@@ -58,6 +58,17 @@ Minimum diagnostics:
 
 Control messages should use a versioned schema. The exact transport can be chosen later, but the API shape should be testable without desktop UI.
 
+The first in-repository schema layer is `PresetDocument`. It is a C++ control-plane model, not a file format yet. UI, CLI, service code, and future JSON/TOML/binary serializers should all validate through this model before publishing a graph.
+
+Current preset fields:
+
+- Schema version.
+- Sample rate.
+- Frames per block.
+- Node IDs, labels, and type names.
+- Route matrix input/output endpoint IDs and labels.
+- Route bindings by stable endpoint ID.
+
 Candidate transports:
 
 - Named pipes.
@@ -74,4 +85,3 @@ The first implementation can be simple if the schema is explicit and versioned.
 - Diagnostics collection must not block the audio thread.
 - UI disconnection must not stop audio.
 - Long-running operations must be asynchronous.
-
