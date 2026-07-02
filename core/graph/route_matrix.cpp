@@ -2,17 +2,71 @@
 
 #include <algorithm>
 #include <stdexcept>
+#include <string>
+#include <unordered_set>
 #include <utility>
 
 namespace sar::graph {
 
-RouteMatrix::RouteMatrix(std::size_t input_channels, std::size_t output_channels)
-    : input_channels_(input_channels),
-      output_channels_(output_channels),
-      gains_(input_channels * output_channels, 0.0F) {
-  if (input_channels == 0 || output_channels == 0) {
-    throw std::invalid_argument("RouteMatrix requires non-zero input and output channels");
+namespace {
+
+std::string to_string(std::string_view value) {
+  return {value.data(), value.size()};
+}
+
+std::vector<RouteEndpointDescriptor> make_default_endpoints(std::size_t count,
+                                                            std::string_view id_prefix,
+                                                            std::string_view label_prefix) {
+  std::vector<RouteEndpointDescriptor> endpoints;
+  endpoints.reserve(count);
+  for (std::size_t index = 0; index < count; ++index) {
+    endpoints.push_back({
+        to_string(id_prefix) + "_" + std::to_string(index),
+        to_string(label_prefix) + " " + std::to_string(index + 1),
+    });
   }
+  return endpoints;
+}
+
+void validate_endpoints(const std::vector<RouteEndpointDescriptor>& endpoints,
+                        std::string_view side) {
+  if (endpoints.empty()) {
+    throw std::invalid_argument("RouteMatrix requires at least one " + to_string(side) +
+                                " endpoint");
+  }
+
+  std::unordered_set<std::string> ids;
+  for (const auto& endpoint : endpoints) {
+    if (endpoint.id.empty()) {
+      throw std::invalid_argument("RouteMatrix " + to_string(side) +
+                                  " endpoint IDs must not be empty");
+    }
+    if (endpoint.label.empty()) {
+      throw std::invalid_argument("RouteMatrix " + to_string(side) +
+                                  " endpoint labels must not be empty");
+    }
+    if (!ids.insert(endpoint.id).second) {
+      throw std::invalid_argument("RouteMatrix " + to_string(side) +
+                                  " endpoint IDs must be unique");
+    }
+  }
+}
+
+}  // namespace
+
+RouteMatrix::RouteMatrix(std::size_t input_channels, std::size_t output_channels)
+    : RouteMatrix(make_default_endpoints(input_channels, "in", "Input"),
+                  make_default_endpoints(output_channels, "out", "Output")) {}
+
+RouteMatrix::RouteMatrix(std::vector<RouteEndpointDescriptor> inputs,
+                         std::vector<RouteEndpointDescriptor> outputs)
+    : input_channels_(inputs.size()),
+      output_channels_(outputs.size()),
+      inputs_(std::move(inputs)),
+      outputs_(std::move(outputs)),
+      gains_(input_channels_ * output_channels_, 0.0F) {
+  validate_endpoints(inputs_, "input");
+  validate_endpoints(outputs_, "output");
 }
 
 std::size_t RouteMatrix::input_channels() const noexcept {
@@ -21,6 +75,34 @@ std::size_t RouteMatrix::input_channels() const noexcept {
 
 std::size_t RouteMatrix::output_channels() const noexcept {
   return output_channels_;
+}
+
+std::string_view RouteMatrix::input_id(std::size_t input_channel) const noexcept {
+  if (input_channel >= inputs_.size()) {
+    return {};
+  }
+  return inputs_[input_channel].id;
+}
+
+std::string_view RouteMatrix::input_label(std::size_t input_channel) const noexcept {
+  if (input_channel >= inputs_.size()) {
+    return {};
+  }
+  return inputs_[input_channel].label;
+}
+
+std::string_view RouteMatrix::output_id(std::size_t output_channel) const noexcept {
+  if (output_channel >= outputs_.size()) {
+    return {};
+  }
+  return outputs_[output_channel].id;
+}
+
+std::string_view RouteMatrix::output_label(std::size_t output_channel) const noexcept {
+  if (output_channel >= outputs_.size()) {
+    return {};
+  }
+  return outputs_[output_channel].label;
 }
 
 void RouteMatrix::clear_routes() noexcept {

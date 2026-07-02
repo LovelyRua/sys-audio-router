@@ -4,16 +4,29 @@
 #include "core/realtime/audio_buffer.h"
 
 #include <cstddef>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace sar::graph {
 
+struct RouteEndpointDescriptor {
+  std::string id;
+  std::string label;
+};
+
 class RouteMatrix {
  public:
   RouteMatrix(std::size_t input_channels, std::size_t output_channels);
+  RouteMatrix(std::vector<RouteEndpointDescriptor> inputs,
+              std::vector<RouteEndpointDescriptor> outputs);
 
   [[nodiscard]] std::size_t input_channels() const noexcept;
   [[nodiscard]] std::size_t output_channels() const noexcept;
+  [[nodiscard]] std::string_view input_id(std::size_t input_channel) const noexcept;
+  [[nodiscard]] std::string_view input_label(std::size_t input_channel) const noexcept;
+  [[nodiscard]] std::string_view output_id(std::size_t output_channel) const noexcept;
+  [[nodiscard]] std::string_view output_label(std::size_t output_channel) const noexcept;
 
   void clear_routes() noexcept;
   void set_gain(std::size_t input_channel,
@@ -31,6 +44,8 @@ class RouteMatrix {
 
   std::size_t input_channels_;
   std::size_t output_channels_;
+  std::vector<RouteEndpointDescriptor> inputs_;
+  std::vector<RouteEndpointDescriptor> outputs_;
   std::vector<float> gains_;
 };
 

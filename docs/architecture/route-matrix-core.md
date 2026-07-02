@@ -15,6 +15,8 @@ Files:
 Capabilities:
 
 - Fixed input and output channel counts.
+- Stable input and output endpoint IDs.
+- Display labels for input and output endpoints.
 - Per-crosspoint gain.
 - Multiple inputs summed into one output.
 - One input routed to multiple outputs.
@@ -38,7 +40,5 @@ The matrix owns its gain table. Route changes should happen off the realtime pat
 - Sparse route representation for very large matrices.
 - Route validation at the graph/control layer.
 - Crosspoint smoothing to avoid clicks during gain changes.
-- Channel labels and stable route IDs.
 - Matrix serialization in the preset schema.
 - UI-level route grouping for multi-channel devices.
-

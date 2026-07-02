@@ -4,6 +4,21 @@
 #include "tests/realtime/test_helpers.h"
 
 #include <iostream>
+#include <stdexcept>
+#include <string_view>
+#include <vector>
+
+namespace {
+
+int expect(bool condition, const char* message) {
+  if (!condition) {
+    std::cerr << message << '\n';
+    return 1;
+  }
+  return 0;
+}
+
+}  // namespace
 
 int main() {
   sar::realtime::AudioBuffer input(2, 4);
@@ -23,6 +38,23 @@ int main() {
   right[3] = 40.0F;
 
   sar::graph::RouteMatrix matrix(2, 2);
+  if (const auto failure = expect(matrix.input_id(0) == std::string_view{"in_0"},
+                                  "Expected default input ID")) {
+    return failure;
+  }
+  if (const auto failure = expect(matrix.input_label(0) == std::string_view{"Input 1"},
+                                  "Expected default input label")) {
+    return failure;
+  }
+  if (const auto failure = expect(matrix.output_id(1) == std::string_view{"out_1"},
+                                  "Expected default output ID")) {
+    return failure;
+  }
+  if (const auto failure = expect(matrix.output_label(1) == std::string_view{"Output 2"},
+                                  "Expected default output label")) {
+    return failure;
+  }
+
   matrix.set_gain(0, 0, 1.0F);
   matrix.set_gain(1, 0, 0.5F);
   matrix.set_gain(1, 1, 1.0F);
@@ -43,6 +75,43 @@ int main() {
     if (!sar::tests::nearly_equal(out_right[frame], expected_right)) {
       return sar::tests::fail_sample("Unexpected right matrix output", 1, frame);
     }
+  }
+
+  {
+    sar::graph::RouteMatrix named_matrix(
+        {
+            {"mic_left", "Mic Left"},
+            {"mic_right", "Mic Right"},
+        },
+        {
+            {"monitor_left", "Monitor Left"},
+            {"monitor_right", "Monitor Right"},
+        });
+
+    if (const auto failure = expect(named_matrix.input_id(1) == std::string_view{"mic_right"},
+                                    "Expected named input ID")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(named_matrix.output_label(0) == std::string_view{"Monitor Left"},
+                   "Expected named output label")) {
+      return failure;
+    }
+  }
+
+  try {
+    sar::graph::RouteMatrix invalid_matrix(
+        {
+            {"dup", "Input A"},
+            {"dup", "Input B"},
+        },
+        {
+            {"out", "Output"},
+        });
+    (void)invalid_matrix;
+    std::cerr << "Expected duplicate endpoint ID failure\n";
+    return 1;
+  } catch (const std::invalid_argument&) {
   }
 
   std::cout << "Route matrix smoke test passed\n";
