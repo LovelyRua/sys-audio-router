@@ -1,5 +1,6 @@
 #include "core/control/control_command.h"
 
+#include <algorithm>
 #include <cmath>
 #include <utility>
 
@@ -26,6 +27,14 @@ void validate_route_binding(const ControlCommand& command,
                     "empty_route_output",
                     "Route commands must reference an output endpoint.",
                     errors);
+}
+
+auto find_route(std::vector<PresetRoute>& routes,
+                const std::string& input_id,
+                const std::string& output_id) {
+  return std::ranges::find_if(routes, [&](const PresetRoute& route) {
+    return route.input_id == input_id && route.output_id == output_id;
+  });
 }
 
 }  // namespace
@@ -114,6 +123,114 @@ ControlCommandValidationResult validate_command(const ControlCommand& command) {
     return ControlCommandValidationResult::failure(std::move(errors));
   }
   return ControlCommandValidationResult::success();
+}
+
+ControlApplyResult ControlApplyResult::success(PresetDocument document) {
+  return {std::move(document), {}};
+}
+
+ControlApplyResult ControlApplyResult::failure(std::vector<PresetError> errors) {
+  return {{}, std::move(errors)};
+}
+
+bool ControlApplyResult::ok() const noexcept {
+  return errors_.empty();
+}
+
+const PresetDocument& ControlApplyResult::document() const noexcept {
+  return document_;
+}
+
+PresetDocument ControlApplyResult::take_document() noexcept {
+  return std::move(document_);
+}
+
+const std::vector<PresetError>& ControlApplyResult::errors() const noexcept {
+  return errors_;
+}
+
+ControlApplyResult::ControlApplyResult(PresetDocument document,
+                                       std::vector<PresetError> errors)
+    : document_(std::move(document)), errors_(std::move(errors)) {}
+
+ControlApplyResult apply_command(const PresetDocument& current,
+                                 const ControlCommand& command) {
+  auto command_validation = validate_command(command);
+  if (!command_validation.ok()) {
+    return ControlApplyResult::failure(command_validation.errors());
+  }
+
+  if (command.type == ControlCommandType::LoadPreset) {
+    return ControlApplyResult::success(command.preset);
+  }
+
+  auto next = current;
+  auto preset_validation = validate_preset(next);
+  if (!preset_validation.ok()) {
+    return ControlApplyResult::failure(preset_validation.errors());
+  }
+
+  switch (command.type) {
+    case ControlCommandType::ConnectRoute: {
+      auto route = find_route(next.matrix.routes, command.input_id, command.output_id);
+      if (route != next.matrix.routes.end()) {
+        return ControlApplyResult::failure({
+            {"duplicate_route", "ConnectRoute cannot redefine an existing route."},
+        });
+      }
+      next.matrix.routes.push_back({
+          command.input_id,
+          command.output_id,
+          command.gain,
+          false,
+      });
+      break;
+    }
+
+    case ControlCommandType::DisconnectRoute: {
+      auto route = find_route(next.matrix.routes, command.input_id, command.output_id);
+      if (route == next.matrix.routes.end()) {
+        return ControlApplyResult::failure({
+            {"unknown_route", "DisconnectRoute references an unknown route."},
+        });
+      }
+      next.matrix.routes.erase(route);
+      break;
+    }
+
+    case ControlCommandType::SetGain: {
+      auto route = find_route(next.matrix.routes, command.input_id, command.output_id);
+      if (route == next.matrix.routes.end()) {
+        return ControlApplyResult::failure({
+            {"unknown_route", "SetGain references an unknown route."},
+        });
+      }
+      route->gain = command.gain;
+      break;
+    }
+
+    case ControlCommandType::SetMute: {
+      auto route = find_route(next.matrix.routes, command.input_id, command.output_id);
+      if (route == next.matrix.routes.end()) {
+        return ControlApplyResult::failure({
+            {"unknown_route", "SetMute references an unknown route."},
+        });
+      }
+      route->muted = command.mute;
+      break;
+    }
+
+    case ControlCommandType::ListDevices:
+    case ControlCommandType::CreateVirtualEndpoint:
+    case ControlCommandType::RemoveVirtualEndpoint:
+    case ControlCommandType::SavePreset:
+    case ControlCommandType::QueryDiagnostics:
+    case ControlCommandType::QueryActiveGraph:
+    case ControlCommandType::LoadPreset:
+      break;
+  }
+
+  return ControlApplyResult::success(std::move(next));
 }
 
 }  // namespace sar::control

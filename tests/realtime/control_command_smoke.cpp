@@ -1,5 +1,8 @@
 #include "core/control/control_command.h"
 
+#include "core/realtime/audio_buffer.h"
+#include "tests/realtime/test_helpers.h"
+
 #include <iostream>
 #include <limits>
 #include <string>
@@ -7,6 +10,16 @@
 namespace {
 
 bool has_error_code(const sar::control::ControlCommandValidationResult& result,
+                    const std::string& code) {
+  for (const auto& error : result.errors()) {
+    if (error.code == code) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool has_error_code(const sar::control::ControlApplyResult& result,
                     const std::string& code) {
   for (const auto& error : result.errors()) {
     if (error.code == code) {
@@ -134,6 +147,110 @@ int main() {
     }
     if (const auto failure = expect(has_error_code(result, "empty_matrix_inputs"),
                                     "Expected empty_matrix_inputs error")) {
+      return failure;
+    }
+  }
+
+  {
+    auto preset = make_valid_preset();
+
+    sar::control::ControlCommand set_gain;
+    set_gain.command_id = "gain_1";
+    set_gain.type = sar::control::ControlCommandType::SetGain;
+    set_gain.input_id = "mic";
+    set_gain.output_id = "monitor";
+    set_gain.gain = 0.5F;
+    auto gain_result = sar::control::apply_command(preset, set_gain);
+    if (const auto failure = expect(gain_result.ok(), "Expected set gain apply success")) {
+      return failure;
+    }
+    preset = gain_result.take_document();
+    if (const auto failure = expect(preset.matrix.routes[0].gain == 0.5F,
+                                    "Expected route gain update")) {
+      return failure;
+    }
+
+    sar::control::ControlCommand mute;
+    mute.command_id = "mute_1";
+    mute.type = sar::control::ControlCommandType::SetMute;
+    mute.input_id = "mic";
+    mute.output_id = "monitor";
+    mute.mute = true;
+    auto mute_result = sar::control::apply_command(preset, mute);
+    if (const auto failure = expect(mute_result.ok(), "Expected mute apply success")) {
+      return failure;
+    }
+    preset = mute_result.take_document();
+    if (const auto failure = expect(preset.matrix.routes[0].muted,
+                                    "Expected route muted state update")) {
+      return failure;
+    }
+
+    auto matrix_result = sar::control::build_route_matrix(preset);
+    if (const auto failure = expect(matrix_result.ok(), "Expected muted matrix build success")) {
+      return failure;
+    }
+    auto matrix = matrix_result.take_matrix();
+    sar::realtime::AudioBuffer input(1, 1);
+    sar::realtime::AudioBuffer output(1, 1);
+    input.channel(0)[0] = 1.0F;
+    matrix->process(input, output);
+    if (!sar::tests::nearly_equal(output.channel(0)[0], 0.0F)) {
+      std::cerr << "Expected muted route to produce silence\n";
+      return 1;
+    }
+  }
+
+  {
+    auto preset = make_valid_preset();
+
+    sar::control::ControlCommand disconnect;
+    disconnect.command_id = "disconnect_1";
+    disconnect.type = sar::control::ControlCommandType::DisconnectRoute;
+    disconnect.input_id = "mic";
+    disconnect.output_id = "monitor";
+    auto disconnect_result = sar::control::apply_command(preset, disconnect);
+    if (const auto failure = expect(disconnect_result.ok(),
+                                    "Expected disconnect apply success")) {
+      return failure;
+    }
+    preset = disconnect_result.take_document();
+    if (const auto failure = expect(preset.matrix.routes.empty(),
+                                    "Expected route to be disconnected")) {
+      return failure;
+    }
+
+    sar::control::ControlCommand connect;
+    connect.command_id = "connect_2";
+    connect.type = sar::control::ControlCommandType::ConnectRoute;
+    connect.input_id = "mic";
+    connect.output_id = "monitor";
+    connect.gain = 0.25F;
+    auto connect_result = sar::control::apply_command(preset, connect);
+    if (const auto failure = expect(connect_result.ok(), "Expected connect apply success")) {
+      return failure;
+    }
+    preset = connect_result.take_document();
+    if (const auto failure = expect(preset.matrix.routes.size() == 1,
+                                    "Expected route to be connected")) {
+      return failure;
+    }
+  }
+
+  {
+    auto preset = make_valid_preset();
+    sar::control::ControlCommand command;
+    command.command_id = "connect_duplicate";
+    command.type = sar::control::ControlCommandType::ConnectRoute;
+    command.input_id = "mic";
+    command.output_id = "monitor";
+    command.gain = 1.0F;
+    const auto result = sar::control::apply_command(preset, command);
+    if (const auto failure = expect(!result.ok(), "Expected duplicate connect failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "duplicate_route"),
+                                    "Expected duplicate_route error")) {
       return failure;
     }
   }

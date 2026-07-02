@@ -197,6 +197,9 @@ PresetMatrixBuildResult build_route_matrix(const PresetDocument& preset) {
   auto matrix = std::make_unique<graph::RouteMatrix>(preset.matrix.inputs,
                                                      preset.matrix.outputs);
   for (const auto& route : preset.matrix.routes) {
+    if (route.muted) {
+      continue;
+    }
     matrix->set_gain(input_indices.at(route.input_id),
                      output_indices.at(route.output_id),
                      route.gain);

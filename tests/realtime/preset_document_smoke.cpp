@@ -174,6 +174,27 @@ int main() {
 
   {
     auto preset = make_valid_preset();
+    preset.matrix.routes[0].muted = true;
+    auto result = sar::control::build_route_matrix(preset);
+    if (const auto failure = expect(result.ok(), "Expected muted route matrix build success")) {
+      return failure;
+    }
+
+    auto matrix = result.take_matrix();
+    sar::realtime::AudioBuffer input(2, 1);
+    sar::realtime::AudioBuffer output(2, 1);
+    input.channel(0)[0] = 1.0F;
+    input.channel(1)[0] = 1.0F;
+    matrix->process(input, output);
+    if (!sar::tests::nearly_equal(output.channel(0)[0], 0.0F) ||
+        !sar::tests::nearly_equal(output.channel(1)[0], 1.0F)) {
+      std::cerr << "Unexpected muted preset-built matrix output\n";
+      return 1;
+    }
+  }
+
+  {
+    auto preset = make_valid_preset();
     preset.matrix.routes.push_back({"mic_left", "monitor_left", 0.5F});
     const auto result = sar::control::build_route_matrix(preset);
     if (const auto failure = expect(!result.ok(), "Expected duplicate route build failure")) {

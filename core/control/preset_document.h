@@ -24,6 +24,7 @@ struct PresetRoute {
   std::string input_id;
   std::string output_id;
   float gain = 0.0F;
+  bool muted = false;
 };
 
 struct PresetRouteMatrix {

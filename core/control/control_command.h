@@ -50,6 +50,25 @@ class ControlCommandValidationResult {
   std::vector<PresetError> errors_;
 };
 
+class ControlApplyResult {
+ public:
+  static ControlApplyResult success(PresetDocument document);
+  static ControlApplyResult failure(std::vector<PresetError> errors);
+
+  [[nodiscard]] bool ok() const noexcept;
+  [[nodiscard]] const PresetDocument& document() const noexcept;
+  [[nodiscard]] PresetDocument take_document() noexcept;
+  [[nodiscard]] const std::vector<PresetError>& errors() const noexcept;
+
+ private:
+  ControlApplyResult(PresetDocument document, std::vector<PresetError> errors);
+
+  PresetDocument document_;
+  std::vector<PresetError> errors_;
+};
+
 [[nodiscard]] ControlCommandValidationResult validate_command(const ControlCommand& command);
+[[nodiscard]] ControlApplyResult apply_command(const PresetDocument& current,
+                                               const ControlCommand& command);
 
 }  // namespace sar::control
