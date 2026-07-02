@@ -91,6 +91,20 @@ Each host test should record:
 7. One DAW output routes to another DAW input.
 8. Long-running low-buffer test passes.
 
+## Endpoint Declarations
+
+Virtual ASIO endpoints should be declared through the shared `VirtualEndpointRegistry` before any driver-facing implementation consumes them.
+
+The declaration includes:
+
+- Stable endpoint ID.
+- Display label.
+- Virtual backend kind.
+- Direction.
+- Format policy: sample rate, channel count, and block size.
+
+The registry is not a driver installer. It is the control-plane source of truth that future ASIO and virtual WASAPI implementations can use to create, expose, remove, and persist endpoint intent consistently.
+
 ## Risks
 
 - ASIO SDK licensing and redistribution terms.
@@ -111,4 +125,3 @@ Before implementation, decide whether the first prototype uses:
 3. A temporary mock ASIO transport to test engine-side assumptions before driver work.
 
 Option 3 should happen first for engine tests. Option 1 is likely required for real DAW integration.
-
