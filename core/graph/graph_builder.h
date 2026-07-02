@@ -40,11 +40,13 @@ class GraphBuilder {
   GraphBuilder& sample_rate(std::uint32_t sample_rate) noexcept;
   GraphBuilder& add_node(std::unique_ptr<Node> node);
   GraphBuilder& add_node(std::string label, std::unique_ptr<Node> node);
+  GraphBuilder& add_node(std::string id, std::string label, std::unique_ptr<Node> node);
 
   [[nodiscard]] GraphBuildResult build();
 
  private:
   struct PendingNode {
+    std::string id;
     std::string label;
     std::unique_ptr<Node> node;
   };

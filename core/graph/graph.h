@@ -21,6 +21,7 @@ class Graph {
 
   void add_node(std::unique_ptr<Node> node);
   void add_node(std::string label, std::unique_ptr<Node> node);
+  void add_node(std::string id, std::string label, std::unique_ptr<Node> node);
 
   void process(const realtime::AudioBuffer& input,
                realtime::AudioBuffer& output,
@@ -28,6 +29,7 @@ class Graph {
 
   [[nodiscard]] std::uint64_t version() const noexcept;
   [[nodiscard]] std::size_t node_count() const noexcept;
+  [[nodiscard]] std::string_view node_id(std::size_t index) const noexcept;
   [[nodiscard]] std::string_view node_label(std::size_t index) const noexcept;
 
  private:
@@ -36,6 +38,7 @@ class Graph {
   realtime::AudioBuffer scratch_a_;
   realtime::AudioBuffer scratch_b_;
   std::vector<std::unique_ptr<Node>> nodes_;
+  std::vector<std::string> node_ids_;
   std::vector<std::string> node_labels_;
 };
 

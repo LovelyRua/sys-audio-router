@@ -19,6 +19,8 @@ Current checks:
 - Frame count must be non-zero.
 - Sample rate must be non-zero.
 - Node list must not contain null nodes.
+- Node IDs must not be empty.
+- Node IDs must be unique.
 - Node labels must not be empty.
 - Node labels must be unique.
 
@@ -26,7 +28,7 @@ Current output:
 
 - Successful builds return a `std::unique_ptr<Graph>`.
 - Failed builds return one or more `GraphBuildError` records.
-- Successful graphs preserve builder node labels for diagnostics, presets, and future UI routing surfaces.
+- Successful graphs preserve builder node IDs and labels for diagnostics, presets, and future UI routing surfaces.
 
 ## Realtime Boundary
 
@@ -36,7 +38,6 @@ Current output:
 
 ## Future Work
 
-- Split display labels from stable machine IDs.
 - Validate graph edges.
 - Reject cycles where feedback is not explicitly modeled.
 - Validate channel maps.
