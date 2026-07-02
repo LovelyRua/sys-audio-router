@@ -55,6 +55,11 @@ Graph::Graph(std::uint64_t version,
       scratch_b_(channels, frames) {}
 
 void Graph::add_node(std::unique_ptr<Node> node) {
+  add_node("node_" + std::to_string(nodes_.size()), std::move(node));
+}
+
+void Graph::add_node(std::string label, std::unique_ptr<Node> node) {
+  node_labels_.push_back(std::move(label));
   nodes_.push_back(std::move(node));
 }
 
@@ -109,6 +114,13 @@ std::uint64_t Graph::version() const noexcept {
 
 std::size_t Graph::node_count() const noexcept {
   return nodes_.size();
+}
+
+std::string_view Graph::node_label(std::size_t index) const noexcept {
+  if (index >= node_labels_.size()) {
+    return {};
+  }
+  return node_labels_[index];
 }
 
 }  // namespace sar::graph

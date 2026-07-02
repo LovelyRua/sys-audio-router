@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include <memory>
+#include <string_view>
 
 namespace {
 
@@ -32,7 +33,7 @@ int main() {
   {
     sar::graph::GraphBuilder builder(1, 2, 64);
     auto result = builder.sample_rate(48000)
-                      .add_node(std::make_unique<sar::graph::GainNode>(0.25F))
+                      .add_node("monitor_gain", std::make_unique<sar::graph::GainNode>(0.25F))
                       .build();
 
     if (const auto failure = expect(result.ok(), "Expected graph builder success")) {
@@ -44,6 +45,10 @@ int main() {
       return failure;
     }
     if (const auto failure = expect(graph->node_count() == 1, "Expected one graph node")) {
+      return failure;
+    }
+    if (const auto failure = expect(graph->node_label(0) == std::string_view{"monitor_gain"},
+                                    "Expected graph node label to be preserved")) {
       return failure;
     }
 
@@ -103,7 +108,33 @@ int main() {
     }
   }
 
+  {
+    auto result = sar::graph::GraphBuilder(1, 2, 64)
+                      .add_node("", std::make_unique<sar::graph::PassthroughNode>())
+                      .build();
+    if (const auto failure = expect(!result.ok(), "Expected empty label builder failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "empty_node_label"),
+                                    "Expected empty_node_label error")) {
+      return failure;
+    }
+  }
+
+  {
+    auto result = sar::graph::GraphBuilder(1, 2, 64)
+                      .add_node("dup", std::make_unique<sar::graph::PassthroughNode>())
+                      .add_node("dup", std::make_unique<sar::graph::GainNode>(1.0F))
+                      .build();
+    if (const auto failure = expect(!result.ok(), "Expected duplicate label builder failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "duplicate_node_label"),
+                                    "Expected duplicate_node_label error")) {
+      return failure;
+    }
+  }
+
   std::cout << "Graph builder smoke test passed\n";
   return 0;
 }
-

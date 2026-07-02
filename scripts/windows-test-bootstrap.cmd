@@ -13,6 +13,8 @@ echo Repository: %REPO_URL%
 echo Worktree:   %REPO_DIR%
 echo.
 
+call :maybe_enable_winrm
+
 call :ensure_vs_buildtools
 call :refresh_common_paths
 
@@ -59,6 +61,19 @@ if errorlevel 1 (
 )
 
 winget install --id %~2 --exact --silent --accept-package-agreements --accept-source-agreements
+exit /b %errorlevel%
+
+:maybe_enable_winrm
+if /I not "%SAR_ENABLE_WINRM%"=="1" exit /b 0
+
+echo [winrm] SAR_ENABLE_WINRM=1 requested
+net session >nul 2>nul
+if errorlevel 1 (
+  echo [winrm] Administrator privileges are required; skipping WinRM enable.
+  exit /b 0
+)
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Set-Service WinRM -StartupType Automatic; Enable-PSRemoting -Force; winrm quickconfig -quiet; if (-not (Get-NetFirewallRule -DisplayName 'SAR WinRM 5985' -ErrorAction SilentlyContinue)) { New-NetFirewallRule -DisplayName 'SAR WinRM 5985' -Direction Inbound -Protocol TCP -LocalPort 5985 -Action Allow | Out-Null }"
 exit /b %errorlevel%
 
 :refresh_common_paths

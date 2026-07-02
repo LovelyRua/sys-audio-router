@@ -20,10 +20,10 @@ if errorlevel 1 (
 )
 
 echo Running test bootstrap... >> "%LOG%"
+set "SAR_ENABLE_WINRM=1"
 call "%BOOTSTRAP%" >> "%LOG%" 2>&1
 set "RESULT=%ERRORLEVEL%"
 
 echo. >> "%LOG%"
 echo Finished at %DATE% %TIME% with exit code %RESULT%. >> "%LOG%"
 exit /b %RESULT%
-

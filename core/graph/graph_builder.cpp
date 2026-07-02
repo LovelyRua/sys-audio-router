@@ -1,5 +1,6 @@
 #include "core/graph/graph_builder.h"
 
+#include <unordered_set>
 #include <utility>
 
 namespace sar::graph {
@@ -41,7 +42,11 @@ GraphBuilder& GraphBuilder::sample_rate(std::uint32_t sample_rate) noexcept {
 }
 
 GraphBuilder& GraphBuilder::add_node(std::unique_ptr<Node> node) {
-  nodes_.push_back(std::move(node));
+  return add_node("node_" + std::to_string(nodes_.size()), std::move(node));
+}
+
+GraphBuilder& GraphBuilder::add_node(std::string label, std::unique_ptr<Node> node) {
+  nodes_.push_back({std::move(label), std::move(node)});
   return *this;
 }
 
@@ -54,8 +59,8 @@ GraphBuildResult GraphBuilder::build() {
   }
 
   auto graph = std::make_unique<Graph>(version_, channels_, frames_, sample_rate_);
-  for (auto& node : nodes_) {
-    graph->add_node(std::move(node));
+  for (auto& pending : nodes_) {
+    graph->add_node(std::move(pending.label), std::move(pending.node));
   }
 
   nodes_.clear();
@@ -79,12 +84,17 @@ void GraphBuilder::validate(std::vector<GraphBuildError>& errors) const {
     errors.push_back({"invalid_sample_rate", "Graph sample rate must be non-zero."});
   }
 
-  for (std::size_t index = 0; index < nodes_.size(); ++index) {
-    if (nodes_[index] == nullptr) {
+  std::unordered_set<std::string> labels;
+  for (const auto& pending : nodes_) {
+    if (pending.node == nullptr) {
       errors.push_back({"null_node", "Graph node list contains a null node."});
+    }
+    if (pending.label.empty()) {
+      errors.push_back({"empty_node_label", "Graph node labels must not be empty."});
+    } else if (!labels.insert(pending.label).second) {
+      errors.push_back({"duplicate_node_label", "Graph node labels must be unique."});
     }
   }
 }
 
 }  // namespace sar::graph
-

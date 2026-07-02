@@ -39,17 +39,23 @@ class GraphBuilder {
 
   GraphBuilder& sample_rate(std::uint32_t sample_rate) noexcept;
   GraphBuilder& add_node(std::unique_ptr<Node> node);
+  GraphBuilder& add_node(std::string label, std::unique_ptr<Node> node);
 
   [[nodiscard]] GraphBuildResult build();
 
  private:
+  struct PendingNode {
+    std::string label;
+    std::unique_ptr<Node> node;
+  };
+
   void validate(std::vector<GraphBuildError>& errors) const;
 
   std::uint64_t version_;
   std::size_t channels_;
   std::size_t frames_;
   std::uint32_t sample_rate_ = 48000;
-  std::vector<std::unique_ptr<Node>> nodes_;
+  std::vector<PendingNode> nodes_;
 };
 
 }  // namespace sar::graph

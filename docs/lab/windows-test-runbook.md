@@ -6,11 +6,11 @@ This runbook describes how to pull the GitHub repository onto the Windows test m
 
 - Host: `192.168.123.3`
 - RDP: open
-- WinRM: not open during initial probe
+- WinRM: enabled by `scripts/windows-enable-winrm-and-test.cmd` or by running the bootstrap with `SAR_ENABLE_WINRM=1` from an elevated `cmd.exe`
 - SSH: not open during initial probe
 - SMB admin share: not open during initial probe
 
-Because only RDP is reachable, commands currently need to be run from an interactive desktop session on the test machine.
+If WinRM is not reachable yet, use RDP or the ESXi web console once to run the bootstrap from an elevated prompt.
 
 ## Attempt RDP Initial Program Automation
 
@@ -48,6 +48,13 @@ curl -L https://raw.githubusercontent.com/LovelyRua/sys-audio-router/main/script
 "%TEMP%\sar-bootstrap.cmd"
 ```
 
+To enable WinRM while bootstrapping, run from an elevated `cmd.exe`:
+
+```bat
+set SAR_ENABLE_WINRM=1
+"%TEMP%\sar-bootstrap.cmd"
+```
+
 The bootstrap script will:
 
 1. Install or verify Git, CMake, Ninja, and Visual Studio Build Tools.
@@ -72,10 +79,12 @@ To choose a different path:
 
 - `realtime_smoke`
 - `graph_snapshot_smoke`
+- `graph_builder_smoke`
 - `route_matrix_smoke`
 - `diagnostics_smoke`
 - `spsc_ring_buffer_smoke`
 - `process_context_smoke`
+- `xrun_detection_smoke`
 - `spsc_ring_buffer_threaded_smoke`
 
 ## Better Future Remote Execution
