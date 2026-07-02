@@ -23,10 +23,12 @@ Current seed implementation:
 - `core/realtime/process_context.h`
 - `core/graph/node.h`
 - `core/graph/graph.h`
+- `core/graph/graph_builder.h`
 - `core/graph/graph_snapshot.h`
 - `core/realtime/spsc_ring_buffer.h`
 - `tests/realtime/realtime_smoke.cpp`
 - `tests/realtime/graph_snapshot_smoke.cpp`
+- `tests/realtime/graph_builder_smoke.cpp`
 - `tests/realtime/route_matrix_smoke.cpp`
 - `tests/realtime/diagnostics_smoke.cpp`
 - `tests/realtime/spsc_ring_buffer_smoke.cpp`

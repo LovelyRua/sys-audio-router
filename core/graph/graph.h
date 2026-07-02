@@ -3,6 +3,8 @@
 #include "core/diagnostics/engine_diagnostics.h"
 #include "core/graph/node.h"
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <vector>
 

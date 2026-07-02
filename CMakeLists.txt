@@ -9,6 +9,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_library(sar_core
   core/realtime/audio_buffer.cpp
   core/graph/graph.cpp
+  core/graph/graph_builder.cpp
   core/graph/graph_snapshot.cpp
   core/graph/route_matrix.cpp
 )
@@ -31,6 +32,12 @@ add_executable(sar_graph_snapshot_smoke
 )
 
 target_link_libraries(sar_graph_snapshot_smoke PRIVATE sar_core)
+
+add_executable(sar_graph_builder_smoke
+  tests/realtime/graph_builder_smoke.cpp
+)
+
+target_link_libraries(sar_graph_builder_smoke PRIVATE sar_core)
 
 add_executable(sar_route_matrix_smoke
   tests/realtime/route_matrix_smoke.cpp
@@ -65,6 +72,7 @@ target_link_libraries(sar_spsc_ring_buffer_threaded_smoke PRIVATE sar_core)
 enable_testing()
 add_test(NAME realtime_smoke COMMAND sar_realtime_smoke)
 add_test(NAME graph_snapshot_smoke COMMAND sar_graph_snapshot_smoke)
+add_test(NAME graph_builder_smoke COMMAND sar_graph_builder_smoke)
 add_test(NAME route_matrix_smoke COMMAND sar_route_matrix_smoke)
 add_test(NAME diagnostics_smoke COMMAND sar_diagnostics_smoke)
 add_test(NAME spsc_ring_buffer_smoke COMMAND sar_spsc_ring_buffer_smoke)

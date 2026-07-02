@@ -35,11 +35,13 @@ The first prototype contains:
 - `Node`: realtime processor interface.
 - `GainNode`: minimal processor for smoke testing.
 - `Graph`: chain-style graph container with diagnostics update.
+- `GraphBuilder`: non-realtime graph validation and construction.
 - `GraphSnapshotPublisher`: early graph hot-swap prototype.
 - `RouteMatrix`: fixed-size channel routing and summing matrix.
 - `SpscRingBuffer`: fixed-capacity single-producer single-consumer queue.
 - `realtime_smoke`: offline processing smoke test.
 - `graph_snapshot_smoke`: offline graph publication smoke test.
+- `graph_builder_smoke`: graph validation and construction smoke test.
 - `route_matrix_smoke`: offline matrix routing smoke test.
 - `diagnostics_smoke`: diagnostics counter smoke test.
 - `spsc_ring_buffer_smoke`: SPSC queue behavior smoke test.
@@ -57,6 +59,7 @@ Current CTest targets:
 
 - `realtime_smoke`
 - `graph_snapshot_smoke`
+- `graph_builder_smoke`
 - `route_matrix_smoke`
 - `diagnostics_smoke`
 - `spsc_ring_buffer_smoke`

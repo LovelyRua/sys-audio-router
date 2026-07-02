@@ -6,6 +6,8 @@ The UI can render the graph as a matrix, patchbay, or mixer, but the underlying 
 
 The first code-level matrix primitive is documented in [Route Matrix Core](route-matrix-core.md).
 
+The first non-realtime graph validation path is documented in [Graph Builder](graph-builder.md).
+
 ## Design Goals
 
 - Express complex routing without special cases.

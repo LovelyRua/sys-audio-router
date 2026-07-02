@@ -16,6 +16,7 @@ Start here:
 - [Roadmap](docs/roadmap.md)
 - [Realtime Audio Engine](docs/architecture/audio-engine.md)
 - [Routing Graph](docs/architecture/routing-graph.md)
+- [Graph Builder](docs/architecture/graph-builder.md)
 - [Route Matrix Core](docs/architecture/route-matrix-core.md)
 - [Realtime Transport](docs/architecture/realtime-transport.md)
 - [Windows Driver Strategy](docs/architecture/windows-driver-strategy.md)
@@ -50,6 +51,7 @@ The repository now contains a minimal C++20 realtime core skeleton and an offlin
 - `sar_core`
 - `sar_realtime_smoke`
 - `sar_graph_snapshot_smoke`
+- `sar_graph_builder_smoke`
 - `sar_route_matrix_smoke`
 - `sar_diagnostics_smoke`
 - `sar_spsc_ring_buffer_smoke`
