@@ -20,6 +20,16 @@ bool has_error_code(const sar::control::PresetValidationResult& result,
   return false;
 }
 
+bool has_error_code(const sar::control::PresetMatrixBuildResult& result,
+                    const std::string& code) {
+  for (const auto& error : result.errors()) {
+    if (error.code == code) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int expect(bool condition, const char* message) {
   if (!condition) {
     std::cerr << message << '\n';
