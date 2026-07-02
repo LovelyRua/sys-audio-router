@@ -37,6 +37,17 @@ Initial command categories:
 - Query diagnostics.
 - Query active graph.
 
+The first in-repository command model is `ControlCommand`. It is transport-neutral and versioned, with validation before any command may reach the engine service mutation path.
+
+Current validated command data:
+
+- Command schema version.
+- Command ID for idempotency and logs.
+- Virtual endpoint ID and label.
+- Route input/output endpoint IDs.
+- Route gain and mute state.
+- Load-preset payload through `PresetDocument`.
+
 ## Diagnostics API
 
 Diagnostics should be available without opening the full UI.

@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(sar_core
+  core/control/control_command.cpp
   core/control/preset_document.cpp
   core/realtime/audio_buffer.cpp
   core/graph/graph.cpp
@@ -52,6 +53,12 @@ add_executable(sar_preset_document_smoke
 
 target_link_libraries(sar_preset_document_smoke PRIVATE sar_core)
 
+add_executable(sar_control_command_smoke
+  tests/realtime/control_command_smoke.cpp
+)
+
+target_link_libraries(sar_control_command_smoke PRIVATE sar_core)
+
 add_executable(sar_diagnostics_smoke
   tests/realtime/diagnostics_smoke.cpp
 )
@@ -88,6 +95,7 @@ add_test(NAME graph_snapshot_smoke COMMAND sar_graph_snapshot_smoke)
 add_test(NAME graph_builder_smoke COMMAND sar_graph_builder_smoke)
 add_test(NAME route_matrix_smoke COMMAND sar_route_matrix_smoke)
 add_test(NAME preset_document_smoke COMMAND sar_preset_document_smoke)
+add_test(NAME control_command_smoke COMMAND sar_control_command_smoke)
 add_test(NAME diagnostics_smoke COMMAND sar_diagnostics_smoke)
 add_test(NAME spsc_ring_buffer_smoke COMMAND sar_spsc_ring_buffer_smoke)
 add_test(NAME process_context_smoke COMMAND sar_process_context_smoke)
