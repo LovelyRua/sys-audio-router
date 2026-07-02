@@ -1,0 +1,22 @@
+# Build output
+build/
+out/
+dist/
+target/
+
+# Local machine state
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Logs
+*.log
+*.err.log
+
+# Local secrets and credentials
+.env
+.env.*
+secrets/
+credentials/
+
