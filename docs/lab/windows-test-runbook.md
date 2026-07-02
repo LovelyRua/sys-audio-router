@@ -12,6 +12,23 @@ This runbook describes how to pull the GitHub repository onto the Windows test m
 
 Because only RDP is reachable, commands currently need to be run from an interactive desktop session on the test machine.
 
+## Attempt RDP Initial Program Automation
+
+From the development machine, this may trigger the bootstrap through RDP without manual desktop interaction:
+
+```bat
+scripts\rdp-trigger-test-machine.cmd 192.168.123.3 codex <password>
+```
+
+If the remote Windows host accepts the RDP initial program setting, it will:
+
+1. Download `scripts/windows-enable-winrm-and-test.cmd`.
+2. Enable WinRM on port `5985`.
+3. Download and run `scripts/windows-test-bootstrap.cmd`.
+4. Write a log to `%USERPROFILE%\Desktop\sar-rdp-bootstrap.log` on the test machine.
+
+This depends on Windows accepting `alternate shell` for the RDP session. If it is ignored, use the manual RDP steps below.
+
 ## Open RDP
 
 From the development machine:
@@ -69,4 +86,3 @@ For non-interactive testing, enable one of:
 - OpenSSH server on port `22`.
 
 Once either is available, the same bootstrap script can be run remotely without manual RDP interaction.
-
