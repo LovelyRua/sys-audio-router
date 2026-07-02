@@ -13,6 +13,21 @@ This document breaks the Windows backend into separate technical paths. The proj
 | APO | Optional endpoint processing hook research | Not first implementation |
 | Kernel streaming / WaveRT | Driver-level virtual endpoint foundation research | Phase 0/4 |
 
+## Shared Device Model
+
+All backend implementations should report devices through the shared platform model in `core/platform/audio_device.h`.
+
+The model requires:
+
+- Stable device ID.
+- Human-readable label.
+- Backend kind.
+- Direction: input, output, or duplex.
+- One or more supported formats.
+- Flags for default and virtual devices.
+
+Backend-specific details can be added later, but the control plane should start from this shared descriptor so UI, presets, diagnostics, and tests do not depend on WASAPI, ASIO, or virtual driver internals.
+
 ## WASAPI Physical Backend
 
 The physical backend should be the first real-device integration because it does not require a custom driver.
@@ -91,4 +106,3 @@ This order reduces unknowns before kernel-mode work.
 - Microsoft SysVAD sample: https://github.com/microsoft/Windows-driver-samples/tree/main/audio/sysvad
 - Microsoft WASAPI documentation: https://learn.microsoft.com/en-us/windows/win32/coreaudio/wasapi
 - Steinberg developer portal for ASIO SDK access: https://www.steinberg.net/developers/
-
