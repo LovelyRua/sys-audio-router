@@ -3,6 +3,7 @@
 #include "core/graph/route_matrix.h"
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -53,6 +54,25 @@ class PresetValidationResult {
   std::vector<PresetError> errors_;
 };
 
+class PresetMatrixBuildResult {
+ public:
+  static PresetMatrixBuildResult success(std::unique_ptr<graph::RouteMatrix> matrix);
+  static PresetMatrixBuildResult failure(std::vector<PresetError> errors);
+
+  [[nodiscard]] bool ok() const noexcept;
+  [[nodiscard]] graph::RouteMatrix* matrix() const noexcept;
+  [[nodiscard]] std::unique_ptr<graph::RouteMatrix> take_matrix() noexcept;
+  [[nodiscard]] const std::vector<PresetError>& errors() const noexcept;
+
+ private:
+  PresetMatrixBuildResult(std::unique_ptr<graph::RouteMatrix> matrix,
+                          std::vector<PresetError> errors);
+
+  std::unique_ptr<graph::RouteMatrix> matrix_;
+  std::vector<PresetError> errors_;
+};
+
 [[nodiscard]] PresetValidationResult validate_preset(const PresetDocument& preset);
+[[nodiscard]] PresetMatrixBuildResult build_route_matrix(const PresetDocument& preset);
 
 }  // namespace sar::control

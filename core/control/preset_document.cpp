@@ -1,6 +1,9 @@
 #include "core/control/preset_document.h"
 
 #include <cmath>
+#include <memory>
+#include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -107,6 +110,7 @@ PresetValidationResult validate_preset(const PresetDocument& preset) {
     errors.push_back({"empty_matrix_outputs", "Route matrix must contain at least one output."});
   }
 
+  std::unordered_set<std::string> route_pairs;
   for (const auto& route : preset.matrix.routes) {
     if (route.input_id.empty()) {
       errors.push_back({"empty_route_input", "Preset routes must reference an input endpoint."});
@@ -126,12 +130,79 @@ PresetValidationResult validate_preset(const PresetDocument& preset) {
     if (!std::isfinite(route.gain)) {
       errors.push_back({"invalid_route_gain", "Preset route gain must be finite."});
     }
+
+    if (!route.input_id.empty() && !route.output_id.empty()) {
+      auto route_key = route.input_id;
+      route_key.push_back('\n');
+      route_key += route.output_id;
+      if (!route_pairs.insert(std::move(route_key)).second) {
+        errors.push_back({
+            "duplicate_route",
+            "Preset routes must not define the same crosspoint twice.",
+        });
+      }
+    }
   }
 
   if (!errors.empty()) {
     return PresetValidationResult::failure(std::move(errors));
   }
   return PresetValidationResult::success();
+}
+
+PresetMatrixBuildResult PresetMatrixBuildResult::success(
+    std::unique_ptr<graph::RouteMatrix> matrix) {
+  return {std::move(matrix), {}};
+}
+
+PresetMatrixBuildResult PresetMatrixBuildResult::failure(std::vector<PresetError> errors) {
+  return {nullptr, std::move(errors)};
+}
+
+bool PresetMatrixBuildResult::ok() const noexcept {
+  return matrix_ != nullptr && errors_.empty();
+}
+
+graph::RouteMatrix* PresetMatrixBuildResult::matrix() const noexcept {
+  return matrix_.get();
+}
+
+std::unique_ptr<graph::RouteMatrix> PresetMatrixBuildResult::take_matrix() noexcept {
+  return std::move(matrix_);
+}
+
+const std::vector<PresetError>& PresetMatrixBuildResult::errors() const noexcept {
+  return errors_;
+}
+
+PresetMatrixBuildResult::PresetMatrixBuildResult(std::unique_ptr<graph::RouteMatrix> matrix,
+                                                 std::vector<PresetError> errors)
+    : matrix_(std::move(matrix)), errors_(std::move(errors)) {}
+
+PresetMatrixBuildResult build_route_matrix(const PresetDocument& preset) {
+  auto validation = validate_preset(preset);
+  if (!validation.ok()) {
+    return PresetMatrixBuildResult::failure(validation.errors());
+  }
+
+  std::unordered_map<std::string, std::size_t> input_indices;
+  std::unordered_map<std::string, std::size_t> output_indices;
+  for (std::size_t index = 0; index < preset.matrix.inputs.size(); ++index) {
+    input_indices.emplace(preset.matrix.inputs[index].id, index);
+  }
+  for (std::size_t index = 0; index < preset.matrix.outputs.size(); ++index) {
+    output_indices.emplace(preset.matrix.outputs[index].id, index);
+  }
+
+  auto matrix = std::make_unique<graph::RouteMatrix>(preset.matrix.inputs,
+                                                     preset.matrix.outputs);
+  for (const auto& route : preset.matrix.routes) {
+    matrix->set_gain(input_indices.at(route.input_id),
+                     output_indices.at(route.output_id),
+                     route.gain);
+  }
+
+  return PresetMatrixBuildResult::success(std::move(matrix));
 }
 
 }  // namespace sar::control

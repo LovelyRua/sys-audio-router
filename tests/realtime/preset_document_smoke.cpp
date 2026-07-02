@@ -1,8 +1,12 @@
 #include "core/control/preset_document.h"
 
-#include <limits>
+#include "core/realtime/audio_buffer.h"
+#include "tests/realtime/test_helpers.h"
+
 #include <iostream>
+#include <limits>
 #include <string>
+#include <string_view>
 
 namespace {
 
@@ -47,6 +51,43 @@ int main() {
     const auto result = sar::control::validate_preset(preset);
     if (const auto failure = expect(result.ok(), "Expected valid preset")) {
       return failure;
+    }
+  }
+
+  {
+    const auto preset = make_valid_preset();
+    auto result = sar::control::build_route_matrix(preset);
+    if (const auto failure = expect(result.ok(), "Expected route matrix build success")) {
+      return failure;
+    }
+
+    auto matrix = result.take_matrix();
+    if (const auto failure = expect(matrix != nullptr, "Expected route matrix pointer")) {
+      return failure;
+    }
+    if (const auto failure = expect(matrix->input_id(0) == std::string_view{"mic_left"},
+                                    "Expected matrix input ID from preset")) {
+      return failure;
+    }
+    if (const auto failure = expect(matrix->output_id(1) == std::string_view{"monitor_right"},
+                                    "Expected matrix output ID from preset")) {
+      return failure;
+    }
+
+    sar::realtime::AudioBuffer input(2, 2);
+    sar::realtime::AudioBuffer output(2, 2);
+    input.channel(0)[0] = 0.25F;
+    input.channel(0)[1] = 0.5F;
+    input.channel(1)[0] = 0.75F;
+    input.channel(1)[1] = 1.0F;
+
+    matrix->process(input, output);
+    if (!sar::tests::nearly_equal(output.channel(0)[0], 0.25F) ||
+        !sar::tests::nearly_equal(output.channel(0)[1], 0.5F) ||
+        !sar::tests::nearly_equal(output.channel(1)[0], 0.75F) ||
+        !sar::tests::nearly_equal(output.channel(1)[1], 1.0F)) {
+      std::cerr << "Unexpected preset-built matrix output\n";
+      return 1;
     }
   }
 
@@ -117,6 +158,19 @@ int main() {
     }
     if (const auto failure = expect(has_error_code(result, "invalid_route_gain"),
                                     "Expected invalid_route_gain error")) {
+      return failure;
+    }
+  }
+
+  {
+    auto preset = make_valid_preset();
+    preset.matrix.routes.push_back({"mic_left", "monitor_left", 0.5F});
+    const auto result = sar::control::build_route_matrix(preset);
+    if (const auto failure = expect(!result.ok(), "Expected duplicate route build failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "duplicate_route"),
+                                    "Expected duplicate_route error")) {
       return failure;
     }
   }
