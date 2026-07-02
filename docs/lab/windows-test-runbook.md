@@ -1,0 +1,72 @@
+# Windows Test Runbook
+
+This runbook describes how to pull the GitHub repository onto the Windows test machine and run the current C++ smoke tests.
+
+## Current Access
+
+- Host: `192.168.123.3`
+- RDP: open
+- WinRM: not open during initial probe
+- SSH: not open during initial probe
+- SMB admin share: not open during initial probe
+
+Because only RDP is reachable, commands currently need to be run from an interactive desktop session on the test machine.
+
+## Open RDP
+
+From the development machine:
+
+```bat
+scripts\open-test-machine-rdp.cmd
+```
+
+Do not commit credentials to this repository.
+
+## Bootstrap and Test
+
+On the test machine, open `cmd.exe` and run:
+
+```bat
+curl -L https://raw.githubusercontent.com/LovelyRua/sys-audio-router/main/scripts/windows-test-bootstrap.cmd -o "%TEMP%\sar-bootstrap.cmd"
+"%TEMP%\sar-bootstrap.cmd"
+```
+
+The bootstrap script will:
+
+1. Install or verify Git, CMake, Ninja, and Visual Studio Build Tools.
+2. Clone or update `https://github.com/LovelyRua/sys-audio-router.git`.
+3. Configure the CMake build.
+4. Build the smoke test targets.
+5. Run CTest with failure output enabled.
+
+Default checkout path:
+
+```text
+%USERPROFILE%\src\sys-audio-router
+```
+
+To choose a different path:
+
+```bat
+"%TEMP%\sar-bootstrap.cmd" C:\src\sys-audio-router
+```
+
+## Expected Test Targets
+
+- `realtime_smoke`
+- `graph_snapshot_smoke`
+- `route_matrix_smoke`
+- `diagnostics_smoke`
+- `spsc_ring_buffer_smoke`
+- `process_context_smoke`
+- `spsc_ring_buffer_threaded_smoke`
+
+## Better Future Remote Execution
+
+For non-interactive testing, enable one of:
+
+- WinRM on port `5985` or `5986`.
+- OpenSSH server on port `22`.
+
+Once either is available, the same bootstrap script can be run remotely without manual RDP interaction.
+

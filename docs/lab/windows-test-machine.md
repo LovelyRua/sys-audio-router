@@ -19,6 +19,8 @@ Credentials must not be committed to this repository. Keep them in the operator'
 - Long-running xrun and latency soak tests.
 - Installer and uninstall validation.
 
+See [Windows Test Runbook](windows-test-runbook.md) for the current pull/build/test workflow.
+
 ## Operating Rules
 
 - Do not use this machine as the primary development environment.
@@ -40,4 +42,3 @@ Record installed versions here when testing begins:
 | FL Studio | TBD | |
 | OBS | TBD | |
 | Discord | TBD | |
-
