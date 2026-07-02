@@ -56,4 +56,5 @@ The repository now contains a minimal C++20 realtime core skeleton and an offlin
 - `sar_diagnostics_smoke`
 - `sar_spsc_ring_buffer_smoke`
 - `sar_process_context_smoke`
+- `sar_xrun_detection_smoke`
 - `sar_spsc_ring_buffer_threaded_smoke`

@@ -46,6 +46,7 @@ The first prototype contains:
 - `diagnostics_smoke`: diagnostics counter smoke test.
 - `spsc_ring_buffer_smoke`: SPSC queue behavior smoke test.
 - `process_context_smoke`: node process context smoke test.
+- `xrun_detection_smoke`: forced slow-node xrun detection smoke test.
 - `spsc_ring_buffer_threaded_smoke`: producer/consumer SPSC ordering smoke test.
 
 Known limitation:
@@ -64,4 +65,5 @@ Current CTest targets:
 - `diagnostics_smoke`
 - `spsc_ring_buffer_smoke`
 - `process_context_smoke`
+- `xrun_detection_smoke`
 - `spsc_ring_buffer_threaded_smoke`

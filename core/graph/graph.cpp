@@ -95,6 +95,12 @@ void Graph::process(const realtime::AudioBuffer& input,
   diagnostics.processed_blocks += 1;
   diagnostics.last_callback_seconds = elapsed;
   diagnostics.peak_callback_seconds = std::max(diagnostics.peak_callback_seconds, elapsed);
+
+  const auto block_seconds = static_cast<double>(input.frames()) /
+                             static_cast<double>(sample_rate_);
+  if (elapsed > block_seconds) {
+    diagnostics.xrun_count += 1;
+  }
 }
 
 std::uint64_t Graph::version() const noexcept {

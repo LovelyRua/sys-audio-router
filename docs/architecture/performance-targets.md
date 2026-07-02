@@ -42,6 +42,8 @@ Each run should capture:
 - Thread priority and scheduling anomalies.
 - Graph version changes.
 
+The current core prototype includes a basic xrun detector that compares graph processing time against block duration. Backend-specific underrun and overrun counters are still future work.
+
 ## Failure Policy
 
 When something goes wrong, the system should preserve audio where possible and explain the failure.
@@ -54,4 +56,3 @@ Examples:
 - Device format change: renegotiate off the realtime thread.
 
 Silent failure is unacceptable.
-

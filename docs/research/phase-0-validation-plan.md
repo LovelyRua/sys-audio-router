@@ -33,6 +33,7 @@ Current seed implementation:
 - `tests/realtime/diagnostics_smoke.cpp`
 - `tests/realtime/spsc_ring_buffer_smoke.cpp`
 - `tests/realtime/process_context_smoke.cpp`
+- `tests/realtime/xrun_detection_smoke.cpp`
 - `tests/realtime/spsc_ring_buffer_threaded_smoke.cpp`
 
 ## Workstream B: WASAPI Backend

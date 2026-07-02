@@ -91,6 +91,14 @@ The engine must expose:
 
 Diagnostics must be designed so collecting them does not destabilize the engine.
 
+The current prototype increments `xrun_count` when `Graph::process` takes longer than the active block duration:
+
+```text
+block_duration = frames / sample_rate
+```
+
+This is a coarse offline-friendly signal. Platform backends will later add device-specific underrun and overrun reporting.
+
 ## Testing Strategy
 
 The first engine prototype should run without real audio devices.
