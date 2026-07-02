@@ -41,6 +41,14 @@ Do not commit credentials to this repository.
 
 ## Bootstrap and Test
 
+Once WinRM is enabled, run the test machine non-interactively from the development machine:
+
+```bat
+scripts\windows-winrm-test.cmd 192.168.123.3 codex <password>
+```
+
+The script downloads the latest bootstrap from `main`, builds the repository on the test machine, and fails if CMake, build, or CTest fails.
+
 On the test machine, open `cmd.exe` and run:
 
 ```bat
@@ -81,6 +89,7 @@ To choose a different path:
 - `graph_snapshot_smoke`
 - `graph_builder_smoke`
 - `route_matrix_smoke`
+- `preset_document_smoke`
 - `diagnostics_smoke`
 - `spsc_ring_buffer_smoke`
 - `process_context_smoke`
