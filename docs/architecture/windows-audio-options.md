@@ -28,6 +28,8 @@ The model requires:
 
 Backend-specific details can be added later, but the control plane should start from this shared descriptor so UI, presets, diagnostics, and tests do not depend on WASAPI, ASIO, or virtual driver internals.
 
+`AudioDeviceRegistry` aggregates one or more backend providers and validates the combined device list. Backend-local enumeration errors and cross-provider ID conflicts must be surfaced before the control plane publishes devices to UI or preset binding code.
+
 ## WASAPI Physical Backend
 
 The physical backend should be the first real-device integration because it does not require a custom driver.

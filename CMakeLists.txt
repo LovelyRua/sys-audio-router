@@ -11,6 +11,7 @@ add_library(sar_core
   core/control/preset_document.cpp
   core/control/control_response.cpp
   core/platform/audio_device.cpp
+  core/platform/audio_device_registry.cpp
   core/platform/mock_audio_device_provider.cpp
   core/realtime/audio_buffer.cpp
   core/graph/graph.cpp
@@ -74,6 +75,12 @@ add_executable(sar_audio_device_smoke
 
 target_link_libraries(sar_audio_device_smoke PRIVATE sar_core)
 
+add_executable(sar_audio_device_registry_smoke
+  tests/realtime/audio_device_registry_smoke.cpp
+)
+
+target_link_libraries(sar_audio_device_registry_smoke PRIVATE sar_core)
+
 add_executable(sar_diagnostics_smoke
   tests/realtime/diagnostics_smoke.cpp
 )
@@ -113,6 +120,7 @@ add_test(NAME preset_document_smoke COMMAND sar_preset_document_smoke)
 add_test(NAME control_command_smoke COMMAND sar_control_command_smoke)
 add_test(NAME control_response_smoke COMMAND sar_control_response_smoke)
 add_test(NAME audio_device_smoke COMMAND sar_audio_device_smoke)
+add_test(NAME audio_device_registry_smoke COMMAND sar_audio_device_registry_smoke)
 add_test(NAME diagnostics_smoke COMMAND sar_diagnostics_smoke)
 add_test(NAME spsc_ring_buffer_smoke COMMAND sar_spsc_ring_buffer_smoke)
 add_test(NAME process_context_smoke COMMAND sar_process_context_smoke)
