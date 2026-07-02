@@ -48,6 +48,13 @@ Current validated command data:
 - Route gain and mute state.
 - Load-preset payload through `PresetDocument`.
 
+Responses use `ControlResponse`, which carries:
+
+- Command ID.
+- Accepted or rejected status.
+- Machine-readable errors.
+- Optional diagnostics snapshot.
+
 ## Diagnostics API
 
 Diagnostics should be available without opening the full UI.
