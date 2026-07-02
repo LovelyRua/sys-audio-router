@@ -2,6 +2,7 @@
 setlocal EnableExtensions EnableDelayedExpansion
 
 set "REPO_URL=https://github.com/LovelyRua/sys-audio-router.git"
+set "REPO_ZIP_URL=https://github.com/LovelyRua/sys-audio-router/archive/refs/heads/main.zip"
 set "REPO_DIR=%USERPROFILE%\src\sys-audio-router"
 set "BUILD_DIR=build"
 
@@ -12,28 +13,11 @@ echo Repository: %REPO_URL%
 echo Worktree:   %REPO_DIR%
 echo.
 
-call :ensure_tool git Git.Git
-call :ensure_tool cmake Kitware.CMake
-call :ensure_tool ninja Ninja-build.Ninja
 call :ensure_vs_buildtools
 call :refresh_common_paths
 
-if not exist "%REPO_DIR%\.git" (
-  if not exist "%REPO_DIR%" mkdir "%REPO_DIR%"
-  for %%I in ("%REPO_DIR%") do set "REPO_PARENT=%%~dpI"
-  for %%I in ("%REPO_DIR%") do set "REPO_NAME=%%~nxI"
-  pushd "!REPO_PARENT!"
-  git clone "%REPO_URL%" "!REPO_NAME!"
-  if errorlevel 1 exit /b 1
-  popd
-) else (
-  pushd "%REPO_DIR%"
-  git fetch origin
-  if errorlevel 1 exit /b 1
-  git reset --hard origin/main
-  if errorlevel 1 exit /b 1
-  popd
-)
+call :fetch_source
+if errorlevel 1 exit /b 1
 
 call :enter_msvc_env
 if errorlevel 1 exit /b 1
@@ -79,6 +63,75 @@ exit /b %errorlevel%
 
 :refresh_common_paths
 set "PATH=%ProgramFiles%\Git\cmd;%ProgramFiles%\CMake\bin;%LocalAppData%\Microsoft\WindowsApps;%PATH%"
+call :add_vs_tool_paths
+exit /b 0
+
+:add_vs_tool_paths
+set "VS_INSTALL="
+if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" (
+  for /f "usebackq tokens=*" %%I in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2^>nul`) do (
+    set "VS_INSTALL=%%I"
+  )
+)
+if not "%VS_INSTALL%"=="" (
+  set "PATH=%VS_INSTALL%\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;%VS_INSTALL%\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;%PATH%"
+)
+exit /b 0
+
+:fetch_source
+where git >nul 2>nul
+if errorlevel 1 goto fetch_source_zip
+
+if not exist "%REPO_DIR%\.git" (
+  if not exist "%REPO_DIR%" mkdir "%REPO_DIR%"
+  for %%I in ("%REPO_DIR%") do set "REPO_PARENT=%%~dpI"
+  for %%I in ("%REPO_DIR%") do set "REPO_NAME=%%~nxI"
+  pushd "!REPO_PARENT!"
+  git clone "%REPO_URL%" "!REPO_NAME!"
+  if errorlevel 1 exit /b 1
+  popd
+) else (
+  pushd "%REPO_DIR%"
+  git fetch origin
+  if errorlevel 1 exit /b 1
+  git reset --hard origin/main
+  if errorlevel 1 exit /b 1
+  popd
+)
+exit /b 0
+
+:fetch_source_zip
+echo [fetch] git not found; downloading source zip
+where curl >nul 2>nul
+if errorlevel 1 (
+  echo curl is required to download the source zip when git is unavailable.
+  exit /b 1
+)
+where tar >nul 2>nul
+if errorlevel 1 (
+  echo tar is required to extract the source zip when git is unavailable.
+  exit /b 1
+)
+
+set "ZIP_WORK=%TEMP%\sar-source"
+set "ZIP_FILE=%TEMP%\sar-main.zip"
+if exist "%ZIP_WORK%" rmdir /s /q "%ZIP_WORK%"
+mkdir "%ZIP_WORK%"
+
+curl -L "%REPO_ZIP_URL%" -o "%ZIP_FILE%"
+if errorlevel 1 exit /b 1
+
+tar -xf "%ZIP_FILE%" -C "%ZIP_WORK%"
+if errorlevel 1 exit /b 1
+
+if exist "%REPO_DIR%\.git" (
+  echo Existing git worktree found at "%REPO_DIR%"; refusing to replace it with zip source.
+  exit /b 1
+)
+if exist "%REPO_DIR%" rmdir /s /q "%REPO_DIR%"
+mkdir "%REPO_DIR%"
+xcopy "%ZIP_WORK%\sys-audio-router-main\*" "%REPO_DIR%\" /E /I /Y >nul
+if errorlevel 1 exit /b 1
 exit /b 0
 
 :ensure_vs_buildtools
@@ -98,12 +151,21 @@ if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" (
 
 echo [install] Microsoft.VisualStudio.2022.BuildTools
 where winget >nul 2>nul
-if errorlevel 1 (
-  echo winget is required to install Visual Studio Build Tools automatically.
-  exit /b 1
+if not errorlevel 1 (
+  winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --silent --accept-package-agreements --accept-source-agreements --override "--wait --quiet --norestart --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.CMake.Project --includeRecommended"
+  exit /b %errorlevel%
 )
 
-winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --silent --accept-package-agreements --accept-source-agreements --override "--wait --quiet --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+echo [install] winget not found; downloading Visual Studio Build Tools directly
+where curl >nul 2>nul
+if errorlevel 1 (
+  echo curl is required to download Visual Studio Build Tools.
+  exit /b 1
+)
+set "VS_BOOTSTRAPPER=%TEMP%\vs_BuildTools.exe"
+curl -L "https://aka.ms/vs/17/release/vs_BuildTools.exe" -o "%VS_BOOTSTRAPPER%"
+if errorlevel 1 exit /b 1
+"%VS_BOOTSTRAPPER%" --wait --quiet --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.CMake.Project --includeRecommended
 exit /b %errorlevel%
 
 :enter_msvc_env
