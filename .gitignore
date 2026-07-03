@@ -23,3 +23,7 @@ credentials/
 # Local scratch
 tmp/
 
+# Local collaborator worktrees/clones nested under this coordination checkout
+system-audio-route-a/
+system-audio-route-b/
+system-audio-route-c/
