@@ -22,6 +22,7 @@ struct WasapiRealtimeWorkerStats {
   std::uint64_t loop_cycles = 0;
   std::uint64_t graph_processed_cycles = 0;
   std::uint64_t idle_cycles = 0;
+  std::uint64_t wait_timeout_cycles = 0;
   std::uint64_t captured_frames = 0;
   std::uint64_t rendered_frames = 0;
 };
@@ -69,6 +70,7 @@ class WindowsWasapiRealtimeWorker {
   std::atomic_uint64_t loop_cycles_ = 0;
   std::atomic_uint64_t graph_processed_cycles_ = 0;
   std::atomic_uint64_t idle_cycles_ = 0;
+  std::atomic_uint64_t wait_timeout_cycles_ = 0;
   std::atomic_uint64_t captured_frames_ = 0;
   std::atomic_uint64_t rendered_frames_ = 0;
   mutable std::mutex errors_mutex_;

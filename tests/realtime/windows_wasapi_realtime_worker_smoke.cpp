@@ -89,6 +89,10 @@ int main() {
                                     "Expected stats graph cycles to match processed cycles")) {
       return failure;
     }
+    if (const auto failure = expect(stats.wait_timeout_cycles == 0,
+                                    "Expected graph-only worker without wait timeouts")) {
+      return failure;
+    }
     if (const auto failure = expect(worker.last_errors().empty(),
                                     "Expected no worker errors")) {
       return failure;

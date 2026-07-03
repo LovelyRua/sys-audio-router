@@ -46,19 +46,33 @@ class WasapiStreamResult {
 
 class WasapiStreamOpenResult;
 
+enum class WasapiStreamIoStatus {
+  Completed,
+  Idle,
+  TimedOut,
+  Failed,
+};
+
 class WasapiStreamIoResult {
  public:
   static WasapiStreamIoResult success(std::uint32_t frames);
+  static WasapiStreamIoResult timeout();
   static WasapiStreamIoResult failure(std::vector<WasapiStreamError> errors);
 
   [[nodiscard]] bool ok() const noexcept;
   [[nodiscard]] std::uint32_t frames() const noexcept;
+  [[nodiscard]] WasapiStreamIoStatus status() const noexcept;
+  [[nodiscard]] bool idle() const noexcept;
+  [[nodiscard]] bool timed_out() const noexcept;
   [[nodiscard]] const std::vector<WasapiStreamError>& errors() const noexcept;
 
  private:
-  WasapiStreamIoResult(std::uint32_t frames, std::vector<WasapiStreamError> errors);
+  WasapiStreamIoResult(std::uint32_t frames,
+                       WasapiStreamIoStatus status,
+                       std::vector<WasapiStreamError> errors);
 
   std::uint32_t frames_ = 0;
+  WasapiStreamIoStatus status_ = WasapiStreamIoStatus::Idle;
   std::vector<WasapiStreamError> errors_;
 };
 

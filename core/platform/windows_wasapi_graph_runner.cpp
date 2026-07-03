@@ -127,6 +127,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
     stats.captured_frames = capture_result.frames();
     if (stats.captured_frames == 0) {
       stats.capture_stream_idle = true;
+      stats.capture_wait_timed_out = capture_result.timed_out();
       return WasapiGraphRunnerResult::success(stats);
     }
   }
@@ -142,6 +143,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
     }
     stats.rendered_frames = render_result.frames();
     stats.render_stream_idle = stats.rendered_frames == 0;
+    stats.render_wait_timed_out = render_result.timed_out();
   }
 
   return WasapiGraphRunnerResult::success(stats);

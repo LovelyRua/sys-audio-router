@@ -18,6 +18,8 @@ struct WasapiGraphRunnerStats {
   bool graph_processed = false;
   bool capture_stream_idle = false;
   bool render_stream_idle = false;
+  bool capture_wait_timed_out = false;
+  bool render_wait_timed_out = false;
 };
 
 class WasapiGraphRunnerResult {

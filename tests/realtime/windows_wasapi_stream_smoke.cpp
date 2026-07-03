@@ -68,6 +68,33 @@ bool has_default_output_device() {
 
 int main() {
   {
+    const auto idle_result = sar::platform::WasapiStreamIoResult::success(0);
+    if (const auto failure = expect(idle_result.ok(), "Expected idle I/O success")) {
+      return failure;
+    }
+    if (const auto failure = expect(idle_result.idle(), "Expected zero-frame I/O idle")) {
+      return failure;
+    }
+    if (const auto failure = expect(!idle_result.timed_out(),
+                                    "Expected idle I/O not to be timed out")) {
+      return failure;
+    }
+
+    const auto timeout_result = sar::platform::WasapiStreamIoResult::timeout();
+    if (const auto failure = expect(timeout_result.ok(), "Expected timeout I/O success")) {
+      return failure;
+    }
+    if (const auto failure = expect(timeout_result.timed_out(),
+                                    "Expected timeout I/O status")) {
+      return failure;
+    }
+    if (const auto failure = expect(!timeout_result.idle(),
+                                    "Expected timeout I/O not to be generic idle")) {
+      return failure;
+    }
+  }
+
+  {
     sar::platform::WindowsWasapiStream stream;
     if (const auto failure = expect(stream.state() == sar::platform::WasapiStreamState::Closed,
                                     "Expected initial closed stream state")) {

@@ -240,11 +240,17 @@ WasapiStreamResult::WasapiStreamResult(std::vector<WasapiStreamError> errors)
     : errors_(std::move(errors)) {}
 
 WasapiStreamIoResult WasapiStreamIoResult::success(std::uint32_t frames) {
-  return {frames, {}};
+  const auto status = frames == 0 ? WasapiStreamIoStatus::Idle
+                                  : WasapiStreamIoStatus::Completed;
+  return {frames, status, {}};
+}
+
+WasapiStreamIoResult WasapiStreamIoResult::timeout() {
+  return {0, WasapiStreamIoStatus::TimedOut, {}};
 }
 
 WasapiStreamIoResult WasapiStreamIoResult::failure(std::vector<WasapiStreamError> errors) {
-  return {0, std::move(errors)};
+  return {0, WasapiStreamIoStatus::Failed, std::move(errors)};
 }
 
 bool WasapiStreamIoResult::ok() const noexcept {
@@ -255,13 +261,26 @@ std::uint32_t WasapiStreamIoResult::frames() const noexcept {
   return frames_;
 }
 
+WasapiStreamIoStatus WasapiStreamIoResult::status() const noexcept {
+  return status_;
+}
+
+bool WasapiStreamIoResult::idle() const noexcept {
+  return status_ == WasapiStreamIoStatus::Idle;
+}
+
+bool WasapiStreamIoResult::timed_out() const noexcept {
+  return status_ == WasapiStreamIoStatus::TimedOut;
+}
+
 const std::vector<WasapiStreamError>& WasapiStreamIoResult::errors() const noexcept {
   return errors_;
 }
 
 WasapiStreamIoResult::WasapiStreamIoResult(std::uint32_t frames,
+                                           WasapiStreamIoStatus status,
                                            std::vector<WasapiStreamError> errors)
-    : frames_(frames), errors_(std::move(errors)) {}
+    : frames_(frames), status_(status), errors_(std::move(errors)) {}
 
 WindowsWasapiStream::WindowsWasapiStream() = default;
 
@@ -363,7 +382,7 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
 
   const auto wait_result = WaitForSingleObject(impl_->samples_ready_event.get(), timeout_ms);
   if (wait_result == WAIT_TIMEOUT) {
-    return WasapiStreamIoResult::success(0);
+    return WasapiStreamIoResult::timeout();
   }
   if (wait_result != WAIT_OBJECT_0) {
     return WasapiStreamIoResult::failure({
@@ -451,7 +470,7 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
 
   const auto wait_result = WaitForSingleObject(impl_->samples_ready_event.get(), timeout_ms);
   if (wait_result == WAIT_TIMEOUT) {
-    return WasapiStreamIoResult::success(0);
+    return WasapiStreamIoResult::timeout();
   }
   if (wait_result != WAIT_OBJECT_0) {
     return WasapiStreamIoResult::failure({
