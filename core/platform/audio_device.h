@@ -21,10 +21,18 @@ enum class AudioDeviceDirection {
   Duplex,
 };
 
+enum class AudioSampleFormat {
+  Unknown,
+  PcmInt,
+  IeeeFloat,
+};
+
 struct AudioFormat {
   std::uint32_t sample_rate = 48000;
   std::uint32_t channels = 2;
   std::uint32_t frames_per_block = 128;
+  std::uint32_t bits_per_sample = 32;
+  AudioSampleFormat sample_format = AudioSampleFormat::IeeeFloat;
 };
 
 struct AudioDeviceDescriptor {

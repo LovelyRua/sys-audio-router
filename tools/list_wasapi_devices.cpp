@@ -17,6 +17,18 @@ const char* direction_name(sar::platform::AudioDeviceDirection direction) {
   return "unknown";
 }
 
+const char* sample_format_name(sar::platform::AudioSampleFormat format) {
+  switch (format) {
+    case sar::platform::AudioSampleFormat::Unknown:
+      return "unknown";
+    case sar::platform::AudioSampleFormat::PcmInt:
+      return "pcm-int";
+    case sar::platform::AudioSampleFormat::IeeeFloat:
+      return "ieee-float";
+  }
+  return "unknown";
+}
+
 void print_probe() {
   const auto result = sar::platform::probe_default_wasapi_stream(
       sar::platform::WasapiStreamDirection::Render);
@@ -33,6 +45,8 @@ void print_probe() {
   std::cout << "  Device: " << probe.device_label << '\n';
   std::cout << "  Sample rate: " << probe.mix_format.sample_rate << '\n';
   std::cout << "  Channels: " << probe.mix_format.channels << '\n';
+  std::cout << "  Sample format: " << sample_format_name(probe.mix_format.sample_format)
+            << ", " << probe.mix_format.bits_per_sample << " bit\n";
   std::cout << "  Buffer frames: " << probe.buffer_frames << '\n';
   std::cout << "  Default period 100ns: " << probe.default_period_100ns << '\n';
   std::cout << "  Minimum period 100ns: " << probe.minimum_period_100ns << '\n';
@@ -59,6 +73,8 @@ int main() {
     for (const auto& format : device.formats) {
       std::cout << "  Format: " << format.sample_rate << " Hz, "
                 << format.channels << " channels, "
+                << sample_format_name(format.sample_format) << ", "
+                << format.bits_per_sample << " bit, "
                 << format.frames_per_block << " frames\n";
     }
   }

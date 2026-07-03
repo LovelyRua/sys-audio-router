@@ -160,6 +160,9 @@ std::vector<WasapiStreamError> validate_probe(const WasapiStreamProbe& probe) {
   if (probe.mix_format.channels == 0) {
     errors.push_back({"invalid_channel_count", "WASAPI stream channel count must be non-zero."});
   }
+  if (probe.mix_format.bits_per_sample == 0) {
+    errors.push_back({"invalid_bits_per_sample", "WASAPI stream bit depth must be non-zero."});
+  }
   if (probe.buffer_frames == 0) {
     errors.push_back({"invalid_buffer_frames", "WASAPI stream buffer size must be non-zero."});
   }

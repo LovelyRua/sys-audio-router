@@ -6,6 +6,7 @@
 
 #include <Windows.h>
 #include <Audioclient.h>
+#include <mmreg.h>
 #include <propkeydef.h>
 #include <Functiondiscoverykeys_devpkey.h>
 #include <Mmdeviceapi.h>
@@ -162,6 +163,36 @@ std::string default_device_id(IMMDeviceEnumerator& enumerator, EDataFlow flow) {
   return device_id(*device);
 }
 
+bool is_wave_subformat(const GUID& guid, unsigned long data1) noexcept {
+  return guid.Data1 == data1 && guid.Data2 == 0x0000 && guid.Data3 == 0x0010 &&
+         guid.Data4[0] == 0x80 && guid.Data4[1] == 0x00 &&
+         guid.Data4[2] == 0x00 && guid.Data4[3] == 0xaa &&
+         guid.Data4[4] == 0x00 && guid.Data4[5] == 0x38 &&
+         guid.Data4[6] == 0x9b && guid.Data4[7] == 0x71;
+}
+
+AudioSampleFormat sample_format(const WAVEFORMATEX& wave_format) noexcept {
+  if (wave_format.wFormatTag == WAVE_FORMAT_PCM) {
+    return AudioSampleFormat::PcmInt;
+  }
+  if (wave_format.wFormatTag == WAVE_FORMAT_IEEE_FLOAT) {
+    return AudioSampleFormat::IeeeFloat;
+  }
+  if (wave_format.wFormatTag != WAVE_FORMAT_EXTENSIBLE ||
+      wave_format.cbSize < sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX)) {
+    return AudioSampleFormat::Unknown;
+  }
+
+  const auto& extensible = reinterpret_cast<const WAVEFORMATEXTENSIBLE&>(wave_format);
+  if (is_wave_subformat(extensible.SubFormat, 0x00000001)) {
+    return AudioSampleFormat::PcmInt;
+  }
+  if (is_wave_subformat(extensible.SubFormat, 0x00000003)) {
+    return AudioSampleFormat::IeeeFloat;
+  }
+  return AudioSampleFormat::Unknown;
+}
+
 AudioFormat mix_format(IMMDevice& device) {
   AudioFormat format;
   ComPtr<IAudioClient> audio_client;
@@ -179,6 +210,8 @@ AudioFormat mix_format(IMMDevice& device) {
 
   format.sample_rate = wave_format->nSamplesPerSec;
   format.channels = wave_format->nChannels;
+  format.bits_per_sample = wave_format->wBitsPerSample;
+  format.sample_format = sample_format(*wave_format);
   format.frames_per_block = 128;
   CoTaskMemFree(wave_format);
   return format;

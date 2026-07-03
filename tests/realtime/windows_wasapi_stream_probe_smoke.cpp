@@ -47,6 +47,10 @@ int main() {
     std::cerr << "Expected probed WASAPI mix format\n";
     return 1;
   }
+  if (probe.mix_format.bits_per_sample == 0) {
+    std::cerr << "Expected probed WASAPI bit depth\n";
+    return 1;
+  }
   if (probe.default_period_100ns == 0 || probe.buffer_frames == 0) {
     std::cerr << "Expected probed WASAPI timing contract\n";
     return 1;
@@ -55,6 +59,7 @@ int main() {
   std::cout << "Windows WASAPI stream probe smoke test passed: "
             << probe.mix_format.sample_rate << " Hz, "
             << probe.mix_format.channels << " channels, "
+            << probe.mix_format.bits_per_sample << " bit, "
             << probe.buffer_frames << " buffer frames\n";
   return 0;
 }

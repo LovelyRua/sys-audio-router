@@ -131,12 +131,17 @@ int main() {
     sar::platform::WindowsWasapiStream stream;
     auto invalid_probe = make_probe();
     invalid_probe.buffer_frames = 0;
+    invalid_probe.mix_format.bits_per_sample = 0;
     const auto result = stream.open(invalid_probe);
     if (const auto failure = expect(!result.ok(), "Expected invalid probe failure")) {
       return failure;
     }
     if (const auto failure = expect(has_error_code(result, "invalid_buffer_frames"),
                                     "Expected invalid_buffer_frames error")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "invalid_bits_per_sample"),
+                                    "Expected invalid_bits_per_sample error")) {
       return failure;
     }
   }

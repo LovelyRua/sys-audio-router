@@ -60,6 +60,10 @@ std::vector<AudioDeviceError> validate_audio_devices(
       if (format.frames_per_block == 0) {
         errors.push_back({"invalid_frames_per_block", "Audio device block sizes must be non-zero."});
       }
+      if (format.bits_per_sample == 0) {
+        errors.push_back({"invalid_bits_per_sample",
+                          "Audio device bit depths must be non-zero."});
+      }
     }
   }
 

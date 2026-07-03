@@ -83,6 +83,7 @@ int main() {
     invalid.formats[0].sample_rate = 0;
     invalid.formats[0].channels = 0;
     invalid.formats[0].frames_per_block = 0;
+    invalid.formats[0].bits_per_sample = 0;
     sar::platform::MockAudioDeviceProvider provider({invalid});
     const auto result = provider.list_devices();
     if (const auto failure = expect(!result.ok(), "Expected invalid device failure")) {
@@ -106,6 +107,10 @@ int main() {
     }
     if (const auto failure = expect(has_error_code(result, "invalid_frames_per_block"),
                                     "Expected invalid_frames_per_block error")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "invalid_bits_per_sample"),
+                                    "Expected invalid_bits_per_sample error")) {
       return failure;
     }
   }
