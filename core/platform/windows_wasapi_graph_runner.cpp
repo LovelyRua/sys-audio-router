@@ -33,10 +33,23 @@ WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(WindowsWasapiStream* capture_
                                                    WindowsWasapiStream* render_stream,
                                                    std::size_t channels,
                                                    std::size_t frames)
+    : WindowsWasapiGraphRunner(capture_stream,
+                               render_stream,
+                               channels,
+                               frames,
+                               channels,
+                               frames) {}
+
+WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(WindowsWasapiStream* capture_stream,
+                                                   WindowsWasapiStream* render_stream,
+                                                   std::size_t capture_channels,
+                                                   std::size_t capture_frames,
+                                                   std::size_t render_channels,
+                                                   std::size_t render_frames)
     : capture_stream_(capture_stream),
       render_stream_(render_stream),
-      input_(channels, frames),
-      output_(channels, frames) {}
+      input_(capture_channels, capture_frames),
+      output_(render_channels, render_frames) {}
 
 realtime::AudioBuffer& WindowsWasapiGraphRunner::input_buffer() noexcept {
   return input_;

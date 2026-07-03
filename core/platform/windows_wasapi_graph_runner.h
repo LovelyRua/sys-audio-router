@@ -43,6 +43,12 @@ class WindowsWasapiGraphRunner {
                            WindowsWasapiStream* render_stream,
                            std::size_t channels,
                            std::size_t frames);
+  WindowsWasapiGraphRunner(WindowsWasapiStream* capture_stream,
+                           WindowsWasapiStream* render_stream,
+                           std::size_t capture_channels,
+                           std::size_t capture_frames,
+                           std::size_t render_channels,
+                           std::size_t render_frames);
 
   [[nodiscard]] realtime::AudioBuffer& input_buffer() noexcept;
   [[nodiscard]] const realtime::AudioBuffer& input_buffer() const noexcept;

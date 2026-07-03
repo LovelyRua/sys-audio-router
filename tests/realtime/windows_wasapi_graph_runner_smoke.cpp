@@ -88,6 +88,42 @@ int main() {
   }
 
   {
+    sar::platform::WindowsWasapiGraphRunner runner(nullptr, nullptr, 1, 4, 2, 8);
+    auto& input = runner.input_buffer();
+    for (std::size_t frame = 0; frame < input.frames(); ++frame) {
+      input.channel(0)[frame] = static_cast<float>(frame + 1);
+    }
+
+    sar::graph::Graph graph(10, 2, 8);
+    graph.add_node(std::make_unique<sar::graph::GainNode>(0.25F));
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    const auto result = runner.process_once(graph, diagnostics, 0);
+
+    if (const auto failure = expect(result.ok(), "Expected mixed-shape runner success")) {
+      return failure;
+    }
+    const auto& output = runner.output_buffer();
+    if (const auto failure =
+            expect(output.channels() == 2, "Expected render-shaped output channels")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(output.frames() == 8, "Expected render-shaped output frames")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::tests::nearly_equal(output.channel(0)[2], 0.75F),
+                   "Expected mixed-shape processed output sample")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::tests::nearly_equal(output.channel(1)[2], 0.0F),
+                   "Expected missing capture channel to remain silent")) {
+      return failure;
+    }
+  }
+
+  {
     sar::platform::WindowsWasapiStream render_stream;
     auto open_result = render_stream.open(make_render_probe());
     if (const auto failure = expect(open_result.ok(), "Expected synthetic render open")) {

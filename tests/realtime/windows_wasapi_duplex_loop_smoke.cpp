@@ -60,7 +60,7 @@ int main() {
   auto result = sar::platform::open_default_wasapi_duplex_loop(graph, diagnostics);
   if (!result.ok()) {
     for (const auto& error : result.errors()) {
-      if (error.code == "duplex_format_mismatch") {
+      if (error.code == "duplex_sample_rate_mismatch") {
         std::cout << "Windows WASAPI duplex loop skipped: " << error.message << '\n';
         return 0;
       }
@@ -70,14 +70,9 @@ int main() {
   }
 
   auto loop = result.take_loop();
-  if (const auto failure = expect(loop->capture_probe().mix_format.channels ==
-                                      loop->render_probe().mix_format.channels,
-                                  "Expected matching duplex channel count")) {
-    return failure;
-  }
-  if (const auto failure = expect(loop->capture_probe().buffer_frames ==
-                                      loop->render_probe().buffer_frames,
-                                  "Expected matching duplex buffer frames")) {
+  if (const auto failure = expect(loop->capture_probe().mix_format.sample_rate ==
+                                      loop->render_probe().mix_format.sample_rate,
+                                  "Expected matching duplex sample rate")) {
     return failure;
   }
 

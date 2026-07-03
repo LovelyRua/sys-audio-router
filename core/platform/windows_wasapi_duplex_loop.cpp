@@ -16,10 +16,9 @@ std::vector<WasapiRealtimeWorkerError> convert_errors(
   return converted;
 }
 
-bool compatible_duplex_probes(const WasapiStreamProbe& capture_probe,
-                              const WasapiStreamProbe& render_probe) noexcept {
-  return capture_probe.mix_format.channels == render_probe.mix_format.channels &&
-         capture_probe.buffer_frames == render_probe.buffer_frames;
+bool compatible_duplex_sample_rates(const WasapiStreamProbe& capture_probe,
+                                    const WasapiStreamProbe& render_probe) noexcept {
+  return capture_probe.mix_format.sample_rate == render_probe.mix_format.sample_rate;
 }
 
 }  // namespace
@@ -65,6 +64,8 @@ WindowsWasapiDuplexLoop::WindowsWasapiDuplexLoop(
       render_stream_(std::move(render_stream)),
       runner_(&capture_stream_,
               &render_stream_,
+              capture_stream_.probe().mix_format.channels,
+              capture_stream_.probe().buffer_frames,
               render_stream_.probe().mix_format.channels,
               render_stream_.probe().buffer_frames),
       worker_(runner_, graph, diagnostics) {}
@@ -118,12 +119,12 @@ WasapiDuplexLoopOpenResult open_default_wasapi_duplex_loop(
     return WasapiDuplexLoopOpenResult::failure(convert_errors(render_result.errors()));
   }
 
-  if (!compatible_duplex_probes(capture_result.stream().probe(),
-                                render_result.stream().probe())) {
+  if (!compatible_duplex_sample_rates(capture_result.stream().probe(),
+                                      render_result.stream().probe())) {
     return WasapiDuplexLoopOpenResult::failure({
         {
-            "duplex_format_mismatch",
-            "Default WASAPI capture and render streams need a format adapter before duplex use.",
+            "duplex_sample_rate_mismatch",
+            "Default WASAPI capture and render streams need a sample-rate adapter before duplex use.",
         },
     });
   }
