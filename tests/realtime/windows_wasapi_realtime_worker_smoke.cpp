@@ -101,6 +101,20 @@ int main() {
                                     "Expected graph-only worker without render idle cycles")) {
       return failure;
     }
+    if (const auto failure = expect(stats.capture_wait_timeout_cycles == 0,
+                                    "Expected graph-only worker without capture timeouts")) {
+      return failure;
+    }
+    if (const auto failure = expect(stats.render_wait_timeout_cycles == 0,
+                                    "Expected graph-only worker without render timeouts")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(stats.wait_timeout_cycles <= stats.capture_wait_timeout_cycles +
+                                                stats.render_wait_timeout_cycles,
+                   "Expected total wait timeout cycles to be covered by split counters")) {
+      return failure;
+    }
     if (const auto failure = expect(worker.last_errors().empty(),
                                     "Expected no worker errors")) {
       return failure;
