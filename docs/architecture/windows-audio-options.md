@@ -38,6 +38,8 @@ The first implementation step is `WindowsWasapiDeviceProvider`, which enumerates
 
 The next step is `WindowsWasapiStreamProbe`, which opens the default shared-mode endpoint far enough to read the mix format, device period, and buffer size. It does not start streaming or connect to the realtime graph.
 
+`WindowsWasapiStream` is the first lifecycle shell around that stream contract. It validates a probe, tracks closed/open/started state, and exposes deterministic start/stop/close transitions. The first shell does not yet call `IAudioClient::Start` or run a render/capture thread.
+
 Use it to validate:
 
 - Device enumeration.
