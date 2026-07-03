@@ -6,6 +6,7 @@
 
 #include <Windows.h>
 #include <Audioclient.h>
+#include <propkeydef.h>
 #include <Functiondiscoverykeys_devpkey.h>
 #include <Mmdeviceapi.h>
 #include <Propidl.h>
