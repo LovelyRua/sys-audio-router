@@ -94,6 +94,46 @@ class ComApartment {
   HRESULT result_ = E_FAIL;
 };
 
+class UniqueHandle {
+ public:
+  UniqueHandle() = default;
+  UniqueHandle(const UniqueHandle&) = delete;
+  UniqueHandle& operator=(const UniqueHandle&) = delete;
+
+  UniqueHandle(UniqueHandle&& other) noexcept
+      : handle_(std::exchange(other.handle_, nullptr)) {}
+
+  UniqueHandle& operator=(UniqueHandle&& other) noexcept {
+    if (this != &other) {
+      reset();
+      handle_ = std::exchange(other.handle_, nullptr);
+    }
+    return *this;
+  }
+
+  ~UniqueHandle() {
+    reset();
+  }
+
+  [[nodiscard]] HANDLE get() const noexcept {
+    return handle_;
+  }
+
+  [[nodiscard]] bool valid() const noexcept {
+    return handle_ != nullptr;
+  }
+
+  void reset(HANDLE handle = nullptr) noexcept {
+    if (handle_ != nullptr) {
+      CloseHandle(handle_);
+    }
+    handle_ = handle;
+  }
+
+ private:
+  HANDLE handle_ = nullptr;
+};
+
 std::string hresult_hex(HRESULT result) {
   char buffer[16] = {};
   const auto value = static_cast<unsigned long>(result);
@@ -149,6 +189,7 @@ struct WindowsWasapiStream::Impl {
   ComPtr<IAudioClient> audio_client;
   ComPtr<IAudioRenderClient> render_client;
   ComPtr<IAudioCaptureClient> capture_client;
+  UniqueHandle samples_ready_event;
   WAVEFORMATEX* wave_format = nullptr;
 
   ~Impl() {
@@ -390,7 +431,7 @@ WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection di
   }
 
   const auto init_result = impl->audio_client->Initialize(AUDCLNT_SHAREMODE_SHARED,
-                                                         0,
+                                                         AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
                                                          0,
                                                          0,
                                                          impl->wave_format,
@@ -400,6 +441,28 @@ WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection di
         {
             "wasapi_initialize_failed",
             "WASAPI shared stream initialization failed with " + hresult_hex(init_result) + ".",
+        },
+    });
+  }
+
+  impl->samples_ready_event.reset(CreateEventW(nullptr, FALSE, FALSE, nullptr));
+  if (!impl->samples_ready_event.valid()) {
+    const auto error = HRESULT_FROM_WIN32(GetLastError());
+    return WasapiStreamOpenResult::failure({
+        {
+            "wasapi_event_create_failed",
+            "WASAPI samples-ready event creation failed with " + hresult_hex(error) + ".",
+        },
+    });
+  }
+
+  const auto event_result =
+      impl->audio_client->SetEventHandle(impl->samples_ready_event.get());
+  if (FAILED(event_result)) {
+    return WasapiStreamOpenResult::failure({
+        {
+            "wasapi_event_handle_failed",
+            "WASAPI event handle registration failed with " + hresult_hex(event_result) + ".",
         },
     });
   }
