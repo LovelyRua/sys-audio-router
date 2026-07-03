@@ -22,6 +22,13 @@ cmake --build build
 ctest --test-dir build
 ```
 
+When using the shared Windows test machine, pass a unique slot to avoid build
+directory collisions with other engineers:
+
+```bat
+scripts\windows-winrm-test.cmd <host> <user> <password> engineer-a
+```
+
 The current local Codex environment does not have `cmake`, `cl`, `ninja`, or `g++` available in `PATH`, so the first smoke test has not been compiled locally yet.
 
 Use `scripts\check-toolchain.cmd` to inspect the local Windows toolchain.

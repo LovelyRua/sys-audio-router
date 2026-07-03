@@ -97,10 +97,11 @@ when the VM has a desktop audio stack.
 Use the WinRM test script for full validation:
 
 ```bat
-scripts\windows-winrm-test.cmd <host> <user> <password>
+scripts\windows-winrm-test.cmd <host> <user> <password> <slot>
 ```
 
-Keep credentials out of git.
+Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
+`engineer-b`. Keep credentials out of git.
 
 ## Known Gaps
 

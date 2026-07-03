@@ -47,6 +47,26 @@ Once WinRM is enabled, run the test machine non-interactively from the developme
 scripts\windows-winrm-test.cmd 192.168.123.3 codex <password>
 ```
 
+For concurrent work, pass a unique slot as the fourth argument:
+
+```bat
+scripts\windows-winrm-test.cmd 192.168.123.3 codex <password> engineer-a
+scripts\windows-winrm-test.cmd 192.168.123.3 codex <password> engineer-b
+scripts\windows-winrm-test.cmd 192.168.123.3 codex <password> engineer-c
+```
+
+Each slot uses an isolated remote checkout and build directory:
+
+```text
+%USERPROFILE%\src\sys-audio-router-engineer-a\build-engineer-a
+%USERPROFILE%\src\sys-audio-router-engineer-b\build-engineer-b
+%USERPROFILE%\src\sys-audio-router-engineer-c\build-engineer-c
+```
+
+This avoids most `.pdb`, `.ninja_log`, `.exe`, and CMake cache file locking
+collisions when multiple engineers test at the same time. If no slot is passed,
+the script keeps the historical default path.
+
 The script downloads the latest bootstrap from `main`, builds the repository on the test machine, and fails if CMake, build, or CTest fails.
 
 On the test machine, open `cmd.exe` and run:

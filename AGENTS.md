@@ -26,8 +26,12 @@ ctest --test-dir build --output-on-failure
 Preferred Windows validation path from the development machine:
 
 ```bat
-scripts\windows-winrm-test.cmd <host> <user> <password>
+scripts\windows-winrm-test.cmd <host> <user> <password> <slot>
 ```
+
+Use a unique slot for concurrent test runs, for example `engineer-a`,
+`engineer-b`, or `engineer-c`. The slot isolates the remote checkout, build
+directory, and bootstrap file.
 
 The current Windows smoke suite has 23 CTest targets. If a change touches
 realtime, WASAPI, thread lifecycle, sample conversion, graph execution, or

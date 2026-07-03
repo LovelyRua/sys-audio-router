@@ -7,10 +7,13 @@ set "REPO_DIR=%USERPROFILE%\src\sys-audio-router"
 set "BUILD_DIR=build"
 
 if not "%~1"=="" set "REPO_DIR=%~1"
+if not "%~2"=="" set "BUILD_DIR=%~2"
+if not "%SAR_BUILD_DIR%"=="" set "BUILD_DIR=%SAR_BUILD_DIR%"
 
 echo System Audio Route Windows test bootstrap
 echo Repository: %REPO_URL%
 echo Worktree:   %REPO_DIR%
+echo Build dir:  %BUILD_DIR%
 echo.
 
 call :maybe_enable_winrm
