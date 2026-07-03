@@ -108,6 +108,12 @@ if(WIN32)
   )
 
   target_link_libraries(sar_windows_wasapi_stream_probe_smoke PRIVATE sar_core)
+
+  add_executable(sar_list_wasapi_devices
+    tools/list_wasapi_devices.cpp
+  )
+
+  target_link_libraries(sar_list_wasapi_devices PRIVATE sar_core)
 endif()
 
 add_executable(sar_diagnostics_smoke

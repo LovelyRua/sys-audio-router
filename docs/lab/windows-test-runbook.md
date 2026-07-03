@@ -96,6 +96,14 @@ To choose a different path:
 - `xrun_detection_smoke`
 - `spsc_ring_buffer_threaded_smoke`
 
+## WASAPI Inspection
+
+After building on Windows, inspect active WASAPI endpoints and the default render stream contract:
+
+```bat
+build\sar_list_wasapi_devices.exe
+```
+
 ## Better Future Remote Execution
 
 For non-interactive testing, enable one of:
