@@ -32,6 +32,7 @@ target_compile_features(sar_core PUBLIC cxx_std_20)
 if(WIN32)
   target_sources(sar_core PRIVATE
     core/platform/windows_wasapi_device_provider.cpp
+    core/platform/windows_wasapi_duplex_loop.cpp
     core/platform/windows_wasapi_graph_runner.cpp
     core/platform/windows_wasapi_realtime_worker.cpp
     core/platform/windows_wasapi_render_loop.cpp
@@ -151,6 +152,12 @@ if(WIN32)
 
   target_link_libraries(sar_windows_wasapi_render_loop_smoke PRIVATE sar_core)
 
+  add_executable(sar_windows_wasapi_duplex_loop_smoke
+    tests/realtime/windows_wasapi_duplex_loop_smoke.cpp
+  )
+
+  target_link_libraries(sar_windows_wasapi_duplex_loop_smoke PRIVATE sar_core)
+
   add_executable(sar_list_wasapi_devices
     tools/list_wasapi_devices.cpp
   )
@@ -212,6 +219,8 @@ if(WIN32)
            COMMAND sar_windows_wasapi_realtime_worker_smoke)
   add_test(NAME windows_wasapi_render_loop_smoke
            COMMAND sar_windows_wasapi_render_loop_smoke)
+  add_test(NAME windows_wasapi_duplex_loop_smoke
+           COMMAND sar_windows_wasapi_duplex_loop_smoke)
 endif()
 add_test(NAME diagnostics_smoke COMMAND sar_diagnostics_smoke)
 add_test(NAME spsc_ring_buffer_smoke COMMAND sar_spsc_ring_buffer_smoke)
