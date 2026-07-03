@@ -36,7 +36,21 @@ class SampleConversionResult {
     const void* source,
     std::size_t source_bytes,
     const AudioFormat& source_format,
+    realtime::AudioBuffer& destination,
+    std::size_t frames) noexcept;
+
+[[nodiscard]] SampleConversionResult import_interleaved_to_float(
+    const void* source,
+    std::size_t source_bytes,
+    const AudioFormat& source_format,
     realtime::AudioBuffer& destination) noexcept;
+
+[[nodiscard]] SampleConversionResult export_float_to_interleaved(
+    const realtime::AudioBuffer& source,
+    const AudioFormat& destination_format,
+    void* destination,
+    std::size_t destination_bytes,
+    std::size_t frames) noexcept;
 
 [[nodiscard]] SampleConversionResult export_float_to_interleaved(
     const realtime::AudioBuffer& source,

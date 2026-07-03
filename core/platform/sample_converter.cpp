@@ -78,20 +78,22 @@ std::size_t required_interleaved_bytes(const AudioFormat& format,
 SampleConversionResult import_interleaved_to_float(const void* source,
                                                    std::size_t source_bytes,
                                                    const AudioFormat& source_format,
-                                                   realtime::AudioBuffer& destination) noexcept {
+                                                   realtime::AudioBuffer& destination,
+                                                   std::size_t frames) noexcept {
   if (!is_supported(source_format)) {
     return SampleConversionResult::failure(SampleConversionStatus::UnsupportedFormat);
   }
   if (source_format.channels != destination.channels()) {
     return SampleConversionResult::failure(SampleConversionStatus::ChannelMismatch);
   }
-  if (source_bytes < required_interleaved_bytes(source_format, destination.frames())) {
+  if (frames > destination.frames() ||
+      source_bytes < required_interleaved_bytes(source_format, frames)) {
     return SampleConversionResult::failure(SampleConversionStatus::BufferTooSmall);
   }
 
   if (source_format.sample_format == AudioSampleFormat::IeeeFloat) {
     const auto* samples = static_cast<const float*>(source);
-    for (std::size_t frame = 0; frame < destination.frames(); ++frame) {
+    for (std::size_t frame = 0; frame < frames; ++frame) {
       for (std::size_t channel = 0; channel < destination.channels(); ++channel) {
         destination.channel(channel)[frame] =
             samples[(frame * destination.channels()) + channel];
@@ -102,7 +104,7 @@ SampleConversionResult import_interleaved_to_float(const void* source,
 
   if (source_format.bits_per_sample == 16) {
     const auto* samples = static_cast<const std::int16_t*>(source);
-    for (std::size_t frame = 0; frame < destination.frames(); ++frame) {
+    for (std::size_t frame = 0; frame < frames; ++frame) {
       for (std::size_t channel = 0; channel < destination.channels(); ++channel) {
         destination.channel(channel)[frame] =
             int16_to_float(samples[(frame * destination.channels()) + channel]);
@@ -110,10 +112,67 @@ SampleConversionResult import_interleaved_to_float(const void* source,
     }
   } else {
     const auto* samples = static_cast<const std::int32_t*>(source);
-    for (std::size_t frame = 0; frame < destination.frames(); ++frame) {
+    for (std::size_t frame = 0; frame < frames; ++frame) {
       for (std::size_t channel = 0; channel < destination.channels(); ++channel) {
         destination.channel(channel)[frame] =
             int32_to_float(samples[(frame * destination.channels()) + channel]);
+      }
+    }
+  }
+  return SampleConversionResult::success();
+}
+
+SampleConversionResult import_interleaved_to_float(const void* source,
+                                                   std::size_t source_bytes,
+                                                   const AudioFormat& source_format,
+                                                   realtime::AudioBuffer& destination) noexcept {
+  return import_interleaved_to_float(source,
+                                     source_bytes,
+                                     source_format,
+                                     destination,
+                                     destination.frames());
+}
+
+SampleConversionResult export_float_to_interleaved(const realtime::AudioBuffer& source,
+                                                   const AudioFormat& destination_format,
+                                                   void* destination,
+                                                   std::size_t destination_bytes,
+                                                   std::size_t frames) noexcept {
+  if (!is_supported(destination_format)) {
+    return SampleConversionResult::failure(SampleConversionStatus::UnsupportedFormat);
+  }
+  if (destination_format.channels != source.channels()) {
+    return SampleConversionResult::failure(SampleConversionStatus::ChannelMismatch);
+  }
+  if (frames > source.frames() ||
+      destination_bytes < required_interleaved_bytes(destination_format, frames)) {
+    return SampleConversionResult::failure(SampleConversionStatus::BufferTooSmall);
+  }
+
+  if (destination_format.sample_format == AudioSampleFormat::IeeeFloat) {
+    auto* samples = static_cast<float*>(destination);
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+      for (std::size_t channel = 0; channel < source.channels(); ++channel) {
+        samples[(frame * source.channels()) + channel] = source.channel(channel)[frame];
+      }
+    }
+    return SampleConversionResult::success();
+  }
+
+  if (destination_format.bits_per_sample == 16) {
+    auto* samples = static_cast<std::int16_t*>(destination);
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+      for (std::size_t channel = 0; channel < source.channels(); ++channel) {
+        samples[(frame * source.channels()) + channel] =
+            float_to_int16(source.channel(channel)[frame]);
+      }
+    }
+  } else {
+    auto* samples = static_cast<std::int32_t*>(destination);
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+      for (std::size_t channel = 0; channel < source.channels(); ++channel) {
+        samples[(frame * source.channels()) + channel] =
+            float_to_int32(source.channel(channel)[frame]);
       }
     }
   }
@@ -124,44 +183,11 @@ SampleConversionResult export_float_to_interleaved(const realtime::AudioBuffer& 
                                                    const AudioFormat& destination_format,
                                                    void* destination,
                                                    std::size_t destination_bytes) noexcept {
-  if (!is_supported(destination_format)) {
-    return SampleConversionResult::failure(SampleConversionStatus::UnsupportedFormat);
-  }
-  if (destination_format.channels != source.channels()) {
-    return SampleConversionResult::failure(SampleConversionStatus::ChannelMismatch);
-  }
-  if (destination_bytes < required_interleaved_bytes(destination_format, source.frames())) {
-    return SampleConversionResult::failure(SampleConversionStatus::BufferTooSmall);
-  }
-
-  if (destination_format.sample_format == AudioSampleFormat::IeeeFloat) {
-    auto* samples = static_cast<float*>(destination);
-    for (std::size_t frame = 0; frame < source.frames(); ++frame) {
-      for (std::size_t channel = 0; channel < source.channels(); ++channel) {
-        samples[(frame * source.channels()) + channel] = source.channel(channel)[frame];
-      }
-    }
-    return SampleConversionResult::success();
-  }
-
-  if (destination_format.bits_per_sample == 16) {
-    auto* samples = static_cast<std::int16_t*>(destination);
-    for (std::size_t frame = 0; frame < source.frames(); ++frame) {
-      for (std::size_t channel = 0; channel < source.channels(); ++channel) {
-        samples[(frame * source.channels()) + channel] =
-            float_to_int16(source.channel(channel)[frame]);
-      }
-    }
-  } else {
-    auto* samples = static_cast<std::int32_t*>(destination);
-    for (std::size_t frame = 0; frame < source.frames(); ++frame) {
-      for (std::size_t channel = 0; channel < source.channels(); ++channel) {
-        samples[(frame * source.channels()) + channel] =
-            float_to_int32(source.channel(channel)[frame]);
-      }
-    }
-  }
-  return SampleConversionResult::success();
+  return export_float_to_interleaved(source,
+                                     destination_format,
+                                     destination,
+                                     destination_bytes,
+                                     source.frames());
 }
 
 }  // namespace sar::platform

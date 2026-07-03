@@ -16,6 +16,16 @@ bool has_error_code(const sar::platform::WasapiStreamResult& result,
   return false;
 }
 
+bool has_error_code(const sar::platform::WasapiStreamIoResult& result,
+                    const std::string& code) {
+  for (const auto& error : result.errors()) {
+    if (error.code == code) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int expect(bool condition, const char* message) {
   if (!condition) {
     std::cerr << message << '\n';
@@ -111,6 +121,28 @@ int main() {
       return failure;
     }
 
+    sar::realtime::AudioBuffer render_buffer(2, 480);
+    auto io_result = stream.render_once(render_buffer, 0);
+    if (const auto failure = expect(!io_result.ok(),
+                                    "Expected synthetic render pump failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(io_result, "native_stream_unavailable"),
+                                    "Expected native_stream_unavailable error")) {
+      return failure;
+    }
+
+    sar::realtime::AudioBuffer capture_buffer(2, 480);
+    io_result = stream.capture_once(capture_buffer, 0);
+    if (const auto failure = expect(!io_result.ok(),
+                                    "Expected render stream capture pump failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(io_result, "wrong_stream_direction"),
+                                    "Expected wrong_stream_direction error")) {
+      return failure;
+    }
+
     result = stream.stop();
     if (const auto failure = expect(result.ok(), "Expected stream stop success")) {
       return failure;
@@ -172,6 +204,15 @@ int main() {
             expect(stream.state() == sar::platform::WasapiStreamState::Started,
                    "Expected default stream shell to start")) {
       return failure;
+    }
+    sar::realtime::AudioBuffer render_buffer(stream.probe().mix_format.channels,
+                                             stream.probe().buffer_frames);
+    auto io_result = stream.render_once(render_buffer, 0);
+    if (!io_result.ok()) {
+      for (const auto& error : io_result.errors()) {
+        std::cerr << error.code << ": " << error.message << '\n';
+      }
+      return 1;
     }
     auto stop_result = stream.stop();
     if (!stop_result.ok()) {

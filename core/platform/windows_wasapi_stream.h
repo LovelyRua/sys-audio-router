@@ -1,7 +1,9 @@
 #pragma once
 
+#include "core/realtime/audio_buffer.h"
 #include "core/platform/windows_wasapi_stream_probe.h"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -44,6 +46,22 @@ class WasapiStreamResult {
 
 class WasapiStreamOpenResult;
 
+class WasapiStreamIoResult {
+ public:
+  static WasapiStreamIoResult success(std::uint32_t frames);
+  static WasapiStreamIoResult failure(std::vector<WasapiStreamError> errors);
+
+  [[nodiscard]] bool ok() const noexcept;
+  [[nodiscard]] std::uint32_t frames() const noexcept;
+  [[nodiscard]] const std::vector<WasapiStreamError>& errors() const noexcept;
+
+ private:
+  WasapiStreamIoResult(std::uint32_t frames, std::vector<WasapiStreamError> errors);
+
+  std::uint32_t frames_ = 0;
+  std::vector<WasapiStreamError> errors_;
+};
+
 class WindowsWasapiStream {
  public:
   WindowsWasapiStream();
@@ -56,6 +74,12 @@ class WindowsWasapiStream {
   [[nodiscard]] WasapiStreamResult open(WasapiStreamProbe probe);
   [[nodiscard]] WasapiStreamResult start();
   [[nodiscard]] WasapiStreamResult stop();
+  [[nodiscard]] WasapiStreamIoResult render_once(
+      const realtime::AudioBuffer& source,
+      std::uint32_t timeout_ms) noexcept;
+  [[nodiscard]] WasapiStreamIoResult capture_once(
+      realtime::AudioBuffer& destination,
+      std::uint32_t timeout_ms) noexcept;
   void close() noexcept;
 
   [[nodiscard]] WasapiStreamState state() const noexcept;
