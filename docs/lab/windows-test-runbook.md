@@ -85,16 +85,9 @@ To choose a different path:
 
 ## Expected Test Targets
 
-- `realtime_smoke`
-- `graph_snapshot_smoke`
-- `graph_builder_smoke`
-- `route_matrix_smoke`
-- `preset_document_smoke`
-- `diagnostics_smoke`
-- `spsc_ring_buffer_smoke`
-- `process_context_smoke`
-- `xrun_detection_smoke`
-- `spsc_ring_buffer_threaded_smoke`
+The Windows suite currently has 22 CTest targets, including the portable core
+smoke tests plus WASAPI stream, graph runner, realtime thread, and realtime
+worker smoke tests.
 
 ## WASAPI Inspection
 

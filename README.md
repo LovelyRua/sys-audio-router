@@ -13,6 +13,7 @@ The project is in architecture and technical validation.
 Start here:
 
 - [Product Principles](docs/architecture/product-principles.md)
+- [Current System Architecture](docs/architecture/current-system.md)
 - [Roadmap](docs/roadmap.md)
 - [Realtime Audio Engine](docs/architecture/audio-engine.md)
 - [Routing Graph](docs/architecture/routing-graph.md)
@@ -46,7 +47,9 @@ Architecture decisions:
 
 ## Prototype
 
-The repository now contains a minimal C++20 realtime core skeleton and an offline smoke test target:
+The repository now contains a C++20 realtime core prototype, Windows WASAPI
+backend shells, sample conversion helpers, a graph runner, and a realtime worker
+shell.
 
 - `sar_core`
 - `sar_realtime_smoke`
@@ -58,3 +61,4 @@ The repository now contains a minimal C++20 realtime core skeleton and an offlin
 - `sar_process_context_smoke`
 - `sar_xrun_detection_smoke`
 - `sar_spsc_ring_buffer_threaded_smoke`
+- Windows WASAPI and realtime worker smoke targets on Windows

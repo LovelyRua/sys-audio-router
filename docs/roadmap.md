@@ -31,6 +31,10 @@ Exit criteria:
 
 Purpose: build the audio engine without depending on real devices.
 
+Status: substantially underway. The portable buffer, process context, linear
+graph, graph builder, graph snapshot prototype, route matrix, diagnostics, SPSC
+queue, and smoke tests exist.
+
 Deliverables:
 
 - Fixed-block graph executor.
@@ -49,6 +53,11 @@ Exit criteria:
 ## Phase 2: Windows Audio Backend v1
 
 Purpose: connect the engine to real Windows audio devices.
+
+Status: underway. WASAPI endpoint enumeration, default stream probing,
+shared-mode event-driven stream handles, single-cycle render/capture pumping,
+graph runner orchestration, MMCSS scope, and a realtime worker shell exist. The
+next milestone is a measured real-device loop.
 
 Deliverables:
 

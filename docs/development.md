@@ -26,9 +26,9 @@ The current local Codex environment does not have `cmake`, `cl`, `ninja`, or `g+
 
 Use `scripts\check-toolchain.cmd` to inspect the local Windows toolchain.
 
-## Current Core Prototype
+## Current Prototype
 
-The first prototype contains:
+The current prototype contains:
 
 - `AudioBuffer`: fixed channel/frame float buffer.
 - `ProcessContext`: per-block timing and format context passed to nodes.
@@ -39,6 +39,16 @@ The first prototype contains:
 - `GraphSnapshotPublisher`: early graph hot-swap prototype.
 - `RouteMatrix`: fixed-size channel routing and summing matrix.
 - `SpscRingBuffer`: fixed-capacity single-producer single-consumer queue.
+- `AudioDeviceProvider`: platform device descriptor abstraction.
+- `SampleConverter`: native interleaved float32/int16/int32 conversion to and
+  from planar float buffers.
+- `WindowsWasapiDeviceProvider`: active WASAPI endpoint enumeration.
+- `WindowsWasapiStream`: WASAPI stream lifecycle, event handle ownership,
+  render/capture service ownership, and single-cycle buffer pumping.
+- `WindowsWasapiGraphRunner`: one-cycle orchestration around capture, graph
+  processing, and render.
+- `WindowsWasapiRealtimeWorker`: start/stop worker shell running the graph
+  runner on a background MMCSS thread.
 - `realtime_smoke`: offline processing smoke test.
 - `graph_snapshot_smoke`: offline graph publication smoke test.
 - `graph_builder_smoke`: graph validation and construction smoke test.
@@ -48,6 +58,7 @@ The first prototype contains:
 - `process_context_smoke`: node process context smoke test.
 - `xrun_detection_smoke`: forced slow-node xrun detection smoke test.
 - `spsc_ring_buffer_threaded_smoke`: producer/consumer SPSC ordering smoke test.
+- Windows WASAPI and realtime worker smoke tests when building on Windows.
 
 Known limitation:
 
@@ -56,12 +67,25 @@ Known limitation:
 
 ## Test Targets
 
-Current CTest targets:
+Current CTest targets on Windows:
 
 - `realtime_smoke`
 - `graph_snapshot_smoke`
 - `graph_builder_smoke`
 - `route_matrix_smoke`
+- `preset_document_smoke`
+- `control_command_smoke`
+- `control_response_smoke`
+- `audio_device_smoke`
+- `audio_device_registry_smoke`
+- `virtual_endpoint_smoke`
+- `sample_converter_smoke`
+- `windows_wasapi_device_smoke`
+- `windows_wasapi_stream_probe_smoke`
+- `windows_wasapi_stream_smoke`
+- `windows_wasapi_graph_runner_smoke`
+- `windows_realtime_thread_smoke`
+- `windows_wasapi_realtime_worker_smoke`
 - `diagnostics_smoke`
 - `spsc_ring_buffer_smoke`
 - `process_context_smoke`
