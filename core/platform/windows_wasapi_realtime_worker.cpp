@@ -2,11 +2,53 @@
 
 #include "core/platform/windows_realtime_thread.h"
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
+#include <Windows.h>
+#include <objbase.h>
+
+#include <cstdio>
 #include <utility>
 
 namespace sar::platform {
 
 namespace {
+
+class ComApartmentScope {
+ public:
+  ComApartmentScope() {
+    result_ = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  }
+
+  ComApartmentScope(const ComApartmentScope&) = delete;
+  ComApartmentScope& operator=(const ComApartmentScope&) = delete;
+
+  ~ComApartmentScope() {
+    if (result_ == S_OK || result_ == S_FALSE) {
+      CoUninitialize();
+    }
+  }
+
+  [[nodiscard]] HRESULT result() const noexcept {
+    return result_;
+  }
+
+  [[nodiscard]] bool ok() const noexcept {
+    return SUCCEEDED(result_) || result_ == RPC_E_CHANGED_MODE;
+  }
+
+ private:
+  HRESULT result_ = E_FAIL;
+};
+
+std::string hresult_hex(HRESULT result) {
+  char buffer[16] = {};
+  const auto value = static_cast<unsigned long>(result);
+  std::snprintf(buffer, sizeof(buffer), "0x%08lX", value);
+  return buffer;
+}
 
 std::vector<WasapiRealtimeWorkerError> convert_errors(
     const std::vector<WasapiStreamError>& errors) {
@@ -118,6 +160,19 @@ std::vector<WasapiRealtimeWorkerError> WindowsWasapiRealtimeWorker::last_errors(
 }
 
 void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
+  ComApartmentScope com_scope;
+  if (!com_scope.ok()) {
+    set_errors({
+        {
+            "com_initialize_failed",
+            "WASAPI realtime worker COM initialization failed with " +
+                hresult_hex(com_scope.result()) + ".",
+        },
+    });
+    running_.store(false);
+    return;
+  }
+
   WindowsRealtimeThreadScope realtime_scope;
   const auto realtime_result =
       WindowsRealtimeThreadScope::enter_current_thread(realtime_scope);
