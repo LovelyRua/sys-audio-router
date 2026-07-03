@@ -31,6 +31,7 @@ target_compile_features(sar_core PUBLIC cxx_std_20)
 if(WIN32)
   target_sources(sar_core PRIVATE
     core/platform/windows_wasapi_device_provider.cpp
+    core/platform/windows_wasapi_stream_probe.cpp
   )
   target_link_libraries(sar_core PUBLIC ole32 uuid)
 endif()
@@ -101,6 +102,12 @@ if(WIN32)
   )
 
   target_link_libraries(sar_windows_wasapi_device_smoke PRIVATE sar_core)
+
+  add_executable(sar_windows_wasapi_stream_probe_smoke
+    tests/realtime/windows_wasapi_stream_probe_smoke.cpp
+  )
+
+  target_link_libraries(sar_windows_wasapi_stream_probe_smoke PRIVATE sar_core)
 endif()
 
 add_executable(sar_diagnostics_smoke
@@ -146,6 +153,8 @@ add_test(NAME audio_device_registry_smoke COMMAND sar_audio_device_registry_smok
 add_test(NAME virtual_endpoint_smoke COMMAND sar_virtual_endpoint_smoke)
 if(WIN32)
   add_test(NAME windows_wasapi_device_smoke COMMAND sar_windows_wasapi_device_smoke)
+  add_test(NAME windows_wasapi_stream_probe_smoke
+           COMMAND sar_windows_wasapi_stream_probe_smoke)
 endif()
 add_test(NAME diagnostics_smoke COMMAND sar_diagnostics_smoke)
 add_test(NAME spsc_ring_buffer_smoke COMMAND sar_spsc_ring_buffer_smoke)

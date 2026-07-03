@@ -36,6 +36,8 @@ The physical backend should be the first real-device integration because it does
 
 The first implementation step is `WindowsWasapiDeviceProvider`, which enumerates active render and capture endpoints through WASAPI and reports them as shared `AudioDeviceDescriptor` values. It does not open streams yet.
 
+The next step is `WindowsWasapiStreamProbe`, which opens the default shared-mode endpoint far enough to read the mix format, device period, and buffer size. It does not start streaming or connect to the realtime graph.
+
 Use it to validate:
 
 - Device enumeration.
