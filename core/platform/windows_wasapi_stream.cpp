@@ -212,6 +212,18 @@ WasapiStreamResult WindowsWasapiStream::start() {
     });
   }
 
+  if (impl_ && impl_->audio_client) {
+    const auto start_result = impl_->audio_client->Start();
+    if (FAILED(start_result)) {
+      return WasapiStreamResult::failure({
+          {
+              "wasapi_start_failed",
+              "WASAPI audio client start failed with " + hresult_hex(start_result) + ".",
+          },
+      });
+    }
+  }
+
   state_ = WasapiStreamState::Started;
   return WasapiStreamResult::success();
 }
@@ -226,11 +238,26 @@ WasapiStreamResult WindowsWasapiStream::stop() {
     });
   }
 
+  if (impl_ && impl_->audio_client) {
+    const auto stop_result = impl_->audio_client->Stop();
+    if (FAILED(stop_result)) {
+      return WasapiStreamResult::failure({
+          {
+              "wasapi_stop_failed",
+              "WASAPI audio client stop failed with " + hresult_hex(stop_result) + ".",
+          },
+      });
+    }
+  }
+
   state_ = WasapiStreamState::Open;
   return WasapiStreamResult::success();
 }
 
 void WindowsWasapiStream::close() noexcept {
+  if (state_ == WasapiStreamState::Started && impl_ && impl_->audio_client) {
+    static_cast<void>(impl_->audio_client->Stop());
+  }
   state_ = WasapiStreamState::Closed;
   probe_ = {};
   impl_.reset();

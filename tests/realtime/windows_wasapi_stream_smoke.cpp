@@ -142,7 +142,7 @@ int main() {
   }
 
   if (has_default_output_device()) {
-    const auto result = sar::platform::open_default_wasapi_stream_shell(
+    auto result = sar::platform::open_default_wasapi_stream_shell(
         sar::platform::WasapiStreamDirection::Render);
     if (!result.ok()) {
       for (const auto& error : result.errors()) {
@@ -153,6 +153,31 @@ int main() {
     if (const auto failure =
             expect(result.stream().state() == sar::platform::WasapiStreamState::Open,
                    "Expected default stream shell to open")) {
+      return failure;
+    }
+    auto stream = result.take_stream();
+    auto start_result = stream.start();
+    if (!start_result.ok()) {
+      for (const auto& error : start_result.errors()) {
+        std::cerr << error.code << ": " << error.message << '\n';
+      }
+      return 1;
+    }
+    if (const auto failure =
+            expect(stream.state() == sar::platform::WasapiStreamState::Started,
+                   "Expected default stream shell to start")) {
+      return failure;
+    }
+    auto stop_result = stream.stop();
+    if (!stop_result.ok()) {
+      for (const auto& error : stop_result.errors()) {
+        std::cerr << error.code << ": " << error.message << '\n';
+      }
+      return 1;
+    }
+    if (const auto failure =
+            expect(stream.state() == sar::platform::WasapiStreamState::Open,
+                   "Expected default stream shell to stop")) {
       return failure;
     }
   }
