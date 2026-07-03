@@ -154,6 +154,14 @@ std::string friendly_name(IMMDevice& device) {
   return name;
 }
 
+std::string default_device_id(IMMDeviceEnumerator& enumerator, EDataFlow flow) {
+  ComPtr<IMMDevice> device;
+  if (FAILED(enumerator.GetDefaultAudioEndpoint(flow, eConsole, device.put())) || !device) {
+    return {};
+  }
+  return device_id(*device);
+}
+
 AudioFormat mix_format(IMMDevice& device) {
   AudioFormat format;
   ComPtr<IAudioClient> audio_client;
@@ -179,6 +187,7 @@ AudioFormat mix_format(IMMDevice& device) {
 void append_devices(IMMDeviceEnumerator& enumerator,
                     EDataFlow flow,
                     AudioDeviceDirection direction,
+                    const std::string& default_id,
                     std::vector<AudioDeviceDescriptor>& devices,
                     std::vector<AudioDeviceError>& errors) {
   ComPtr<IMMDeviceCollection> collection;
@@ -215,6 +224,7 @@ void append_devices(IMMDeviceEnumerator& enumerator,
     descriptor.backend = AudioBackendKind::Wasapi;
     descriptor.direction = direction;
     descriptor.formats.push_back(mix_format(*device));
+    descriptor.is_default = descriptor.id == default_id;
     descriptor.is_virtual = false;
     devices.push_back(std::move(descriptor));
   }
@@ -254,8 +264,20 @@ AudioDeviceListResult WindowsWasapiDeviceProvider::list_devices() const {
 
   std::vector<AudioDeviceDescriptor> devices;
   std::vector<AudioDeviceError> errors;
-  append_devices(*enumerator, eRender, AudioDeviceDirection::Output, devices, errors);
-  append_devices(*enumerator, eCapture, AudioDeviceDirection::Input, devices, errors);
+  const auto default_render_id = default_device_id(*enumerator, eRender);
+  const auto default_capture_id = default_device_id(*enumerator, eCapture);
+  append_devices(*enumerator,
+                 eRender,
+                 AudioDeviceDirection::Output,
+                 default_render_id,
+                 devices,
+                 errors);
+  append_devices(*enumerator,
+                 eCapture,
+                 AudioDeviceDirection::Input,
+                 default_capture_id,
+                 devices,
+                 errors);
 
   auto validation_errors = validate_audio_devices(devices);
   for (const auto& error : validation_errors) {
