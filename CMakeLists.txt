@@ -13,6 +13,7 @@ add_library(sar_core
   core/platform/audio_device.cpp
   core/platform/audio_device_registry.cpp
   core/platform/mock_audio_device_provider.cpp
+  core/platform/sample_converter.cpp
   core/platform/virtual_endpoint.cpp
   core/realtime/audio_buffer.cpp
   core/graph/graph.cpp
@@ -97,6 +98,12 @@ add_executable(sar_virtual_endpoint_smoke
 
 target_link_libraries(sar_virtual_endpoint_smoke PRIVATE sar_core)
 
+add_executable(sar_sample_converter_smoke
+  tests/realtime/sample_converter_smoke.cpp
+)
+
+target_link_libraries(sar_sample_converter_smoke PRIVATE sar_core)
+
 if(WIN32)
   add_executable(sar_windows_wasapi_device_smoke
     tests/realtime/windows_wasapi_device_smoke.cpp
@@ -164,6 +171,7 @@ add_test(NAME control_response_smoke COMMAND sar_control_response_smoke)
 add_test(NAME audio_device_smoke COMMAND sar_audio_device_smoke)
 add_test(NAME audio_device_registry_smoke COMMAND sar_audio_device_registry_smoke)
 add_test(NAME virtual_endpoint_smoke COMMAND sar_virtual_endpoint_smoke)
+add_test(NAME sample_converter_smoke COMMAND sar_sample_converter_smoke)
 if(WIN32)
   add_test(NAME windows_wasapi_device_smoke COMMAND sar_windows_wasapi_device_smoke)
   add_test(NAME windows_wasapi_stream_probe_smoke

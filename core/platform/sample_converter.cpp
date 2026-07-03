@@ -1,0 +1,133 @@
+#include "core/platform/sample_converter.h"
+
+#include <algorithm>
+#include <cmath>
+
+namespace sar::platform {
+
+namespace {
+
+std::size_t bytes_per_sample(const AudioFormat& format) noexcept {
+  if (format.bits_per_sample % 8 != 0) {
+    return 0;
+  }
+  return format.bits_per_sample / 8;
+}
+
+bool is_supported(const AudioFormat& format) noexcept {
+  if (format.sample_format == AudioSampleFormat::IeeeFloat &&
+      format.bits_per_sample == 32) {
+    return true;
+  }
+  if (format.sample_format == AudioSampleFormat::PcmInt &&
+      format.bits_per_sample == 16) {
+    return true;
+  }
+  return false;
+}
+
+float int16_to_float(std::int16_t value) noexcept {
+  return static_cast<float>(value) / 32768.0F;
+}
+
+std::int16_t float_to_int16(float value) noexcept {
+  const auto clamped = std::clamp(value, -1.0F, 1.0F);
+  return static_cast<std::int16_t>(std::lround(clamped * 32767.0F));
+}
+
+}  // namespace
+
+SampleConversionResult SampleConversionResult::success() {
+  return SampleConversionResult(SampleConversionStatus::Ok);
+}
+
+SampleConversionResult SampleConversionResult::failure(SampleConversionStatus status) {
+  return SampleConversionResult(status);
+}
+
+bool SampleConversionResult::ok() const noexcept {
+  return status_ == SampleConversionStatus::Ok;
+}
+
+SampleConversionStatus SampleConversionResult::status() const noexcept {
+  return status_;
+}
+
+SampleConversionResult::SampleConversionResult(SampleConversionStatus status)
+    : status_(status) {}
+
+std::size_t required_interleaved_bytes(const AudioFormat& format,
+                                       std::size_t frames) noexcept {
+  return static_cast<std::size_t>(format.channels) * frames * bytes_per_sample(format);
+}
+
+SampleConversionResult import_interleaved_to_float(const void* source,
+                                                   std::size_t source_bytes,
+                                                   const AudioFormat& source_format,
+                                                   realtime::AudioBuffer& destination) noexcept {
+  if (!is_supported(source_format)) {
+    return SampleConversionResult::failure(SampleConversionStatus::UnsupportedFormat);
+  }
+  if (source_format.channels != destination.channels()) {
+    return SampleConversionResult::failure(SampleConversionStatus::ChannelMismatch);
+  }
+  if (source_bytes < required_interleaved_bytes(source_format, destination.frames())) {
+    return SampleConversionResult::failure(SampleConversionStatus::BufferTooSmall);
+  }
+
+  if (source_format.sample_format == AudioSampleFormat::IeeeFloat) {
+    const auto* samples = static_cast<const float*>(source);
+    for (std::size_t frame = 0; frame < destination.frames(); ++frame) {
+      for (std::size_t channel = 0; channel < destination.channels(); ++channel) {
+        destination.channel(channel)[frame] =
+            samples[(frame * destination.channels()) + channel];
+      }
+    }
+    return SampleConversionResult::success();
+  }
+
+  const auto* samples = static_cast<const std::int16_t*>(source);
+  for (std::size_t frame = 0; frame < destination.frames(); ++frame) {
+    for (std::size_t channel = 0; channel < destination.channels(); ++channel) {
+      destination.channel(channel)[frame] =
+          int16_to_float(samples[(frame * destination.channels()) + channel]);
+    }
+  }
+  return SampleConversionResult::success();
+}
+
+SampleConversionResult export_float_to_interleaved(const realtime::AudioBuffer& source,
+                                                   const AudioFormat& destination_format,
+                                                   void* destination,
+                                                   std::size_t destination_bytes) noexcept {
+  if (!is_supported(destination_format)) {
+    return SampleConversionResult::failure(SampleConversionStatus::UnsupportedFormat);
+  }
+  if (destination_format.channels != source.channels()) {
+    return SampleConversionResult::failure(SampleConversionStatus::ChannelMismatch);
+  }
+  if (destination_bytes < required_interleaved_bytes(destination_format, source.frames())) {
+    return SampleConversionResult::failure(SampleConversionStatus::BufferTooSmall);
+  }
+
+  if (destination_format.sample_format == AudioSampleFormat::IeeeFloat) {
+    auto* samples = static_cast<float*>(destination);
+    for (std::size_t frame = 0; frame < source.frames(); ++frame) {
+      for (std::size_t channel = 0; channel < source.channels(); ++channel) {
+        samples[(frame * source.channels()) + channel] = source.channel(channel)[frame];
+      }
+    }
+    return SampleConversionResult::success();
+  }
+
+  auto* samples = static_cast<std::int16_t*>(destination);
+  for (std::size_t frame = 0; frame < source.frames(); ++frame) {
+    for (std::size_t channel = 0; channel < source.channels(); ++channel) {
+      samples[(frame * source.channels()) + channel] =
+          float_to_int16(source.channel(channel)[frame]);
+    }
+  }
+  return SampleConversionResult::success();
+}
+
+}  // namespace sar::platform
