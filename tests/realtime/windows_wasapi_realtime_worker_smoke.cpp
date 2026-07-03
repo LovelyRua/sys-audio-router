@@ -93,6 +93,14 @@ int main() {
                                     "Expected graph-only worker without wait timeouts")) {
       return failure;
     }
+    if (const auto failure = expect(stats.capture_idle_cycles == 0,
+                                    "Expected graph-only worker without capture idle cycles")) {
+      return failure;
+    }
+    if (const auto failure = expect(stats.render_idle_cycles == 0,
+                                    "Expected graph-only worker without render idle cycles")) {
+      return failure;
+    }
     if (const auto failure = expect(worker.last_errors().empty(),
                                     "Expected no worker errors")) {
       return failure;
