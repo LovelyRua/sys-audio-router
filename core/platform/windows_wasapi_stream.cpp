@@ -416,6 +416,40 @@ WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection di
           },
       });
     }
+
+    UINT32 render_buffer_frames = 0;
+    const auto buffer_size_result = impl->audio_client->GetBufferSize(&render_buffer_frames);
+    if (FAILED(buffer_size_result) || render_buffer_frames == 0) {
+      return WasapiStreamOpenResult::failure({
+          {
+              "wasapi_render_buffer_size_failed",
+              "WASAPI render buffer size query failed with " + hresult_hex(buffer_size_result) + ".",
+          },
+      });
+    }
+
+    BYTE* render_buffer = nullptr;
+    const auto get_buffer_result =
+        impl->render_client->GetBuffer(render_buffer_frames, &render_buffer);
+    if (FAILED(get_buffer_result) || render_buffer == nullptr) {
+      return WasapiStreamOpenResult::failure({
+          {
+              "wasapi_render_buffer_failed",
+              "WASAPI render buffer acquisition failed with " + hresult_hex(get_buffer_result) + ".",
+          },
+      });
+    }
+
+    const auto release_result =
+        impl->render_client->ReleaseBuffer(render_buffer_frames, AUDCLNT_BUFFERFLAGS_SILENT);
+    if (FAILED(release_result)) {
+      return WasapiStreamOpenResult::failure({
+          {
+              "wasapi_render_buffer_release_failed",
+              "WASAPI silent render buffer release failed with " + hresult_hex(release_result) + ".",
+          },
+      });
+    }
   } else {
     const auto capture_client_result = impl->audio_client->GetService(
         __uuidof(IAudioCaptureClient),
