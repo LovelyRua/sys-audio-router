@@ -16,6 +16,8 @@ struct WasapiGraphRunnerStats {
   std::uint32_t captured_frames = 0;
   std::uint32_t rendered_frames = 0;
   bool graph_processed = false;
+  bool capture_stream_idle = false;
+  bool render_stream_idle = false;
 };
 
 class WasapiGraphRunnerResult {
@@ -47,6 +49,8 @@ class WindowsWasapiGraphRunner {
   [[nodiscard]] realtime::AudioBuffer& output_buffer() noexcept;
   [[nodiscard]] const realtime::AudioBuffer& output_buffer() const noexcept;
 
+  [[nodiscard]] WasapiGraphRunnerResult start_streams() noexcept;
+  [[nodiscard]] WasapiGraphRunnerResult stop_streams() noexcept;
   [[nodiscard]] WasapiGraphRunnerResult process_once(
       graph::Graph& graph,
       diagnostics::EngineDiagnostics& diagnostics,

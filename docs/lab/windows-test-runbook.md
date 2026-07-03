@@ -85,9 +85,9 @@ To choose a different path:
 
 ## Expected Test Targets
 
-The Windows suite currently has 22 CTest targets, including the portable core
+The Windows suite currently has 23 CTest targets, including the portable core
 smoke tests plus WASAPI stream, graph runner, realtime thread, and realtime
-worker smoke tests.
+worker/render loop smoke tests.
 
 ## WASAPI Inspection
 

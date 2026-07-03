@@ -54,6 +54,51 @@ const realtime::AudioBuffer& WindowsWasapiGraphRunner::output_buffer() const noe
   return output_;
 }
 
+WasapiGraphRunnerResult WindowsWasapiGraphRunner::start_streams() noexcept {
+  if (capture_stream_ != nullptr) {
+    auto result = capture_stream_->start();
+    if (!result.ok()) {
+      return WasapiGraphRunnerResult::failure(result.errors());
+    }
+  }
+
+  if (render_stream_ != nullptr) {
+    auto result = render_stream_->start();
+    if (!result.ok()) {
+      if (capture_stream_ != nullptr) {
+        static_cast<void>(capture_stream_->stop());
+      }
+      return WasapiGraphRunnerResult::failure(result.errors());
+    }
+  }
+
+  return WasapiGraphRunnerResult::success({});
+}
+
+WasapiGraphRunnerResult WindowsWasapiGraphRunner::stop_streams() noexcept {
+  std::vector<WasapiStreamError> errors;
+
+  if (render_stream_ != nullptr) {
+    auto result = render_stream_->stop();
+    if (!result.ok()) {
+      errors.insert(errors.end(), result.errors().begin(), result.errors().end());
+    }
+  }
+
+  if (capture_stream_ != nullptr) {
+    auto result = capture_stream_->stop();
+    if (!result.ok()) {
+      errors.insert(errors.end(), result.errors().begin(), result.errors().end());
+    }
+  }
+
+  if (!errors.empty()) {
+    return WasapiGraphRunnerResult::failure(std::move(errors));
+  }
+
+  return WasapiGraphRunnerResult::success({});
+}
+
 WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics,
@@ -67,6 +112,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
     }
     stats.captured_frames = capture_result.frames();
     if (stats.captured_frames == 0) {
+      stats.capture_stream_idle = true;
       return WasapiGraphRunnerResult::success(stats);
     }
   }
@@ -81,6 +127,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
       return WasapiGraphRunnerResult::failure(render_result.errors());
     }
     stats.rendered_frames = render_result.frames();
+    stats.render_stream_idle = stats.rendered_frames == 0;
   }
 
   return WasapiGraphRunnerResult::success(stats);

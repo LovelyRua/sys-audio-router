@@ -6,8 +6,8 @@ where the project is going; this file describes the current executable shape.
 ## Current Stage
 
 The project is still pre-alpha. The portable realtime core, graph execution
-prototype, Windows WASAPI stream shell, graph runner, realtime worker, sample
-conversion helpers, and smoke-test harness are in place.
+prototype, Windows WASAPI stream shell, graph runner, realtime worker, render
+loop wrapper, sample conversion helpers, and smoke-test harness are in place.
 
 The next major milestone is the first measured real-device loop:
 
@@ -60,6 +60,7 @@ WASAPI loops expose underrun, overrun, drift, and wait-time behavior.
 - Windows WASAPI stream lifecycle and single-cycle buffer pumping.
 - Windows WASAPI graph runner.
 - Windows realtime worker shell.
+- Windows render-only loop wrapper for the first default-output device path.
 - Windows MMCSS realtime thread scope.
 
 ## Windows WASAPI Flow
@@ -83,9 +84,13 @@ WASAPI loops expose underrun, overrun, drift, and wait-time behavior.
 `WindowsWasapiRealtimeWorker` runs the graph runner in a background thread and
 enters MMCSS `Pro Audio` priority through `WindowsRealtimeThreadScope`.
 
+`WindowsWasapiRenderLoop` owns a default render stream, graph runner, and
+realtime worker. It is the current high-level entry point for the first measured
+render-only real-device loop.
+
 ## Current Testing Model
 
-The Windows CTest suite currently has 22 smoke targets. Several tests are
+The Windows CTest suite currently has 23 smoke targets. Several tests are
 synthetic because WinRM sessions may not expose interactive audio endpoints even
 when the VM has a desktop audio stack.
 

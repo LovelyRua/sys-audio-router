@@ -73,7 +73,11 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   }
 
   stop_requested_.store(false);
-  processed_cycles_.store(0);
+  loop_cycles_.store(0);
+  graph_processed_cycles_.store(0);
+  idle_cycles_.store(0);
+  captured_frames_.store(0);
+  rendered_frames_.store(0);
   set_errors({});
   running_.store(true);
   worker_ = std::thread([this, timeout_ms] {
@@ -95,7 +99,17 @@ bool WindowsWasapiRealtimeWorker::running() const noexcept {
 }
 
 std::uint64_t WindowsWasapiRealtimeWorker::processed_cycles() const noexcept {
-  return processed_cycles_.load();
+  return graph_processed_cycles_.load();
+}
+
+WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
+  WasapiRealtimeWorkerStats result;
+  result.loop_cycles = loop_cycles_.load();
+  result.graph_processed_cycles = graph_processed_cycles_.load();
+  result.idle_cycles = idle_cycles_.load();
+  result.captured_frames = captured_frames_.load();
+  result.rendered_frames = rendered_frames_.load();
+  return result;
 }
 
 std::vector<WasapiRealtimeWorkerError> WindowsWasapiRealtimeWorker::last_errors() const {
@@ -113,6 +127,13 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     return;
   }
 
+  const auto start_result = runner_.start_streams();
+  if (!start_result.ok()) {
+    set_errors(convert_errors(start_result.errors()));
+    running_.store(false);
+    return;
+  }
+
   while (!stop_requested_.load()) {
     auto result = runner_.process_once(graph_, diagnostics_, timeout_ms);
     if (!result.ok()) {
@@ -120,9 +141,21 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
       stop_requested_.store(true);
       break;
     }
+    loop_cycles_.fetch_add(1);
+    captured_frames_.fetch_add(result.stats().captured_frames);
+    rendered_frames_.fetch_add(result.stats().rendered_frames);
     if (result.stats().graph_processed) {
-      processed_cycles_.fetch_add(1);
+      graph_processed_cycles_.fetch_add(1);
     }
+    if (!result.stats().graph_processed || result.stats().capture_stream_idle ||
+        result.stats().render_stream_idle) {
+      idle_cycles_.fetch_add(1);
+    }
+  }
+
+  const auto stop_result = runner_.stop_streams();
+  if (!stop_result.ok() && last_errors().empty()) {
+    set_errors(convert_errors(stop_result.errors()));
   }
 
   running_.store(false);

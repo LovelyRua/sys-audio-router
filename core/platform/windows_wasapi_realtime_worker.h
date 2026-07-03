@@ -18,6 +18,14 @@ struct WasapiRealtimeWorkerError {
   std::string message;
 };
 
+struct WasapiRealtimeWorkerStats {
+  std::uint64_t loop_cycles = 0;
+  std::uint64_t graph_processed_cycles = 0;
+  std::uint64_t idle_cycles = 0;
+  std::uint64_t captured_frames = 0;
+  std::uint64_t rendered_frames = 0;
+};
+
 class WasapiRealtimeWorkerResult {
  public:
   static WasapiRealtimeWorkerResult success();
@@ -46,6 +54,7 @@ class WindowsWasapiRealtimeWorker {
 
   [[nodiscard]] bool running() const noexcept;
   [[nodiscard]] std::uint64_t processed_cycles() const noexcept;
+  [[nodiscard]] WasapiRealtimeWorkerStats stats() const noexcept;
   [[nodiscard]] std::vector<WasapiRealtimeWorkerError> last_errors() const;
 
  private:
@@ -57,7 +66,11 @@ class WindowsWasapiRealtimeWorker {
   diagnostics::EngineDiagnostics& diagnostics_;
   std::atomic_bool stop_requested_ = false;
   std::atomic_bool running_ = false;
-  std::atomic_uint64_t processed_cycles_ = 0;
+  std::atomic_uint64_t loop_cycles_ = 0;
+  std::atomic_uint64_t graph_processed_cycles_ = 0;
+  std::atomic_uint64_t idle_cycles_ = 0;
+  std::atomic_uint64_t captured_frames_ = 0;
+  std::atomic_uint64_t rendered_frames_ = 0;
   mutable std::mutex errors_mutex_;
   std::vector<WasapiRealtimeWorkerError> last_errors_;
   std::thread worker_;

@@ -29,7 +29,7 @@ Preferred Windows validation path from the development machine:
 scripts\windows-winrm-test.cmd <host> <user> <password>
 ```
 
-The current Windows smoke suite has 22 CTest targets. If a change touches
+The current Windows smoke suite has 23 CTest targets. If a change touches
 realtime, WASAPI, thread lifecycle, sample conversion, graph execution, or
 diagnostics, run the Windows test script before pushing or merging.
 
