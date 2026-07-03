@@ -104,6 +104,8 @@ After building on Windows, inspect active WASAPI endpoints and the default rende
 build\sar_list_wasapi_devices.exe
 ```
 
+WinRM sessions may report zero active WASAPI endpoints even when an interactive desktop session has audio devices. Use the CLI output as a session-local inspection result, not as proof that the VM has no audio stack.
+
 ## Better Future Remote Execution
 
 For non-interactive testing, enable one of:
