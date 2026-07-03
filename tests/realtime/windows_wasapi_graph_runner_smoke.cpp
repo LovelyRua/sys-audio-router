@@ -43,6 +43,12 @@ sar::platform::WasapiStreamProbe make_render_probe() {
   return probe;
 }
 
+sar::platform::WasapiStreamProbe make_capture_probe() {
+  auto probe = make_render_probe();
+  probe.direction = sar::platform::WasapiStreamDirection::Capture;
+  return probe;
+}
+
 }  // namespace
 
 int main() {
@@ -102,6 +108,43 @@ int main() {
     }
     if (const auto failure = expect(has_error_code(result, "native_stream_unavailable"),
                                     "Expected native_stream_unavailable")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiStream capture_stream;
+    auto open_result = capture_stream.open(make_capture_probe());
+    if (const auto failure = expect(open_result.ok(), "Expected synthetic capture open")) {
+      return failure;
+    }
+    auto start_result = capture_stream.start();
+    if (const auto failure = expect(start_result.ok(), "Expected synthetic capture start")) {
+      return failure;
+    }
+
+    sar::platform::WindowsWasapiGraphRunner runner(&capture_stream, nullptr, 2, 4);
+    auto& input = runner.input_buffer();
+    for (std::size_t channel = 0; channel < input.channels(); ++channel) {
+      auto samples = input.channel(channel);
+      for (std::size_t frame = 0; frame < input.frames(); ++frame) {
+        samples[frame] = 1.0F;
+      }
+    }
+
+    sar::graph::Graph graph(9, 2, 4);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    const auto result = runner.process_once(graph, diagnostics, 0);
+
+    if (const auto failure = expect(!result.ok(), "Expected synthetic capture failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "native_stream_unavailable"),
+                                    "Expected capture native_stream_unavailable")) {
+      return failure;
+    }
+    if (const auto failure = expect(input.channel(0)[0] == 0.0F,
+                                    "Expected capture input to be cleared before pump")) {
       return failure;
     }
   }

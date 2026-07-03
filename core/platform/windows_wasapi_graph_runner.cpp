@@ -106,6 +106,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
   WasapiGraphRunnerStats stats;
 
   if (capture_stream_ != nullptr) {
+    input_.clear();
     auto capture_result = capture_stream_->capture_once(input_, timeout_ms);
     if (!capture_result.ok()) {
       return WasapiGraphRunnerResult::failure(capture_result.errors());
