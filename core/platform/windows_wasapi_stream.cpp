@@ -147,6 +147,8 @@ struct WindowsWasapiStream::Impl {
   ComPtr<IMMDeviceEnumerator> enumerator;
   ComPtr<IMMDevice> device;
   ComPtr<IAudioClient> audio_client;
+  ComPtr<IAudioRenderClient> render_client;
+  ComPtr<IAudioCaptureClient> capture_client;
   WAVEFORMATEX* wave_format = nullptr;
 
   ~Impl() {
@@ -400,6 +402,32 @@ WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection di
             "WASAPI shared stream initialization failed with " + hresult_hex(init_result) + ".",
         },
     });
+  }
+
+  if (direction == WasapiStreamDirection::Render) {
+    const auto render_client_result = impl->audio_client->GetService(
+        __uuidof(IAudioRenderClient),
+        reinterpret_cast<void**>(impl->render_client.put()));
+    if (FAILED(render_client_result) || !impl->render_client) {
+      return WasapiStreamOpenResult::failure({
+          {
+              "wasapi_render_client_failed",
+              "WASAPI render client query failed with " + hresult_hex(render_client_result) + ".",
+          },
+      });
+    }
+  } else {
+    const auto capture_client_result = impl->audio_client->GetService(
+        __uuidof(IAudioCaptureClient),
+        reinterpret_cast<void**>(impl->capture_client.put()));
+    if (FAILED(capture_client_result) || !impl->capture_client) {
+      return WasapiStreamOpenResult::failure({
+          {
+              "wasapi_capture_client_failed",
+              "WASAPI capture client query failed with " + hresult_hex(capture_client_result) + ".",
+          },
+      });
+    }
   }
 
   stream.impl_ = std::move(impl);
