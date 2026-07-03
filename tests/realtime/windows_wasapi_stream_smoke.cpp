@@ -81,6 +81,20 @@ int main() {
                                     "Expected open stream state")) {
       return failure;
     }
+    auto diagnostics = stream.diagnostics();
+    if (const auto failure =
+            expect(diagnostics.state == sar::platform::WasapiStreamState::Open,
+                   "Expected open diagnostics state")) {
+      return failure;
+    }
+    if (const auto failure = expect(diagnostics.mix_format.sample_rate == 48000,
+                                    "Expected diagnostics sample rate")) {
+      return failure;
+    }
+    if (const auto failure = expect(diagnostics.buffer_frames == 480,
+                                    "Expected diagnostics buffer frames")) {
+      return failure;
+    }
 
     result = stream.start();
     if (const auto failure = expect(result.ok(), "Expected stream start success")) {
@@ -88,6 +102,12 @@ int main() {
     }
     if (const auto failure = expect(stream.state() == sar::platform::WasapiStreamState::Started,
                                     "Expected started stream state")) {
+      return failure;
+    }
+    diagnostics = stream.diagnostics();
+    if (const auto failure =
+            expect(diagnostics.state == sar::platform::WasapiStreamState::Started,
+                   "Expected started diagnostics state")) {
       return failure;
     }
 

@@ -18,6 +18,15 @@ struct WasapiStreamError {
   std::string message;
 };
 
+struct WasapiStreamDiagnostics {
+  WasapiStreamState state = WasapiStreamState::Closed;
+  WasapiStreamDirection direction = WasapiStreamDirection::Render;
+  AudioFormat mix_format;
+  std::uint32_t buffer_frames = 0;
+  std::uint64_t default_period_100ns = 0;
+  std::uint64_t minimum_period_100ns = 0;
+};
+
 class WasapiStreamResult {
  public:
   static WasapiStreamResult success();
@@ -41,6 +50,7 @@ class WindowsWasapiStream {
 
   [[nodiscard]] WasapiStreamState state() const noexcept;
   [[nodiscard]] const WasapiStreamProbe& probe() const noexcept;
+  [[nodiscard]] WasapiStreamDiagnostics diagnostics() const noexcept;
 
  private:
   WasapiStreamState state_ = WasapiStreamState::Closed;

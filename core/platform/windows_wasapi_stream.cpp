@@ -120,6 +120,17 @@ const WasapiStreamProbe& WindowsWasapiStream::probe() const noexcept {
   return probe_;
 }
 
+WasapiStreamDiagnostics WindowsWasapiStream::diagnostics() const noexcept {
+  WasapiStreamDiagnostics diagnostics;
+  diagnostics.state = state_;
+  diagnostics.direction = probe_.direction;
+  diagnostics.mix_format = probe_.mix_format;
+  diagnostics.buffer_frames = probe_.buffer_frames;
+  diagnostics.default_period_100ns = probe_.default_period_100ns;
+  diagnostics.minimum_period_100ns = probe_.minimum_period_100ns;
+  return diagnostics;
+}
+
 WasapiStreamOpenResult WasapiStreamOpenResult::success(WindowsWasapiStream stream) {
   return {std::move(stream), {}};
 }
