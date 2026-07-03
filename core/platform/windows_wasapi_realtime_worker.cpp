@@ -68,10 +68,14 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
         {"worker_already_running", "WASAPI realtime worker is already running."},
     });
   }
+  if (worker_.joinable()) {
+    worker_.join();
+  }
 
   stop_requested_.store(false);
   processed_cycles_.store(0);
   set_errors({});
+  running_.store(true);
   worker_ = std::thread([this, timeout_ms] {
     run(timeout_ms);
   });
@@ -100,8 +104,6 @@ std::vector<WasapiRealtimeWorkerError> WindowsWasapiRealtimeWorker::last_errors(
 }
 
 void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
-  running_.store(true);
-
   WindowsRealtimeThreadScope realtime_scope;
   const auto realtime_result =
       WindowsRealtimeThreadScope::enter_current_thread(realtime_scope);

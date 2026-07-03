@@ -60,6 +60,17 @@ int main() {
     return failure;
   }
 
+  const auto restart_result = worker.start(0);
+  if (const auto failure = expect(restart_result.ok(), "Expected worker restart success")) {
+    return failure;
+  }
+  const auto duplicate_start = worker.start(0);
+  if (const auto failure = expect(!duplicate_start.ok(),
+                                  "Expected duplicate worker start failure")) {
+    return failure;
+  }
+  worker.stop();
+
   std::cout << "Windows WASAPI realtime worker smoke test passed\n";
   return 0;
 }
