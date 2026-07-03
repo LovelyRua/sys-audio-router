@@ -1,0 +1,111 @@
+#include "core/platform/windows_wasapi_graph_runner.h"
+
+#include "core/graph/node.h"
+#include "tests/realtime/test_helpers.h"
+
+#include <iostream>
+#include <memory>
+#include <string>
+
+namespace {
+
+bool has_error_code(const sar::platform::WasapiGraphRunnerResult& result,
+                    const std::string& code) {
+  for (const auto& error : result.errors()) {
+    if (error.code == code) {
+      return true;
+    }
+  }
+  return false;
+}
+
+int expect(bool condition, const char* message) {
+  if (!condition) {
+    std::cerr << message << '\n';
+    return 1;
+  }
+  return 0;
+}
+
+sar::platform::WasapiStreamProbe make_render_probe() {
+  sar::platform::WasapiStreamProbe probe;
+  probe.direction = sar::platform::WasapiStreamDirection::Render;
+  probe.device_id = "device";
+  probe.device_label = "Device";
+  probe.mix_format.sample_rate = 48000;
+  probe.mix_format.channels = 2;
+  probe.mix_format.frames_per_block = 4;
+  probe.mix_format.bits_per_sample = 32;
+  probe.mix_format.sample_format = sar::platform::AudioSampleFormat::IeeeFloat;
+  probe.default_period_100ns = 100000;
+  probe.minimum_period_100ns = 30000;
+  probe.buffer_frames = 4;
+  return probe;
+}
+
+}  // namespace
+
+int main() {
+  {
+    sar::platform::WindowsWasapiGraphRunner runner(nullptr, nullptr, 2, 4);
+    auto& input = runner.input_buffer();
+    for (std::size_t channel = 0; channel < input.channels(); ++channel) {
+      auto samples = input.channel(channel);
+      for (std::size_t frame = 0; frame < input.frames(); ++frame) {
+        samples[frame] = static_cast<float>(frame + 1);
+      }
+    }
+
+    sar::graph::Graph graph(7, 2, 4);
+    graph.add_node(std::make_unique<sar::graph::GainNode>(0.5F));
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    const auto result = runner.process_once(graph, diagnostics, 0);
+
+    if (const auto failure = expect(result.ok(), "Expected graph-only runner success")) {
+      return failure;
+    }
+    if (const auto failure = expect(result.stats().graph_processed,
+                                    "Expected graph to be processed")) {
+      return failure;
+    }
+    if (const auto failure = expect(diagnostics.processed_blocks == 1,
+                                    "Expected diagnostics block count")) {
+      return failure;
+    }
+
+    const auto& output = runner.output_buffer();
+    if (const auto failure =
+            expect(sar::tests::nearly_equal(output.channel(0)[2], 1.5F),
+                   "Expected processed output sample")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiStream render_stream;
+    auto open_result = render_stream.open(make_render_probe());
+    if (const auto failure = expect(open_result.ok(), "Expected synthetic render open")) {
+      return failure;
+    }
+    auto start_result = render_stream.start();
+    if (const auto failure = expect(start_result.ok(), "Expected synthetic render start")) {
+      return failure;
+    }
+
+    sar::platform::WindowsWasapiGraphRunner runner(nullptr, &render_stream, 2, 4);
+    sar::graph::Graph graph(8, 2, 4);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    const auto result = runner.process_once(graph, diagnostics, 0);
+
+    if (const auto failure = expect(!result.ok(), "Expected synthetic render failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "native_stream_unavailable"),
+                                    "Expected native_stream_unavailable")) {
+      return failure;
+    }
+  }
+
+  std::cout << "Windows WASAPI graph runner smoke test passed\n";
+  return 0;
+}
