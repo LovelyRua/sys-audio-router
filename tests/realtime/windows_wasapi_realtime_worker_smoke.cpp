@@ -76,6 +76,10 @@ int main() {
     if (const auto failure = expect(!worker.running(), "Expected stopped worker")) {
       return failure;
     }
+    if (const auto failure = expect(worker.stats().last_stop_wait_microseconds < 1000000,
+                                    "Expected bounded worker stop wait")) {
+      return failure;
+    }
     if (const auto failure = expect(worker.processed_cycles() >= 1,
                                     "Expected processed worker cycles")) {
       return failure;
@@ -126,6 +130,10 @@ int main() {
 
     const auto restart_result = worker.start(0);
     if (const auto failure = expect(restart_result.ok(), "Expected worker restart success")) {
+      return failure;
+    }
+    if (const auto failure = expect(worker.stats().last_stop_wait_microseconds == 0,
+                                    "Expected restart to reset stop wait")) {
       return failure;
     }
     const auto duplicate_start = worker.start(0);

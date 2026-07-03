@@ -9,6 +9,7 @@
 #include <Windows.h>
 #include <objbase.h>
 
+#include <chrono>
 #include <cstdio>
 #include <utility>
 
@@ -125,6 +126,7 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   render_wait_timeout_cycles_.store(0);
   captured_frames_.store(0);
   rendered_frames_.store(0);
+  last_stop_wait_microseconds_.store(0);
   set_errors({});
   running_.store(true);
   worker_ = std::thread([this, timeout_ms] {
@@ -137,7 +139,12 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
 void WindowsWasapiRealtimeWorker::stop() noexcept {
   stop_requested_.store(true);
   if (worker_.joinable()) {
+    const auto started = std::chrono::steady_clock::now();
     worker_.join();
+    const auto stopped = std::chrono::steady_clock::now();
+    const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+        stopped - started);
+    last_stop_wait_microseconds_.store(static_cast<std::uint64_t>(elapsed.count()));
   }
 }
 
@@ -161,6 +168,7 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.render_wait_timeout_cycles = render_wait_timeout_cycles_.load();
   result.captured_frames = captured_frames_.load();
   result.rendered_frames = rendered_frames_.load();
+  result.last_stop_wait_microseconds = last_stop_wait_microseconds_.load();
   return result;
 }
 
