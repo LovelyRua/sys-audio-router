@@ -1,10 +1,109 @@
 #include "core/platform/windows_wasapi_stream.h"
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
+#include <Windows.h>
+#include <Audioclient.h>
+#include <propkeydef.h>
+#include <Functiondiscoverykeys_devpkey.h>
+#include <Mmdeviceapi.h>
+#include <Propidl.h>
+#include <Propvarutil.h>
+
+#include <cstdio>
+#include <memory>
+#include <string>
 #include <utility>
 
 namespace sar::platform {
 
 namespace {
+
+template <typename T>
+class ComPtr {
+ public:
+  ComPtr() = default;
+  ComPtr(const ComPtr&) = delete;
+  ComPtr& operator=(const ComPtr&) = delete;
+
+  ComPtr(ComPtr&& other) noexcept : ptr_(std::exchange(other.ptr_, nullptr)) {}
+
+  ComPtr& operator=(ComPtr&& other) noexcept {
+    if (this != &other) {
+      reset();
+      ptr_ = std::exchange(other.ptr_, nullptr);
+    }
+    return *this;
+  }
+
+  ~ComPtr() {
+    reset();
+  }
+
+  [[nodiscard]] T** put() noexcept {
+    reset();
+    return &ptr_;
+  }
+
+  [[nodiscard]] T* operator->() const noexcept {
+    return ptr_;
+  }
+
+  [[nodiscard]] T& operator*() const noexcept {
+    return *ptr_;
+  }
+
+  explicit operator bool() const noexcept {
+    return ptr_ != nullptr;
+  }
+
+  void reset() noexcept {
+    if (ptr_ != nullptr) {
+      ptr_->Release();
+      ptr_ = nullptr;
+    }
+  }
+
+ private:
+  T* ptr_ = nullptr;
+};
+
+class ComApartment {
+ public:
+  ComApartment() {
+    result_ = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  }
+
+  ~ComApartment() {
+    if (result_ == S_OK || result_ == S_FALSE) {
+      CoUninitialize();
+    }
+  }
+
+  [[nodiscard]] HRESULT result() const noexcept {
+    return result_;
+  }
+
+  [[nodiscard]] bool ok() const noexcept {
+    return SUCCEEDED(result_) || result_ == RPC_E_CHANGED_MODE;
+  }
+
+ private:
+  HRESULT result_ = E_FAIL;
+};
+
+std::string hresult_hex(HRESULT result) {
+  char buffer[16] = {};
+  const auto value = static_cast<unsigned long>(result);
+  std::snprintf(buffer, sizeof(buffer), "0x%08lX", value);
+  return buffer;
+}
+
+EDataFlow data_flow(WasapiStreamDirection direction) noexcept {
+  return direction == WasapiStreamDirection::Render ? eRender : eCapture;
+}
 
 std::vector<WasapiStreamError> validate_probe(const WasapiStreamProbe& probe) {
   std::vector<WasapiStreamError> errors;
@@ -43,6 +142,21 @@ std::vector<WasapiStreamError> convert_probe_errors(
 
 }  // namespace
 
+struct WindowsWasapiStream::Impl {
+  ComApartment apartment;
+  ComPtr<IMMDeviceEnumerator> enumerator;
+  ComPtr<IMMDevice> device;
+  ComPtr<IAudioClient> audio_client;
+  WAVEFORMATEX* wave_format = nullptr;
+
+  ~Impl() {
+    if (wave_format != nullptr) {
+      CoTaskMemFree(wave_format);
+      wave_format = nullptr;
+    }
+  }
+};
+
 WasapiStreamResult WasapiStreamResult::success() {
   return WasapiStreamResult({});
 }
@@ -62,6 +176,14 @@ const std::vector<WasapiStreamError>& WasapiStreamResult::errors() const noexcep
 WasapiStreamResult::WasapiStreamResult(std::vector<WasapiStreamError> errors)
     : errors_(std::move(errors)) {}
 
+WindowsWasapiStream::WindowsWasapiStream() = default;
+
+WindowsWasapiStream::WindowsWasapiStream(WindowsWasapiStream&&) noexcept = default;
+
+WindowsWasapiStream& WindowsWasapiStream::operator=(WindowsWasapiStream&&) noexcept = default;
+
+WindowsWasapiStream::~WindowsWasapiStream() = default;
+
 WasapiStreamResult WindowsWasapiStream::open(WasapiStreamProbe probe) {
   if (state_ != WasapiStreamState::Closed) {
     return WasapiStreamResult::failure({
@@ -75,6 +197,7 @@ WasapiStreamResult WindowsWasapiStream::open(WasapiStreamProbe probe) {
   }
 
   probe_ = std::move(probe);
+  impl_.reset();
   state_ = WasapiStreamState::Open;
   return WasapiStreamResult::success();
 }
@@ -110,6 +233,7 @@ WasapiStreamResult WindowsWasapiStream::stop() {
 void WindowsWasapiStream::close() noexcept {
   state_ = WasapiStreamState::Closed;
   probe_ = {};
+  impl_.reset();
 }
 
 WasapiStreamState WindowsWasapiStream::state() const noexcept {
@@ -174,6 +298,84 @@ WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection di
   if (!open_result.ok()) {
     return WasapiStreamOpenResult::failure(open_result.errors());
   }
+
+  auto impl = std::make_unique<WindowsWasapiStream::Impl>();
+  if (!impl->apartment.ok()) {
+    return WasapiStreamOpenResult::failure({
+        {
+            "com_initialize_failed",
+            "COM initialization failed with " + hresult_hex(impl->apartment.result()) + ".",
+        },
+    });
+  }
+
+  const auto create_result = CoCreateInstance(__uuidof(MMDeviceEnumerator),
+                                             nullptr,
+                                             CLSCTX_ALL,
+                                             __uuidof(IMMDeviceEnumerator),
+                                             reinterpret_cast<void**>(impl->enumerator.put()));
+  if (FAILED(create_result) || !impl->enumerator) {
+    return WasapiStreamOpenResult::failure({
+        {
+            "wasapi_enumerator_failed",
+            "WASAPI enumerator creation failed with " + hresult_hex(create_result) + ".",
+        },
+    });
+  }
+
+  const auto endpoint_result = impl->enumerator->GetDefaultAudioEndpoint(
+      data_flow(direction),
+      eConsole,
+      impl->device.put());
+  if (FAILED(endpoint_result) || !impl->device) {
+    return WasapiStreamOpenResult::failure({
+        {
+            "wasapi_default_endpoint_failed",
+            "WASAPI default endpoint query failed with " + hresult_hex(endpoint_result) + ".",
+        },
+    });
+  }
+
+  const auto activate_result = impl->device->Activate(
+      __uuidof(IAudioClient),
+      CLSCTX_ALL,
+      nullptr,
+      reinterpret_cast<void**>(impl->audio_client.put()));
+  if (FAILED(activate_result) || !impl->audio_client) {
+    return WasapiStreamOpenResult::failure({
+        {
+            "wasapi_audio_client_failed",
+            "WASAPI audio client activation failed with " + hresult_hex(activate_result) + ".",
+        },
+    });
+  }
+
+  const auto format_result = impl->audio_client->GetMixFormat(&impl->wave_format);
+  if (FAILED(format_result) || impl->wave_format == nullptr) {
+    return WasapiStreamOpenResult::failure({
+        {
+            "wasapi_mix_format_failed",
+            "WASAPI mix format query failed with " + hresult_hex(format_result) + ".",
+        },
+    });
+  }
+
+  const auto init_result = impl->audio_client->Initialize(AUDCLNT_SHAREMODE_SHARED,
+                                                         0,
+                                                         0,
+                                                         0,
+                                                         impl->wave_format,
+                                                         nullptr);
+  if (FAILED(init_result)) {
+    return WasapiStreamOpenResult::failure({
+        {
+            "wasapi_initialize_failed",
+            "WASAPI shared stream initialization failed with " + hresult_hex(init_result) + ".",
+        },
+    });
+  }
+
+  stream.impl_ = std::move(impl);
 
   return WasapiStreamOpenResult::success(std::move(stream));
 }

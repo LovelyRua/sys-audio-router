@@ -2,6 +2,7 @@
 
 #include "core/platform/windows_wasapi_stream_probe.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -41,8 +42,17 @@ class WasapiStreamResult {
   std::vector<WasapiStreamError> errors_;
 };
 
+class WasapiStreamOpenResult;
+
 class WindowsWasapiStream {
  public:
+  WindowsWasapiStream();
+  WindowsWasapiStream(WindowsWasapiStream&&) noexcept;
+  WindowsWasapiStream& operator=(WindowsWasapiStream&&) noexcept;
+  WindowsWasapiStream(const WindowsWasapiStream&) = delete;
+  WindowsWasapiStream& operator=(const WindowsWasapiStream&) = delete;
+  ~WindowsWasapiStream();
+
   [[nodiscard]] WasapiStreamResult open(WasapiStreamProbe probe);
   [[nodiscard]] WasapiStreamResult start();
   [[nodiscard]] WasapiStreamResult stop();
@@ -53,8 +63,14 @@ class WindowsWasapiStream {
   [[nodiscard]] WasapiStreamDiagnostics diagnostics() const noexcept;
 
  private:
+  friend WasapiStreamOpenResult open_default_wasapi_stream_shell(
+      WasapiStreamDirection direction);
+
+  struct Impl;
+
   WasapiStreamState state_ = WasapiStreamState::Closed;
   WasapiStreamProbe probe_;
+  std::unique_ptr<Impl> impl_;
 };
 
 class WasapiStreamOpenResult {
