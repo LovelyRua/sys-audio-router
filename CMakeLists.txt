@@ -28,6 +28,13 @@ target_include_directories(sar_core
 
 target_compile_features(sar_core PUBLIC cxx_std_20)
 
+if(WIN32)
+  target_sources(sar_core PRIVATE
+    core/platform/windows_wasapi_device_provider.cpp
+  )
+  target_link_libraries(sar_core PUBLIC ole32 uuid)
+endif()
+
 add_executable(sar_realtime_smoke
   tests/realtime/realtime_smoke.cpp
 )
@@ -88,6 +95,14 @@ add_executable(sar_virtual_endpoint_smoke
 
 target_link_libraries(sar_virtual_endpoint_smoke PRIVATE sar_core)
 
+if(WIN32)
+  add_executable(sar_windows_wasapi_device_smoke
+    tests/realtime/windows_wasapi_device_smoke.cpp
+  )
+
+  target_link_libraries(sar_windows_wasapi_device_smoke PRIVATE sar_core)
+endif()
+
 add_executable(sar_diagnostics_smoke
   tests/realtime/diagnostics_smoke.cpp
 )
@@ -129,6 +144,9 @@ add_test(NAME control_response_smoke COMMAND sar_control_response_smoke)
 add_test(NAME audio_device_smoke COMMAND sar_audio_device_smoke)
 add_test(NAME audio_device_registry_smoke COMMAND sar_audio_device_registry_smoke)
 add_test(NAME virtual_endpoint_smoke COMMAND sar_virtual_endpoint_smoke)
+if(WIN32)
+  add_test(NAME windows_wasapi_device_smoke COMMAND sar_windows_wasapi_device_smoke)
+endif()
 add_test(NAME diagnostics_smoke COMMAND sar_diagnostics_smoke)
 add_test(NAME spsc_ring_buffer_smoke COMMAND sar_spsc_ring_buffer_smoke)
 add_test(NAME process_context_smoke COMMAND sar_process_context_smoke)

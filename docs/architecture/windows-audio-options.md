@@ -34,6 +34,8 @@ Backend-specific details can be added later, but the control plane should start 
 
 The physical backend should be the first real-device integration because it does not require a custom driver.
 
+The first implementation step is `WindowsWasapiDeviceProvider`, which enumerates active render and capture endpoints through WASAPI and reports them as shared `AudioDeviceDescriptor` values. It does not open streams yet.
+
 Use it to validate:
 
 - Device enumeration.
