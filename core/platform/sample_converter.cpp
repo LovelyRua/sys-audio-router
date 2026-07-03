@@ -23,6 +23,10 @@ bool is_supported(const AudioFormat& format) noexcept {
       format.bits_per_sample == 16) {
     return true;
   }
+  if (format.sample_format == AudioSampleFormat::PcmInt &&
+      format.bits_per_sample == 32) {
+    return true;
+  }
   return false;
 }
 
@@ -33,6 +37,16 @@ float int16_to_float(std::int16_t value) noexcept {
 std::int16_t float_to_int16(float value) noexcept {
   const auto clamped = std::clamp(value, -1.0F, 1.0F);
   return static_cast<std::int16_t>(std::lround(clamped * 32767.0F));
+}
+
+float int32_to_float(std::int32_t value) noexcept {
+  return static_cast<float>(value) / 2147483648.0F;
+}
+
+std::int32_t float_to_int32(float value) noexcept {
+  const auto clamped = std::clamp(value, -1.0F, 1.0F);
+  return static_cast<std::int32_t>(
+      std::llround(static_cast<double>(clamped) * 2147483647.0));
 }
 
 }  // namespace
@@ -86,11 +100,21 @@ SampleConversionResult import_interleaved_to_float(const void* source,
     return SampleConversionResult::success();
   }
 
-  const auto* samples = static_cast<const std::int16_t*>(source);
-  for (std::size_t frame = 0; frame < destination.frames(); ++frame) {
-    for (std::size_t channel = 0; channel < destination.channels(); ++channel) {
-      destination.channel(channel)[frame] =
-          int16_to_float(samples[(frame * destination.channels()) + channel]);
+  if (source_format.bits_per_sample == 16) {
+    const auto* samples = static_cast<const std::int16_t*>(source);
+    for (std::size_t frame = 0; frame < destination.frames(); ++frame) {
+      for (std::size_t channel = 0; channel < destination.channels(); ++channel) {
+        destination.channel(channel)[frame] =
+            int16_to_float(samples[(frame * destination.channels()) + channel]);
+      }
+    }
+  } else {
+    const auto* samples = static_cast<const std::int32_t*>(source);
+    for (std::size_t frame = 0; frame < destination.frames(); ++frame) {
+      for (std::size_t channel = 0; channel < destination.channels(); ++channel) {
+        destination.channel(channel)[frame] =
+            int32_to_float(samples[(frame * destination.channels()) + channel]);
+      }
     }
   }
   return SampleConversionResult::success();
@@ -120,11 +144,21 @@ SampleConversionResult export_float_to_interleaved(const realtime::AudioBuffer& 
     return SampleConversionResult::success();
   }
 
-  auto* samples = static_cast<std::int16_t*>(destination);
-  for (std::size_t frame = 0; frame < source.frames(); ++frame) {
-    for (std::size_t channel = 0; channel < source.channels(); ++channel) {
-      samples[(frame * source.channels()) + channel] =
-          float_to_int16(source.channel(channel)[frame]);
+  if (destination_format.bits_per_sample == 16) {
+    auto* samples = static_cast<std::int16_t*>(destination);
+    for (std::size_t frame = 0; frame < source.frames(); ++frame) {
+      for (std::size_t channel = 0; channel < source.channels(); ++channel) {
+        samples[(frame * source.channels()) + channel] =
+            float_to_int16(source.channel(channel)[frame]);
+      }
+    }
+  } else {
+    auto* samples = static_cast<std::int32_t*>(destination);
+    for (std::size_t frame = 0; frame < source.frames(); ++frame) {
+      for (std::size_t channel = 0; channel < source.channels(); ++channel) {
+        samples[(frame * source.channels()) + channel] =
+            float_to_int32(source.channel(channel)[frame]);
+      }
     }
   }
   return SampleConversionResult::success();

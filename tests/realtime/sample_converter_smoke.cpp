@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <vector>
 
 namespace {
@@ -29,6 +30,13 @@ sar::platform::AudioFormat float32_format() {
 sar::platform::AudioFormat int16_format() {
   auto format = float32_format();
   format.bits_per_sample = 16;
+  format.sample_format = sar::platform::AudioSampleFormat::PcmInt;
+  return format;
+}
+
+sar::platform::AudioFormat int32_format() {
+  auto format = float32_format();
+  format.bits_per_sample = 32;
   format.sample_format = sar::platform::AudioSampleFormat::PcmInt;
   return format;
 }
@@ -95,6 +103,35 @@ int main() {
   }
 
   {
+    const auto format = int32_format();
+    const std::vector<std::int32_t> interleaved = {
+        0, std::numeric_limits<std::int32_t>::max(),
+        std::numeric_limits<std::int32_t>::min(), 1073741824,
+        -1073741824, 536870912,
+        268435456, -268435456,
+    };
+    sar::realtime::AudioBuffer buffer(2, 4);
+    const auto result = sar::platform::import_interleaved_to_float(
+        interleaved.data(),
+        interleaved.size() * sizeof(std::int32_t),
+        format,
+        buffer);
+    if (const auto failure = expect(result.ok(), "Expected int32 import success")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::tests::nearly_equal(buffer.channel(0)[1], -1.0F),
+                   "Expected int32 minimum to import as -1")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::tests::nearly_equal(buffer.channel(1)[1], 0.5F),
+                   "Expected int32 positive sample")) {
+      return failure;
+    }
+  }
+
+  {
     const auto format = int16_format();
     sar::realtime::AudioBuffer buffer(2, 2);
     buffer.channel(0)[0] = -1.0F;
@@ -121,6 +158,40 @@ int main() {
     }
     if (const auto failure = expect(interleaved[2] == 32767 && interleaved[3] == -32767,
                                     "Expected export clipping")) {
+      return failure;
+    }
+  }
+
+  {
+    const auto format = int32_format();
+    sar::realtime::AudioBuffer buffer(2, 2);
+    buffer.channel(0)[0] = -1.0F;
+    buffer.channel(1)[0] = 1.0F;
+    buffer.channel(0)[1] = 2.0F;
+    buffer.channel(1)[1] = -2.0F;
+
+    std::vector<std::int32_t> interleaved(4);
+    const auto result = sar::platform::export_float_to_interleaved(
+        buffer,
+        format,
+        interleaved.data(),
+        interleaved.size() * sizeof(std::int32_t));
+    if (const auto failure = expect(result.ok(), "Expected int32 export success")) {
+      return failure;
+    }
+    if (const auto failure = expect(interleaved[0] == -2147483647,
+                                    "Expected negative int32 full-scale export")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(interleaved[1] == std::numeric_limits<std::int32_t>::max(),
+                                    "Expected positive int32 full-scale export")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(interleaved[2] == std::numeric_limits<std::int32_t>::max() &&
+                       interleaved[3] == -2147483647,
+                   "Expected int32 export clipping")) {
       return failure;
     }
   }
