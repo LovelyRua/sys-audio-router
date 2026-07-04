@@ -124,6 +124,28 @@ int main() {
   }
 
   {
+    sar::platform::WindowsWasapiGraphRunner runner(nullptr, nullptr, 2, 4);
+    sar::graph::Graph graph(11, 1, 4);
+    graph.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+    graph.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    const auto result = runner.process_once(graph, diagnostics, 0);
+
+    if (const auto failure =
+            expect(!result.ok(), "Expected undersized multi-node graph failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "graph_buffer_too_small"),
+                                    "Expected graph_buffer_too_small error")) {
+      return failure;
+    }
+    if (const auto failure = expect(diagnostics.processed_blocks == 0,
+                                    "Expected undersized graph not to process")) {
+      return failure;
+    }
+  }
+
+  {
     sar::platform::WindowsWasapiStream render_stream;
     auto open_result = render_stream.open(make_render_probe());
     if (const auto failure = expect(open_result.ok(), "Expected synthetic render open")) {

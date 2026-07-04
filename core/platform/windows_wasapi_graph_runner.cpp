@@ -1,8 +1,35 @@
 #include "core/platform/windows_wasapi_graph_runner.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace sar::platform {
+
+namespace {
+
+std::vector<WasapiStreamError> validate_graph_shape(
+    const graph::Graph& graph,
+    const realtime::AudioBuffer& input,
+    const realtime::AudioBuffer& output) {
+  if (graph.node_count() <= 1) {
+    return {};
+  }
+
+  const auto required_channels = std::max(input.channels(), output.channels());
+  const auto required_frames = std::max(input.frames(), output.frames());
+  if (graph.channels() >= required_channels && graph.frames() >= required_frames) {
+    return {};
+  }
+
+  return {
+      {
+          "graph_buffer_too_small",
+          "Graph scratch buffers must cover the runner input and output shapes.",
+      },
+  };
+}
+
+}  // namespace
 
 WasapiGraphRunnerResult WasapiGraphRunnerResult::success(WasapiGraphRunnerStats stats) {
   return {stats, {}};
@@ -130,6 +157,11 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
       stats.capture_wait_timed_out = capture_result.timed_out();
       return WasapiGraphRunnerResult::success(stats);
     }
+  }
+
+  auto shape_errors = validate_graph_shape(graph, input_, output_);
+  if (!shape_errors.empty()) {
+    return WasapiGraphRunnerResult::failure(std::move(shape_errors));
   }
 
   output_.clear();
