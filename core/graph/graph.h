@@ -28,6 +28,9 @@ class Graph {
                diagnostics::EngineDiagnostics& diagnostics) noexcept;
 
   [[nodiscard]] std::uint64_t version() const noexcept;
+  [[nodiscard]] std::size_t channels() const noexcept;
+  [[nodiscard]] std::size_t frames() const noexcept;
+  [[nodiscard]] std::uint32_t sample_rate() const noexcept;
   [[nodiscard]] std::size_t node_count() const noexcept;
   [[nodiscard]] std::string_view node_id(std::size_t index) const noexcept;
   [[nodiscard]] std::string_view node_label(std::size_t index) const noexcept;
@@ -35,6 +38,8 @@ class Graph {
  private:
   std::uint64_t version_;
   std::uint32_t sample_rate_;
+  std::size_t channels_;
+  std::size_t frames_;
   realtime::AudioBuffer scratch_a_;
   realtime::AudioBuffer scratch_b_;
   std::vector<std::unique_ptr<Node>> nodes_;

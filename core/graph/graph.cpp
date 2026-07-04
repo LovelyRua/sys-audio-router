@@ -51,6 +51,8 @@ Graph::Graph(std::uint64_t version,
              std::uint32_t sample_rate)
     : version_(version),
       sample_rate_(sample_rate),
+      channels_(channels),
+      frames_(frames),
       scratch_a_(channels, frames),
       scratch_b_(channels, frames) {}
 
@@ -116,6 +118,18 @@ void Graph::process(const realtime::AudioBuffer& input,
 
 std::uint64_t Graph::version() const noexcept {
   return version_;
+}
+
+std::size_t Graph::channels() const noexcept {
+  return channels_;
+}
+
+std::size_t Graph::frames() const noexcept {
+  return frames_;
+}
+
+std::uint32_t Graph::sample_rate() const noexcept {
+  return sample_rate_;
 }
 
 std::size_t Graph::node_count() const noexcept {

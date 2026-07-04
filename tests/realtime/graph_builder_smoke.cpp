@@ -49,6 +49,16 @@ int main() {
     if (const auto failure = expect(graph->node_count() == 1, "Expected one graph node")) {
       return failure;
     }
+    if (const auto failure = expect(graph->channels() == 2, "Expected graph channel count")) {
+      return failure;
+    }
+    if (const auto failure = expect(graph->frames() == 64, "Expected graph frame count")) {
+      return failure;
+    }
+    if (const auto failure = expect(graph->sample_rate() == 48000,
+                                    "Expected graph sample rate")) {
+      return failure;
+    }
     if (const auto failure = expect(graph->node_id(0) == std::string_view{"monitor_gain"},
                                     "Expected graph node ID to be preserved")) {
       return failure;
