@@ -119,6 +119,10 @@ int main() {
                    "Expected total wait timeout cycles to be covered by split counters")) {
       return failure;
     }
+    if (const auto failure = expect(stats.process_error_cycles == 0,
+                                    "Expected graph-only worker without process errors")) {
+      return failure;
+    }
     if (const auto failure = expect(worker.last_errors().empty(),
                                     "Expected no worker errors")) {
       return failure;
@@ -170,6 +174,10 @@ int main() {
     const auto errors = worker.last_errors();
     if (const auto failure = expect(has_error_code(errors, "native_stream_unavailable"),
                                     "Expected native_stream_unavailable worker error")) {
+      return failure;
+    }
+    if (const auto failure = expect(worker.stats().process_error_cycles == 1,
+                                    "Expected one worker process error")) {
       return failure;
     }
     if (const auto failure =
