@@ -29,6 +29,33 @@ std::vector<WasapiStreamError> validate_graph_shape(
   };
 }
 
+std::vector<WasapiStreamError> validate_graph_sample_rate(
+    const graph::Graph& graph,
+    const WindowsWasapiStream* capture_stream,
+    const WindowsWasapiStream* render_stream) {
+  if (capture_stream != nullptr &&
+      graph.sample_rate() != capture_stream->probe().mix_format.sample_rate) {
+    return {
+        {
+            "graph_sample_rate_mismatch",
+            "Graph sample rate must match the WASAPI capture stream sample rate.",
+        },
+    };
+  }
+
+  if (render_stream != nullptr &&
+      graph.sample_rate() != render_stream->probe().mix_format.sample_rate) {
+    return {
+        {
+            "graph_sample_rate_mismatch",
+            "Graph sample rate must match the WASAPI render stream sample rate.",
+        },
+    };
+  }
+
+  return {};
+}
+
 }  // namespace
 
 WasapiGraphRunnerResult WasapiGraphRunnerResult::success(WasapiGraphRunnerStats stats) {
@@ -144,6 +171,12 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
     diagnostics::EngineDiagnostics& diagnostics,
     std::uint32_t timeout_ms) noexcept {
   WasapiGraphRunnerStats stats;
+
+  auto sample_rate_errors =
+      validate_graph_sample_rate(graph, capture_stream_, render_stream_);
+  if (!sample_rate_errors.empty()) {
+    return WasapiGraphRunnerResult::failure(std::move(sample_rate_errors));
+  }
 
   if (capture_stream_ != nullptr) {
     input_.clear();

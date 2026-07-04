@@ -49,6 +49,12 @@ sar::platform::WasapiStreamProbe make_capture_probe() {
   return probe;
 }
 
+sar::platform::WasapiStreamProbe make_mismatched_render_probe() {
+  auto probe = make_render_probe();
+  probe.mix_format.sample_rate = 44100;
+  return probe;
+}
+
 }  // namespace
 
 int main() {
@@ -166,6 +172,39 @@ int main() {
     }
     if (const auto failure = expect(has_error_code(result, "native_stream_unavailable"),
                                     "Expected native_stream_unavailable")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiStream render_stream;
+    auto open_result = render_stream.open(make_mismatched_render_probe());
+    if (const auto failure =
+            expect(open_result.ok(), "Expected mismatched synthetic render open")) {
+      return failure;
+    }
+    auto start_result = render_stream.start();
+    if (const auto failure =
+            expect(start_result.ok(), "Expected mismatched synthetic render start")) {
+      return failure;
+    }
+
+    sar::platform::WindowsWasapiGraphRunner runner(nullptr, &render_stream, 2, 4);
+    sar::graph::Graph graph(12, 2, 4, 48000);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    const auto result = runner.process_once(graph, diagnostics, 0);
+
+    if (const auto failure = expect(!result.ok(),
+                                    "Expected graph sample-rate mismatch failure")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(has_error_code(result, "graph_sample_rate_mismatch"),
+                   "Expected graph_sample_rate_mismatch error")) {
+      return failure;
+    }
+    if (const auto failure = expect(diagnostics.processed_blocks == 0,
+                                    "Expected mismatched graph not to process")) {
       return failure;
     }
   }
