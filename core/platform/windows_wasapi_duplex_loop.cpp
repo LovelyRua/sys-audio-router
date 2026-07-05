@@ -47,6 +47,14 @@ const WasapiStreamProbe& WindowsWasapiDuplexLoop::render_probe() const noexcept 
   return render_stream_.probe();
 }
 
+WasapiStreamDiagnostics WindowsWasapiDuplexLoop::capture_diagnostics() const noexcept {
+  return capture_stream_.diagnostics();
+}
+
+WasapiStreamDiagnostics WindowsWasapiDuplexLoop::render_diagnostics() const noexcept {
+  return render_stream_.diagnostics();
+}
+
 WasapiRealtimeWorkerStats WindowsWasapiDuplexLoop::stats() const noexcept {
   return worker_.stats();
 }

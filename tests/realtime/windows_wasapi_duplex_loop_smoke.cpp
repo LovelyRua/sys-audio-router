@@ -70,6 +70,39 @@ int main() {
   }
 
   auto loop = result.take_loop();
+  const auto capture_diagnostics = loop->capture_diagnostics();
+  const auto render_diagnostics = loop->render_diagnostics();
+  if (const auto failure = expect(capture_diagnostics.state ==
+                                      sar::platform::WasapiStreamState::Open,
+                                  "Expected open capture stream diagnostics")) {
+    return failure;
+  }
+  if (const auto failure = expect(render_diagnostics.state ==
+                                      sar::platform::WasapiStreamState::Open,
+                                  "Expected open render stream diagnostics")) {
+    return failure;
+  }
+  if (const auto failure = expect(capture_diagnostics.direction ==
+                                      sar::platform::WasapiStreamDirection::Capture,
+                                  "Expected capture stream diagnostics direction")) {
+    return failure;
+  }
+  if (const auto failure = expect(render_diagnostics.direction ==
+                                      sar::platform::WasapiStreamDirection::Render,
+                                  "Expected render stream diagnostics direction")) {
+    return failure;
+  }
+  if (const auto failure = expect(capture_diagnostics.buffer_frames ==
+                                      loop->capture_probe().buffer_frames,
+                                  "Expected capture diagnostics buffer size")) {
+    return failure;
+  }
+  if (const auto failure = expect(render_diagnostics.buffer_frames ==
+                                      loop->render_probe().buffer_frames,
+                                  "Expected render diagnostics buffer size")) {
+    return failure;
+  }
+
   if (const auto failure = expect(loop->capture_probe().mix_format.sample_rate ==
                                       loop->render_probe().mix_format.sample_rate,
                                   "Expected matching duplex sample rate")) {

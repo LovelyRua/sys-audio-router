@@ -30,6 +30,7 @@ class WindowsWasapiRenderLoop {
   [[nodiscard]] realtime::AudioBuffer& input_buffer() noexcept;
   [[nodiscard]] const realtime::AudioBuffer& input_buffer() const noexcept;
   [[nodiscard]] const WasapiStreamProbe& probe() const noexcept;
+  [[nodiscard]] WasapiStreamDiagnostics diagnostics() const noexcept;
   [[nodiscard]] WasapiRealtimeWorkerStats stats() const noexcept;
   [[nodiscard]] std::vector<WasapiRealtimeWorkerError> last_errors() const;
 

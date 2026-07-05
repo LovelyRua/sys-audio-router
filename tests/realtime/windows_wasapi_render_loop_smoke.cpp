@@ -54,6 +54,23 @@ int main() {
   }
 
   auto loop = result.take_loop();
+  const auto render_diagnostics = loop->diagnostics();
+  if (const auto failure = expect(render_diagnostics.state ==
+                                      sar::platform::WasapiStreamState::Open,
+                                  "Expected open render stream diagnostics")) {
+    return failure;
+  }
+  if (const auto failure = expect(render_diagnostics.direction ==
+                                      sar::platform::WasapiStreamDirection::Render,
+                                  "Expected render stream diagnostics direction")) {
+    return failure;
+  }
+  if (const auto failure = expect(render_diagnostics.buffer_frames ==
+                                      loop->probe().buffer_frames,
+                                  "Expected render diagnostics buffer size")) {
+    return failure;
+  }
+
   auto& input = loop->input_buffer();
   for (std::size_t channel = 0; channel < input.channels(); ++channel) {
     auto samples = input.channel(channel);

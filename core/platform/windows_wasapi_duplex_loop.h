@@ -25,6 +25,8 @@ class WindowsWasapiDuplexLoop {
   [[nodiscard]] bool running() const noexcept;
   [[nodiscard]] const WasapiStreamProbe& capture_probe() const noexcept;
   [[nodiscard]] const WasapiStreamProbe& render_probe() const noexcept;
+  [[nodiscard]] WasapiStreamDiagnostics capture_diagnostics() const noexcept;
+  [[nodiscard]] WasapiStreamDiagnostics render_diagnostics() const noexcept;
   [[nodiscard]] WasapiRealtimeWorkerStats stats() const noexcept;
   [[nodiscard]] std::vector<WasapiRealtimeWorkerError> last_errors() const;
 

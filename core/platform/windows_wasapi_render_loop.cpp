@@ -46,6 +46,10 @@ const WasapiStreamProbe& WindowsWasapiRenderLoop::probe() const noexcept {
   return render_stream_.probe();
 }
 
+WasapiStreamDiagnostics WindowsWasapiRenderLoop::diagnostics() const noexcept {
+  return render_stream_.diagnostics();
+}
+
 WasapiRealtimeWorkerStats WindowsWasapiRenderLoop::stats() const noexcept {
   return worker_.stats();
 }
