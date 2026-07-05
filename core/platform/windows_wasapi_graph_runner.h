@@ -15,6 +15,8 @@ namespace sar::platform {
 struct WasapiGraphRunnerStats {
   std::uint32_t captured_frames = 0;
   std::uint32_t rendered_frames = 0;
+  std::uint32_t capture_partial_frames = 0;
+  std::uint32_t render_partial_frames = 0;
   bool graph_processed = false;
   bool capture_stream_idle = false;
   bool render_stream_idle = false;

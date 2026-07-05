@@ -127,6 +127,14 @@ int main() {
                                     "Expected graph-only worker without partial render")) {
       return failure;
     }
+    if (const auto failure = expect(stats.capture_partial_frames == 0,
+                                    "Expected graph-only worker without partial capture frames")) {
+      return failure;
+    }
+    if (const auto failure = expect(stats.render_partial_frames == 0,
+                                    "Expected graph-only worker without partial render frames")) {
+      return failure;
+    }
     if (const auto failure = expect(stats.process_error_cycles == 0,
                                     "Expected graph-only worker without process errors")) {
       return failure;

@@ -126,6 +126,8 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   render_wait_timeout_cycles_.store(0);
   capture_partial_cycles_.store(0);
   render_partial_cycles_.store(0);
+  capture_partial_frames_.store(0);
+  render_partial_frames_.store(0);
   process_error_cycles_.store(0);
   captured_frames_.store(0);
   rendered_frames_.store(0);
@@ -171,6 +173,8 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.render_wait_timeout_cycles = render_wait_timeout_cycles_.load();
   result.capture_partial_cycles = capture_partial_cycles_.load();
   result.render_partial_cycles = render_partial_cycles_.load();
+  result.capture_partial_frames = capture_partial_frames_.load();
+  result.render_partial_frames = render_partial_frames_.load();
   result.process_error_cycles = process_error_cycles_.load();
   result.captured_frames = captured_frames_.load();
   result.rendered_frames = rendered_frames_.load();
@@ -248,9 +252,11 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     }
     if (result.stats().capture_partial) {
       capture_partial_cycles_.fetch_add(1);
+      capture_partial_frames_.fetch_add(result.stats().capture_partial_frames);
     }
     if (result.stats().render_partial) {
       render_partial_cycles_.fetch_add(1);
+      render_partial_frames_.fetch_add(result.stats().render_partial_frames);
     }
   }
 

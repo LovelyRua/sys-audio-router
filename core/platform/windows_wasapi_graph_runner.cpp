@@ -187,6 +187,10 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
     stats.captured_frames = capture_result.frames();
     stats.capture_partial =
         stats.captured_frames > 0 && stats.captured_frames < input_.frames();
+    if (stats.capture_partial) {
+      stats.capture_partial_frames =
+          static_cast<std::uint32_t>(input_.frames() - stats.captured_frames);
+    }
     if (stats.captured_frames == 0) {
       stats.capture_stream_idle = true;
       stats.capture_wait_timed_out = capture_result.timed_out();
@@ -213,6 +217,10 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
     stats.render_wait_timed_out = render_result.timed_out();
     stats.render_partial =
         stats.rendered_frames > 0 && stats.rendered_frames < output_.frames();
+    if (stats.render_partial) {
+      stats.render_partial_frames =
+          static_cast<std::uint32_t>(output_.frames() - stats.rendered_frames);
+    }
   }
 
   return WasapiGraphRunnerResult::success(stats);
