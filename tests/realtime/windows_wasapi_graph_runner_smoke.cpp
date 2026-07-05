@@ -84,6 +84,14 @@ int main() {
                                     "Expected diagnostics block count")) {
       return failure;
     }
+    if (const auto failure = expect(!result.stats().capture_partial,
+                                    "Expected graph-only runner without partial capture")) {
+      return failure;
+    }
+    if (const auto failure = expect(!result.stats().render_partial,
+                                    "Expected graph-only runner without partial render")) {
+      return failure;
+    }
 
     const auto& output = runner.output_buffer();
     if (const auto failure =

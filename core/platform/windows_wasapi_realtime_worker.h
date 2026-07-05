@@ -27,6 +27,8 @@ struct WasapiRealtimeWorkerStats {
   std::uint64_t wait_timeout_cycles = 0;
   std::uint64_t capture_wait_timeout_cycles = 0;
   std::uint64_t render_wait_timeout_cycles = 0;
+  std::uint64_t capture_partial_cycles = 0;
+  std::uint64_t render_partial_cycles = 0;
   std::uint64_t process_error_cycles = 0;
   std::uint64_t captured_frames = 0;
   std::uint64_t rendered_frames = 0;
@@ -81,6 +83,8 @@ class WindowsWasapiRealtimeWorker {
   std::atomic_uint64_t wait_timeout_cycles_ = 0;
   std::atomic_uint64_t capture_wait_timeout_cycles_ = 0;
   std::atomic_uint64_t render_wait_timeout_cycles_ = 0;
+  std::atomic_uint64_t capture_partial_cycles_ = 0;
+  std::atomic_uint64_t render_partial_cycles_ = 0;
   std::atomic_uint64_t process_error_cycles_ = 0;
   std::atomic_uint64_t captured_frames_ = 0;
   std::atomic_uint64_t rendered_frames_ = 0;
