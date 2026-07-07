@@ -307,6 +307,84 @@ int main() {
   }
 
   {
+    sar::control::ControlCommand left_gain;
+    left_gain.command_id = "batch_left_gain";
+    left_gain.type = sar::control::ControlCommandType::SetGain;
+    left_gain.input_id = "mic_l";
+    left_gain.output_id = "monitor_l";
+    left_gain.gain = 0.5F;
+
+    sar::control::ControlCommand right_gain;
+    right_gain.command_id = "batch_right_gain";
+    right_gain.type = sar::control::ControlCommandType::SetGain;
+    right_gain.input_id = "mic_r";
+    right_gain.output_id = "monitor_r";
+    right_gain.gain = 0.25F;
+
+    const auto response = session->handle_batch("batch_gain", {left_gain, right_gain});
+    if (const auto failure = expect(response.status ==
+                                        sar::control::ControlResponseStatus::Accepted,
+                                    "Expected batch gain accepted")) {
+      return failure;
+    }
+    if (const auto failure = expect(session->current_graph()->version() == 12,
+                                    "Expected one graph publish for batch")) {
+      return failure;
+    }
+    if (const auto failure = expect(session->next_graph_version() == 13,
+                                    "Expected next graph version after batch")) {
+      return failure;
+    }
+
+    output.clear();
+    session->process(input, output, diagnostics);
+    if (const auto failure = expect_output_gain(input,
+                                                output,
+                                                0.5F,
+                                                0.25F,
+                                                "Unexpected batch gain output")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::control::ControlCommand bad_gain;
+    bad_gain.command_id = "batch_bad_gain";
+    bad_gain.type = sar::control::ControlCommandType::SetGain;
+    bad_gain.input_id = "missing";
+    bad_gain.output_id = "monitor_l";
+    bad_gain.gain = 1.0F;
+
+    const auto response = session->handle_batch("batch_bad", {bad_gain});
+    if (const auto failure = expect(response.status ==
+                                        sar::control::ControlResponseStatus::Rejected,
+                                    "Expected bad batch rejected")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(response, "unknown_route"),
+                                    "Expected unknown_route batch error")) {
+      return failure;
+    }
+    if (const auto failure = expect(session->current_graph()->version() == 12,
+                                    "Expected graph version preserved after bad batch")) {
+      return failure;
+    }
+  }
+
+  {
+    const auto response = session->handle_batch("batch_empty", {});
+    if (const auto failure = expect(response.status ==
+                                        sar::control::ControlResponseStatus::Rejected,
+                                    "Expected empty batch rejected")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(response, "empty_command_batch"),
+                                    "Expected empty_command_batch error")) {
+      return failure;
+    }
+  }
+
+  {
     sar::control::PresetDocument preset = make_valid_preset();
     preset.matrix.routes[0].muted = true;
 
@@ -320,7 +398,7 @@ int main() {
                                     "Expected load preset accepted")) {
       return failure;
     }
-    if (const auto failure = expect(session->current_graph()->version() == 12,
+    if (const auto failure = expect(session->current_graph()->version() == 13,
                                     "Expected graph republish after load preset")) {
       return failure;
     }

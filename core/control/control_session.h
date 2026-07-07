@@ -24,6 +24,8 @@ class ControlSession {
   ControlResponse handle(const ControlCommand& command);
   ControlResponse handle(const ControlCommand& command,
                          diagnostics::EngineDiagnostics diagnostics);
+  ControlResponse handle_batch(std::string command_id,
+                               const std::vector<ControlCommand>& commands);
 
   void process(const realtime::AudioBuffer& input,
                realtime::AudioBuffer& output,

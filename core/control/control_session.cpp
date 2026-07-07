@@ -147,6 +147,48 @@ ControlResponse ControlSession::handle(const ControlCommand& command,
   return publish_preset(command, apply_result.take_document());
 }
 
+ControlResponse ControlSession::handle_batch(
+    std::string command_id,
+    const std::vector<ControlCommand>& commands) {
+  if (command_id.empty()) {
+    return command_rejected(std::move(command_id), {
+        {"empty_command_id", "Control command batches must have a command ID."},
+    });
+  }
+
+  if (commands.empty()) {
+    return command_rejected(std::move(command_id), {
+        {"empty_command_batch", "Control command batches must contain at least one command."},
+    });
+  }
+
+  auto next = current_preset_;
+  for (const auto& command : commands) {
+    auto validation = validate_command(command);
+    if (!validation.ok()) {
+      return command_rejected(command_id, validation.errors());
+    }
+
+    if (!mutates_preset(command.type)) {
+      return command_rejected(command_id, {
+          {"unsupported_batch_command",
+           "Control command batches currently support preset mutation commands only."},
+      });
+    }
+
+    auto apply_result = apply_command(next, command);
+    if (!apply_result.ok()) {
+      return command_rejected(command_id, apply_result.errors());
+    }
+    next = apply_result.take_document();
+  }
+
+  ControlCommand publish_command;
+  publish_command.command_id = std::move(command_id);
+  publish_command.type = ControlCommandType::LoadPreset;
+  return publish_preset(publish_command, std::move(next));
+}
+
 void ControlSession::process(const realtime::AudioBuffer& input,
                              realtime::AudioBuffer& output,
                              diagnostics::EngineDiagnostics& diagnostics) noexcept {
