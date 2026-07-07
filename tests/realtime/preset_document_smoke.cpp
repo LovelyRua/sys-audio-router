@@ -1,5 +1,6 @@
 #include "core/control/preset_document.h"
 
+#include "core/diagnostics/engine_diagnostics.h"
 #include "core/realtime/audio_buffer.h"
 #include "tests/realtime/test_helpers.h"
 
@@ -21,6 +22,16 @@ bool has_error_code(const sar::control::PresetValidationResult& result,
 }
 
 bool has_error_code(const sar::control::PresetMatrixBuildResult& result,
+                    const std::string& code) {
+  for (const auto& error : result.errors()) {
+    if (error.code == code) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool has_error_code(const sar::control::PresetGraphBuildResult& result,
                     const std::string& code) {
   for (const auto& error : result.errors()) {
     if (error.code == code) {
@@ -97,6 +108,57 @@ int main() {
         !sar::tests::nearly_equal(output.channel(1)[0], 0.75F) ||
         !sar::tests::nearly_equal(output.channel(1)[1], 1.0F)) {
       std::cerr << "Unexpected preset-built matrix output\n";
+      return 1;
+    }
+  }
+
+  {
+    const auto preset = make_valid_preset();
+    auto result = sar::control::build_preset_graph(preset, 42);
+    if (const auto failure = expect(result.ok(), "Expected preset graph build success")) {
+      return failure;
+    }
+
+    auto graph = result.take_graph();
+    if (const auto failure = expect(graph != nullptr, "Expected preset graph pointer")) {
+      return failure;
+    }
+    if (const auto failure = expect(graph->version() == 42, "Expected preset graph version")) {
+      return failure;
+    }
+    if (const auto failure = expect(graph->sample_rate() == preset.sample_rate,
+                                    "Expected preset graph sample rate")) {
+      return failure;
+    }
+    if (const auto failure = expect(graph->frames() == preset.frames_per_block,
+                                    "Expected preset graph block size")) {
+      return failure;
+    }
+    if (const auto failure = expect(graph->channels() == preset.matrix.outputs.size(),
+                                    "Expected preset graph output channel count")) {
+      return failure;
+    }
+    if (const auto failure = expect(graph->node_count() == 1,
+                                    "Expected preset graph matrix node")) {
+      return failure;
+    }
+    if (const auto failure = expect(graph->node_id(0) == std::string_view{"matrix"},
+                                    "Expected preset graph node ID")) {
+      return failure;
+    }
+
+    sar::realtime::AudioBuffer input(2, preset.frames_per_block);
+    sar::realtime::AudioBuffer output(2, preset.frames_per_block);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    input.channel(0)[0] = 0.125F;
+    input.channel(1)[0] = 0.875F;
+
+    graph->process(input, output, diagnostics);
+    if (!sar::tests::nearly_equal(output.channel(0)[0], 0.125F) ||
+        !sar::tests::nearly_equal(output.channel(1)[0], 0.875F) ||
+        diagnostics.graph_version != 42 ||
+        diagnostics.processed_blocks != 1) {
+      std::cerr << "Unexpected preset-built graph output\n";
       return 1;
     }
   }
@@ -202,6 +264,45 @@ int main() {
     }
     if (const auto failure = expect(has_error_code(result, "duplicate_route"),
                                     "Expected duplicate_route error")) {
+      return failure;
+    }
+  }
+
+  {
+    auto preset = make_valid_preset();
+    preset.nodes.push_back({"gain", "Gain", "gain"});
+    const auto result = sar::control::build_preset_graph(preset);
+    if (const auto failure = expect(!result.ok(), "Expected unsupported node graph failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "unsupported_preset_node_type"),
+                                    "Expected unsupported_preset_node_type error")) {
+      return failure;
+    }
+  }
+
+  {
+    auto preset = make_valid_preset();
+    preset.nodes.clear();
+    const auto result = sar::control::build_preset_graph(preset);
+    if (const auto failure = expect(!result.ok(), "Expected missing matrix node graph failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "missing_route_matrix_node"),
+                                    "Expected missing_route_matrix_node error")) {
+      return failure;
+    }
+  }
+
+  {
+    auto preset = make_valid_preset();
+    preset.matrix.outputs.push_back({"broadcast", "Broadcast"});
+    const auto result = sar::control::build_preset_graph(preset);
+    if (const auto failure = expect(!result.ok(), "Expected asymmetric graph failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "asymmetric_matrix_channel_count"),
+                                    "Expected asymmetric_matrix_channel_count error")) {
       return failure;
     }
   }

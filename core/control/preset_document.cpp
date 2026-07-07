@@ -1,5 +1,7 @@
 #include "core/control/preset_document.h"
 
+#include "core/graph/graph_builder.h"
+
 #include <cmath>
 #include <memory>
 #include <string>
@@ -35,6 +37,49 @@ void validate_unique_endpoint_ids(const std::vector<graph::RouteEndpointDescript
     if (endpoint.label.empty()) {
       errors.push_back({"empty_endpoint_label", "Route endpoint labels must not be empty."});
     }
+  }
+}
+
+const PresetNode* find_route_matrix_node(const PresetDocument& preset,
+                                         std::vector<PresetError>& errors) {
+  const PresetNode* matrix_node = nullptr;
+
+  for (const auto& node : preset.nodes) {
+    if (node.type == "route_matrix") {
+      if (matrix_node != nullptr) {
+        errors.push_back({
+            "multiple_route_matrix_nodes",
+            "Preset graph build currently supports exactly one route_matrix node.",
+        });
+      } else {
+        matrix_node = &node;
+      }
+      continue;
+    }
+
+    errors.push_back({
+        "unsupported_preset_node_type",
+        "Preset graph build currently supports route_matrix nodes only.",
+    });
+  }
+
+  if (matrix_node == nullptr) {
+    errors.push_back({
+        "missing_route_matrix_node",
+        "Preset graph build requires one route_matrix node.",
+    });
+  }
+
+  return matrix_node;
+}
+
+void append_graph_build_errors(const graph::GraphBuildResult& result,
+                               std::vector<PresetError>& errors) {
+  for (const auto& error : result.errors()) {
+    errors.push_back({
+        "graph_" + error.code,
+        error.message,
+    });
   }
 }
 
@@ -206,6 +251,77 @@ PresetMatrixBuildResult build_route_matrix(const PresetDocument& preset) {
   }
 
   return PresetMatrixBuildResult::success(std::move(matrix));
+}
+
+PresetGraphBuildResult PresetGraphBuildResult::success(std::unique_ptr<graph::Graph> graph) {
+  return {std::move(graph), {}};
+}
+
+PresetGraphBuildResult PresetGraphBuildResult::failure(std::vector<PresetError> errors) {
+  return {nullptr, std::move(errors)};
+}
+
+bool PresetGraphBuildResult::ok() const noexcept {
+  return graph_ != nullptr && errors_.empty();
+}
+
+graph::Graph* PresetGraphBuildResult::graph() const noexcept {
+  return graph_.get();
+}
+
+std::unique_ptr<graph::Graph> PresetGraphBuildResult::take_graph() noexcept {
+  return std::move(graph_);
+}
+
+const std::vector<PresetError>& PresetGraphBuildResult::errors() const noexcept {
+  return errors_;
+}
+
+PresetGraphBuildResult::PresetGraphBuildResult(std::unique_ptr<graph::Graph> graph,
+                                               std::vector<PresetError> errors)
+    : graph_(std::move(graph)), errors_(std::move(errors)) {}
+
+PresetGraphBuildResult build_preset_graph(const PresetDocument& preset,
+                                          std::uint64_t graph_version) {
+  auto validation = validate_preset(preset);
+  if (!validation.ok()) {
+    return PresetGraphBuildResult::failure(validation.errors());
+  }
+
+  std::vector<PresetError> errors;
+  const auto* matrix_node = find_route_matrix_node(preset, errors);
+
+  if (preset.matrix.inputs.size() != preset.matrix.outputs.size()) {
+    errors.push_back({
+        "asymmetric_matrix_channel_count",
+        "Preset graph build requires matching matrix input and output counts.",
+    });
+  }
+
+  if (!errors.empty()) {
+    return PresetGraphBuildResult::failure(std::move(errors));
+  }
+
+  auto matrix_result = build_route_matrix(preset);
+  if (!matrix_result.ok()) {
+    return PresetGraphBuildResult::failure(matrix_result.errors());
+  }
+
+  auto matrix = matrix_result.take_matrix();
+  auto builder = graph::GraphBuilder(graph_version,
+                                     matrix->output_channels(),
+                                     preset.frames_per_block)
+                     .sample_rate(preset.sample_rate)
+                     .add_node(matrix_node->id,
+                               matrix_node->label,
+                               std::make_unique<graph::RouteMatrixNode>(std::move(*matrix)));
+  auto graph_result = builder.build();
+  if (!graph_result.ok()) {
+    append_graph_build_errors(graph_result, errors);
+    return PresetGraphBuildResult::failure(std::move(errors));
+  }
+
+  return PresetGraphBuildResult::success(graph_result.take_graph());
 }
 
 }  // namespace sar::control

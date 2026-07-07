@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/graph/graph.h"
 #include "core/graph/route_matrix.h"
 
 #include <cstdint>
@@ -73,7 +74,27 @@ class PresetMatrixBuildResult {
   std::vector<PresetError> errors_;
 };
 
+class PresetGraphBuildResult {
+ public:
+  static PresetGraphBuildResult success(std::unique_ptr<graph::Graph> graph);
+  static PresetGraphBuildResult failure(std::vector<PresetError> errors);
+
+  [[nodiscard]] bool ok() const noexcept;
+  [[nodiscard]] graph::Graph* graph() const noexcept;
+  [[nodiscard]] std::unique_ptr<graph::Graph> take_graph() noexcept;
+  [[nodiscard]] const std::vector<PresetError>& errors() const noexcept;
+
+ private:
+  PresetGraphBuildResult(std::unique_ptr<graph::Graph> graph,
+                         std::vector<PresetError> errors);
+
+  std::unique_ptr<graph::Graph> graph_;
+  std::vector<PresetError> errors_;
+};
+
 [[nodiscard]] PresetValidationResult validate_preset(const PresetDocument& preset);
 [[nodiscard]] PresetMatrixBuildResult build_route_matrix(const PresetDocument& preset);
+[[nodiscard]] PresetGraphBuildResult build_preset_graph(const PresetDocument& preset,
+                                                        std::uint64_t graph_version = 1);
 
 }  // namespace sar::control
