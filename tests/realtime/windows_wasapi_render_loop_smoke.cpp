@@ -1,5 +1,6 @@
 #include "core/platform/windows_wasapi_device_provider.h"
 #include "core/platform/windows_wasapi_render_loop.h"
+#include "core/platform/windows_wasapi_stream_probe.h"
 
 #include "core/graph/node.h"
 
@@ -34,6 +35,20 @@ bool has_default_output_device() {
   return false;
 }
 
+bool has_error_code(const sar::platform::WasapiRenderLoopOpenResult& result,
+                    const char* code) {
+  for (const auto& error : result.errors()) {
+    if (error.code == code) {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::uint32_t mismatched_sample_rate(std::uint32_t sample_rate) noexcept {
+  return sample_rate == 48000 ? 44100 : 48000;
+}
+
 }  // namespace
 
 int main() {
@@ -42,7 +57,55 @@ int main() {
     return 0;
   }
 
-  sar::graph::Graph graph(21, 2, 128);
+  const auto probe_result =
+      sar::platform::probe_default_wasapi_stream(sar::platform::WasapiStreamDirection::Render);
+  auto render_sample_rate = 48000U;
+  if (!probe_result.ok()) {
+    std::cout << "Windows WASAPI render loop preflight skipped: probe failed\n";
+  } else {
+    const auto& probe = probe_result.probe();
+    render_sample_rate = probe.mix_format.sample_rate;
+    {
+      sar::graph::Graph mismatched_graph(31,
+                                         probe.mix_format.channels,
+                                         probe.buffer_frames,
+                                         mismatched_sample_rate(probe.mix_format.sample_rate));
+      sar::diagnostics::EngineDiagnostics diagnostics;
+      auto result = sar::platform::open_default_wasapi_render_loop(mismatched_graph,
+                                                                   diagnostics);
+      if (const auto failure =
+              expect(!result.ok(), "Expected render loop sample-rate preflight failure")) {
+        return failure;
+      }
+      if (const auto failure =
+              expect(has_error_code(result, "graph_sample_rate_mismatch"),
+                     "Expected render loop graph_sample_rate_mismatch")) {
+        return failure;
+      }
+    }
+
+    if (probe.buffer_frames > 1) {
+      sar::graph::Graph undersized_graph(32,
+                                         probe.mix_format.channels,
+                                         probe.buffer_frames - 1,
+                                         probe.mix_format.sample_rate);
+      undersized_graph.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+      undersized_graph.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+      sar::diagnostics::EngineDiagnostics diagnostics;
+      auto result = sar::platform::open_default_wasapi_render_loop(undersized_graph,
+                                                                   diagnostics);
+      if (const auto failure =
+              expect(!result.ok(), "Expected render loop graph-shape preflight failure")) {
+        return failure;
+      }
+      if (const auto failure = expect(has_error_code(result, "graph_buffer_too_small"),
+                                      "Expected render loop graph_buffer_too_small")) {
+        return failure;
+      }
+    }
+  }
+
+  sar::graph::Graph graph(21, 2, 128, render_sample_rate);
   graph.add_node(std::make_unique<sar::graph::GainNode>(0.0F));
   sar::diagnostics::EngineDiagnostics diagnostics;
   auto result = sar::platform::open_default_wasapi_render_loop(graph, diagnostics);

@@ -1,8 +1,10 @@
 #include "core/platform/windows_wasapi_device_provider.h"
 #include "core/platform/windows_wasapi_duplex_loop.h"
+#include "core/platform/windows_wasapi_stream_probe.h"
 
 #include "core/graph/node.h"
 
+#include <algorithm>
 #include <chrono>
 #include <iostream>
 #include <memory>
@@ -45,6 +47,20 @@ DefaultEndpointAvailability default_endpoint_availability() {
   return availability;
 }
 
+bool has_error_code(const sar::platform::WasapiDuplexLoopOpenResult& result,
+                    const char* code) {
+  for (const auto& error : result.errors()) {
+    if (error.code == code) {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::uint32_t mismatched_sample_rate(std::uint32_t sample_rate) noexcept {
+  return sample_rate == 48000 ? 44100 : 48000;
+}
+
 }  // namespace
 
 int main() {
@@ -54,7 +70,63 @@ int main() {
     return 0;
   }
 
-  sar::graph::Graph graph(22, 2, 128);
+  const auto capture_probe_result =
+      sar::platform::probe_default_wasapi_stream(sar::platform::WasapiStreamDirection::Capture);
+  const auto render_probe_result =
+      sar::platform::probe_default_wasapi_stream(sar::platform::WasapiStreamDirection::Render);
+  auto duplex_sample_rate = 48000U;
+  if (!capture_probe_result.ok() || !render_probe_result.ok()) {
+    std::cout << "Windows WASAPI duplex loop preflight skipped: probe failed\n";
+  } else if (capture_probe_result.probe().mix_format.sample_rate ==
+             render_probe_result.probe().mix_format.sample_rate) {
+    const auto& capture_probe = capture_probe_result.probe();
+    const auto& render_probe = render_probe_result.probe();
+    duplex_sample_rate = capture_probe.mix_format.sample_rate;
+    {
+      sar::graph::Graph mismatched_graph(
+          33,
+          std::max(capture_probe.mix_format.channels, render_probe.mix_format.channels),
+          std::max(capture_probe.buffer_frames, render_probe.buffer_frames),
+          mismatched_sample_rate(capture_probe.mix_format.sample_rate));
+      sar::diagnostics::EngineDiagnostics diagnostics;
+      auto result = sar::platform::open_default_wasapi_duplex_loop(mismatched_graph,
+                                                                   diagnostics);
+      if (const auto failure =
+              expect(!result.ok(), "Expected duplex loop sample-rate preflight failure")) {
+        return failure;
+      }
+      if (const auto failure =
+              expect(has_error_code(result, "graph_sample_rate_mismatch"),
+                     "Expected duplex loop graph_sample_rate_mismatch")) {
+        return failure;
+      }
+    }
+
+    const auto required_frames =
+        std::max(capture_probe.buffer_frames, render_probe.buffer_frames);
+    if (required_frames > 1) {
+      sar::graph::Graph undersized_graph(
+          34,
+          std::max(capture_probe.mix_format.channels, render_probe.mix_format.channels),
+          required_frames - 1,
+          capture_probe.mix_format.sample_rate);
+      undersized_graph.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+      undersized_graph.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+      sar::diagnostics::EngineDiagnostics diagnostics;
+      auto result = sar::platform::open_default_wasapi_duplex_loop(undersized_graph,
+                                                                   diagnostics);
+      if (const auto failure =
+              expect(!result.ok(), "Expected duplex loop graph-shape preflight failure")) {
+        return failure;
+      }
+      if (const auto failure = expect(has_error_code(result, "graph_buffer_too_small"),
+                                      "Expected duplex loop graph_buffer_too_small")) {
+        return failure;
+      }
+    }
+  }
+
+  sar::graph::Graph graph(22, 2, 128, duplex_sample_rate);
   graph.add_node(std::make_unique<sar::graph::GainNode>(0.0F));
   sar::diagnostics::EngineDiagnostics diagnostics;
   auto result = sar::platform::open_default_wasapi_duplex_loop(graph, diagnostics);
