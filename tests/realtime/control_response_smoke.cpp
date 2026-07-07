@@ -1,6 +1,10 @@
 #include "core/control/control_response.h"
 
+#include "core/graph/graph_builder.h"
+#include "core/graph/node.h"
+
 #include <iostream>
+#include <memory>
 
 namespace {
 
@@ -70,6 +74,53 @@ int main() {
     }
     if (const auto failure = expect(response.diagnostics.xrun_count == 3,
                                     "Expected diagnostics xrun count")) {
+      return failure;
+    }
+  }
+
+  {
+    auto graph_result = sar::graph::GraphBuilder(11, 2, 128)
+                            .sample_rate(48000)
+                            .add_node("monitor_gain",
+                                      "Monitor Gain",
+                                      std::make_unique<sar::graph::GainNode>(0.5F))
+                            .build();
+    if (const auto failure = expect(graph_result.ok(), "Expected graph build success")) {
+      return failure;
+    }
+
+    auto graph = graph_result.take_graph();
+    const auto response = sar::control::active_graph_response("cmd_4", *graph);
+    if (const auto failure = expect(response.has_active_graph,
+                                    "Expected active graph payload")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.active_graph.version == 11,
+                                    "Expected active graph version")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.active_graph.sample_rate == 48000,
+                                    "Expected active graph sample rate")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.active_graph.channels == 2,
+                                    "Expected active graph channel count")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.active_graph.frames == 128,
+                                    "Expected active graph frame count")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.active_graph.nodes.size() == 1,
+                                    "Expected active graph node summary")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.active_graph.nodes[0].id == "monitor_gain",
+                                    "Expected active graph node ID")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.active_graph.nodes[0].label == "Monitor Gain",
+                                    "Expected active graph node label")) {
       return failure;
     }
   }

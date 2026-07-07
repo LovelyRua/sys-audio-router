@@ -28,4 +28,24 @@ ControlResponse diagnostics_response(std::string command_id,
   return response;
 }
 
+ControlResponse active_graph_response(std::string command_id,
+                                      const graph::Graph& graph) {
+  auto response = command_accepted(std::move(command_id));
+  response.active_graph.version = graph.version();
+  response.active_graph.sample_rate = graph.sample_rate();
+  response.active_graph.channels = graph.channels();
+  response.active_graph.frames = graph.frames();
+  response.active_graph.nodes.reserve(graph.node_count());
+
+  for (std::size_t index = 0; index < graph.node_count(); ++index) {
+    response.active_graph.nodes.push_back({
+        std::string{graph.node_id(index)},
+        std::string{graph.node_label(index)},
+    });
+  }
+
+  response.has_active_graph = true;
+  return response;
+}
+
 }  // namespace sar::control
