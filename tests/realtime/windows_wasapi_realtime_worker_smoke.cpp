@@ -143,6 +143,10 @@ int main() {
                                     "Expected graph-only worker without silent capture frames")) {
       return failure;
     }
+    if (const auto failure = expect(stats.stream_start_error_cycles == 0,
+                                    "Expected graph-only worker without stream start errors")) {
+      return failure;
+    }
     if (const auto failure = expect(stats.last_captured_frames == 0,
                                     "Expected graph-only worker without last captured frames")) {
       return failure;
@@ -214,6 +218,10 @@ int main() {
                                     "Expected restart to reset last rendered frames")) {
       return failure;
     }
+    if (const auto failure = expect(worker.stats().stream_start_error_cycles == 0,
+                                    "Expected restart to reset stream start errors")) {
+      return failure;
+    }
     const auto duplicate_start = worker.start(0);
     if (const auto failure = expect(!duplicate_start.ok(),
                                     "Expected duplicate worker start failure")) {
@@ -257,6 +265,52 @@ int main() {
     if (const auto failure =
             expect(render_stream.state() == sar::platform::WasapiStreamState::Open,
                    "Expected worker to stop synthetic render stream")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiStream render_stream;
+    sar::platform::WindowsWasapiGraphRunner runner(nullptr, &render_stream, 2, 16);
+    sar::graph::Graph graph(13, 2, 16);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    sar::platform::WindowsWasapiRealtimeWorker worker(runner, graph, diagnostics);
+
+    const auto start_result = worker.start(0);
+    if (const auto failure =
+            expect(start_result.ok(), "Expected closed-stream worker thread start")) {
+      return failure;
+    }
+
+    for (int attempt = 0; attempt < 100 && worker.running(); ++attempt) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    worker.stop();
+
+    const auto errors = worker.last_errors();
+    if (const auto failure = expect(has_error_code(errors, "stream_not_open"),
+                                    "Expected stream_not_open worker error")) {
+      return failure;
+    }
+    const auto stats = worker.stats();
+    if (const auto failure = expect(stats.stream_start_error_cycles == 1,
+                                    "Expected one stream start error")) {
+      return failure;
+    }
+    if (const auto failure = expect(stats.process_error_cycles == 0,
+                                    "Expected no process errors after stream start failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(stats.loop_cycles == 0,
+                                    "Expected no loop cycles after stream start failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(stats.graph_processed_cycles == 0,
+                                    "Expected no graph cycles after stream start failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(!stats.last_graph_processed,
+                                    "Expected no last graph cycle after stream start failure")) {
       return failure;
     }
   }
