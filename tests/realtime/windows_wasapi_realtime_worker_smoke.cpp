@@ -143,6 +143,14 @@ int main() {
                                     "Expected graph-only worker without silent capture frames")) {
       return failure;
     }
+    if (const auto failure = expect(stats.last_captured_frames == 0,
+                                    "Expected graph-only worker without last captured frames")) {
+      return failure;
+    }
+    if (const auto failure = expect(stats.last_rendered_frames == 0,
+                                    "Expected graph-only worker without last rendered frames")) {
+      return failure;
+    }
     if (const auto failure = expect(stats.process_error_cycles == 0,
                                     "Expected graph-only worker without process errors")) {
       return failure;
@@ -162,6 +170,14 @@ int main() {
     }
     if (const auto failure = expect(worker.stats().last_stop_wait_microseconds == 0,
                                     "Expected restart to reset stop wait")) {
+      return failure;
+    }
+    if (const auto failure = expect(worker.stats().last_captured_frames == 0,
+                                    "Expected restart to reset last captured frames")) {
+      return failure;
+    }
+    if (const auto failure = expect(worker.stats().last_rendered_frames == 0,
+                                    "Expected restart to reset last rendered frames")) {
       return failure;
     }
     const auto duplicate_start = worker.start(0);

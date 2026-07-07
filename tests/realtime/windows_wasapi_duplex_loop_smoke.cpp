@@ -127,6 +127,25 @@ int main() {
                                   "Expected no duplex loop worker errors")) {
     return failure;
   }
+  const auto stats = loop->stats();
+  if (const auto failure =
+          expect(stats.last_captured_frames <= loop->capture_probe().buffer_frames,
+                 "Expected bounded last captured frames")) {
+    return failure;
+  }
+  if (const auto failure =
+          expect(stats.last_rendered_frames <= loop->render_probe().buffer_frames,
+                 "Expected bounded last rendered frames")) {
+    return failure;
+  }
+  if (const auto failure = expect(stats.captured_frames >= stats.last_captured_frames,
+                                  "Expected total captured frames to cover last capture")) {
+    return failure;
+  }
+  if (const auto failure = expect(stats.rendered_frames >= stats.last_rendered_frames,
+                                  "Expected total rendered frames to cover last render")) {
+    return failure;
+  }
 
   std::cout << "Windows WASAPI duplex loop smoke test passed\n";
   return 0;

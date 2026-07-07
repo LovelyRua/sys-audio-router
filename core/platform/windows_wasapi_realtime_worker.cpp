@@ -133,6 +133,8 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   process_error_cycles_.store(0);
   captured_frames_.store(0);
   rendered_frames_.store(0);
+  last_captured_frames_.store(0);
+  last_rendered_frames_.store(0);
   last_stop_wait_microseconds_.store(0);
   set_errors({});
   running_.store(true);
@@ -182,6 +184,8 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.process_error_cycles = process_error_cycles_.load();
   result.captured_frames = captured_frames_.load();
   result.rendered_frames = rendered_frames_.load();
+  result.last_captured_frames = last_captured_frames_.load();
+  result.last_rendered_frames = last_rendered_frames_.load();
   result.last_stop_wait_microseconds = last_stop_wait_microseconds_.load();
   return result;
 }
@@ -232,6 +236,8 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     loop_cycles_.fetch_add(1);
     captured_frames_.fetch_add(result.stats().captured_frames);
     rendered_frames_.fetch_add(result.stats().rendered_frames);
+    last_captured_frames_.store(result.stats().captured_frames);
+    last_rendered_frames_.store(result.stats().rendered_frames);
     if (result.stats().graph_processed) {
       graph_processed_cycles_.fetch_add(1);
     }

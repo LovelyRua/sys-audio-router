@@ -97,6 +97,19 @@ int main() {
                                   "Expected no render loop worker errors")) {
     return failure;
   }
+  const auto stats = loop->stats();
+  if (const auto failure = expect(stats.last_captured_frames == 0,
+                                  "Expected render loop without last captured frames")) {
+    return failure;
+  }
+  if (const auto failure = expect(stats.last_rendered_frames <= loop->probe().buffer_frames,
+                                  "Expected bounded last rendered frames")) {
+    return failure;
+  }
+  if (const auto failure = expect(stats.rendered_frames >= stats.last_rendered_frames,
+                                  "Expected total rendered frames to cover last render")) {
+    return failure;
+  }
 
   std::cout << "Windows WASAPI render loop smoke test passed\n";
   return 0;
