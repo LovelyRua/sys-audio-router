@@ -10,6 +10,7 @@ add_library(sar_core
   core/control/control_command.cpp
   core/control/preset_document.cpp
   core/control/control_response.cpp
+  core/control/control_session.cpp
   core/platform/audio_device.cpp
   core/platform/audio_device_registry.cpp
   core/platform/mock_audio_device_provider.cpp
@@ -84,6 +85,12 @@ add_executable(sar_control_response_smoke
 )
 
 target_link_libraries(sar_control_response_smoke PRIVATE sar_core)
+
+add_executable(sar_control_session_smoke
+  tests/realtime/control_session_smoke.cpp
+)
+
+target_link_libraries(sar_control_session_smoke PRIVATE sar_core)
 
 add_executable(sar_audio_device_smoke
   tests/realtime/audio_device_smoke.cpp
@@ -203,6 +210,7 @@ add_test(NAME route_matrix_smoke COMMAND sar_route_matrix_smoke)
 add_test(NAME preset_document_smoke COMMAND sar_preset_document_smoke)
 add_test(NAME control_command_smoke COMMAND sar_control_command_smoke)
 add_test(NAME control_response_smoke COMMAND sar_control_response_smoke)
+add_test(NAME control_session_smoke COMMAND sar_control_session_smoke)
 add_test(NAME audio_device_smoke COMMAND sar_audio_device_smoke)
 add_test(NAME audio_device_registry_smoke COMMAND sar_audio_device_registry_smoke)
 add_test(NAME virtual_endpoint_smoke COMMAND sar_virtual_endpoint_smoke)
