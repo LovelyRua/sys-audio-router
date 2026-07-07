@@ -79,6 +79,36 @@ int main() {
   }
 
   {
+    sar::platform::AudioDeviceDescriptor device;
+    device.id = "sar_asio_1";
+    device.label = "SAR ASIO 1";
+    device.backend = sar::platform::AudioBackendKind::VirtualAsio;
+    device.direction = sar::platform::AudioDeviceDirection::Duplex;
+    device.is_virtual = true;
+    device.formats.push_back({
+        .sample_rate = 48000,
+        .channels = 16,
+        .frames_per_block = 128,
+    });
+
+    const auto response = sar::control::device_list_response("cmd_devices", {device});
+    if (const auto failure = expect(response.has_devices, "Expected devices payload")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.devices.size() == 1, "Expected one device")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.devices[0].id == "sar_asio_1",
+                                    "Expected device ID")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.devices[0].is_virtual,
+                                    "Expected virtual device")) {
+      return failure;
+    }
+  }
+
+  {
     auto graph_result = sar::graph::GraphBuilder(11, 2, 128)
                             .sample_rate(48000)
                             .add_node("monitor_gain",

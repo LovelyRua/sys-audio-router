@@ -1,5 +1,6 @@
 #include "core/control/control_session.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -30,6 +31,43 @@ bool mutates_preset(ControlCommandType type) noexcept {
 
 std::shared_ptr<graph::Graph> share_graph(std::unique_ptr<graph::Graph> graph) {
   return std::shared_ptr<graph::Graph>(std::move(graph));
+}
+
+std::vector<PresetError> convert_errors(
+    const std::vector<platform::VirtualEndpointError>& errors) {
+  std::vector<PresetError> converted;
+  converted.reserve(errors.size());
+  for (const auto& error : errors) {
+    converted.push_back({error.code, error.message});
+  }
+  return converted;
+}
+
+std::vector<PresetError> convert_errors(
+    const std::vector<platform::AudioDeviceError>& errors) {
+  std::vector<PresetError> converted;
+  converted.reserve(errors.size());
+  for (const auto& error : errors) {
+    converted.push_back({error.code, error.message});
+  }
+  return converted;
+}
+
+platform::VirtualEndpointDescriptor make_virtual_endpoint(
+    const ControlCommand& command,
+    const PresetDocument& preset) {
+  const auto endpoint_channels = std::max(preset.matrix.inputs.size(),
+                                          preset.matrix.outputs.size());
+
+  platform::VirtualEndpointDescriptor endpoint;
+  endpoint.id = command.endpoint_id;
+  endpoint.label = command.endpoint_label;
+  endpoint.backend = platform::AudioBackendKind::VirtualAsio;
+  endpoint.direction = platform::AudioDeviceDirection::Duplex;
+  endpoint.format.sample_rate = preset.sample_rate;
+  endpoint.format.channels = static_cast<std::uint32_t>(endpoint_channels);
+  endpoint.format.frames_per_block = preset.frames_per_block;
+  return endpoint;
 }
 
 }  // namespace
@@ -72,6 +110,31 @@ ControlResponse ControlSession::handle(const ControlCommand& command,
     return active_graph_response(command.command_id, *publisher_.current());
   }
 
+  if (command.type == ControlCommandType::ListDevices) {
+    auto result = virtual_endpoints_.list_devices();
+    if (!result.ok()) {
+      return command_rejected(command.command_id, convert_errors(result.errors()));
+    }
+    return device_list_response(command.command_id, result.devices());
+  }
+
+  if (command.type == ControlCommandType::CreateVirtualEndpoint) {
+    auto result = virtual_endpoints_.add_endpoint(
+        make_virtual_endpoint(command, current_preset_));
+    if (!result.ok()) {
+      return command_rejected(command.command_id, convert_errors(result.errors()));
+    }
+    return command_accepted(command.command_id);
+  }
+
+  if (command.type == ControlCommandType::RemoveVirtualEndpoint) {
+    auto result = virtual_endpoints_.remove_endpoint(command.endpoint_id);
+    if (!result.ok()) {
+      return command_rejected(command.command_id, convert_errors(result.errors()));
+    }
+    return command_accepted(command.command_id);
+  }
+
   if (!mutates_preset(command.type)) {
     return command_accepted(command.command_id);
   }
@@ -96,6 +159,11 @@ const PresetDocument& ControlSession::current_preset() const noexcept {
 
 std::shared_ptr<graph::Graph> ControlSession::current_graph() const noexcept {
   return publisher_.current();
+}
+
+const std::vector<platform::VirtualEndpointDescriptor>&
+ControlSession::virtual_endpoints() const noexcept {
+  return virtual_endpoints_.endpoints();
 }
 
 std::uint64_t ControlSession::next_graph_version() const noexcept {

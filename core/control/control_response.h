@@ -3,6 +3,7 @@
 #include "core/control/preset_document.h"
 #include "core/diagnostics/engine_diagnostics.h"
 #include "core/graph/graph.h"
+#include "core/platform/audio_device.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -22,6 +23,8 @@ struct ControlResponse {
   std::vector<PresetError> errors;
   diagnostics::EngineDiagnostics diagnostics;
   bool has_diagnostics = false;
+  std::vector<platform::AudioDeviceDescriptor> devices;
+  bool has_devices = false;
   struct ActiveGraphNode {
     std::string id;
     std::string label;
@@ -43,6 +46,9 @@ struct ControlResponse {
 [[nodiscard]] ControlResponse diagnostics_response(
     std::string command_id,
     diagnostics::EngineDiagnostics diagnostics);
+[[nodiscard]] ControlResponse device_list_response(
+    std::string command_id,
+    std::vector<platform::AudioDeviceDescriptor> devices);
 [[nodiscard]] ControlResponse active_graph_response(std::string command_id,
                                                     const graph::Graph& graph);
 

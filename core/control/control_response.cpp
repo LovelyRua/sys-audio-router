@@ -28,6 +28,15 @@ ControlResponse diagnostics_response(std::string command_id,
   return response;
 }
 
+ControlResponse device_list_response(
+    std::string command_id,
+    std::vector<platform::AudioDeviceDescriptor> devices) {
+  auto response = command_accepted(std::move(command_id));
+  response.devices = std::move(devices);
+  response.has_devices = true;
+  return response;
+}
+
 ControlResponse active_graph_response(std::string command_id,
                                       const graph::Graph& graph) {
   auto response = command_accepted(std::move(command_id));

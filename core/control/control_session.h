@@ -5,6 +5,7 @@
 #include "core/diagnostics/engine_diagnostics.h"
 #include "core/graph/graph.h"
 #include "core/graph/graph_snapshot.h"
+#include "core/platform/virtual_endpoint.h"
 #include "core/realtime/audio_buffer.h"
 
 #include <cstdint>
@@ -30,6 +31,8 @@ class ControlSession {
 
   [[nodiscard]] const PresetDocument& current_preset() const noexcept;
   [[nodiscard]] std::shared_ptr<graph::Graph> current_graph() const noexcept;
+  [[nodiscard]] const std::vector<platform::VirtualEndpointDescriptor>&
+  virtual_endpoints() const noexcept;
   [[nodiscard]] std::uint64_t next_graph_version() const noexcept;
 
  private:
@@ -42,6 +45,7 @@ class ControlSession {
 
   PresetDocument current_preset_;
   graph::GraphSnapshotPublisher publisher_;
+  platform::VirtualEndpointRegistry virtual_endpoints_;
   std::uint64_t next_graph_version_;
 };
 

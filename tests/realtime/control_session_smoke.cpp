@@ -157,6 +157,68 @@ int main() {
   }
 
   {
+    sar::control::ControlCommand create;
+    create.command_id = "endpoint_create_1";
+    create.type = sar::control::ControlCommandType::CreateVirtualEndpoint;
+    create.endpoint_id = "sar_asio_1";
+    create.endpoint_label = "SAR ASIO 1";
+    const auto response = session->handle(create);
+    if (const auto failure = expect(response.status ==
+                                        sar::control::ControlResponseStatus::Accepted,
+                                    "Expected endpoint create accepted")) {
+      return failure;
+    }
+    if (const auto failure = expect(session->virtual_endpoints().size() == 1,
+                                    "Expected one virtual endpoint")) {
+      return failure;
+    }
+    if (const auto failure = expect(session->virtual_endpoints()[0].format.sample_rate == 48000,
+                                    "Expected endpoint sample rate from preset")) {
+      return failure;
+    }
+    if (const auto failure = expect(session->virtual_endpoints()[0].format.channels == 2,
+                                    "Expected endpoint channels from preset")) {
+      return failure;
+    }
+    if (const auto failure = expect(session->current_graph()->version() == 10,
+                                    "Expected endpoint create not to republish graph")) {
+      return failure;
+    }
+
+    sar::control::ControlCommand list;
+    list.command_id = "endpoint_list_1";
+    list.type = sar::control::ControlCommandType::ListDevices;
+    const auto list_response = session->handle(list);
+    if (const auto failure = expect(list_response.has_devices,
+                                    "Expected list devices payload")) {
+      return failure;
+    }
+    if (const auto failure = expect(list_response.devices.size() == 1,
+                                    "Expected one listed virtual device")) {
+      return failure;
+    }
+    if (const auto failure = expect(list_response.devices[0].id == "sar_asio_1",
+                                    "Expected listed endpoint ID")) {
+      return failure;
+    }
+    if (const auto failure = expect(list_response.devices[0].is_virtual,
+                                    "Expected listed endpoint to be virtual")) {
+      return failure;
+    }
+
+    const auto duplicate = session->handle(create);
+    if (const auto failure = expect(duplicate.status ==
+                                        sar::control::ControlResponseStatus::Rejected,
+                                    "Expected duplicate endpoint rejected")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(duplicate, "duplicate_endpoint_id"),
+                                    "Expected duplicate_endpoint_id error")) {
+      return failure;
+    }
+  }
+
+  {
     sar::control::ControlCommand set_gain;
     set_gain.command_id = "gain_1";
     set_gain.type = sar::control::ControlCommandType::SetGain;
@@ -189,6 +251,34 @@ int main() {
                                                 0.25F,
                                                 1.0F,
                                                 "Unexpected set gain output")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::control::ControlCommand remove;
+    remove.command_id = "endpoint_remove_1";
+    remove.type = sar::control::ControlCommandType::RemoveVirtualEndpoint;
+    remove.endpoint_id = "sar_asio_1";
+    const auto response = session->handle(remove);
+    if (const auto failure = expect(response.status ==
+                                        sar::control::ControlResponseStatus::Accepted,
+                                    "Expected endpoint remove accepted")) {
+      return failure;
+    }
+    if (const auto failure = expect(session->virtual_endpoints().empty(),
+                                    "Expected endpoint registry to be empty")) {
+      return failure;
+    }
+
+    const auto missing = session->handle(remove);
+    if (const auto failure = expect(missing.status ==
+                                        sar::control::ControlResponseStatus::Rejected,
+                                    "Expected missing endpoint remove rejected")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(missing, "unknown_endpoint_id"),
+                                    "Expected unknown_endpoint_id error")) {
       return failure;
     }
   }
