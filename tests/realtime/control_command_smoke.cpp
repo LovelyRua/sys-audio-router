@@ -61,6 +61,16 @@ int main() {
 
   {
     sar::control::ControlCommand command;
+    command.command_id = "state_1";
+    command.type = sar::control::ControlCommandType::QuerySessionState;
+    const auto result = sar::control::validate_command(command);
+    if (const auto failure = expect(result.ok(), "Expected query session state success")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::control::ControlCommand command;
     command.schema_version = 0;
     command.type = sar::control::ControlCommandType::QueryDiagnostics;
     const auto result = sar::control::validate_command(command);

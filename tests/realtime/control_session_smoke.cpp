@@ -219,6 +219,63 @@ int main() {
   }
 
   {
+    sar::control::ControlCommand save;
+    save.command_id = "save_1";
+    save.type = sar::control::ControlCommandType::SavePreset;
+    const auto response = session->handle(save);
+    if (const auto failure = expect(response.status ==
+                                        sar::control::ControlResponseStatus::Accepted,
+                                    "Expected save preset accepted")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.has_preset, "Expected save preset payload")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.preset.matrix.routes.size() == 2,
+                                    "Expected saved preset routes")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::control::ControlCommand state;
+    state.command_id = "state_1";
+    state.type = sar::control::ControlCommandType::QuerySessionState;
+    const auto response = session->handle(state);
+    if (const auto failure = expect(response.status ==
+                                        sar::control::ControlResponseStatus::Accepted,
+                                    "Expected session state accepted")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.has_session_state,
+                                    "Expected session state payload")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.has_preset, "Expected state preset payload")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.has_devices, "Expected state devices payload")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.has_active_graph,
+                                    "Expected state graph payload")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.devices.size() == 1,
+                                    "Expected state virtual device")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.active_graph.version == 10,
+                                    "Expected state graph version")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.next_graph_version == 11,
+                                    "Expected state next graph version")) {
+      return failure;
+    }
+  }
+
+  {
     sar::control::ControlCommand set_gain;
     set_gain.command_id = "gain_1";
     set_gain.type = sar::control::ControlCommandType::SetGain;

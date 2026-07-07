@@ -20,6 +20,13 @@ ControlResponse command_rejected(std::string command_id,
   return response;
 }
 
+ControlResponse preset_response(std::string command_id, PresetDocument preset) {
+  auto response = command_accepted(std::move(command_id));
+  response.preset = std::move(preset);
+  response.has_preset = true;
+  return response;
+}
+
 ControlResponse diagnostics_response(std::string command_id,
                                      diagnostics::EngineDiagnostics diagnostics) {
   auto response = command_accepted(std::move(command_id));
@@ -54,6 +61,22 @@ ControlResponse active_graph_response(std::string command_id,
   }
 
   response.has_active_graph = true;
+  return response;
+}
+
+ControlResponse session_state_response(
+    std::string command_id,
+    PresetDocument preset,
+    std::vector<platform::AudioDeviceDescriptor> devices,
+    const graph::Graph& graph,
+    std::uint64_t next_graph_version) {
+  auto response = active_graph_response(std::move(command_id), graph);
+  response.preset = std::move(preset);
+  response.has_preset = true;
+  response.devices = std::move(devices);
+  response.has_devices = true;
+  response.next_graph_version = next_graph_version;
+  response.has_session_state = true;
   return response;
 }
 

@@ -23,6 +23,7 @@ bool mutates_preset(ControlCommandType type) noexcept {
     case ControlCommandType::SavePreset:
     case ControlCommandType::QueryDiagnostics:
     case ControlCommandType::QueryActiveGraph:
+    case ControlCommandType::QuerySessionState:
       return false;
   }
 
@@ -108,6 +109,22 @@ ControlResponse ControlSession::handle(const ControlCommand& command,
 
   if (command.type == ControlCommandType::QueryActiveGraph) {
     return active_graph_response(command.command_id, *publisher_.current());
+  }
+
+  if (command.type == ControlCommandType::SavePreset) {
+    return preset_response(command.command_id, current_preset_);
+  }
+
+  if (command.type == ControlCommandType::QuerySessionState) {
+    auto result = virtual_endpoints_.list_devices();
+    if (!result.ok()) {
+      return command_rejected(command.command_id, convert_errors(result.errors()));
+    }
+    return session_state_response(command.command_id,
+                                  current_preset_,
+                                  result.devices(),
+                                  *publisher_.current(),
+                                  next_graph_version_);
   }
 
   if (command.type == ControlCommandType::ListDevices) {

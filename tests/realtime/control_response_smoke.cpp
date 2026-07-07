@@ -16,6 +16,17 @@ int expect(bool condition, const char* message) {
   return 0;
 }
 
+sar::control::PresetDocument make_preset() {
+  sar::control::PresetDocument preset;
+  preset.sample_rate = 48000;
+  preset.frames_per_block = 128;
+  preset.nodes.push_back({"matrix", "Main Matrix", "route_matrix"});
+  preset.matrix.inputs.push_back({"mic", "Mic"});
+  preset.matrix.outputs.push_back({"monitor", "Monitor"});
+  preset.matrix.routes.push_back({"mic", "monitor", 1.0F});
+  return preset;
+}
+
 }  // namespace
 
 int main() {
@@ -74,6 +85,17 @@ int main() {
     }
     if (const auto failure = expect(response.diagnostics.xrun_count == 3,
                                     "Expected diagnostics xrun count")) {
+      return failure;
+    }
+  }
+
+  {
+    const auto response = sar::control::preset_response("cmd_preset", make_preset());
+    if (const auto failure = expect(response.has_preset, "Expected preset payload")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.preset.matrix.routes.size() == 1,
+                                    "Expected preset route payload")) {
       return failure;
     }
   }
@@ -151,6 +173,55 @@ int main() {
     }
     if (const auto failure = expect(response.active_graph.nodes[0].label == "Monitor Gain",
                                     "Expected active graph node label")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::AudioDeviceDescriptor device;
+    device.id = "sar_asio_1";
+    device.label = "SAR ASIO 1";
+    device.backend = sar::platform::AudioBackendKind::VirtualAsio;
+    device.direction = sar::platform::AudioDeviceDirection::Duplex;
+    device.is_virtual = true;
+    device.formats.push_back({
+        .sample_rate = 48000,
+        .channels = 2,
+        .frames_per_block = 128,
+    });
+
+    auto graph_result = sar::graph::GraphBuilder(12, 2, 128)
+                            .sample_rate(48000)
+                            .add_node("matrix",
+                                      "Main Matrix",
+                                      std::make_unique<sar::graph::PassthroughNode>())
+                            .build();
+    if (const auto failure = expect(graph_result.ok(), "Expected state graph build success")) {
+      return failure;
+    }
+
+    auto graph = graph_result.take_graph();
+    const auto response = sar::control::session_state_response("cmd_state",
+                                                               make_preset(),
+                                                               {device},
+                                                               *graph,
+                                                               13);
+    if (const auto failure = expect(response.has_session_state,
+                                    "Expected session state payload")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.has_preset, "Expected state preset payload")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.has_devices, "Expected state devices payload")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.has_active_graph,
+                                    "Expected state graph payload")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.next_graph_version == 13,
+                                    "Expected state next graph version")) {
       return failure;
     }
   }

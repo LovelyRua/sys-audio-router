@@ -77,6 +77,7 @@ ControlCommandValidationResult validate_command(const ControlCommand& command) {
     case ControlCommandType::SavePreset:
     case ControlCommandType::QueryDiagnostics:
     case ControlCommandType::QueryActiveGraph:
+    case ControlCommandType::QuerySessionState:
       break;
 
     case ControlCommandType::CreateVirtualEndpoint:
@@ -226,6 +227,7 @@ ControlApplyResult apply_command(const PresetDocument& current,
     case ControlCommandType::SavePreset:
     case ControlCommandType::QueryDiagnostics:
     case ControlCommandType::QueryActiveGraph:
+    case ControlCommandType::QuerySessionState:
     case ControlCommandType::LoadPreset:
       break;
   }

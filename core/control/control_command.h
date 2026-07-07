@@ -20,6 +20,7 @@ enum class ControlCommandType {
   SavePreset,
   QueryDiagnostics,
   QueryActiveGraph,
+  QuerySessionState,
 };
 
 struct ControlCommand {

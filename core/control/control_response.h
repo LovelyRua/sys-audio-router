@@ -21,10 +21,14 @@ struct ControlResponse {
   std::string command_id;
   ControlResponseStatus status = ControlResponseStatus::Accepted;
   std::vector<PresetError> errors;
+  PresetDocument preset;
+  bool has_preset = false;
   diagnostics::EngineDiagnostics diagnostics;
   bool has_diagnostics = false;
   std::vector<platform::AudioDeviceDescriptor> devices;
   bool has_devices = false;
+  std::uint64_t next_graph_version = 0;
+  bool has_session_state = false;
   struct ActiveGraphNode {
     std::string id;
     std::string label;
@@ -43,6 +47,8 @@ struct ControlResponse {
 [[nodiscard]] ControlResponse command_accepted(std::string command_id);
 [[nodiscard]] ControlResponse command_rejected(std::string command_id,
                                                std::vector<PresetError> errors);
+[[nodiscard]] ControlResponse preset_response(std::string command_id,
+                                              PresetDocument preset);
 [[nodiscard]] ControlResponse diagnostics_response(
     std::string command_id,
     diagnostics::EngineDiagnostics diagnostics);
@@ -51,5 +57,11 @@ struct ControlResponse {
     std::vector<platform::AudioDeviceDescriptor> devices);
 [[nodiscard]] ControlResponse active_graph_response(std::string command_id,
                                                     const graph::Graph& graph);
+[[nodiscard]] ControlResponse session_state_response(
+    std::string command_id,
+    PresetDocument preset,
+    std::vector<platform::AudioDeviceDescriptor> devices,
+    const graph::Graph& graph,
+    std::uint64_t next_graph_version);
 
 }  // namespace sar::control
