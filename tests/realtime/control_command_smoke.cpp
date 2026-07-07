@@ -255,6 +255,42 @@ int main() {
     }
   }
 
+  {
+    auto preset = make_valid_preset();
+    sar::control::ControlCommand command;
+    command.command_id = "connect_unknown_input";
+    command.type = sar::control::ControlCommandType::ConnectRoute;
+    command.input_id = "missing";
+    command.output_id = "monitor";
+    command.gain = 1.0F;
+    const auto result = sar::control::apply_command(preset, command);
+    if (const auto failure = expect(!result.ok(), "Expected unknown input connect failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "unknown_route_input"),
+                                    "Expected unknown_route_input error")) {
+      return failure;
+    }
+  }
+
+  {
+    auto preset = make_valid_preset();
+    sar::control::ControlCommand command;
+    command.command_id = "connect_unknown_output";
+    command.type = sar::control::ControlCommandType::ConnectRoute;
+    command.input_id = "mic";
+    command.output_id = "missing";
+    command.gain = 1.0F;
+    const auto result = sar::control::apply_command(preset, command);
+    if (const auto failure = expect(!result.ok(), "Expected unknown output connect failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "unknown_route_output"),
+                                    "Expected unknown_route_output error")) {
+      return failure;
+    }
+  }
+
   std::cout << "Control command smoke test passed\n";
   return 0;
 }

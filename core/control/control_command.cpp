@@ -230,6 +230,11 @@ ControlApplyResult apply_command(const PresetDocument& current,
       break;
   }
 
+  auto next_validation = validate_preset(next);
+  if (!next_validation.ok()) {
+    return ControlApplyResult::failure(next_validation.errors());
+  }
+
   return ControlApplyResult::success(std::move(next));
 }
 
