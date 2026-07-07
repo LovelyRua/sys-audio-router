@@ -17,6 +17,7 @@ struct WasapiGraphRunnerStats {
   std::uint32_t rendered_frames = 0;
   std::uint32_t capture_partial_frames = 0;
   std::uint32_t render_partial_frames = 0;
+  std::uint32_t capture_silent_frames = 0;
   bool graph_processed = false;
   bool capture_stream_idle = false;
   bool render_stream_idle = false;
@@ -24,6 +25,7 @@ struct WasapiGraphRunnerStats {
   bool render_wait_timed_out = false;
   bool capture_partial = false;
   bool render_partial = false;
+  bool capture_silent = false;
 };
 
 class WasapiGraphRunnerResult {

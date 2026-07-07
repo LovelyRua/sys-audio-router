@@ -185,6 +185,10 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
       return WasapiGraphRunnerResult::failure(capture_result.errors());
     }
     stats.captured_frames = capture_result.frames();
+    stats.capture_silent = capture_result.silent();
+    if (stats.capture_silent) {
+      stats.capture_silent_frames = stats.captured_frames;
+    }
     stats.capture_partial =
         stats.captured_frames > 0 && stats.captured_frames < input_.frames();
     if (stats.capture_partial) {

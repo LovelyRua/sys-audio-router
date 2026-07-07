@@ -92,6 +92,18 @@ int main() {
                                     "Expected timeout I/O not to be generic idle")) {
       return failure;
     }
+
+    const auto silent_result = sar::platform::WasapiStreamIoResult::success_silent(128);
+    if (const auto failure = expect(silent_result.ok(), "Expected silent I/O success")) {
+      return failure;
+    }
+    if (const auto failure = expect(silent_result.silent(), "Expected silent I/O flag")) {
+      return failure;
+    }
+    if (const auto failure = expect(!silent_result.idle(),
+                                    "Expected non-zero silent I/O not idle")) {
+      return failure;
+    }
   }
 
   {

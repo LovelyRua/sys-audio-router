@@ -135,6 +135,14 @@ int main() {
                                     "Expected graph-only worker without partial render frames")) {
       return failure;
     }
+    if (const auto failure = expect(stats.capture_silent_cycles == 0,
+                                    "Expected graph-only worker without silent capture cycles")) {
+      return failure;
+    }
+    if (const auto failure = expect(stats.capture_silent_frames == 0,
+                                    "Expected graph-only worker without silent capture frames")) {
+      return failure;
+    }
     if (const auto failure = expect(stats.process_error_cycles == 0,
                                     "Expected graph-only worker without process errors")) {
       return failure;

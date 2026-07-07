@@ -100,6 +100,14 @@ int main() {
                                     "Expected graph-only runner without partial render frames")) {
       return failure;
     }
+    if (const auto failure = expect(!result.stats().capture_silent,
+                                    "Expected graph-only runner without silent capture")) {
+      return failure;
+    }
+    if (const auto failure = expect(result.stats().capture_silent_frames == 0,
+                                    "Expected graph-only runner without silent capture frames")) {
+      return failure;
+    }
 
     const auto& output = runner.output_buffer();
     if (const auto failure =
