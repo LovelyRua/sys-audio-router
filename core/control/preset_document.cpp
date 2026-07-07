@@ -308,13 +308,13 @@ PresetGraphBuildResult build_preset_graph(const PresetDocument& preset,
   }
 
   auto matrix = matrix_result.take_matrix();
-  auto builder = graph::GraphBuilder(graph_version,
-                                     matrix->output_channels(),
-                                     preset.frames_per_block)
-                     .sample_rate(preset.sample_rate)
-                     .add_node(matrix_node->id,
-                               matrix_node->label,
-                               std::make_unique<graph::RouteMatrixNode>(std::move(*matrix)));
+  graph::GraphBuilder builder(graph_version,
+                              matrix->output_channels(),
+                              preset.frames_per_block);
+  builder.sample_rate(preset.sample_rate)
+      .add_node(matrix_node->id,
+                matrix_node->label,
+                std::make_unique<graph::RouteMatrixNode>(std::move(*matrix)));
   auto graph_result = builder.build();
   if (!graph_result.ok()) {
     append_graph_build_errors(graph_result, errors);
