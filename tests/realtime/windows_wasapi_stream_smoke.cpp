@@ -79,6 +79,50 @@ int main() {
                                     "Expected idle I/O not to be timed out")) {
       return failure;
     }
+    if (const auto failure = expect(!idle_result.silent(),
+                                    "Expected idle I/O not to be silent")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(idle_result.status() == sar::platform::WasapiStreamIoStatus::Idle,
+                   "Expected idle I/O status")) {
+      return failure;
+    }
+    if (const auto failure = expect(idle_result.frames() == 0,
+                                    "Expected idle I/O zero frames")) {
+      return failure;
+    }
+    if (const auto failure = expect(idle_result.errors().empty(),
+                                    "Expected idle I/O without errors")) {
+      return failure;
+    }
+
+    const auto completed_result = sar::platform::WasapiStreamIoResult::success(256);
+    if (const auto failure = expect(completed_result.ok(),
+                                    "Expected completed I/O success")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(completed_result.status() == sar::platform::WasapiStreamIoStatus::Completed,
+                   "Expected completed I/O status")) {
+      return failure;
+    }
+    if (const auto failure = expect(completed_result.frames() == 256,
+                                    "Expected completed I/O frame count")) {
+      return failure;
+    }
+    if (const auto failure = expect(!completed_result.idle(),
+                                    "Expected completed I/O not idle")) {
+      return failure;
+    }
+    if (const auto failure = expect(!completed_result.silent(),
+                                    "Expected completed I/O not silent")) {
+      return failure;
+    }
+    if (const auto failure = expect(!completed_result.timed_out(),
+                                    "Expected completed I/O not timed out")) {
+      return failure;
+    }
 
     const auto timeout_result = sar::platform::WasapiStreamIoResult::timeout();
     if (const auto failure = expect(timeout_result.ok(), "Expected timeout I/O success")) {
@@ -92,6 +136,19 @@ int main() {
                                     "Expected timeout I/O not to be generic idle")) {
       return failure;
     }
+    if (const auto failure =
+            expect(timeout_result.status() == sar::platform::WasapiStreamIoStatus::TimedOut,
+                   "Expected timeout I/O status enum")) {
+      return failure;
+    }
+    if (const auto failure = expect(timeout_result.frames() == 0,
+                                    "Expected timeout I/O zero frames")) {
+      return failure;
+    }
+    if (const auto failure = expect(!timeout_result.silent(),
+                                    "Expected timeout I/O not silent")) {
+      return failure;
+    }
 
     const auto silent_result = sar::platform::WasapiStreamIoResult::success_silent(128);
     if (const auto failure = expect(silent_result.ok(), "Expected silent I/O success")) {
@@ -102,6 +159,70 @@ int main() {
     }
     if (const auto failure = expect(!silent_result.idle(),
                                     "Expected non-zero silent I/O not idle")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(silent_result.status() == sar::platform::WasapiStreamIoStatus::Completed,
+                   "Expected non-zero silent I/O completed status")) {
+      return failure;
+    }
+    if (const auto failure = expect(silent_result.frames() == 128,
+                                    "Expected silent I/O frame count")) {
+      return failure;
+    }
+    if (const auto failure = expect(!silent_result.timed_out(),
+                                    "Expected silent I/O not timed out")) {
+      return failure;
+    }
+
+    const auto zero_silent_result = sar::platform::WasapiStreamIoResult::success_silent(0);
+    if (const auto failure = expect(zero_silent_result.ok(),
+                                    "Expected zero silent I/O success")) {
+      return failure;
+    }
+    if (const auto failure = expect(zero_silent_result.idle(),
+                                    "Expected zero silent I/O idle")) {
+      return failure;
+    }
+    if (const auto failure = expect(!zero_silent_result.silent(),
+                                    "Expected zero silent I/O not flagged silent")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(zero_silent_result.status() == sar::platform::WasapiStreamIoStatus::Idle,
+                   "Expected zero silent I/O idle status")) {
+      return failure;
+    }
+
+    const auto failure_result = sar::platform::WasapiStreamIoResult::failure({
+        {"io_failed", "Synthetic I/O failure."},
+    });
+    if (const auto failure = expect(!failure_result.ok(), "Expected failed I/O result")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(failure_result.status() == sar::platform::WasapiStreamIoStatus::Failed,
+                   "Expected failed I/O status")) {
+      return failure;
+    }
+    if (const auto failure = expect(failure_result.frames() == 0,
+                                    "Expected failed I/O zero frames")) {
+      return failure;
+    }
+    if (const auto failure = expect(!failure_result.idle(),
+                                    "Expected failed I/O not idle")) {
+      return failure;
+    }
+    if (const auto failure = expect(!failure_result.silent(),
+                                    "Expected failed I/O not silent")) {
+      return failure;
+    }
+    if (const auto failure = expect(!failure_result.timed_out(),
+                                    "Expected failed I/O not timed out")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(failure_result, "io_failed"),
+                                    "Expected failed I/O error code")) {
       return failure;
     }
   }
@@ -203,8 +324,29 @@ int main() {
     auto invalid_probe = make_probe();
     invalid_probe.buffer_frames = 0;
     invalid_probe.mix_format.bits_per_sample = 0;
+    invalid_probe.device_id.clear();
+    invalid_probe.device_label.clear();
+    invalid_probe.mix_format.sample_rate = 0;
+    invalid_probe.mix_format.channels = 0;
+    invalid_probe.default_period_100ns = 0;
     const auto result = stream.open(invalid_probe);
     if (const auto failure = expect(!result.ok(), "Expected invalid probe failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "empty_device_id"),
+                                    "Expected empty_device_id error")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "empty_device_label"),
+                                    "Expected empty_device_label error")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "invalid_sample_rate"),
+                                    "Expected invalid_sample_rate error")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "invalid_channel_count"),
+                                    "Expected invalid_channel_count error")) {
       return failure;
     }
     if (const auto failure = expect(has_error_code(result, "invalid_buffer_frames"),
@@ -213,6 +355,60 @@ int main() {
     }
     if (const auto failure = expect(has_error_code(result, "invalid_bits_per_sample"),
                                     "Expected invalid_bits_per_sample error")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "invalid_device_period"),
+                                    "Expected invalid_device_period error")) {
+      return failure;
+    }
+    if (const auto failure = expect(stream.state() == sar::platform::WasapiStreamState::Closed,
+                                    "Expected invalid probe to leave stream closed")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiStream stream;
+    auto first_open = stream.open(make_probe());
+    if (const auto failure = expect(first_open.ok(), "Expected first stream open success")) {
+      return failure;
+    }
+    auto second_open = stream.open(make_probe());
+    if (const auto failure = expect(!second_open.ok(), "Expected duplicate stream open failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(second_open, "stream_already_open"),
+                                    "Expected stream_already_open error")) {
+      return failure;
+    }
+    if (const auto failure = expect(stream.state() == sar::platform::WasapiStreamState::Open,
+                                    "Expected duplicate open to preserve open state")) {
+      return failure;
+    }
+    stream.close();
+  }
+
+  {
+    sar::platform::WindowsWasapiStream stream;
+    auto stop_result = stream.stop();
+    if (const auto failure = expect(!stop_result.ok(), "Expected stop-before-open failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(stop_result, "stream_not_started"),
+                                    "Expected stream_not_started before open")) {
+      return failure;
+    }
+
+    auto open_result = stream.open(make_probe());
+    if (const auto failure = expect(open_result.ok(), "Expected stream open before stop")) {
+      return failure;
+    }
+    stop_result = stream.stop();
+    if (const auto failure = expect(stop_result.ok(), "Expected stop-open stream success")) {
+      return failure;
+    }
+    if (const auto failure = expect(stream.state() == sar::platform::WasapiStreamState::Open,
+                                    "Expected stop-open stream to stay open")) {
       return failure;
     }
   }
