@@ -60,6 +60,143 @@ sar::platform::WasapiStreamProbe make_mismatched_render_probe() {
 int main() {
   {
     sar::platform::WindowsWasapiGraphRunner runner(nullptr, nullptr, 2, 4);
+    const auto start_result = runner.start_streams();
+    if (const auto failure =
+            expect(start_result.ok(), "Expected graph-only stream start success")) {
+      return failure;
+    }
+    const auto stop_result = runner.stop_streams();
+    if (const auto failure =
+            expect(stop_result.ok(), "Expected graph-only stream stop success")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiStream render_stream;
+    auto open_result = render_stream.open(make_render_probe());
+    if (const auto failure =
+            expect(open_result.ok(), "Expected render stream open before runner start")) {
+      return failure;
+    }
+
+    sar::platform::WindowsWasapiGraphRunner runner(nullptr, &render_stream, 2, 4);
+    const auto start_result = runner.start_streams();
+    if (const auto failure =
+            expect(start_result.ok(), "Expected render stream runner start success")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(render_stream.state() == sar::platform::WasapiStreamState::Started,
+                   "Expected render stream started by runner")) {
+      return failure;
+    }
+
+    const auto stop_result = runner.stop_streams();
+    if (const auto failure =
+            expect(stop_result.ok(), "Expected render stream runner stop success")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(render_stream.state() == sar::platform::WasapiStreamState::Open,
+                   "Expected render stream stopped by runner")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiStream capture_stream;
+    auto open_result = capture_stream.open(make_capture_probe());
+    if (const auto failure =
+            expect(open_result.ok(), "Expected capture stream open before runner start")) {
+      return failure;
+    }
+
+    sar::platform::WindowsWasapiGraphRunner runner(&capture_stream, nullptr, 2, 4);
+    const auto start_result = runner.start_streams();
+    if (const auto failure =
+            expect(start_result.ok(), "Expected capture stream runner start success")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(capture_stream.state() == sar::platform::WasapiStreamState::Started,
+                   "Expected capture stream started by runner")) {
+      return failure;
+    }
+
+    const auto stop_result = runner.stop_streams();
+    if (const auto failure =
+            expect(stop_result.ok(), "Expected capture stream runner stop success")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(capture_stream.state() == sar::platform::WasapiStreamState::Open,
+                   "Expected capture stream stopped by runner")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiStream capture_stream;
+    auto capture_open_result = capture_stream.open(make_capture_probe());
+    if (const auto failure =
+            expect(capture_open_result.ok(), "Expected capture stream open before rollback")) {
+      return failure;
+    }
+    sar::platform::WindowsWasapiStream render_stream;
+
+    sar::platform::WindowsWasapiGraphRunner runner(&capture_stream, &render_stream, 2, 4);
+    const auto start_result = runner.start_streams();
+    if (const auto failure =
+            expect(!start_result.ok(), "Expected render start failure after capture start")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(start_result, "stream_not_open"),
+                                    "Expected stream_not_open from closed render stream")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(capture_stream.state() == sar::platform::WasapiStreamState::Open,
+                   "Expected capture stream rollback after render start failure")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(render_stream.state() == sar::platform::WasapiStreamState::Closed,
+                   "Expected render stream to remain closed after start failure")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiStream capture_stream;
+    sar::platform::WindowsWasapiGraphRunner runner(&capture_stream, nullptr, 2, 4);
+    const auto start_result = runner.start_streams();
+    if (const auto failure =
+            expect(!start_result.ok(), "Expected closed capture runner start failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(start_result, "stream_not_open"),
+                                    "Expected stream_not_open from closed capture stream")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiStream render_stream;
+    sar::platform::WindowsWasapiGraphRunner runner(nullptr, &render_stream, 2, 4);
+    const auto stop_result = runner.stop_streams();
+    if (const auto failure =
+            expect(!stop_result.ok(), "Expected closed render runner stop failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(stop_result, "stream_not_started"),
+                                    "Expected stream_not_started from closed render stop")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiGraphRunner runner(nullptr, nullptr, 2, 4);
     auto& input = runner.input_buffer();
     for (std::size_t channel = 0; channel < input.channels(); ++channel) {
       auto samples = input.channel(channel);
