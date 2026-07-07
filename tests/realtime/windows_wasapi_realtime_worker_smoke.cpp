@@ -151,6 +151,40 @@ int main() {
                                     "Expected graph-only worker without last rendered frames")) {
       return failure;
     }
+    if (const auto failure = expect(stats.last_graph_processed,
+                                    "Expected graph-only worker last cycle processed")) {
+      return failure;
+    }
+    if (const auto failure = expect(!stats.last_capture_idle,
+                                    "Expected graph-only worker last cycle without capture idle")) {
+      return failure;
+    }
+    if (const auto failure = expect(!stats.last_render_idle,
+                                    "Expected graph-only worker last cycle without render idle")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(!stats.last_capture_wait_timed_out,
+                   "Expected graph-only worker last cycle without capture timeout")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(!stats.last_render_wait_timed_out,
+                   "Expected graph-only worker last cycle without render timeout")) {
+      return failure;
+    }
+    if (const auto failure = expect(!stats.last_capture_partial,
+                                    "Expected graph-only worker last cycle without capture partial")) {
+      return failure;
+    }
+    if (const auto failure = expect(!stats.last_render_partial,
+                                    "Expected graph-only worker last cycle without render partial")) {
+      return failure;
+    }
+    if (const auto failure = expect(!stats.last_capture_silent,
+                                    "Expected graph-only worker last cycle without silent capture")) {
+      return failure;
+    }
     if (const auto failure = expect(stats.process_error_cycles == 0,
                                     "Expected graph-only worker without process errors")) {
       return failure;

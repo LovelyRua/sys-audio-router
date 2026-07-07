@@ -146,6 +146,41 @@ int main() {
                                   "Expected total rendered frames to cover last render")) {
     return failure;
   }
+  if (const auto failure = expect(!stats.last_capture_wait_timed_out ||
+                                      stats.capture_wait_timeout_cycles > 0,
+                                  "Expected last capture timeout to be counted")) {
+    return failure;
+  }
+  if (const auto failure = expect(!stats.last_render_wait_timed_out ||
+                                      stats.render_wait_timeout_cycles > 0,
+                                  "Expected last render timeout to be counted")) {
+    return failure;
+  }
+  if (const auto failure = expect(!stats.last_capture_partial ||
+                                      stats.capture_partial_cycles > 0,
+                                  "Expected last capture partial to be counted")) {
+    return failure;
+  }
+  if (const auto failure = expect(!stats.last_render_partial ||
+                                      stats.render_partial_cycles > 0,
+                                  "Expected last render partial to be counted")) {
+    return failure;
+  }
+  if (const auto failure = expect(!stats.last_capture_silent ||
+                                      stats.capture_silent_cycles > 0,
+                                  "Expected last silent capture to be counted")) {
+    return failure;
+  }
+  if (const auto failure = expect(!stats.last_capture_idle ||
+                                      stats.capture_idle_cycles > 0,
+                                  "Expected last capture idle to be counted")) {
+    return failure;
+  }
+  if (const auto failure = expect(!stats.last_render_idle ||
+                                      stats.render_idle_cycles > 0,
+                                  "Expected last render idle to be counted")) {
+    return failure;
+  }
 
   std::cout << "Windows WASAPI duplex loop smoke test passed\n";
   return 0;

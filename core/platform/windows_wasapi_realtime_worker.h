@@ -38,6 +38,14 @@ struct WasapiRealtimeWorkerStats {
   std::uint64_t rendered_frames = 0;
   std::uint32_t last_captured_frames = 0;
   std::uint32_t last_rendered_frames = 0;
+  bool last_graph_processed = false;
+  bool last_capture_idle = false;
+  bool last_render_idle = false;
+  bool last_capture_wait_timed_out = false;
+  bool last_render_wait_timed_out = false;
+  bool last_capture_partial = false;
+  bool last_render_partial = false;
+  bool last_capture_silent = false;
   std::uint64_t last_stop_wait_microseconds = 0;
 };
 
@@ -100,6 +108,14 @@ class WindowsWasapiRealtimeWorker {
   std::atomic_uint64_t rendered_frames_ = 0;
   std::atomic<std::uint32_t> last_captured_frames_ = 0;
   std::atomic<std::uint32_t> last_rendered_frames_ = 0;
+  std::atomic_bool last_graph_processed_ = false;
+  std::atomic_bool last_capture_idle_ = false;
+  std::atomic_bool last_render_idle_ = false;
+  std::atomic_bool last_capture_wait_timed_out_ = false;
+  std::atomic_bool last_render_wait_timed_out_ = false;
+  std::atomic_bool last_capture_partial_ = false;
+  std::atomic_bool last_render_partial_ = false;
+  std::atomic_bool last_capture_silent_ = false;
   std::atomic_uint64_t last_stop_wait_microseconds_ = 0;
   mutable std::mutex errors_mutex_;
   std::vector<WasapiRealtimeWorkerError> last_errors_;

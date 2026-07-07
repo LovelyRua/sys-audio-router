@@ -135,6 +135,14 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   rendered_frames_.store(0);
   last_captured_frames_.store(0);
   last_rendered_frames_.store(0);
+  last_graph_processed_.store(false);
+  last_capture_idle_.store(false);
+  last_render_idle_.store(false);
+  last_capture_wait_timed_out_.store(false);
+  last_render_wait_timed_out_.store(false);
+  last_capture_partial_.store(false);
+  last_render_partial_.store(false);
+  last_capture_silent_.store(false);
   last_stop_wait_microseconds_.store(0);
   set_errors({});
   running_.store(true);
@@ -186,6 +194,14 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.rendered_frames = rendered_frames_.load();
   result.last_captured_frames = last_captured_frames_.load();
   result.last_rendered_frames = last_rendered_frames_.load();
+  result.last_graph_processed = last_graph_processed_.load();
+  result.last_capture_idle = last_capture_idle_.load();
+  result.last_render_idle = last_render_idle_.load();
+  result.last_capture_wait_timed_out = last_capture_wait_timed_out_.load();
+  result.last_render_wait_timed_out = last_render_wait_timed_out_.load();
+  result.last_capture_partial = last_capture_partial_.load();
+  result.last_render_partial = last_render_partial_.load();
+  result.last_capture_silent = last_capture_silent_.load();
   result.last_stop_wait_microseconds = last_stop_wait_microseconds_.load();
   return result;
 }
@@ -238,6 +254,14 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     rendered_frames_.fetch_add(result.stats().rendered_frames);
     last_captured_frames_.store(result.stats().captured_frames);
     last_rendered_frames_.store(result.stats().rendered_frames);
+    last_graph_processed_.store(result.stats().graph_processed);
+    last_capture_idle_.store(result.stats().capture_stream_idle);
+    last_render_idle_.store(result.stats().render_stream_idle);
+    last_capture_wait_timed_out_.store(result.stats().capture_wait_timed_out);
+    last_render_wait_timed_out_.store(result.stats().render_wait_timed_out);
+    last_capture_partial_.store(result.stats().capture_partial);
+    last_render_partial_.store(result.stats().render_partial);
+    last_capture_silent_.store(result.stats().capture_silent);
     if (result.stats().graph_processed) {
       graph_processed_cycles_.fetch_add(1);
     }

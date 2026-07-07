@@ -110,6 +110,37 @@ int main() {
                                   "Expected total rendered frames to cover last render")) {
     return failure;
   }
+  if (const auto failure = expect(!stats.last_capture_idle,
+                                  "Expected render loop without last capture idle")) {
+    return failure;
+  }
+  if (const auto failure = expect(!stats.last_capture_wait_timed_out,
+                                  "Expected render loop without last capture timeout")) {
+    return failure;
+  }
+  if (const auto failure = expect(!stats.last_capture_partial,
+                                  "Expected render loop without last capture partial")) {
+    return failure;
+  }
+  if (const auto failure = expect(!stats.last_capture_silent,
+                                  "Expected render loop without last silent capture")) {
+    return failure;
+  }
+  if (const auto failure = expect(stats.last_rendered_frames == 0 ||
+                                      stats.last_graph_processed,
+                                  "Expected non-idle render loop cycle to process graph")) {
+    return failure;
+  }
+  if (const auto failure = expect(!stats.last_render_wait_timed_out ||
+                                      stats.render_wait_timeout_cycles > 0,
+                                  "Expected last render timeout to be counted")) {
+    return failure;
+  }
+  if (const auto failure = expect(!stats.last_render_partial ||
+                                      stats.render_partial_cycles > 0,
+                                  "Expected last render partial to be counted")) {
+    return failure;
+  }
 
   std::cout << "Windows WASAPI render loop smoke test passed\n";
   return 0;
