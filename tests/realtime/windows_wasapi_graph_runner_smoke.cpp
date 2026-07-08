@@ -19,6 +19,17 @@ bool has_error_code(const sar::platform::WasapiGraphRunnerResult& result,
   return false;
 }
 
+std::size_t error_code_count(const sar::platform::WasapiGraphRunnerResult& result,
+                             const std::string& code) {
+  std::size_t count = 0;
+  for (const auto& error : result.errors()) {
+    if (error.code == code) {
+      ++count;
+    }
+  }
+  return count;
+}
+
 int expect(bool condition, const char* message) {
   if (!condition) {
     std::cerr << message << '\n';
@@ -51,6 +62,12 @@ sar::platform::WasapiStreamProbe make_capture_probe() {
 
 sar::platform::WasapiStreamProbe make_mismatched_render_probe() {
   auto probe = make_render_probe();
+  probe.mix_format.sample_rate = 44100;
+  return probe;
+}
+
+sar::platform::WasapiStreamProbe make_mismatched_capture_probe() {
+  auto probe = make_capture_probe();
   probe.mix_format.sample_rate = 44100;
   return probe;
 }
@@ -191,6 +208,22 @@ int main() {
     }
     if (const auto failure = expect(has_error_code(stop_result, "stream_not_started"),
                                     "Expected stream_not_started from closed render stop")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiStream capture_stream;
+    sar::platform::WindowsWasapiStream render_stream;
+    sar::platform::WindowsWasapiGraphRunner runner(&capture_stream, &render_stream, 2, 4);
+    const auto stop_result = runner.stop_streams();
+    if (const auto failure =
+            expect(!stop_result.ok(), "Expected closed duplex runner stop failure")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(error_code_count(stop_result, "stream_not_started") == 2,
+                   "Expected closed duplex stop to aggregate both stream errors")) {
       return failure;
     }
   }
@@ -366,6 +399,52 @@ int main() {
     }
     if (const auto failure = expect(diagnostics.processed_blocks == 0,
                                     "Expected mismatched graph not to process")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiStream capture_stream;
+    auto open_result = capture_stream.open(make_mismatched_capture_probe());
+    if (const auto failure =
+            expect(open_result.ok(), "Expected mismatched synthetic capture open")) {
+      return failure;
+    }
+    auto start_result = capture_stream.start();
+    if (const auto failure =
+            expect(start_result.ok(), "Expected mismatched synthetic capture start")) {
+      return failure;
+    }
+
+    sar::platform::WindowsWasapiGraphRunner runner(&capture_stream, nullptr, 2, 4);
+    auto& input = runner.input_buffer();
+    for (std::size_t channel = 0; channel < input.channels(); ++channel) {
+      auto samples = input.channel(channel);
+      for (std::size_t frame = 0; frame < input.frames(); ++frame) {
+        samples[frame] = 0.5F;
+      }
+    }
+
+    sar::graph::Graph graph(13, 2, 4, 48000);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    const auto result = runner.process_once(graph, diagnostics, 0);
+
+    if (const auto failure = expect(!result.ok(),
+                                    "Expected capture sample-rate mismatch failure")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(has_error_code(result, "graph_sample_rate_mismatch"),
+                   "Expected capture graph_sample_rate_mismatch error")) {
+      return failure;
+    }
+    if (const auto failure = expect(diagnostics.processed_blocks == 0,
+                                    "Expected mismatched capture graph not to process")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::tests::nearly_equal(input.channel(0)[0], 0.5F),
+                   "Expected capture sample-rate preflight not to clear input")) {
       return failure;
     }
   }
