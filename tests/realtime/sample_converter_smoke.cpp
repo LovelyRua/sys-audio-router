@@ -41,6 +41,13 @@ sar::platform::AudioFormat int32_format() {
   return format;
 }
 
+sar::platform::AudioFormat int24_format() {
+  auto format = float32_format();
+  format.bits_per_sample = 24;
+  format.sample_format = sar::platform::AudioSampleFormat::PcmInt;
+  return format;
+}
+
 }  // namespace
 
 int main() {
@@ -197,18 +204,72 @@ int main() {
   }
 
   {
-    auto format = int16_format();
-    format.bits_per_sample = 24;
+    const auto format = int24_format();
+    if (const auto failure = expect(sar::platform::required_interleaved_bytes(format, 4) == 24,
+                                    "Expected packed int24 byte count")) {
+      return failure;
+    }
+
+    const std::vector<std::uint8_t> interleaved = {
+        0x00, 0x00, 0x00, 0xFF, 0xFF, 0x7F,
+        0x00, 0x00, 0x80, 0x00, 0x00, 0x40,
+        0x00, 0x00, 0xC0, 0x00, 0x00, 0x20,
+        0x00, 0x00, 0x10, 0x00, 0x00, 0xF0,
+    };
     sar::realtime::AudioBuffer buffer(2, 4);
-    std::vector<std::uint8_t> bytes(32);
     const auto result = sar::platform::import_interleaved_to_float(
-        bytes.data(),
-        bytes.size(),
+        interleaved.data(),
+        interleaved.size(),
         format,
         buffer);
+    if (const auto failure = expect(result.ok(), "Expected int24 import success")) {
+      return failure;
+    }
     if (const auto failure =
-            expect(result.status() == sar::platform::SampleConversionStatus::UnsupportedFormat,
-                   "Expected unsupported format status")) {
+            expect(sar::tests::nearly_equal(buffer.channel(0)[1], -1.0F),
+                   "Expected int24 minimum to import as -1")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::tests::nearly_equal(buffer.channel(1)[1], 0.5F),
+                   "Expected int24 positive sample")) {
+      return failure;
+    }
+  }
+
+  {
+    const auto format = int24_format();
+    sar::realtime::AudioBuffer buffer(2, 2);
+    buffer.channel(0)[0] = -1.0F;
+    buffer.channel(1)[0] = 1.0F;
+    buffer.channel(0)[1] = 2.0F;
+    buffer.channel(1)[1] = -2.0F;
+
+    std::vector<std::uint8_t> interleaved(12);
+    const auto result = sar::platform::export_float_to_interleaved(
+        buffer,
+        format,
+        interleaved.data(),
+        interleaved.size());
+    if (const auto failure = expect(result.ok(), "Expected int24 export success")) {
+      return failure;
+    }
+    if (const auto failure = expect(interleaved[0] == 0x01 && interleaved[1] == 0x00 &&
+                                        interleaved[2] == 0x80,
+                                    "Expected negative int24 full-scale export")) {
+      return failure;
+    }
+    if (const auto failure = expect(interleaved[3] == 0xFF && interleaved[4] == 0xFF &&
+                                        interleaved[5] == 0x7F,
+                                    "Expected positive int24 full-scale export")) {
+      return failure;
+    }
+    if (const auto failure = expect(interleaved[6] == 0xFF && interleaved[7] == 0xFF &&
+                                        interleaved[8] == 0x7F &&
+                                        interleaved[9] == 0x01 &&
+                                        interleaved[10] == 0x00 &&
+                                        interleaved[11] == 0x80,
+                                    "Expected int24 export clipping")) {
       return failure;
     }
   }

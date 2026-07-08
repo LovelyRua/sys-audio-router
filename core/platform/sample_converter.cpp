@@ -20,6 +20,10 @@ bool is_supported(const AudioFormat& format) noexcept {
     return true;
   }
   if (format.sample_format == AudioSampleFormat::PcmInt &&
+      format.bits_per_sample == 24) {
+    return true;
+  }
+  if (format.sample_format == AudioSampleFormat::PcmInt &&
       format.bits_per_sample == 16) {
     return true;
   }
@@ -37,6 +41,32 @@ float int16_to_float(std::int16_t value) noexcept {
 std::int16_t float_to_int16(float value) noexcept {
   const auto clamped = std::clamp(value, -1.0F, 1.0F);
   return static_cast<std::int16_t>(std::lround(clamped * 32767.0F));
+}
+
+std::int32_t read_int24_le(const std::uint8_t* bytes) noexcept {
+  auto value = static_cast<std::int32_t>(bytes[0]) |
+               (static_cast<std::int32_t>(bytes[1]) << 8) |
+               (static_cast<std::int32_t>(bytes[2]) << 16);
+  if ((value & 0x00800000) != 0) {
+    value |= static_cast<std::int32_t>(0xFF000000);
+  }
+  return value;
+}
+
+float int24_to_float(std::int32_t value) noexcept {
+  return static_cast<float>(value) / 8388608.0F;
+}
+
+void write_int24_le(std::int32_t value, std::uint8_t* bytes) noexcept {
+  bytes[0] = static_cast<std::uint8_t>(value & 0xFF);
+  bytes[1] = static_cast<std::uint8_t>((value >> 8) & 0xFF);
+  bytes[2] = static_cast<std::uint8_t>((value >> 16) & 0xFF);
+}
+
+std::int32_t float_to_int24(float value) noexcept {
+  const auto clamped = std::clamp(value, -1.0F, 1.0F);
+  return static_cast<std::int32_t>(
+      std::llround(static_cast<double>(clamped) * 8388607.0));
 }
 
 float int32_to_float(std::int32_t value) noexcept {
@@ -110,6 +140,16 @@ SampleConversionResult import_interleaved_to_float(const void* source,
             int16_to_float(samples[(frame * destination.channels()) + channel]);
       }
     }
+  } else if (source_format.bits_per_sample == 24) {
+    const auto* bytes = static_cast<const std::uint8_t*>(source);
+    const auto channels = destination.channels();
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+      for (std::size_t channel = 0; channel < channels; ++channel) {
+        const auto sample_index = (frame * channels) + channel;
+        destination.channel(channel)[frame] =
+            int24_to_float(read_int24_le(bytes + (sample_index * 3)));
+      }
+    }
   } else {
     const auto* samples = static_cast<const std::int32_t*>(source);
     for (std::size_t frame = 0; frame < frames; ++frame) {
@@ -165,6 +205,16 @@ SampleConversionResult export_float_to_interleaved(const realtime::AudioBuffer& 
       for (std::size_t channel = 0; channel < source.channels(); ++channel) {
         samples[(frame * source.channels()) + channel] =
             float_to_int16(source.channel(channel)[frame]);
+      }
+    }
+  } else if (destination_format.bits_per_sample == 24) {
+    auto* bytes = static_cast<std::uint8_t*>(destination);
+    const auto channels = source.channels();
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+      for (std::size_t channel = 0; channel < channels; ++channel) {
+        const auto sample_index = (frame * channels) + channel;
+        write_int24_le(float_to_int24(source.channel(channel)[frame]),
+                       bytes + (sample_index * 3));
       }
     }
   } else {
