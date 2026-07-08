@@ -1,6 +1,7 @@
 #include "core/platform/windows_wasapi_render_loop.h"
 
-#include <algorithm>
+#include "core/platform/windows_wasapi_loop_preflight.h"
+
 #include <utility>
 
 namespace sar::platform {
@@ -15,35 +16,6 @@ std::vector<WasapiRealtimeWorkerError> convert_errors(
     converted.push_back({error.code, error.message});
   }
   return converted;
-}
-
-std::vector<WasapiRealtimeWorkerError> validate_render_graph_preflight(
-    const graph::Graph& graph,
-    const WasapiStreamProbe& render_probe) {
-  if (graph.sample_rate() != render_probe.mix_format.sample_rate) {
-    return {
-        {
-            "graph_sample_rate_mismatch",
-            "Graph sample rate must match the WASAPI render stream sample rate.",
-        },
-    };
-  }
-
-  if (graph.node_count() <= 1) {
-    return {};
-  }
-
-  if (graph.channels() >= render_probe.mix_format.channels &&
-      graph.frames() >= render_probe.buffer_frames) {
-    return {};
-  }
-
-  return {
-      {
-          "graph_buffer_too_small",
-          "Graph scratch buffers must cover the WASAPI render stream shape.",
-      },
-  };
 }
 
 }  // namespace
@@ -152,7 +124,8 @@ WasapiRenderLoopOpenResult open_default_wasapi_render_loop(
     return WasapiRenderLoopOpenResult::failure(convert_errors(stream_result.errors()));
   }
 
-  auto graph_errors = validate_render_graph_preflight(graph, stream_result.stream().probe());
+  auto graph_errors =
+      validate_wasapi_render_graph_preflight(graph, stream_result.stream().probe());
   if (!graph_errors.empty()) {
     return WasapiRenderLoopOpenResult::failure(std::move(graph_errors));
   }

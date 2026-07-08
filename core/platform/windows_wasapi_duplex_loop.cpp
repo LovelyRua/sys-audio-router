@@ -1,6 +1,7 @@
 #include "core/platform/windows_wasapi_duplex_loop.h"
 
-#include <algorithm>
+#include "core/platform/windows_wasapi_loop_preflight.h"
+
 #include <utility>
 
 namespace sar::platform {
@@ -15,53 +16,6 @@ std::vector<WasapiRealtimeWorkerError> convert_errors(
     converted.push_back({error.code, error.message});
   }
   return converted;
-}
-
-bool compatible_duplex_sample_rates(const WasapiStreamProbe& capture_probe,
-                                    const WasapiStreamProbe& render_probe) noexcept {
-  return capture_probe.mix_format.sample_rate == render_probe.mix_format.sample_rate;
-}
-
-std::vector<WasapiRealtimeWorkerError> validate_duplex_graph_preflight(
-    const graph::Graph& graph,
-    const WasapiStreamProbe& capture_probe,
-    const WasapiStreamProbe& render_probe) {
-  if (graph.sample_rate() != capture_probe.mix_format.sample_rate) {
-    return {
-        {
-            "graph_sample_rate_mismatch",
-            "Graph sample rate must match the WASAPI capture stream sample rate.",
-        },
-    };
-  }
-
-  if (graph.sample_rate() != render_probe.mix_format.sample_rate) {
-    return {
-        {
-            "graph_sample_rate_mismatch",
-            "Graph sample rate must match the WASAPI render stream sample rate.",
-        },
-    };
-  }
-
-  if (graph.node_count() <= 1) {
-    return {};
-  }
-
-  const auto required_channels =
-      std::max(capture_probe.mix_format.channels, render_probe.mix_format.channels);
-  const auto required_frames =
-      std::max(capture_probe.buffer_frames, render_probe.buffer_frames);
-  if (graph.channels() >= required_channels && graph.frames() >= required_frames) {
-    return {};
-  }
-
-  return {
-      {
-          "graph_buffer_too_small",
-          "Graph scratch buffers must cover the WASAPI duplex stream shapes.",
-      },
-  };
 }
 
 }  // namespace
@@ -180,8 +134,8 @@ WasapiDuplexLoopOpenResult open_default_wasapi_duplex_loop(
     return WasapiDuplexLoopOpenResult::failure(convert_errors(render_result.errors()));
   }
 
-  if (!compatible_duplex_sample_rates(capture_result.stream().probe(),
-                                      render_result.stream().probe())) {
+  if (!compatible_wasapi_duplex_sample_rates(capture_result.stream().probe(),
+                                             render_result.stream().probe())) {
     return WasapiDuplexLoopOpenResult::failure({
         {
             "duplex_sample_rate_mismatch",
@@ -190,9 +144,10 @@ WasapiDuplexLoopOpenResult open_default_wasapi_duplex_loop(
     });
   }
 
-  auto graph_errors = validate_duplex_graph_preflight(graph,
-                                                      capture_result.stream().probe(),
-                                                      render_result.stream().probe());
+  auto graph_errors =
+      validate_wasapi_duplex_graph_preflight(graph,
+                                            capture_result.stream().probe(),
+                                            render_result.stream().probe());
   if (!graph_errors.empty()) {
     return WasapiDuplexLoopOpenResult::failure(std::move(graph_errors));
   }
