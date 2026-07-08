@@ -1,7 +1,9 @@
 #include "core/platform/windows_wasapi_device_provider.h"
 #include "core/platform/windows_wasapi_stream_probe.h"
 
+#include <algorithm>
 #include <iostream>
+#include <optional>
 
 namespace {
 
@@ -29,19 +31,31 @@ const char* sample_format_name(sar::platform::AudioSampleFormat format) {
   return "unknown";
 }
 
-void print_probe() {
+const char* stream_direction_name(sar::platform::WasapiStreamDirection direction) {
+  switch (direction) {
+    case sar::platform::WasapiStreamDirection::Render:
+      return "render";
+    case sar::platform::WasapiStreamDirection::Capture:
+      return "capture";
+  }
+  return "unknown";
+}
+
+std::optional<sar::platform::WasapiStreamProbe> print_probe(
+    sar::platform::WasapiStreamDirection direction) {
   const auto result = sar::platform::probe_default_wasapi_stream(
-      sar::platform::WasapiStreamDirection::Render);
+      direction);
   if (!result.ok()) {
-    std::cout << "\nDefault render stream probe: unavailable\n";
+    std::cout << "\nDefault " << stream_direction_name(direction)
+              << " stream probe: unavailable\n";
     for (const auto& error : result.errors()) {
       std::cout << "  " << error.code << ": " << error.message << '\n';
     }
-    return;
+    return std::nullopt;
   }
 
   const auto& probe = result.probe();
-  std::cout << "\nDefault render stream probe\n";
+  std::cout << "\nDefault " << stream_direction_name(direction) << " stream probe\n";
   std::cout << "  Device: " << probe.device_label << '\n';
   std::cout << "  Sample rate: " << probe.mix_format.sample_rate << '\n';
   std::cout << "  Channels: " << probe.mix_format.channels << '\n';
@@ -50,6 +64,44 @@ void print_probe() {
   std::cout << "  Buffer frames: " << probe.buffer_frames << '\n';
   std::cout << "  Default period 100ns: " << probe.default_period_100ns << '\n';
   std::cout << "  Minimum period 100ns: " << probe.minimum_period_100ns << '\n';
+  return probe;
+}
+
+void print_loop_graph_hints(
+    const std::optional<sar::platform::WasapiStreamProbe>& capture_probe,
+    const std::optional<sar::platform::WasapiStreamProbe>& render_probe) {
+  std::cout << "\nLoop graph hints\n";
+  if (render_probe.has_value()) {
+    std::cout << "  Render loop graph: "
+              << render_probe->mix_format.sample_rate << " Hz, "
+              << render_probe->mix_format.channels << " channels, "
+              << render_probe->buffer_frames << " frames\n";
+  } else {
+    std::cout << "  Render loop graph: unavailable without a default render stream\n";
+  }
+
+  if (!capture_probe.has_value() || !render_probe.has_value()) {
+    std::cout << "  Duplex loop graph: unavailable without both default streams\n";
+    return;
+  }
+
+  if (capture_probe->mix_format.sample_rate != render_probe->mix_format.sample_rate) {
+    std::cout << "  Duplex loop graph: unavailable until capture/render sample rates match\n";
+    std::cout << "    Capture sample rate: "
+              << capture_probe->mix_format.sample_rate << '\n';
+    std::cout << "    Render sample rate: "
+              << render_probe->mix_format.sample_rate << '\n';
+    return;
+  }
+
+  std::cout << "  Duplex loop graph: "
+            << capture_probe->mix_format.sample_rate << " Hz, "
+            << std::max(capture_probe->mix_format.channels,
+                        render_probe->mix_format.channels)
+            << " channels, "
+            << std::max(capture_probe->buffer_frames,
+                        render_probe->buffer_frames)
+            << " frames\n";
 }
 
 }  // namespace
@@ -79,6 +131,8 @@ int main() {
     }
   }
 
-  print_probe();
+  const auto capture_probe = print_probe(sar::platform::WasapiStreamDirection::Capture);
+  const auto render_probe = print_probe(sar::platform::WasapiStreamDirection::Render);
+  print_loop_graph_hints(capture_probe, render_probe);
   return 0;
 }

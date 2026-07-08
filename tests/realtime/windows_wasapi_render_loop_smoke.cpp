@@ -133,6 +133,24 @@ int main() {
                                   "Expected render diagnostics buffer size")) {
     return failure;
   }
+  const auto initial_summary = loop->summary();
+  if (const auto failure = expect(!initial_summary.running,
+                                  "Expected initial render summary stopped")) {
+    return failure;
+  }
+  if (const auto failure = expect(initial_summary.error_count == 0,
+                                  "Expected initial render summary without errors")) {
+    return failure;
+  }
+  if (const auto failure = expect(initial_summary.render_stream.buffer_frames ==
+                                      loop->probe().buffer_frames,
+                                  "Expected render summary buffer size")) {
+    return failure;
+  }
+  if (const auto failure = expect(initial_summary.worker.loop_cycles == 0,
+                                  "Expected initial render summary without loop cycles")) {
+    return failure;
+  }
 
   auto& input = loop->input_buffer();
   for (std::size_t channel = 0; channel < input.channels(); ++channel) {
@@ -161,6 +179,25 @@ int main() {
     return failure;
   }
   const auto stats = loop->stats();
+  const auto final_summary = loop->summary();
+  if (const auto failure = expect(!final_summary.running,
+                                  "Expected stopped render summary")) {
+    return failure;
+  }
+  if (const auto failure = expect(final_summary.error_count == 0,
+                                  "Expected final render summary without errors")) {
+    return failure;
+  }
+  if (const auto failure = expect(final_summary.worker.rendered_frames ==
+                                      stats.rendered_frames,
+                                  "Expected render summary worker stats")) {
+    return failure;
+  }
+  if (const auto failure = expect(final_summary.render_stream.state ==
+                                      sar::platform::WasapiStreamState::Open,
+                                  "Expected render summary open stream after stop")) {
+    return failure;
+  }
   if (const auto failure = expect(stats.last_captured_frames == 0,
                                   "Expected render loop without last captured frames")) {
     return failure;

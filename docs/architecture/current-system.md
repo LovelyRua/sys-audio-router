@@ -7,8 +7,8 @@ where the project is going; this file describes the current executable shape.
 
 The project is still pre-alpha. The portable realtime core, graph execution
 prototype, control session shell, Windows WASAPI stream shell, graph runner,
-realtime worker, render loop wrapper, sample conversion helpers, and smoke-test
-harness are in place.
+realtime worker, render and duplex loop wrappers, sample conversion helpers,
+and smoke-test harness are in place.
 
 The next major milestone is the first measured real-device loop:
 
@@ -74,6 +74,7 @@ WASAPI loops expose underrun, overrun, drift, and wait-time behavior.
 - Windows WASAPI graph runner.
 - Windows realtime worker shell.
 - Windows render-only loop wrapper for the first default-output device path.
+- Windows duplex loop wrapper for the first default capture/render path.
 - Windows MMCSS realtime thread scope.
 
 ## Windows WASAPI Flow
@@ -100,6 +101,10 @@ enters MMCSS `Pro Audio` priority through `WindowsRealtimeThreadScope`.
 `WindowsWasapiRenderLoop` owns a default render stream, graph runner, and
 realtime worker. It is the current high-level entry point for the first measured
 render-only real-device loop.
+
+`WindowsWasapiDuplexLoop` owns default capture and render streams, a graph
+runner, and a realtime worker. It is the current high-level entry point for the
+first measured full-duplex real-device loop.
 
 ## Current Testing Model
 

@@ -174,6 +174,29 @@ int main() {
                                   "Expected render diagnostics buffer size")) {
     return failure;
   }
+  const auto initial_summary = loop->summary();
+  if (const auto failure = expect(!initial_summary.running,
+                                  "Expected initial duplex summary stopped")) {
+    return failure;
+  }
+  if (const auto failure = expect(initial_summary.error_count == 0,
+                                  "Expected initial duplex summary without errors")) {
+    return failure;
+  }
+  if (const auto failure = expect(initial_summary.capture_stream.buffer_frames ==
+                                      loop->capture_probe().buffer_frames,
+                                  "Expected duplex summary capture buffer size")) {
+    return failure;
+  }
+  if (const auto failure = expect(initial_summary.render_stream.buffer_frames ==
+                                      loop->render_probe().buffer_frames,
+                                  "Expected duplex summary render buffer size")) {
+    return failure;
+  }
+  if (const auto failure = expect(initial_summary.worker.loop_cycles == 0,
+                                  "Expected initial duplex summary without loop cycles")) {
+    return failure;
+  }
 
   if (const auto failure = expect(loop->capture_probe().mix_format.sample_rate ==
                                       loop->render_probe().mix_format.sample_rate,
@@ -200,6 +223,35 @@ int main() {
     return failure;
   }
   const auto stats = loop->stats();
+  const auto final_summary = loop->summary();
+  if (const auto failure = expect(!final_summary.running,
+                                  "Expected stopped duplex summary")) {
+    return failure;
+  }
+  if (const auto failure = expect(final_summary.error_count == 0,
+                                  "Expected final duplex summary without errors")) {
+    return failure;
+  }
+  if (const auto failure = expect(final_summary.worker.captured_frames ==
+                                      stats.captured_frames,
+                                  "Expected duplex summary captured frames")) {
+    return failure;
+  }
+  if (const auto failure = expect(final_summary.worker.rendered_frames ==
+                                      stats.rendered_frames,
+                                  "Expected duplex summary rendered frames")) {
+    return failure;
+  }
+  if (const auto failure = expect(final_summary.capture_stream.state ==
+                                      sar::platform::WasapiStreamState::Open,
+                                  "Expected duplex summary open capture stream after stop")) {
+    return failure;
+  }
+  if (const auto failure = expect(final_summary.render_stream.state ==
+                                      sar::platform::WasapiStreamState::Open,
+                                  "Expected duplex summary open render stream after stop")) {
+    return failure;
+  }
   if (const auto failure =
           expect(stats.last_captured_frames <= loop->capture_probe().buffer_frames,
                  "Expected bounded last captured frames")) {
