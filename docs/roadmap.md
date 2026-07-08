@@ -32,8 +32,8 @@ Exit criteria:
 Purpose: build the audio engine without depending on real devices.
 
 Status: substantially underway. The portable buffer, process context, linear
-graph, graph builder, graph snapshot prototype, route matrix, diagnostics, SPSC
-queue, and smoke tests exist.
+graph, graph builder, graph snapshot publisher, route matrix, diagnostics, SPSC
+queue, control session shell, and smoke tests exist.
 
 Deliverables:
 
@@ -41,6 +41,8 @@ Deliverables:
 - Basic node and edge model.
 - Gain, mute, meter, and bus nodes.
 - Realtime-safe graph snapshot publishing.
+- Preset-to-graph build for the first route-matrix preset shape.
+- In-process control session that can publish graph updates.
 - Diagnostics counters.
 - Offline test harness.
 
@@ -110,6 +112,10 @@ Exit criteria:
 ## Phase 5: Matrix and Mixer UI
 
 Purpose: make the engine usable without hiding the system model.
+
+Status: not started as a UI, but several backend pieces now exist: preset
+validation, route matrix graph building, active graph summaries, virtual
+endpoint listing, and full session-state responses.
 
 Deliverables:
 

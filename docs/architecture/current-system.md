@@ -6,8 +6,9 @@ where the project is going; this file describes the current executable shape.
 ## Current Stage
 
 The project is still pre-alpha. The portable realtime core, graph execution
-prototype, Windows WASAPI stream shell, graph runner, realtime worker, render
-loop wrapper, sample conversion helpers, and smoke-test harness are in place.
+prototype, control session shell, Windows WASAPI stream shell, graph runner,
+realtime worker, render loop wrapper, sample conversion helpers, and smoke-test
+harness are in place.
 
 The next major milestone is the first measured real-device loop:
 
@@ -29,17 +30,29 @@ context structures. The graph currently consumes and produces
 - `Graph`: linear graph executor with diagnostics updates.
 - `Node`: realtime processor interface.
 - `GainNode` and passthrough behavior used by smoke tests.
-- Graph builder and graph snapshot prototypes.
+- Graph builder and graph snapshot publishing.
 - Route matrix core for channel routing and summing experiments.
 
 The graph is still intentionally simple. Branching graph execution, bus summing,
-latency compensation, and final graph publication strategy are future work.
+latency compensation, and multi-bus graph execution are future work.
 
 ## Control And Diagnostics
 
 `core/control` validates preset documents and control commands before applying
-them to non-realtime state. This is the beginning of the future engine service
-control plane.
+them to non-realtime state. `PresetDocument` can build a route matrix graph for
+the currently supported single-matrix preset shape. `ControlSession` now owns the
+current preset, the active graph snapshot publisher, virtual endpoint registry,
+and next graph version. It handles:
+
+- Loading and saving presets.
+- Querying diagnostics, active graph summaries, devices, and full session state.
+- Creating and removing virtual endpoint descriptors.
+- Applying route, gain, and mute edits.
+- Applying batches of preset mutations atomically, with one graph publication on
+  success and no state mutation on failure.
+
+The current session state model is still in-process. IPC, persistence, UI
+binding, and service hosting are future work.
 
 `core/diagnostics` tracks graph version, processed blocks, callback duration,
 peak callback duration, and xrun count. Diagnostics will need to expand as real
@@ -90,7 +103,7 @@ render-only real-device loop.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 23 smoke targets. Several tests are
+The Windows CTest suite currently has 25 smoke targets. Several tests are
 synthetic because WinRM sessions may not expose interactive audio endpoints even
 when the VM has a desktop audio stack.
 
@@ -111,6 +124,9 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 - No UI exists yet.
 - No plugin hosting exists yet.
 - Graph execution is still linear.
+- Control sessions are in-process only; no IPC/service boundary exists yet.
+- Preset-to-graph build currently supports one route matrix node with matching
+  matrix input/output counts.
 - Sample conversion does not yet cover packed 24-bit PCM or valid-bits-in-32-bit
   extensible formats.
 - Drift, underrun, overrun, and end-to-end latency diagnostics are still early.
