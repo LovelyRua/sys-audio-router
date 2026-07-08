@@ -13,6 +13,7 @@ enum class SampleConversionStatus {
   UnsupportedFormat,
   BufferTooSmall,
   ChannelMismatch,
+  NullBuffer,
 };
 
 class SampleConversionResult {

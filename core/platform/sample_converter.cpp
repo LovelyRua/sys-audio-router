@@ -129,6 +129,9 @@ SampleConversionResult import_interleaved_to_float(const void* source,
   if (!is_supported(source_format)) {
     return SampleConversionResult::failure(SampleConversionStatus::UnsupportedFormat);
   }
+  if (frames > 0 && source == nullptr) {
+    return SampleConversionResult::failure(SampleConversionStatus::NullBuffer);
+  }
   if (source_format.channels != destination.channels()) {
     return SampleConversionResult::failure(SampleConversionStatus::ChannelMismatch);
   }
@@ -199,6 +202,9 @@ SampleConversionResult export_float_to_interleaved(const realtime::AudioBuffer& 
                                                    std::size_t frames) noexcept {
   if (!is_supported(destination_format)) {
     return SampleConversionResult::failure(SampleConversionStatus::UnsupportedFormat);
+  }
+  if (frames > 0 && destination == nullptr) {
+    return SampleConversionResult::failure(SampleConversionStatus::NullBuffer);
   }
   if (destination_format.channels != source.channels()) {
     return SampleConversionResult::failure(SampleConversionStatus::ChannelMismatch);

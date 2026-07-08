@@ -354,6 +354,36 @@ int main() {
     }
   }
 
+  {
+    const auto format = float32_format();
+    sar::realtime::AudioBuffer buffer(2, 4);
+    const auto result = sar::platform::import_interleaved_to_float(
+        nullptr,
+        sar::platform::required_interleaved_bytes(format, 4),
+        format,
+        buffer);
+    if (const auto failure =
+            expect(result.status() == sar::platform::SampleConversionStatus::NullBuffer,
+                   "Expected null source import status")) {
+      return failure;
+    }
+  }
+
+  {
+    const auto format = float32_format();
+    sar::realtime::AudioBuffer buffer(2, 4);
+    const auto result = sar::platform::export_float_to_interleaved(
+        buffer,
+        format,
+        nullptr,
+        sar::platform::required_interleaved_bytes(format, 4));
+    if (const auto failure =
+            expect(result.status() == sar::platform::SampleConversionStatus::NullBuffer,
+                   "Expected null destination export status")) {
+      return failure;
+    }
+  }
+
   std::cout << "Sample converter smoke test passed\n";
   return 0;
 }
