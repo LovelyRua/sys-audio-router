@@ -1,4 +1,5 @@
 #include "core/platform/windows_wasapi_realtime_worker.h"
+#include "core/platform/windows_wasapi_runtime_summary.h"
 
 #include "core/graph/node.h"
 
@@ -29,6 +30,23 @@ bool has_error_code(const std::vector<sar::platform::WasapiRealtimeWorkerError>&
   return false;
 }
 
+sar::platform::WasapiStreamDiagnostics make_stream_diagnostics(
+    sar::platform::WasapiStreamDirection direction,
+    std::uint32_t buffer_frames) {
+  sar::platform::WasapiStreamDiagnostics diagnostics;
+  diagnostics.state = sar::platform::WasapiStreamState::Started;
+  diagnostics.direction = direction;
+  diagnostics.mix_format.sample_rate = 48000;
+  diagnostics.mix_format.channels = 2;
+  diagnostics.mix_format.frames_per_block = buffer_frames;
+  diagnostics.mix_format.bits_per_sample = 32;
+  diagnostics.mix_format.sample_format = sar::platform::AudioSampleFormat::IeeeFloat;
+  diagnostics.buffer_frames = buffer_frames;
+  diagnostics.default_period_100ns = 100000;
+  diagnostics.minimum_period_100ns = 30000;
+  return diagnostics;
+}
+
 sar::platform::WasapiStreamProbe make_render_probe() {
   sar::platform::WasapiStreamProbe probe;
   probe.direction = sar::platform::WasapiStreamDirection::Render;
@@ -48,6 +66,131 @@ sar::platform::WasapiStreamProbe make_render_probe() {
 }  // namespace
 
 int main() {
+  {
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_runtime_health_name(
+                       sar::platform::WasapiRuntimeHealth::Stopped)) == "stopped",
+                   "Expected stopped health name")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_runtime_health_name(
+                       sar::platform::WasapiRuntimeHealth::Healthy)) == "healthy",
+                   "Expected healthy health name")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_runtime_health_name(
+                       sar::platform::WasapiRuntimeHealth::Degraded)) == "degraded",
+                   "Expected degraded health name")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_runtime_health_name(
+                       sar::platform::WasapiRuntimeHealth::Faulted)) == "faulted",
+                   "Expected faulted health name")) {
+      return failure;
+    }
+
+    sar::platform::WasapiRealtimeWorkerStats stats;
+    auto summary = sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
+    if (const auto failure =
+            expect(summary.health == sar::platform::WasapiRuntimeHealth::Stopped,
+                   "Expected no-cycle runtime summary to be stopped")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.reason_code == "no_cycles",
+                   "Expected no-cycle runtime summary reason")) {
+      return failure;
+    }
+
+    stats.loop_cycles = 8;
+    stats.graph_processed_cycles = 8;
+    stats.last_graph_processed = true;
+    const auto capture_diagnostics =
+        make_stream_diagnostics(sar::platform::WasapiStreamDirection::Capture, 96);
+    const auto render_diagnostics =
+        make_stream_diagnostics(sar::platform::WasapiStreamDirection::Render, 128);
+    summary = sar::platform::summarize_wasapi_runtime(
+        stats, {}, &capture_diagnostics, &render_diagnostics);
+    if (const auto failure =
+            expect(summary.health == sar::platform::WasapiRuntimeHealth::Healthy,
+                   "Expected fully processed runtime summary to be healthy")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.reason_code == "running",
+                   "Expected healthy runtime summary reason")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.has_capture_stream && summary.has_render_stream,
+                   "Expected runtime summary stream presence")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.capture_buffer_frames == 96 &&
+                       summary.render_buffer_frames == 128,
+                   "Expected runtime summary buffer sizes")) {
+      return failure;
+    }
+
+    stats.wait_timeout_cycles = 1;
+    summary = sar::platform::summarize_wasapi_runtime(
+        stats, {}, &capture_diagnostics, &render_diagnostics);
+    if (const auto failure =
+            expect(summary.health == sar::platform::WasapiRuntimeHealth::Degraded,
+                   "Expected timeout runtime summary to be degraded")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.reason_code == "wait_timeout",
+                   "Expected timeout runtime summary reason")) {
+      return failure;
+    }
+
+    stats.wait_timeout_cycles = 0;
+    stats.capture_partial_cycles = 1;
+    summary = sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
+    if (const auto failure =
+            expect(summary.health == sar::platform::WasapiRuntimeHealth::Degraded,
+                   "Expected partial runtime summary to be degraded")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.reason_code == "partial_buffer",
+                   "Expected partial runtime summary reason")) {
+      return failure;
+    }
+
+    const std::vector<sar::platform::WasapiRealtimeWorkerError> errors = {
+        {"native_stream_unavailable", "Synthetic stream has no native WASAPI client."},
+        {"ignored_second_error", "Second error should not be the primary reason."},
+    };
+    summary = sar::platform::summarize_wasapi_runtime(stats, errors, nullptr, nullptr);
+    if (const auto failure =
+            expect(summary.health == sar::platform::WasapiRuntimeHealth::Faulted,
+                   "Expected error runtime summary to be faulted")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.error_count == 2,
+                   "Expected runtime summary error count")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.first_error_code == "native_stream_unavailable",
+                   "Expected runtime summary first error code")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.reason_code == "native_stream_unavailable",
+                   "Expected runtime summary reason to use first error")) {
+      return failure;
+    }
+  }
+
   {
     sar::platform::WindowsWasapiGraphRunner runner(nullptr, nullptr, 2, 16);
     auto& input = runner.input_buffer();
