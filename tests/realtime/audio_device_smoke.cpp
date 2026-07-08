@@ -65,6 +65,41 @@ int main() {
   }
 
   {
+    auto device = make_device("multi_format", "Multi Format Device");
+    device.formats.push_back({
+        .sample_rate = 44100,
+        .channels = 1,
+        .frames_per_block = 64,
+        .bits_per_sample = 24,
+        .valid_bits_per_sample = 24,
+        .sample_format = sar::platform::AudioSampleFormat::PcmInt,
+    });
+    device.formats.push_back({
+        .sample_rate = 48000,
+        .channels = 2,
+        .frames_per_block = 128,
+        .bits_per_sample = 32,
+        .valid_bits_per_sample = 24,
+        .sample_format = sar::platform::AudioSampleFormat::PcmInt,
+    });
+
+    sar::platform::MockAudioDeviceProvider provider({device});
+    const auto result = provider.list_devices();
+    if (const auto failure = expect(result.ok(), "Expected valid multi-format device")) {
+      return failure;
+    }
+    if (const auto failure = expect(result.devices()[0].formats.size() == 3,
+                                    "Expected all formats to be preserved")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(result.devices()[0].formats[2].valid_bits_per_sample == 24,
+                   "Expected valid bits to be preserved")) {
+      return failure;
+    }
+  }
+
+  {
     auto duplicate_a = make_device("dup", "Device A");
     auto duplicate_b = make_device("dup", "Device B");
     sar::platform::MockAudioDeviceProvider provider({duplicate_a, duplicate_b});
@@ -85,6 +120,7 @@ int main() {
     invalid.formats[0].frames_per_block = 0;
     invalid.formats[0].bits_per_sample = 0;
     invalid.formats[0].valid_bits_per_sample = 24;
+    invalid.formats[0].sample_format = sar::platform::AudioSampleFormat::Unknown;
     sar::platform::MockAudioDeviceProvider provider({invalid});
     const auto result = provider.list_devices();
     if (const auto failure = expect(!result.ok(), "Expected invalid device failure")) {
@@ -114,8 +150,26 @@ int main() {
                                     "Expected invalid_bits_per_sample error")) {
       return failure;
     }
+    if (const auto failure = expect(has_error_code(result, "invalid_sample_format"),
+                                    "Expected invalid_sample_format error")) {
+      return failure;
+    }
     if (const auto failure = expect(has_error_code(result, "invalid_valid_bits_per_sample"),
                                     "Expected invalid_valid_bits_per_sample error")) {
+      return failure;
+    }
+  }
+
+  {
+    auto invalid = make_device("unknown_format", "Unknown Format");
+    invalid.formats[0].sample_format = sar::platform::AudioSampleFormat::Unknown;
+    sar::platform::MockAudioDeviceProvider provider({invalid});
+    const auto result = provider.list_devices();
+    if (const auto failure = expect(!result.ok(), "Expected unknown sample format failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "invalid_sample_format"),
+                                    "Expected invalid_sample_format error")) {
       return failure;
     }
   }
