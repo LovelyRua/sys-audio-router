@@ -1,4 +1,5 @@
 #include "core/platform/windows_wasapi_device_provider.h"
+#include "core/platform/windows_wasapi_loop_preflight.h"
 #include "core/platform/windows_wasapi_render_loop.h"
 #include "core/platform/windows_wasapi_stream_probe.h"
 
@@ -45,13 +46,140 @@ bool has_error_code(const sar::platform::WasapiRenderLoopOpenResult& result,
   return false;
 }
 
+bool has_worker_error_code(
+    const std::vector<sar::platform::WasapiRealtimeWorkerError>& errors,
+    const char* code) {
+  for (const auto& error : errors) {
+    if (error.code == code) {
+      return true;
+    }
+  }
+  return false;
+}
+
 std::uint32_t mismatched_sample_rate(std::uint32_t sample_rate) noexcept {
   return sample_rate == 48000 ? 44100 : 48000;
+}
+
+sar::platform::WasapiStreamProbe make_probe(
+    sar::platform::WasapiStreamDirection direction,
+    std::uint32_t sample_rate,
+    std::uint32_t channels,
+    std::uint32_t buffer_frames) {
+  sar::platform::WasapiStreamProbe probe;
+  probe.direction = direction;
+  probe.device_id = direction == sar::platform::WasapiStreamDirection::Capture
+                        ? "capture-device"
+                        : "render-device";
+  probe.device_label = direction == sar::platform::WasapiStreamDirection::Capture
+                           ? "Capture Device"
+                           : "Render Device";
+  probe.mix_format.sample_rate = sample_rate;
+  probe.mix_format.channels = channels;
+  probe.mix_format.frames_per_block = buffer_frames;
+  probe.mix_format.bits_per_sample = 32;
+  probe.mix_format.sample_format = sar::platform::AudioSampleFormat::IeeeFloat;
+  probe.default_period_100ns = 100000;
+  probe.minimum_period_100ns = 30000;
+  probe.buffer_frames = buffer_frames;
+  return probe;
 }
 
 }  // namespace
 
 int main() {
+  {
+    const auto capture_probe =
+        make_probe(sar::platform::WasapiStreamDirection::Capture, 48000, 4, 96);
+    const auto render_probe =
+        make_probe(sar::platform::WasapiStreamDirection::Render, 48000, 2, 128);
+    const auto mismatched_render_probe =
+        make_probe(sar::platform::WasapiStreamDirection::Render, 44100, 2, 128);
+
+    if (const auto failure =
+            expect(sar::platform::compatible_wasapi_duplex_sample_rates(
+                       capture_probe, render_probe),
+                   "Expected matching synthetic duplex sample rates")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(!sar::platform::compatible_wasapi_duplex_sample_rates(
+                       capture_probe, mismatched_render_probe),
+                   "Expected mismatched synthetic duplex sample rates")) {
+      return failure;
+    }
+
+    sar::graph::Graph passthrough_graph(40, 1, 1, 48000);
+    auto errors =
+        sar::platform::validate_wasapi_render_graph_preflight(passthrough_graph,
+                                                             render_probe);
+    if (const auto failure =
+            expect(errors.empty(), "Expected single-node render preflight success")) {
+      return failure;
+    }
+    errors = sar::platform::validate_wasapi_duplex_graph_preflight(passthrough_graph,
+                                                                  capture_probe,
+                                                                  render_probe);
+    if (const auto failure =
+            expect(errors.empty(), "Expected single-node duplex preflight success")) {
+      return failure;
+    }
+
+    sar::graph::Graph render_graph(41, 2, 128, 48000);
+    render_graph.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+    render_graph.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+    errors =
+        sar::platform::validate_wasapi_render_graph_preflight(render_graph, render_probe);
+    if (const auto failure =
+            expect(errors.empty(), "Expected shaped render preflight success")) {
+      return failure;
+    }
+
+    sar::graph::Graph render_rate_mismatch(42, 2, 128, 44100);
+    errors = sar::platform::validate_wasapi_render_graph_preflight(render_rate_mismatch,
+                                                                  render_probe);
+    if (const auto failure =
+            expect(has_worker_error_code(errors, "graph_sample_rate_mismatch"),
+                   "Expected render preflight sample-rate mismatch")) {
+      return failure;
+    }
+
+    sar::graph::Graph render_too_small(43, 1, 127, 48000);
+    render_too_small.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+    render_too_small.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+    errors =
+        sar::platform::validate_wasapi_render_graph_preflight(render_too_small,
+                                                             render_probe);
+    if (const auto failure =
+            expect(has_worker_error_code(errors, "graph_buffer_too_small"),
+                   "Expected render preflight graph-buffer failure")) {
+      return failure;
+    }
+
+    sar::graph::Graph duplex_graph(44, 4, 128, 48000);
+    duplex_graph.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+    duplex_graph.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+    errors = sar::platform::validate_wasapi_duplex_graph_preflight(duplex_graph,
+                                                                  capture_probe,
+                                                                  render_probe);
+    if (const auto failure =
+            expect(errors.empty(), "Expected shaped duplex preflight success")) {
+      return failure;
+    }
+
+    sar::graph::Graph duplex_too_small(45, 3, 128, 48000);
+    duplex_too_small.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+    duplex_too_small.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+    errors = sar::platform::validate_wasapi_duplex_graph_preflight(duplex_too_small,
+                                                                  capture_probe,
+                                                                  render_probe);
+    if (const auto failure =
+            expect(has_worker_error_code(errors, "graph_buffer_too_small"),
+                   "Expected duplex preflight graph-buffer failure")) {
+      return failure;
+    }
+  }
+
   if (!has_default_output_device()) {
     std::cout << "Windows WASAPI render loop skipped: no default output endpoint\n";
     return 0;
