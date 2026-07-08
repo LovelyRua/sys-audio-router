@@ -5,61 +5,147 @@
 
 namespace {
 
-bool has_default_output_device() {
+struct DefaultEndpointAvailability {
+  bool capture = false;
+  bool render = false;
+};
+
+DefaultEndpointAvailability default_endpoint_availability() {
+  DefaultEndpointAvailability availability;
   sar::platform::WindowsWasapiDeviceProvider provider;
   const auto result = provider.list_devices();
   if (!result.ok()) {
-    return false;
+    return availability;
   }
 
   for (const auto& device : result.devices()) {
-    if (device.direction == sar::platform::AudioDeviceDirection::Output &&
-        device.is_default) {
-      return true;
+    if (!device.is_default) {
+      continue;
+    }
+    if (device.direction == sar::platform::AudioDeviceDirection::Input) {
+      availability.capture = true;
+    }
+    if (device.direction == sar::platform::AudioDeviceDirection::Output) {
+      availability.render = true;
     }
   }
-  return false;
+  return availability;
+}
+
+int expect(bool condition, const char* message) {
+  if (!condition) {
+    std::cerr << message << '\n';
+    return 1;
+  }
+  return 0;
+}
+
+int verify_probe_contract(const sar::platform::WasapiStreamProbe& probe,
+                          sar::platform::WasapiStreamDirection direction,
+                          const char* label) {
+  if (const auto failure = expect(probe.direction == direction,
+                                  "Expected probed WASAPI direction")) {
+    return failure;
+  }
+  if (const auto failure = expect(!probe.device_id.empty(),
+                                  "Expected probed WASAPI device id")) {
+    return failure;
+  }
+  if (const auto failure = expect(!probe.device_label.empty(),
+                                  "Expected probed WASAPI device label")) {
+    return failure;
+  }
+  if (const auto failure = expect(probe.mix_format.sample_rate > 0,
+                                  "Expected probed WASAPI sample rate")) {
+    return failure;
+  }
+  if (const auto failure = expect(probe.mix_format.channels > 0,
+                                  "Expected probed WASAPI channel count")) {
+    return failure;
+  }
+  if (const auto failure = expect(probe.mix_format.bits_per_sample > 0,
+                                  "Expected probed WASAPI bit depth")) {
+    return failure;
+  }
+  if (const auto failure =
+          expect(probe.mix_format.sample_format != sar::platform::AudioSampleFormat::Unknown,
+                 "Expected supported probed WASAPI sample format")) {
+    return failure;
+  }
+  if (const auto failure = expect(probe.buffer_frames > 0,
+                                  "Expected probed WASAPI buffer frames")) {
+    return failure;
+  }
+  if (const auto failure = expect(probe.mix_format.frames_per_block == probe.buffer_frames,
+                                  "Expected probed frames-per-block to match buffer frames")) {
+    return failure;
+  }
+  if (const auto failure = expect(probe.default_period_100ns > 0,
+                                  "Expected probed WASAPI default period")) {
+    return failure;
+  }
+  if (const auto failure = expect(probe.minimum_period_100ns > 0,
+                                  "Expected probed WASAPI minimum period")) {
+    return failure;
+  }
+  if (const auto failure = expect(probe.minimum_period_100ns <= probe.default_period_100ns,
+                                  "Expected WASAPI minimum period not to exceed default period")) {
+    return failure;
+  }
+
+  std::cout << "Windows WASAPI " << label << " stream probe: "
+            << probe.mix_format.sample_rate << " Hz, "
+            << probe.mix_format.channels << " channels, "
+            << probe.mix_format.bits_per_sample << " bit, "
+            << probe.buffer_frames << " buffer frames\n";
+  return 0;
 }
 
 }  // namespace
 
 int main() {
-  if (!has_default_output_device()) {
+  const auto availability = default_endpoint_availability();
+  if (!availability.render) {
     std::cout << "Windows WASAPI stream probe skipped: no default output endpoint\n";
+  } else {
+    const auto result = sar::platform::probe_default_wasapi_stream(
+        sar::platform::WasapiStreamDirection::Render);
+    if (!result.ok()) {
+      for (const auto& error : result.errors()) {
+        std::cerr << error.code << ": " << error.message << '\n';
+      }
+      return 1;
+    }
+    if (const auto failure = verify_probe_contract(result.probe(),
+                                                   sar::platform::WasapiStreamDirection::Render,
+                                                   "render")) {
+      return failure;
+    }
+  }
+
+  if (!availability.capture) {
+    std::cout << "Windows WASAPI capture stream probe skipped: no default input endpoint\n";
+  } else {
+    const auto result = sar::platform::probe_default_wasapi_stream(
+        sar::platform::WasapiStreamDirection::Capture);
+    if (!result.ok()) {
+      for (const auto& error : result.errors()) {
+        std::cerr << error.code << ": " << error.message << '\n';
+      }
+      return 1;
+    }
+    if (const auto failure = verify_probe_contract(result.probe(),
+                                                   sar::platform::WasapiStreamDirection::Capture,
+                                                   "capture")) {
+      return failure;
+    }
+  }
+
+  if (!availability.capture && !availability.render) {
+    std::cout << "Windows WASAPI stream probe skipped: no default endpoints\n";
     return 0;
   }
 
-  const auto result = sar::platform::probe_default_wasapi_stream(
-      sar::platform::WasapiStreamDirection::Render);
-  if (!result.ok()) {
-    for (const auto& error : result.errors()) {
-      std::cerr << error.code << ": " << error.message << '\n';
-    }
-    return 1;
-  }
-
-  const auto& probe = result.probe();
-  if (probe.device_id.empty() || probe.device_label.empty()) {
-    std::cerr << "Expected probed WASAPI device identity\n";
-    return 1;
-  }
-  if (probe.mix_format.sample_rate == 0 || probe.mix_format.channels == 0) {
-    std::cerr << "Expected probed WASAPI mix format\n";
-    return 1;
-  }
-  if (probe.mix_format.bits_per_sample == 0) {
-    std::cerr << "Expected probed WASAPI bit depth\n";
-    return 1;
-  }
-  if (probe.default_period_100ns == 0 || probe.buffer_frames == 0) {
-    std::cerr << "Expected probed WASAPI timing contract\n";
-    return 1;
-  }
-
-  std::cout << "Windows WASAPI stream probe smoke test passed: "
-            << probe.mix_format.sample_rate << " Hz, "
-            << probe.mix_format.channels << " channels, "
-            << probe.mix_format.bits_per_sample << " bit, "
-            << probe.buffer_frames << " buffer frames\n";
+  std::cout << "Windows WASAPI stream probe smoke test passed\n";
   return 0;
 }
