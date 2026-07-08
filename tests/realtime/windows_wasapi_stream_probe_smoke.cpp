@@ -92,6 +92,10 @@ int verify_probe_contract(const sar::platform::WasapiStreamProbe& probe,
                                   "Expected WASAPI minimum period not to exceed default period")) {
     return failure;
   }
+  if (probe.mix_format.valid_bits_per_sample > probe.mix_format.bits_per_sample) {
+    std::cerr << "Expected probed WASAPI valid bits not to exceed container bits\n";
+    return 1;
+  }
 
   std::cout << "Windows WASAPI " << label << " stream probe: "
             << probe.mix_format.sample_rate << " Hz, "

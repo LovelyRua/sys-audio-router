@@ -64,6 +64,10 @@ std::vector<AudioDeviceError> validate_audio_devices(
         errors.push_back({"invalid_bits_per_sample",
                           "Audio device bit depths must be non-zero."});
       }
+      if (format.valid_bits_per_sample > format.bits_per_sample) {
+        errors.push_back({"invalid_valid_bits_per_sample",
+                          "Audio device valid bit depth cannot exceed container bit depth."});
+      }
     }
   }
 

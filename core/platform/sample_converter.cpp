@@ -14,6 +14,13 @@ std::size_t bytes_per_sample(const AudioFormat& format) noexcept {
   return format.bits_per_sample / 8;
 }
 
+std::uint32_t effective_valid_bits(const AudioFormat& format) noexcept {
+  if (format.valid_bits_per_sample == 0) {
+    return format.bits_per_sample;
+  }
+  return format.valid_bits_per_sample;
+}
+
 bool is_supported(const AudioFormat& format) noexcept {
   if (format.sample_format == AudioSampleFormat::IeeeFloat &&
       format.bits_per_sample == 32) {
@@ -29,7 +36,8 @@ bool is_supported(const AudioFormat& format) noexcept {
   }
   if (format.sample_format == AudioSampleFormat::PcmInt &&
       format.bits_per_sample == 32) {
-    return true;
+    const auto valid_bits = effective_valid_bits(format);
+    return valid_bits == 24 || valid_bits == 32;
   }
   return false;
 }
@@ -73,10 +81,18 @@ float int32_to_float(std::int32_t value) noexcept {
   return static_cast<float>(value) / 2147483648.0F;
 }
 
+float int24_in_int32_to_float(std::int32_t value) noexcept {
+  return int32_to_float(value);
+}
+
 std::int32_t float_to_int32(float value) noexcept {
   const auto clamped = std::clamp(value, -1.0F, 1.0F);
   return static_cast<std::int32_t>(
       std::llround(static_cast<double>(clamped) * 2147483647.0));
+}
+
+std::int32_t float_to_int24_in_int32(float value) noexcept {
+  return float_to_int24(value) << 8;
 }
 
 }  // namespace
@@ -152,10 +168,13 @@ SampleConversionResult import_interleaved_to_float(const void* source,
     }
   } else {
     const auto* samples = static_cast<const std::int32_t*>(source);
+    const auto valid_bits = effective_valid_bits(source_format);
     for (std::size_t frame = 0; frame < frames; ++frame) {
       for (std::size_t channel = 0; channel < destination.channels(); ++channel) {
-        destination.channel(channel)[frame] =
-            int32_to_float(samples[(frame * destination.channels()) + channel]);
+        const auto sample = samples[(frame * destination.channels()) + channel];
+        destination.channel(channel)[frame] = valid_bits == 24
+                                                  ? int24_in_int32_to_float(sample)
+                                                  : int32_to_float(sample);
       }
     }
   }
@@ -219,10 +238,13 @@ SampleConversionResult export_float_to_interleaved(const realtime::AudioBuffer& 
     }
   } else {
     auto* samples = static_cast<std::int32_t*>(destination);
+    const auto valid_bits = effective_valid_bits(destination_format);
     for (std::size_t frame = 0; frame < frames; ++frame) {
       for (std::size_t channel = 0; channel < source.channels(); ++channel) {
-        samples[(frame * source.channels()) + channel] =
-            float_to_int32(source.channel(channel)[frame]);
+        const auto sample = source.channel(channel)[frame];
+        samples[(frame * source.channels()) + channel] = valid_bits == 24
+                                                             ? float_to_int24_in_int32(sample)
+                                                             : float_to_int32(sample);
       }
     }
   }

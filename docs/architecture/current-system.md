@@ -65,8 +65,9 @@ WASAPI loops expose underrun, overrun, drift, and wait-time behavior.
 - `AudioDeviceProvider` and descriptor validation.
 - `AudioFormat`, including sample rate, channel count, block size, bit depth,
   and native sample format.
-- `SampleConverter`, currently covering float32, int16 PCM, and int32 PCM
-  interleaved buffers to/from planar float buffers.
+- `SampleConverter`, currently covering float32, int16 PCM, packed int24 PCM,
+  int24-in-int32 PCM, and int32 PCM interleaved buffers to/from planar float
+  buffers.
 - `VirtualEndpointRegistry`, the current model shell for future virtual devices.
 - Windows WASAPI device enumeration.
 - Windows WASAPI stream probing.
@@ -127,6 +128,6 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 - Control sessions are in-process only; no IPC/service boundary exists yet.
 - Preset-to-graph build currently supports one route matrix node with matching
   matrix input/output counts.
-- Sample conversion does not yet cover packed 24-bit PCM or valid-bits-in-32-bit
-  extensible formats.
+- Sample conversion does not yet cover unusual byte orders or non-PCM encoded
+  formats.
 - Drift, underrun, overrun, and end-to-end latency diagnostics are still early.

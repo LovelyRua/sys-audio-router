@@ -211,6 +211,11 @@ AudioFormat mix_format(IMMDevice& device) {
   format.sample_rate = wave_format->nSamplesPerSec;
   format.channels = wave_format->nChannels;
   format.bits_per_sample = wave_format->wBitsPerSample;
+  if (wave_format->wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
+      wave_format->cbSize >= sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX)) {
+    const auto& extensible = reinterpret_cast<const WAVEFORMATEXTENSIBLE&>(*wave_format);
+    format.valid_bits_per_sample = extensible.Samples.wValidBitsPerSample;
+  }
   format.sample_format = sample_format(*wave_format);
   format.frames_per_block = 128;
   CoTaskMemFree(wave_format);

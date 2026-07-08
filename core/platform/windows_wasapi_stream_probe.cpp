@@ -188,6 +188,11 @@ AudioFormat to_audio_format(const WAVEFORMATEX& format) {
   result.sample_rate = format.nSamplesPerSec;
   result.channels = format.nChannels;
   result.bits_per_sample = format.wBitsPerSample;
+  if (format.wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
+      format.cbSize >= sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX)) {
+    const auto& extensible = reinterpret_cast<const WAVEFORMATEXTENSIBLE&>(format);
+    result.valid_bits_per_sample = extensible.Samples.wValidBitsPerSample;
+  }
   result.sample_format = sample_format(format);
   result.frames_per_block = 128;
   return result;

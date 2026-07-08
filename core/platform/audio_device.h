@@ -32,6 +32,7 @@ struct AudioFormat {
   std::uint32_t channels = 2;
   std::uint32_t frames_per_block = 128;
   std::uint32_t bits_per_sample = 32;
+  std::uint32_t valid_bits_per_sample = 0;
   AudioSampleFormat sample_format = AudioSampleFormat::IeeeFloat;
 };
 
