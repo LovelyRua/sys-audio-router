@@ -112,6 +112,24 @@ int main() {
     }
   }
 
+  {
+    auto invalid = make_device("unknown_format", "Unknown Format");
+    invalid.formats[0].sample_format = sar::platform::AudioSampleFormat::Unknown;
+
+    sar::platform::AudioDeviceRegistry registry;
+    registry.add_provider(std::make_unique<sar::platform::MockAudioDeviceProvider>(
+        std::vector<sar::platform::AudioDeviceDescriptor>{invalid}));
+
+    const auto result = registry.list_devices();
+    if (const auto failure = expect(!result.ok(), "Expected registry sample format failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "invalid_sample_format"),
+                                    "Expected propagated invalid_sample_format error")) {
+      return failure;
+    }
+  }
+
   std::cout << "Audio device registry smoke test passed\n";
   return 0;
 }
