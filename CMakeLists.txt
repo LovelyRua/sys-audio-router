@@ -37,6 +37,7 @@ if(WIN32)
     core/platform/windows_wasapi_graph_runner.cpp
     core/platform/windows_wasapi_realtime_worker.cpp
     core/platform/windows_wasapi_render_loop.cpp
+    core/platform/windows_wasapi_runtime_summary.cpp
     core/platform/windows_realtime_thread.cpp
     core/platform/windows_wasapi_stream.cpp
     core/platform/windows_wasapi_stream_probe.cpp
