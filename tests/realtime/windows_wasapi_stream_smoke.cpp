@@ -324,11 +324,14 @@ int main() {
     auto invalid_probe = make_probe();
     invalid_probe.buffer_frames = 0;
     invalid_probe.mix_format.bits_per_sample = 0;
+    invalid_probe.mix_format.sample_format = sar::platform::AudioSampleFormat::Unknown;
+    invalid_probe.mix_format.frames_per_block = 240;
     invalid_probe.device_id.clear();
     invalid_probe.device_label.clear();
     invalid_probe.mix_format.sample_rate = 0;
     invalid_probe.mix_format.channels = 0;
     invalid_probe.default_period_100ns = 0;
+    invalid_probe.minimum_period_100ns = 0;
     const auto result = stream.open(invalid_probe);
     if (const auto failure = expect(!result.ok(), "Expected invalid probe failure")) {
       return failure;
@@ -357,12 +360,62 @@ int main() {
                                     "Expected invalid_bits_per_sample error")) {
       return failure;
     }
+    if (const auto failure = expect(has_error_code(result, "unsupported_sample_format"),
+                                    "Expected unsupported_sample_format error")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "frames_per_block_mismatch"),
+                                    "Expected frames_per_block_mismatch error")) {
+      return failure;
+    }
     if (const auto failure = expect(has_error_code(result, "invalid_device_period"),
                                     "Expected invalid_device_period error")) {
       return failure;
     }
+    if (const auto failure = expect(has_error_code(result, "invalid_minimum_device_period"),
+                                    "Expected invalid_minimum_device_period error")) {
+      return failure;
+    }
     if (const auto failure = expect(stream.state() == sar::platform::WasapiStreamState::Closed,
                                     "Expected invalid probe to leave stream closed")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiStream stream;
+    auto invalid_probe = make_probe();
+    invalid_probe.minimum_period_100ns = invalid_probe.default_period_100ns + 1;
+    const auto result = stream.open(invalid_probe);
+    if (const auto failure =
+            expect(!result.ok(), "Expected invalid period ordering failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "invalid_device_period_order"),
+                                    "Expected invalid_device_period_order error")) {
+      return failure;
+    }
+    if (const auto failure = expect(stream.state() == sar::platform::WasapiStreamState::Closed,
+                                    "Expected invalid period to leave stream closed")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiStream stream;
+    auto invalid_probe = make_probe();
+    invalid_probe.mix_format.frames_per_block = 0;
+    const auto result = stream.open(invalid_probe);
+    if (const auto failure =
+            expect(!result.ok(), "Expected invalid block size failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "invalid_frames_per_block"),
+                                    "Expected invalid_frames_per_block error")) {
+      return failure;
+    }
+    if (const auto failure = expect(stream.state() == sar::platform::WasapiStreamState::Closed,
+                                    "Expected invalid block size to leave stream closed")) {
       return failure;
     }
   }

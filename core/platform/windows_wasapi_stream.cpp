@@ -166,11 +166,40 @@ std::vector<WasapiStreamError> validate_probe(const WasapiStreamProbe& probe) {
   if (probe.mix_format.bits_per_sample == 0) {
     errors.push_back({"invalid_bits_per_sample", "WASAPI stream bit depth must be non-zero."});
   }
+  if (probe.mix_format.sample_format == AudioSampleFormat::Unknown) {
+    errors.push_back({
+        "unsupported_sample_format",
+        "WASAPI stream sample format must be supported before opening.",
+    });
+  }
+  if (probe.mix_format.frames_per_block == 0) {
+    errors.push_back({"invalid_frames_per_block", "WASAPI stream block size must be non-zero."});
+  }
+  if (probe.mix_format.frames_per_block != 0 &&
+      probe.mix_format.frames_per_block != probe.buffer_frames) {
+    errors.push_back({
+        "frames_per_block_mismatch",
+        "WASAPI stream block size must match the probed buffer size.",
+    });
+  }
   if (probe.buffer_frames == 0) {
     errors.push_back({"invalid_buffer_frames", "WASAPI stream buffer size must be non-zero."});
   }
   if (probe.default_period_100ns == 0) {
     errors.push_back({"invalid_device_period", "WASAPI stream device period must be non-zero."});
+  }
+  if (probe.minimum_period_100ns == 0) {
+    errors.push_back({
+        "invalid_minimum_device_period",
+        "WASAPI stream minimum device period must be non-zero.",
+    });
+  }
+  if (probe.default_period_100ns != 0 &&
+      probe.minimum_period_100ns > probe.default_period_100ns) {
+    errors.push_back({
+        "invalid_device_period_order",
+        "WASAPI stream minimum device period must not exceed the default period.",
+    });
   }
 
   return errors;
