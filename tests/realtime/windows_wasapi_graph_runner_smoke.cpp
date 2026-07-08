@@ -347,6 +347,21 @@ int main() {
 
   {
     sar::platform::WindowsWasapiStream render_stream;
+    sar::platform::WindowsWasapiGraphRunner runner(nullptr, &render_stream, 2, 4);
+    const auto result = runner.stop_streams();
+
+    if (const auto failure =
+            expect(!result.ok(), "Expected closed render stop failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "stream_not_started"),
+                                    "Expected stop_streams to report stream_not_started")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiStream render_stream;
     auto open_result = render_stream.open(make_render_probe());
     if (const auto failure = expect(open_result.ok(), "Expected synthetic render open")) {
       return failure;

@@ -58,6 +58,12 @@ The current prototype contains:
   runner on a background MMCSS thread.
 - `WindowsWasapiRenderLoop`: high-level render-only wrapper around default
   WASAPI render stream, graph runner, and realtime worker.
+- `WindowsWasapiDuplexLoop`: high-level capture/render wrapper around default
+  WASAPI streams, graph runner, and realtime worker.
+- `ControlSession`: non-realtime control-plane shell for validated command
+  application, graph publication, and active graph summaries.
+- `sar_list_wasapi_devices`: command-line WASAPI endpoint, default stream probe,
+  and loop graph-shape inspection.
 - `realtime_smoke`: offline processing smoke test.
 - `graph_snapshot_smoke`: offline graph publication smoke test.
 - `graph_builder_smoke`: graph validation and construction smoke test.
@@ -85,6 +91,7 @@ Current CTest targets on Windows:
 - `preset_document_smoke`
 - `control_command_smoke`
 - `control_response_smoke`
+- `control_session_smoke`
 - `audio_device_smoke`
 - `audio_device_registry_smoke`
 - `virtual_endpoint_smoke`
@@ -96,6 +103,7 @@ Current CTest targets on Windows:
 - `windows_realtime_thread_smoke`
 - `windows_wasapi_realtime_worker_smoke`
 - `windows_wasapi_render_loop_smoke`
+- `windows_wasapi_duplex_loop_smoke`
 - `diagnostics_smoke`
 - `spsc_ring_buffer_smoke`
 - `process_context_smoke`

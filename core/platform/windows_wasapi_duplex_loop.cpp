@@ -102,6 +102,16 @@ WasapiRealtimeWorkerStats WindowsWasapiDuplexLoop::stats() const noexcept {
   return worker_.stats();
 }
 
+WasapiDuplexLoopSummary WindowsWasapiDuplexLoop::summary() const {
+  WasapiDuplexLoopSummary result;
+  result.running = running();
+  result.error_count = last_errors().size();
+  result.capture_stream = capture_diagnostics();
+  result.render_stream = render_diagnostics();
+  result.worker = stats();
+  return result;
+}
+
 std::vector<WasapiRealtimeWorkerError> WindowsWasapiDuplexLoop::last_errors() const {
   return worker_.last_errors();
 }

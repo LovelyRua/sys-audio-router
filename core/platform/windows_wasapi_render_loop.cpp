@@ -84,6 +84,15 @@ WasapiRealtimeWorkerStats WindowsWasapiRenderLoop::stats() const noexcept {
   return worker_.stats();
 }
 
+WasapiRenderLoopSummary WindowsWasapiRenderLoop::summary() const {
+  WasapiRenderLoopSummary result;
+  result.running = running();
+  result.error_count = last_errors().size();
+  result.render_stream = diagnostics();
+  result.worker = stats();
+  return result;
+}
+
 std::vector<WasapiRealtimeWorkerError> WindowsWasapiRenderLoop::last_errors() const {
   return worker_.last_errors();
 }

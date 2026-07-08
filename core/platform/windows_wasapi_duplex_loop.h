@@ -5,6 +5,7 @@
 #include "core/platform/windows_wasapi_realtime_worker.h"
 #include "core/platform/windows_wasapi_stream.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -12,6 +13,14 @@
 namespace sar::platform {
 
 class WasapiDuplexLoopOpenResult;
+
+struct WasapiDuplexLoopSummary {
+  bool running = false;
+  std::size_t error_count = 0;
+  WasapiStreamDiagnostics capture_stream;
+  WasapiStreamDiagnostics render_stream;
+  WasapiRealtimeWorkerStats worker;
+};
 
 class WindowsWasapiDuplexLoop {
  public:
@@ -28,6 +37,7 @@ class WindowsWasapiDuplexLoop {
   [[nodiscard]] WasapiStreamDiagnostics capture_diagnostics() const noexcept;
   [[nodiscard]] WasapiStreamDiagnostics render_diagnostics() const noexcept;
   [[nodiscard]] WasapiRealtimeWorkerStats stats() const noexcept;
+  [[nodiscard]] WasapiDuplexLoopSummary summary() const;
   [[nodiscard]] std::vector<WasapiRealtimeWorkerError> last_errors() const;
 
  private:

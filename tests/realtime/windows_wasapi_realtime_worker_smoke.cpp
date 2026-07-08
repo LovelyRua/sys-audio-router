@@ -147,6 +147,10 @@ int main() {
                                     "Expected graph-only worker without stream start errors")) {
       return failure;
     }
+    if (const auto failure = expect(stats.stream_stop_error_cycles == 0,
+                                    "Expected graph-only worker without stream stop errors")) {
+      return failure;
+    }
     if (const auto failure = expect(stats.last_captured_frames == 0,
                                     "Expected graph-only worker without last captured frames")) {
       return failure;
@@ -222,6 +226,10 @@ int main() {
                                     "Expected restart to reset stream start errors")) {
       return failure;
     }
+    if (const auto failure = expect(worker.stats().stream_stop_error_cycles == 0,
+                                    "Expected restart to reset stream stop errors")) {
+      return failure;
+    }
     const auto duplicate_start = worker.start(0);
     if (const auto failure = expect(!duplicate_start.ok(),
                                     "Expected duplicate worker start failure")) {
@@ -262,6 +270,10 @@ int main() {
                                     "Expected one worker process error")) {
       return failure;
     }
+    if (const auto failure = expect(worker.stats().stream_stop_error_cycles == 0,
+                                    "Expected synthetic render stop to succeed")) {
+      return failure;
+    }
     if (const auto failure =
             expect(render_stream.state() == sar::platform::WasapiStreamState::Open,
                    "Expected worker to stop synthetic render stream")) {
@@ -299,6 +311,10 @@ int main() {
     }
     if (const auto failure = expect(stats.process_error_cycles == 0,
                                     "Expected no process errors after stream start failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(stats.stream_stop_error_cycles == 0,
+                                    "Expected no stop errors after stream start failure")) {
       return failure;
     }
     if (const auto failure = expect(stats.loop_cycles == 0,

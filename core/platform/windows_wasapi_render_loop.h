@@ -5,6 +5,7 @@
 #include "core/platform/windows_wasapi_realtime_worker.h"
 #include "core/platform/windows_wasapi_stream.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -12,6 +13,13 @@
 namespace sar::platform {
 
 class WasapiRenderLoopOpenResult;
+
+struct WasapiRenderLoopSummary {
+  bool running = false;
+  std::size_t error_count = 0;
+  WasapiStreamDiagnostics render_stream;
+  WasapiRealtimeWorkerStats worker;
+};
 
 [[nodiscard]] WasapiRenderLoopOpenResult open_default_wasapi_render_loop(
     graph::Graph& graph,
@@ -32,6 +40,7 @@ class WindowsWasapiRenderLoop {
   [[nodiscard]] const WasapiStreamProbe& probe() const noexcept;
   [[nodiscard]] WasapiStreamDiagnostics diagnostics() const noexcept;
   [[nodiscard]] WasapiRealtimeWorkerStats stats() const noexcept;
+  [[nodiscard]] WasapiRenderLoopSummary summary() const;
   [[nodiscard]] std::vector<WasapiRealtimeWorkerError> last_errors() const;
 
  private:
