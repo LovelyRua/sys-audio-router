@@ -87,6 +87,23 @@ int main() {
   }
 
   {
+    auto format = float32_format();
+    if (const auto failure = expect(sar::platform::required_interleaved_bytes(format, 0) == 0,
+                                    "Expected zero frame byte count")) {
+      return failure;
+    }
+
+    format.channels = std::numeric_limits<std::uint32_t>::max();
+    const auto bytes = sar::platform::required_interleaved_bytes(
+        format,
+        std::numeric_limits<std::size_t>::max());
+    if (const auto failure = expect(bytes == std::numeric_limits<std::size_t>::max(),
+                                    "Expected saturated byte count")) {
+      return failure;
+    }
+  }
+
+  {
     const auto format = int16_format();
     const std::vector<std::int16_t> interleaved = {
         0, 32767,

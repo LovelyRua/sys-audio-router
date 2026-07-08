@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace sar::platform {
 
@@ -12,6 +13,16 @@ std::size_t bytes_per_sample(const AudioFormat& format) noexcept {
     return 0;
   }
   return format.bits_per_sample / 8;
+}
+
+std::size_t saturated_multiply(std::size_t lhs, std::size_t rhs) noexcept {
+  if (lhs == 0 || rhs == 0) {
+    return 0;
+  }
+  if (lhs > std::numeric_limits<std::size_t>::max() / rhs) {
+    return std::numeric_limits<std::size_t>::max();
+  }
+  return lhs * rhs;
 }
 
 std::uint32_t effective_valid_bits(const AudioFormat& format) noexcept {
@@ -118,7 +129,9 @@ SampleConversionResult::SampleConversionResult(SampleConversionStatus status)
 
 std::size_t required_interleaved_bytes(const AudioFormat& format,
                                        std::size_t frames) noexcept {
-  return static_cast<std::size_t>(format.channels) * frames * bytes_per_sample(format);
+  const auto samples = saturated_multiply(static_cast<std::size_t>(format.channels),
+                                          frames);
+  return saturated_multiply(samples, bytes_per_sample(format));
 }
 
 SampleConversionResult import_interleaved_to_float(const void* source,
