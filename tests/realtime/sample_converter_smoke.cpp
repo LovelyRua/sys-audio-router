@@ -54,6 +54,13 @@ sar::platform::AudioFormat int24_format() {
   return format;
 }
 
+sar::platform::AudioFormat unsupported_format() {
+  auto format = float32_format();
+  format.bits_per_sample = 64;
+  format.sample_format = sar::platform::AudioSampleFormat::PcmInt;
+  return format;
+}
+
 }  // namespace
 
 int main() {
@@ -87,6 +94,44 @@ int main() {
   }
 
   {
+    const auto format = float32_format();
+    const std::vector<float> interleaved = {
+        0.125F, -0.125F,
+        0.25F, -0.25F,
+        0.5F, -0.5F,
+        0.75F, -0.75F,
+    };
+    sar::realtime::AudioBuffer buffer(2, 4);
+    buffer.channel(0)[2] = 9.0F;
+    buffer.channel(1)[2] = -9.0F;
+    const auto result = sar::platform::import_interleaved_to_float(
+        interleaved.data(),
+        interleaved.size() * sizeof(float),
+        format,
+        buffer,
+        2);
+    if (const auto failure = expect(result.ok(), "Expected partial float32 import success")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::tests::nearly_equal(buffer.channel(0)[0], 0.125F),
+                   "Expected partial import channel 0 first sample")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::tests::nearly_equal(buffer.channel(1)[1], -0.25F),
+                   "Expected partial import channel 1 second sample")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::tests::nearly_equal(buffer.channel(0)[2], 9.0F) &&
+                       sar::tests::nearly_equal(buffer.channel(1)[2], -9.0F),
+                   "Expected partial import not to overwrite trailing frames")) {
+      return failure;
+    }
+  }
+
+  {
     auto format = float32_format();
     if (const auto failure = expect(sar::platform::required_interleaved_bytes(format, 0) == 0,
                                     "Expected zero frame byte count")) {
@@ -99,6 +144,15 @@ int main() {
         std::numeric_limits<std::size_t>::max());
     if (const auto failure = expect(bytes == std::numeric_limits<std::size_t>::max(),
                                     "Expected saturated byte count")) {
+      return failure;
+    }
+  }
+
+  {
+    auto format = float32_format();
+    format.bits_per_sample = 20;
+    if (const auto failure = expect(sar::platform::required_interleaved_bytes(format, 4) == 0,
+                                    "Expected non-byte-aligned byte count to be zero")) {
       return failure;
     }
   }
@@ -196,6 +250,35 @@ int main() {
   }
 
   {
+    const auto format = int24_in_int32_format();
+    sar::realtime::AudioBuffer buffer(2, 2);
+    const std::vector<std::int32_t> interleaved = {
+        0x7FFFFF00, static_cast<std::int32_t>(0x80000000),
+        0x40000000, static_cast<std::int32_t>(0xC0000000),
+    };
+    const auto result = sar::platform::import_interleaved_to_float(
+        interleaved.data(),
+        sar::platform::required_interleaved_bytes(format, 1),
+        format,
+        buffer,
+        1);
+    if (const auto failure =
+            expect(result.ok(), "Expected explicit-frame int24-in-int32 import success")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::tests::nearly_equal(buffer.channel(0)[0], 0.99999988F),
+                   "Expected explicit-frame int24-in-int32 positive sample")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::tests::nearly_equal(buffer.channel(1)[0], -1.0F),
+                   "Expected explicit-frame int24-in-int32 negative sample")) {
+      return failure;
+    }
+  }
+
+  {
     const auto format = int16_format();
     sar::realtime::AudioBuffer buffer(2, 2);
     buffer.channel(0)[0] = -1.0F;
@@ -222,6 +305,41 @@ int main() {
     }
     if (const auto failure = expect(interleaved[2] == 32767 && interleaved[3] == -32767,
                                     "Expected export clipping")) {
+      return failure;
+    }
+  }
+
+  {
+    const auto format = float32_format();
+    sar::realtime::AudioBuffer buffer(2, 4);
+    buffer.channel(0)[0] = 0.125F;
+    buffer.channel(1)[0] = -0.125F;
+    buffer.channel(0)[1] = 0.25F;
+    buffer.channel(1)[1] = -0.25F;
+    buffer.channel(0)[2] = 9.0F;
+    buffer.channel(1)[2] = -9.0F;
+
+    std::vector<float> interleaved(8, 77.0F);
+    const auto result = sar::platform::export_float_to_interleaved(
+        buffer,
+        format,
+        interleaved.data(),
+        interleaved.size() * sizeof(float),
+        2);
+    if (const auto failure = expect(result.ok(), "Expected partial float32 export success")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::tests::nearly_equal(interleaved[0], 0.125F) &&
+                       sar::tests::nearly_equal(interleaved[1], -0.125F) &&
+                       sar::tests::nearly_equal(interleaved[2], 0.25F) &&
+                       sar::tests::nearly_equal(interleaved[3], -0.25F),
+                   "Expected partial float32 export samples")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::tests::nearly_equal(interleaved[4], 77.0F),
+                   "Expected partial export not to overwrite trailing frames")) {
       return failure;
     }
   }
@@ -267,6 +385,29 @@ int main() {
   }
 
   {
+    auto format = int32_format();
+    format.valid_bits_per_sample = 32;
+    sar::realtime::AudioBuffer buffer(2, 1);
+    buffer.channel(0)[0] = -0.5F;
+    buffer.channel(1)[0] = 0.5F;
+
+    std::vector<std::int32_t> interleaved(2);
+    const auto result = sar::platform::export_float_to_interleaved(
+        buffer,
+        format,
+        interleaved.data(),
+        interleaved.size() * sizeof(std::int32_t));
+    if (const auto failure = expect(result.ok(), "Expected explicit int32 export success")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(interleaved[0] == -1073741824 && interleaved[1] == 1073741824,
+                   "Expected explicit int32 valid bits to use full int32 range")) {
+      return failure;
+    }
+  }
+
+  {
     const auto format = int32_format();
     sar::realtime::AudioBuffer buffer(2, 2);
     buffer.channel(0)[0] = -1.0F;
@@ -296,6 +437,34 @@ int main() {
             expect(interleaved[2] == std::numeric_limits<std::int32_t>::max() &&
                        interleaved[3] == -2147483647,
                    "Expected int32 export clipping")) {
+      return failure;
+    }
+  }
+
+  {
+    const auto format = int24_format();
+    const std::vector<std::uint8_t> interleaved = {
+        0xFF, 0xFF, 0x7F, 0x01, 0x00, 0x80,
+        0x00, 0x00, 0x40, 0x00, 0x00, 0xC0,
+    };
+    sar::realtime::AudioBuffer buffer(2, 2);
+    const auto result = sar::platform::import_interleaved_to_float(
+        interleaved.data(),
+        sar::platform::required_interleaved_bytes(format, 1),
+        format,
+        buffer,
+        1);
+    if (const auto failure = expect(result.ok(), "Expected partial int24 import success")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::tests::nearly_equal(buffer.channel(0)[0], 0.99999988F),
+                   "Expected partial int24 positive full-scale import")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::tests::nearly_equal(buffer.channel(1)[0], -0.99999988F),
+                   "Expected partial int24 negative full-scale import")) {
       return failure;
     }
   }
@@ -376,12 +545,138 @@ int main() {
     sar::realtime::AudioBuffer buffer(2, 4);
     const auto result = sar::platform::import_interleaved_to_float(
         nullptr,
+        0,
+        format,
+        buffer,
+        0);
+    if (const auto failure = expect(result.ok(), "Expected zero-frame null import success")) {
+      return failure;
+    }
+  }
+
+  {
+    const auto format = float32_format();
+    sar::realtime::AudioBuffer buffer(2, 4);
+    const auto result = sar::platform::export_float_to_interleaved(
+        buffer,
+        format,
+        nullptr,
+        0,
+        0);
+    if (const auto failure = expect(result.ok(), "Expected zero-frame null export success")) {
+      return failure;
+    }
+  }
+
+  {
+    const auto format = float32_format();
+    sar::realtime::AudioBuffer buffer(2, 4);
+    const auto result = sar::platform::import_interleaved_to_float(
+        nullptr,
         sar::platform::required_interleaved_bytes(format, 4),
         format,
         buffer);
     if (const auto failure =
             expect(result.status() == sar::platform::SampleConversionStatus::NullBuffer,
                    "Expected null source import status")) {
+      return failure;
+    }
+  }
+
+  {
+    const auto format = float32_format();
+    const std::vector<float> interleaved = {0.0F, 0.0F};
+    sar::realtime::AudioBuffer buffer(1, 2);
+    const auto result = sar::platform::import_interleaved_to_float(
+        interleaved.data(),
+        interleaved.size() * sizeof(float),
+        format,
+        buffer,
+        1);
+    if (const auto failure =
+            expect(result.status() == sar::platform::SampleConversionStatus::ChannelMismatch,
+                   "Expected import channel mismatch status")) {
+      return failure;
+    }
+  }
+
+  {
+    const auto format = float32_format();
+    const std::vector<float> interleaved = {0.0F, 0.0F};
+    sar::realtime::AudioBuffer buffer(2, 2);
+    const auto result = sar::platform::import_interleaved_to_float(
+        interleaved.data(),
+        sizeof(float),
+        format,
+        buffer,
+        1);
+    if (const auto failure =
+            expect(result.status() == sar::platform::SampleConversionStatus::BufferTooSmall,
+                   "Expected import buffer-too-small status")) {
+      return failure;
+    }
+  }
+
+  {
+    const auto format = float32_format();
+    sar::realtime::AudioBuffer buffer(2, 2);
+    std::vector<float> interleaved(2);
+    const auto result = sar::platform::export_float_to_interleaved(
+        buffer,
+        format,
+        interleaved.data(),
+        interleaved.size() * sizeof(float),
+        3);
+    if (const auto failure =
+            expect(result.status() == sar::platform::SampleConversionStatus::BufferTooSmall,
+                   "Expected export source-frame buffer-too-small status")) {
+      return failure;
+    }
+  }
+
+  {
+    const auto format = float32_format();
+    sar::realtime::AudioBuffer buffer(1, 2);
+    std::vector<float> interleaved(2);
+    const auto result = sar::platform::export_float_to_interleaved(
+        buffer,
+        format,
+        interleaved.data(),
+        interleaved.size() * sizeof(float),
+        1);
+    if (const auto failure =
+            expect(result.status() == sar::platform::SampleConversionStatus::ChannelMismatch,
+                   "Expected export channel mismatch status")) {
+      return failure;
+    }
+  }
+
+  {
+    const auto format = unsupported_format();
+    sar::realtime::AudioBuffer buffer(2, 2);
+    const auto import_result = sar::platform::import_interleaved_to_float(
+        nullptr,
+        0,
+        format,
+        buffer,
+        1);
+    if (const auto failure =
+            expect(import_result.status() ==
+                       sar::platform::SampleConversionStatus::UnsupportedFormat,
+                   "Expected unsupported import status before null status")) {
+      return failure;
+    }
+
+    const auto export_result = sar::platform::export_float_to_interleaved(
+        buffer,
+        format,
+        nullptr,
+        0,
+        1);
+    if (const auto failure =
+            expect(export_result.status() ==
+                       sar::platform::SampleConversionStatus::UnsupportedFormat,
+                   "Expected unsupported export status before null status")) {
       return failure;
     }
   }
