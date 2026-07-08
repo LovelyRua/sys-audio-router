@@ -2,6 +2,7 @@
 #include "core/graph/graph.h"
 #include "core/graph/node.h"
 #include "core/platform/windows_wasapi_render_loop.h"
+#include "core/platform/windows_wasapi_runtime_summary.h"
 #include "core/platform/windows_wasapi_stream_probe.h"
 
 #include <chrono>
@@ -85,6 +86,7 @@ void print_worker_stats(const sar::platform::WasapiRealtimeWorkerStats& stats) {
   std::cout << "  Graph processed cycles: " << stats.graph_processed_cycles << '\n';
   std::cout << "  Idle cycles: " << stats.idle_cycles << '\n';
   std::cout << "  Render idle cycles: " << stats.render_idle_cycles << '\n';
+  std::cout << "  Wait timeout cycles: " << stats.wait_timeout_cycles << '\n';
   std::cout << "  Render wait timeout cycles: " << stats.render_wait_timeout_cycles << '\n';
   std::cout << "  Render partial cycles: " << stats.render_partial_cycles << '\n';
   std::cout << "  Render partial frames: " << stats.render_partial_frames << '\n';
@@ -102,6 +104,20 @@ void print_engine_diagnostics(const sar::diagnostics::EngineDiagnostics& diagnos
   std::cout << "  Xruns: " << diagnostics.xrun_count << '\n';
   std::cout << "  Last callback seconds: " << diagnostics.last_callback_seconds << '\n';
   std::cout << "  Peak callback seconds: " << diagnostics.peak_callback_seconds << '\n';
+}
+
+void print_runtime_summary(const sar::platform::WasapiRuntimeSummary& summary) {
+  std::cout << "Runtime summary\n";
+  std::cout << "  Health: "
+            << sar::platform::wasapi_runtime_health_name(summary.health) << '\n';
+  std::cout << "  Reason code: " << summary.reason_code << '\n';
+  std::cout << "  Reason: " << summary.reason << '\n';
+  std::cout << "  Error count: " << summary.error_count << '\n';
+  if (!summary.first_error_code.empty()) {
+    std::cout << "  First error code: " << summary.first_error_code << '\n';
+    std::cout << "  First error message: " << summary.first_error_message << '\n';
+  }
+  std::cout << "  Render buffer frames: " << summary.render_buffer_frames << '\n';
 }
 
 }  // namespace
@@ -181,7 +197,12 @@ int main(int argc, char** argv) {
     }
   }
 
-  print_worker_stats(loop->stats());
+  const auto stats = loop->stats();
+  const auto render_diagnostics = loop->diagnostics();
+  const auto summary = sar::platform::summarize_wasapi_runtime(
+      stats, errors, nullptr, &render_diagnostics);
+  print_runtime_summary(summary);
+  print_worker_stats(stats);
   print_engine_diagnostics(diagnostics);
   return errors.empty() ? 0 : 1;
 }

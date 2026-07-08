@@ -26,11 +26,27 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
   summary.graph_processed_cycles = stats.graph_processed_cycles;
   summary.idle_cycles = stats.idle_cycles;
   summary.wait_timeout_cycles = stats.wait_timeout_cycles;
+  summary.capture_wait_timeout_cycles = stats.capture_wait_timeout_cycles;
+  summary.render_wait_timeout_cycles = stats.render_wait_timeout_cycles;
+  summary.capture_partial_cycles = stats.capture_partial_cycles;
+  summary.render_partial_cycles = stats.render_partial_cycles;
+  summary.capture_partial_frames = stats.capture_partial_frames;
+  summary.render_partial_frames = stats.render_partial_frames;
+  summary.capture_silent_cycles = stats.capture_silent_cycles;
+  summary.capture_silent_frames = stats.capture_silent_frames;
   summary.process_error_cycles = stats.process_error_cycles;
   summary.stream_start_error_cycles = stats.stream_start_error_cycles;
+  summary.stream_stop_error_cycles = stats.stream_stop_error_cycles;
   summary.captured_frames = stats.captured_frames;
   summary.rendered_frames = stats.rendered_frames;
   summary.last_graph_processed = stats.last_graph_processed;
+  summary.last_capture_idle = stats.last_capture_idle;
+  summary.last_render_idle = stats.last_render_idle;
+  summary.last_capture_wait_timed_out = stats.last_capture_wait_timed_out;
+  summary.last_render_wait_timed_out = stats.last_render_wait_timed_out;
+  summary.last_capture_partial = stats.last_capture_partial;
+  summary.last_render_partial = stats.last_render_partial;
+  summary.last_capture_silent = stats.last_capture_silent;
   summary.error_count = errors.size();
 
   if (capture_diagnostics != nullptr) {
@@ -65,6 +81,13 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
     return summary;
   }
 
+  if (stats.stream_stop_error_cycles > 0) {
+    summary.health = WasapiRuntimeHealth::Faulted;
+    summary.reason_code = "stream_stop_error";
+    summary.reason = "A WASAPI stream failed to stop cleanly.";
+    return summary;
+  }
+
   if (stats.loop_cycles == 0 && stats.graph_processed_cycles == 0 &&
       stats.captured_frames == 0 && stats.rendered_frames == 0) {
     summary.health = WasapiRuntimeHealth::Stopped;
@@ -75,15 +98,37 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
 
   if (stats.wait_timeout_cycles > 0) {
     summary.health = WasapiRuntimeHealth::Degraded;
-    summary.reason_code = "wait_timeout";
-    summary.reason = "One or more WASAPI event waits timed out.";
+    if (stats.capture_wait_timeout_cycles > 0 &&
+        stats.render_wait_timeout_cycles == 0) {
+      summary.reason_code = "capture_wait_timeout";
+      summary.reason = "One or more WASAPI capture event waits timed out.";
+    } else if (stats.render_wait_timeout_cycles > 0 &&
+               stats.capture_wait_timeout_cycles == 0) {
+      summary.reason_code = "render_wait_timeout";
+      summary.reason = "One or more WASAPI render event waits timed out.";
+    } else {
+      summary.reason_code = "wait_timeout";
+      summary.reason = "One or more WASAPI event waits timed out.";
+    }
     return summary;
   }
 
   if (stats.capture_partial_cycles > 0 || stats.render_partial_cycles > 0) {
     summary.health = WasapiRuntimeHealth::Degraded;
-    summary.reason_code = "partial_buffer";
-    summary.reason = "One or more WASAPI cycles transferred fewer frames than requested.";
+    if (stats.capture_partial_cycles > 0 && stats.render_partial_cycles == 0) {
+      summary.reason_code = "capture_partial_buffer";
+      summary.reason =
+          "One or more WASAPI capture cycles transferred fewer frames than requested.";
+    } else if (stats.render_partial_cycles > 0 &&
+               stats.capture_partial_cycles == 0) {
+      summary.reason_code = "render_partial_buffer";
+      summary.reason =
+          "One or more WASAPI render cycles transferred fewer frames than requested.";
+    } else {
+      summary.reason_code = "partial_buffer";
+      summary.reason =
+          "One or more WASAPI cycles transferred fewer frames than requested.";
+    }
     return summary;
   }
 

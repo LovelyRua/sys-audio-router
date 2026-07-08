@@ -137,6 +137,7 @@ int main() {
     }
 
     stats.wait_timeout_cycles = 1;
+    stats.render_wait_timeout_cycles = 1;
     summary = sar::platform::summarize_wasapi_runtime(
         stats, {}, &capture_diagnostics, &render_diagnostics);
     if (const auto failure =
@@ -145,13 +146,20 @@ int main() {
       return failure;
     }
     if (const auto failure =
-            expect(summary.reason_code == "wait_timeout",
-                   "Expected timeout runtime summary reason")) {
+            expect(summary.reason_code == "render_wait_timeout",
+                   "Expected split timeout runtime summary reason")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.render_wait_timeout_cycles == 1,
+                   "Expected runtime summary render timeout count")) {
       return failure;
     }
 
     stats.wait_timeout_cycles = 0;
+    stats.render_wait_timeout_cycles = 0;
     stats.capture_partial_cycles = 1;
+    stats.capture_partial_frames = 4;
     summary = sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
     if (const auto failure =
             expect(summary.health == sar::platform::WasapiRuntimeHealth::Degraded,
@@ -159,10 +167,31 @@ int main() {
       return failure;
     }
     if (const auto failure =
-            expect(summary.reason_code == "partial_buffer",
-                   "Expected partial runtime summary reason")) {
+            expect(summary.reason_code == "capture_partial_buffer",
+                   "Expected split partial runtime summary reason")) {
       return failure;
     }
+    if (const auto failure =
+            expect(summary.capture_partial_frames == 4,
+                   "Expected runtime summary capture partial frame count")) {
+      return failure;
+    }
+
+    stats.capture_partial_cycles = 0;
+    stats.capture_partial_frames = 0;
+    stats.stream_stop_error_cycles = 1;
+    summary = sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
+    if (const auto failure =
+            expect(summary.health == sar::platform::WasapiRuntimeHealth::Faulted,
+                   "Expected stop-error runtime summary to be faulted")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.reason_code == "stream_stop_error",
+                   "Expected stop-error runtime summary reason")) {
+      return failure;
+    }
+    stats.stream_stop_error_cycles = 0;
 
     const std::vector<sar::platform::WasapiRealtimeWorkerError> errors = {
         {"native_stream_unavailable", "Synthetic stream has no native WASAPI client."},

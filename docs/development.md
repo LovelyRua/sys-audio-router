@@ -65,7 +65,8 @@ The current prototype contains:
 - `sar_list_wasapi_devices`: command-line WASAPI endpoint, default stream probe,
   and loop graph-shape inspection.
 - `sar_measure_wasapi_render_loop`: command-line default render loop measurement
-  tool for real-device smoke runs.
+  tool for real-device smoke runs, including runtime health, reason codes,
+  worker counters, and engine diagnostics.
 - `realtime_smoke`: offline processing smoke test.
 - `graph_snapshot_smoke`: offline graph publication smoke test.
 - `graph_builder_smoke`: graph validation and construction smoke test.
