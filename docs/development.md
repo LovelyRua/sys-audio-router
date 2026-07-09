@@ -119,7 +119,17 @@ Current CTest targets on Windows:
 - `windows_wasapi_render_loop_smoke`
 - `windows_wasapi_duplex_loop_smoke`
 - `windows_wasapi_render_loop_measure_help`
+- `windows_wasapi_render_loop_measure_short_help`
+- `windows_wasapi_render_loop_measure_missing_duration`
+- `windows_wasapi_render_loop_measure_bad_duration`
+- `windows_wasapi_render_loop_measure_bad_timeout`
+- `windows_wasapi_render_loop_measure_unknown_arg`
 - `windows_wasapi_duplex_loop_measure_help`
+- `windows_wasapi_duplex_loop_measure_short_help`
+- `windows_wasapi_duplex_loop_measure_missing_duration`
+- `windows_wasapi_duplex_loop_measure_bad_duration`
+- `windows_wasapi_duplex_loop_measure_bad_timeout`
+- `windows_wasapi_duplex_loop_measure_unknown_arg`
 - `diagnostics_smoke`
 - `spsc_ring_buffer_smoke`
 - `process_context_smoke`

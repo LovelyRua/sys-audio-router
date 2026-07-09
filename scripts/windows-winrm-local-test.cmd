@@ -23,5 +23,11 @@ if "%PASSWORD%"=="" (
 
 if "%SLOT%"=="" set "SLOT=local"
 
+echo System Audio Route local Windows test upload
+echo Host: %HOST%
+echo Slot: %SLOT%
+echo Source: local git archive HEAD
+echo.
+
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0windows-winrm-local-test.ps1" -HostName "%HOST%" -UserName "%USER%" -Password "%PASSWORD%" -Slot "%SLOT%" -RepoRoot "%~dp0.."
 exit /b %errorlevel%
