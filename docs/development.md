@@ -116,6 +116,7 @@ Current CTest targets on Windows:
 - `windows_wasapi_graph_runner_smoke`
 - `windows_realtime_thread_smoke`
 - `windows_wasapi_realtime_worker_smoke`
+- `windows_wasapi_runtime_summary_smoke`
 - `windows_wasapi_render_loop_smoke`
 - `windows_wasapi_duplex_loop_smoke`
 - `windows_wasapi_render_loop_measure_help`
