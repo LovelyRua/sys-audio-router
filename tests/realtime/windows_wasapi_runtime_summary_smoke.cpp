@@ -129,7 +129,13 @@ int main() {
                        "render_partial_cycles=0 capture_silent_cycles=0 "
                        "process_error_cycles=0 stream_start_error_cycles=0 "
                        "stream_stop_error_cycles=0 captured_frames=0 "
-                       "rendered_frames=0 error_count=0",
+                       "rendered_frames=0 last_captured_frames=0 "
+                       "last_rendered_frames=0 last_stop_wait_us=0 "
+                       "capture_sample_rate=0 render_sample_rate=0 "
+                       "capture_channels=0 render_channels=0 "
+                       "capture_frames_per_block=0 render_frames_per_block=0 "
+                       "capture_buffer_frames=0 render_buffer_frames=0 "
+                       "error_count=0",
                    "Expected no-cycle machine-readable summary line")) {
       return failure;
     }
@@ -325,6 +331,47 @@ int main() {
     if (const auto failure =
             expect(summary_line.find("rendered_frames=256") != std::string::npos,
                    "Expected summary line rendered frames")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("last_captured_frames=20") !=
+                       std::string::npos,
+                   "Expected summary line last captured frames")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("last_rendered_frames=24") !=
+                       std::string::npos,
+                   "Expected summary line last rendered frames")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("last_stop_wait_us=2500") !=
+                       std::string::npos,
+                   "Expected summary line stop wait")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("capture_sample_rate=48000") !=
+                       std::string::npos,
+                   "Expected summary line capture sample rate")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("render_channels=2") != std::string::npos,
+                   "Expected summary line render channels")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("capture_buffer_frames=96") !=
+                       std::string::npos,
+                   "Expected summary line capture buffer frames")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("render_buffer_frames=128") !=
+                       std::string::npos,
+                   "Expected summary line render buffer frames")) {
       return failure;
     }
   }

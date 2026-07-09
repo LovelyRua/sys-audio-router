@@ -47,6 +47,17 @@ std::string format_wasapi_runtime_summary_line(
          << " stream_stop_error_cycles=" << summary.stream_stop_error_cycles
          << " captured_frames=" << summary.captured_frames
          << " rendered_frames=" << summary.rendered_frames
+         << " last_captured_frames=" << summary.last_captured_frames
+         << " last_rendered_frames=" << summary.last_rendered_frames
+         << " last_stop_wait_us=" << summary.last_stop_wait_microseconds
+         << " capture_sample_rate=" << summary.capture_sample_rate
+         << " render_sample_rate=" << summary.render_sample_rate
+         << " capture_channels=" << summary.capture_channels
+         << " render_channels=" << summary.render_channels
+         << " capture_frames_per_block=" << summary.capture_frames_per_block
+         << " render_frames_per_block=" << summary.render_frames_per_block
+         << " capture_buffer_frames=" << summary.capture_buffer_frames
+         << " render_buffer_frames=" << summary.render_buffer_frames
          << " error_count=" << summary.error_count;
   return stream.str();
 }
