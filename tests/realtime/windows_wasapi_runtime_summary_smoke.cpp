@@ -126,15 +126,22 @@ int main() {
                        "graph_processed_cycles=0 idle_cycles=0 "
                        "wait_timeout_cycles=0 capture_wait_timeout_cycles=0 "
                        "render_wait_timeout_cycles=0 capture_partial_cycles=0 "
-                       "render_partial_cycles=0 capture_silent_cycles=0 "
+                       "render_partial_cycles=0 capture_partial_frames=0 "
+                       "render_partial_frames=0 capture_silent_cycles=0 "
+                       "capture_silent_frames=0 "
                        "process_error_cycles=0 stream_start_error_cycles=0 "
                        "stream_stop_error_cycles=0 captured_frames=0 "
                        "rendered_frames=0 last_captured_frames=0 "
                        "last_rendered_frames=0 last_stop_wait_us=0 "
+                       "has_capture_stream=0 has_render_stream=0 "
                        "capture_sample_rate=0 render_sample_rate=0 "
                        "capture_channels=0 render_channels=0 "
                        "capture_frames_per_block=0 render_frames_per_block=0 "
                        "capture_buffer_frames=0 render_buffer_frames=0 "
+                       "capture_default_period_100ns=0 "
+                       "render_default_period_100ns=0 "
+                       "capture_minimum_period_100ns=0 "
+                       "render_minimum_period_100ns=0 "
                        "error_count=0",
                    "Expected no-cycle machine-readable summary line")) {
       return failure;
@@ -324,6 +331,24 @@ int main() {
       return failure;
     }
     if (const auto failure =
+            expect(summary_line.find("capture_partial_frames=12") !=
+                       std::string::npos,
+                   "Expected summary line capture partial frames")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("render_partial_frames=16") !=
+                       std::string::npos,
+                   "Expected summary line render partial frames")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("capture_silent_frames=32") !=
+                       std::string::npos,
+                   "Expected summary line silent capture frames")) {
+      return failure;
+    }
+    if (const auto failure =
             expect(summary_line.find("captured_frames=256") != std::string::npos,
                    "Expected summary line captured frames")) {
       return failure;
@@ -352,6 +377,17 @@ int main() {
       return failure;
     }
     if (const auto failure =
+            expect(summary_line.find("has_capture_stream=1") !=
+                       std::string::npos,
+                   "Expected summary line capture stream presence")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("has_render_stream=1") != std::string::npos,
+                   "Expected summary line render stream presence")) {
+      return failure;
+    }
+    if (const auto failure =
             expect(summary_line.find("capture_sample_rate=48000") !=
                        std::string::npos,
                    "Expected summary line capture sample rate")) {
@@ -372,6 +408,18 @@ int main() {
             expect(summary_line.find("render_buffer_frames=128") !=
                        std::string::npos,
                    "Expected summary line render buffer frames")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("capture_default_period_100ns=100000") !=
+                       std::string::npos,
+                   "Expected summary line capture default period")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("render_minimum_period_100ns=30000") !=
+                       std::string::npos,
+                   "Expected summary line render minimum period")) {
       return failure;
     }
   }

@@ -41,7 +41,10 @@ std::string format_wasapi_runtime_summary_line(
          << " render_wait_timeout_cycles=" << summary.render_wait_timeout_cycles
          << " capture_partial_cycles=" << summary.capture_partial_cycles
          << " render_partial_cycles=" << summary.render_partial_cycles
+         << " capture_partial_frames=" << summary.capture_partial_frames
+         << " render_partial_frames=" << summary.render_partial_frames
          << " capture_silent_cycles=" << summary.capture_silent_cycles
+         << " capture_silent_frames=" << summary.capture_silent_frames
          << " process_error_cycles=" << summary.process_error_cycles
          << " stream_start_error_cycles=" << summary.stream_start_error_cycles
          << " stream_stop_error_cycles=" << summary.stream_stop_error_cycles
@@ -50,6 +53,8 @@ std::string format_wasapi_runtime_summary_line(
          << " last_captured_frames=" << summary.last_captured_frames
          << " last_rendered_frames=" << summary.last_rendered_frames
          << " last_stop_wait_us=" << summary.last_stop_wait_microseconds
+         << " has_capture_stream=" << (summary.has_capture_stream ? 1 : 0)
+         << " has_render_stream=" << (summary.has_render_stream ? 1 : 0)
          << " capture_sample_rate=" << summary.capture_sample_rate
          << " render_sample_rate=" << summary.render_sample_rate
          << " capture_channels=" << summary.capture_channels
@@ -58,6 +63,12 @@ std::string format_wasapi_runtime_summary_line(
          << " render_frames_per_block=" << summary.render_frames_per_block
          << " capture_buffer_frames=" << summary.capture_buffer_frames
          << " render_buffer_frames=" << summary.render_buffer_frames
+         << " capture_default_period_100ns="
+         << summary.capture_default_period_100ns
+         << " render_default_period_100ns=" << summary.render_default_period_100ns
+         << " capture_minimum_period_100ns="
+         << summary.capture_minimum_period_100ns
+         << " render_minimum_period_100ns=" << summary.render_minimum_period_100ns
          << " error_count=" << summary.error_count;
   return stream.str();
 }
