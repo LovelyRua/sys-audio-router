@@ -156,7 +156,32 @@ int main() {
       return failure;
     }
 
+    stats.render_wait_timeout_cycles = 0;
+    stats.capture_wait_timeout_cycles = 1;
+    summary = sar::platform::summarize_wasapi_runtime(
+        stats, {}, &capture_diagnostics, &render_diagnostics);
+    if (const auto failure =
+            expect(summary.health == sar::platform::WasapiRuntimeHealth::Degraded,
+                   "Expected capture timeout runtime summary to be degraded")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.reason_code == "capture_wait_timeout",
+                   "Expected capture timeout runtime summary reason")) {
+      return failure;
+    }
+
+    stats.render_wait_timeout_cycles = 1;
+    summary = sar::platform::summarize_wasapi_runtime(
+        stats, {}, &capture_diagnostics, &render_diagnostics);
+    if (const auto failure =
+            expect(summary.reason_code == "wait_timeout",
+                   "Expected combined timeout runtime summary reason")) {
+      return failure;
+    }
+
     stats.wait_timeout_cycles = 0;
+    stats.capture_wait_timeout_cycles = 0;
     stats.render_wait_timeout_cycles = 0;
     stats.capture_partial_cycles = 1;
     stats.capture_partial_frames = 4;
@@ -179,6 +204,96 @@ int main() {
 
     stats.capture_partial_cycles = 0;
     stats.capture_partial_frames = 0;
+    stats.render_partial_cycles = 1;
+    stats.render_partial_frames = 8;
+    summary = sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
+    if (const auto failure =
+            expect(summary.health == sar::platform::WasapiRuntimeHealth::Degraded,
+                   "Expected render partial runtime summary to be degraded")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.reason_code == "render_partial_buffer",
+                   "Expected split render partial runtime summary reason")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.render_partial_frames == 8,
+                   "Expected runtime summary render partial frame count")) {
+      return failure;
+    }
+
+    stats.capture_partial_cycles = 1;
+    summary = sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
+    if (const auto failure =
+            expect(summary.reason_code == "partial_buffer",
+                   "Expected combined partial runtime summary reason")) {
+      return failure;
+    }
+
+    stats.capture_partial_cycles = 0;
+    stats.capture_partial_frames = 0;
+    stats.render_partial_cycles = 0;
+    stats.render_partial_frames = 0;
+    stats.capture_silent_cycles = 1;
+    stats.capture_silent_frames = 16;
+    summary = sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
+    if (const auto failure =
+            expect(summary.health == sar::platform::WasapiRuntimeHealth::Degraded,
+                   "Expected silent capture runtime summary to be degraded")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.reason_code == "silent_capture",
+                   "Expected silent capture runtime summary reason")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.capture_silent_frames == 16,
+                   "Expected runtime summary silent frame count")) {
+      return failure;
+    }
+
+    stats.capture_silent_cycles = 0;
+    stats.capture_silent_frames = 0;
+    stats.idle_cycles = 1;
+    summary = sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
+    if (const auto failure =
+            expect(summary.health == sar::platform::WasapiRuntimeHealth::Degraded,
+                   "Expected idle runtime summary to be degraded")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.reason_code == "idle_cycle",
+                   "Expected idle runtime summary reason")) {
+      return failure;
+    }
+    stats.idle_cycles = 0;
+
+    stats.stream_start_error_cycles = 1;
+    stats.process_error_cycles = 1;
+    stats.stream_stop_error_cycles = 1;
+    summary = sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
+    if (const auto failure =
+            expect(summary.health == sar::platform::WasapiRuntimeHealth::Faulted,
+                   "Expected start-error runtime summary to be faulted")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.reason_code == "stream_start_error",
+                   "Expected start-error priority in runtime summary")) {
+      return failure;
+    }
+    stats.stream_start_error_cycles = 0;
+
+    summary = sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
+    if (const auto failure =
+            expect(summary.reason_code == "process_error",
+                   "Expected process-error priority in runtime summary")) {
+      return failure;
+    }
+    stats.process_error_cycles = 0;
+
     stats.stream_stop_error_cycles = 1;
     summary = sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
     if (const auto failure =
