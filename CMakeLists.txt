@@ -245,8 +245,38 @@ if(WIN32)
     COMMAND sar_windows_wasapi_duplex_loop_smoke)
   add_test(NAME windows_wasapi_render_loop_measure_help
     COMMAND sar_measure_wasapi_render_loop --help)
+  add_test(NAME windows_wasapi_render_loop_measure_short_help
+    COMMAND sar_measure_wasapi_render_loop -h)
+  add_test(NAME windows_wasapi_render_loop_measure_missing_duration
+    COMMAND sar_measure_wasapi_render_loop --duration-ms)
+  add_test(NAME windows_wasapi_render_loop_measure_bad_duration
+    COMMAND sar_measure_wasapi_render_loop --duration-ms abc)
+  add_test(NAME windows_wasapi_render_loop_measure_bad_timeout
+    COMMAND sar_measure_wasapi_render_loop --timeout-ms -1)
+  add_test(NAME windows_wasapi_render_loop_measure_unknown_arg
+    COMMAND sar_measure_wasapi_render_loop --definitely-not-a-real-option)
   add_test(NAME windows_wasapi_duplex_loop_measure_help
     COMMAND sar_measure_wasapi_duplex_loop --help)
+  add_test(NAME windows_wasapi_duplex_loop_measure_short_help
+    COMMAND sar_measure_wasapi_duplex_loop -h)
+  add_test(NAME windows_wasapi_duplex_loop_measure_missing_duration
+    COMMAND sar_measure_wasapi_duplex_loop --duration-ms)
+  add_test(NAME windows_wasapi_duplex_loop_measure_bad_duration
+    COMMAND sar_measure_wasapi_duplex_loop --duration-ms abc)
+  add_test(NAME windows_wasapi_duplex_loop_measure_bad_timeout
+    COMMAND sar_measure_wasapi_duplex_loop --timeout-ms -1)
+  add_test(NAME windows_wasapi_duplex_loop_measure_unknown_arg
+    COMMAND sar_measure_wasapi_duplex_loop --definitely-not-a-real-option)
+  set_tests_properties(
+    windows_wasapi_render_loop_measure_missing_duration
+    windows_wasapi_render_loop_measure_bad_duration
+    windows_wasapi_render_loop_measure_bad_timeout
+    windows_wasapi_render_loop_measure_unknown_arg
+    windows_wasapi_duplex_loop_measure_missing_duration
+    windows_wasapi_duplex_loop_measure_bad_duration
+    windows_wasapi_duplex_loop_measure_bad_timeout
+    windows_wasapi_duplex_loop_measure_unknown_arg
+    PROPERTIES WILL_FAIL TRUE)
 endif()
 add_test(NAME diagnostics_smoke COMMAND sar_diagnostics_smoke)
 add_test(NAME spsc_ring_buffer_smoke COMMAND sar_spsc_ring_buffer_smoke)
