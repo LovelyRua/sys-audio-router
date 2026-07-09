@@ -197,6 +197,26 @@ int main() {
                                   "Expected initial duplex summary without loop cycles")) {
     return failure;
   }
+  if (const auto failure =
+          expect(initial_summary.runtime.health ==
+                     sar::platform::WasapiRuntimeHealth::Stopped,
+                 "Expected initial duplex runtime summary stopped")) {
+    return failure;
+  }
+  if (const auto failure = expect(initial_summary.runtime.reason_code == "no_cycles",
+                                  "Expected initial duplex runtime no-cycle reason")) {
+    return failure;
+  }
+  if (const auto failure = expect(initial_summary.runtime.capture_buffer_frames ==
+                                      loop->capture_probe().buffer_frames,
+                                  "Expected initial duplex runtime capture buffer size")) {
+    return failure;
+  }
+  if (const auto failure = expect(initial_summary.runtime.render_buffer_frames ==
+                                      loop->render_probe().buffer_frames,
+                                  "Expected initial duplex runtime render buffer size")) {
+    return failure;
+  }
 
   if (const auto failure = expect(loop->capture_probe().mix_format.sample_rate ==
                                       loop->render_probe().mix_format.sample_rate,
@@ -240,6 +260,26 @@ int main() {
   if (const auto failure = expect(final_summary.worker.rendered_frames ==
                                       stats.rendered_frames,
                                   "Expected duplex summary rendered frames")) {
+    return failure;
+  }
+  if (const auto failure =
+          expect(final_summary.runtime.health !=
+                     sar::platform::WasapiRuntimeHealth::Faulted,
+                 "Expected final duplex runtime summary without fault")) {
+    return failure;
+  }
+  if (const auto failure = expect(!final_summary.runtime.reason_code.empty(),
+                                  "Expected final duplex runtime reason")) {
+    return failure;
+  }
+  if (const auto failure = expect(final_summary.runtime.captured_frames ==
+                                      stats.captured_frames,
+                                  "Expected final duplex runtime captured frames")) {
+    return failure;
+  }
+  if (const auto failure = expect(final_summary.runtime.rendered_frames ==
+                                      stats.rendered_frames,
+                                  "Expected final duplex runtime rendered frames")) {
     return failure;
   }
   if (const auto failure = expect(final_summary.capture_stream.state ==

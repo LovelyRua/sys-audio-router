@@ -279,6 +279,21 @@ int main() {
                                   "Expected initial render summary without loop cycles")) {
     return failure;
   }
+  if (const auto failure =
+          expect(initial_summary.runtime.health ==
+                     sar::platform::WasapiRuntimeHealth::Stopped,
+                 "Expected initial render runtime summary stopped")) {
+    return failure;
+  }
+  if (const auto failure = expect(initial_summary.runtime.reason_code == "no_cycles",
+                                  "Expected initial render runtime no-cycle reason")) {
+    return failure;
+  }
+  if (const auto failure = expect(initial_summary.runtime.render_buffer_frames ==
+                                      loop->probe().buffer_frames,
+                                  "Expected initial render runtime buffer size")) {
+    return failure;
+  }
 
   auto& input = loop->input_buffer();
   for (std::size_t channel = 0; channel < input.channels(); ++channel) {
@@ -319,6 +334,26 @@ int main() {
   if (const auto failure = expect(final_summary.worker.rendered_frames ==
                                       stats.rendered_frames,
                                   "Expected render summary worker stats")) {
+    return failure;
+  }
+  if (const auto failure =
+          expect(final_summary.runtime.health !=
+                     sar::platform::WasapiRuntimeHealth::Faulted,
+                 "Expected final render runtime summary without fault")) {
+    return failure;
+  }
+  if (const auto failure = expect(!final_summary.runtime.reason_code.empty(),
+                                  "Expected final render runtime reason")) {
+    return failure;
+  }
+  if (const auto failure = expect(final_summary.runtime.rendered_frames ==
+                                      stats.rendered_frames,
+                                  "Expected final render runtime rendered frames")) {
+    return failure;
+  }
+  if (const auto failure = expect(final_summary.runtime.render_buffer_frames ==
+                                      loop->probe().buffer_frames,
+                                  "Expected final render runtime buffer size")) {
     return failure;
   }
   if (const auto failure = expect(final_summary.render_stream.state ==

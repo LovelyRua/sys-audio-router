@@ -197,11 +197,9 @@ int main(int argc, char** argv) {
     }
   }
 
-  const auto stats = loop->stats();
-  const auto render_diagnostics = loop->diagnostics();
-  const auto summary = sar::platform::summarize_wasapi_runtime(
-      stats, errors, nullptr, &render_diagnostics);
-  print_runtime_summary(summary);
+  const auto loop_summary = loop->summary();
+  const auto stats = loop_summary.worker;
+  print_runtime_summary(loop_summary.runtime);
   print_worker_stats(stats);
   print_engine_diagnostics(diagnostics);
   return errors.empty() ? 0 : 1;

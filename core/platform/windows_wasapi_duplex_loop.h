@@ -3,6 +3,7 @@
 #include "core/diagnostics/engine_diagnostics.h"
 #include "core/graph/graph.h"
 #include "core/platform/windows_wasapi_realtime_worker.h"
+#include "core/platform/windows_wasapi_runtime_summary.h"
 #include "core/platform/windows_wasapi_stream.h"
 
 #include <cstddef>
@@ -20,6 +21,7 @@ struct WasapiDuplexLoopSummary {
   WasapiStreamDiagnostics capture_stream;
   WasapiStreamDiagnostics render_stream;
   WasapiRealtimeWorkerStats worker;
+  WasapiRuntimeSummary runtime;
 };
 
 class WindowsWasapiDuplexLoop {
