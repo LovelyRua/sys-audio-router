@@ -4,6 +4,21 @@
 
 namespace sar::tools {
 
+namespace {
+
+const char* wasapi_stream_direction_name(
+    platform::WasapiStreamDirection direction) noexcept {
+  switch (direction) {
+    case platform::WasapiStreamDirection::Render:
+      return "render";
+    case platform::WasapiStreamDirection::Capture:
+      return "capture";
+  }
+  return "unknown";
+}
+
+}  // namespace
+
 void print_wasapi_probe(std::ostream& out,
                         const char* label,
                         const platform::WasapiStreamProbe& probe) {
@@ -53,6 +68,21 @@ void print_wasapi_runtime_summary(
   out << "  Last captured frames: " << summary.last_captured_frames << '\n';
   out << "  Last rendered frames: " << summary.last_rendered_frames << '\n';
   out << "  Last stop wait us: " << summary.last_stop_wait_microseconds << '\n';
+}
+
+void print_wasapi_stream_diagnostics(
+    std::ostream& out,
+    const char* label,
+    const platform::WasapiStreamDiagnostics& diagnostics) {
+  out << label << '\n';
+  out << "  State: " << platform::wasapi_stream_state_name(diagnostics.state) << '\n';
+  out << "  Direction: " << wasapi_stream_direction_name(diagnostics.direction) << '\n';
+  out << "  Sample rate: " << diagnostics.mix_format.sample_rate << '\n';
+  out << "  Channels: " << diagnostics.mix_format.channels << '\n';
+  out << "  Frames per block: " << diagnostics.mix_format.frames_per_block << '\n';
+  out << "  Buffer frames: " << diagnostics.buffer_frames << '\n';
+  out << "  Default period 100ns: " << diagnostics.default_period_100ns << '\n';
+  out << "  Minimum period 100ns: " << diagnostics.minimum_period_100ns << '\n';
 }
 
 void print_wasapi_worker_stats(

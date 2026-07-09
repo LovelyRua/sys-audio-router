@@ -95,6 +95,9 @@ int main(int argc, char** argv) {
   const auto loop_summary = loop->summary();
   const auto stats = loop_summary.worker;
   sar::tools::print_wasapi_runtime_summary(std::cout, loop_summary.runtime);
+  sar::tools::print_wasapi_stream_diagnostics(std::cout,
+                                              "Render stream diagnostics",
+                                              loop_summary.render_stream);
   sar::tools::print_wasapi_worker_stats(std::cout, stats);
   sar::tools::print_wasapi_engine_diagnostics(std::cout, diagnostics);
   if (sar::platform::wasapi_runtime_summary_should_fail(loop_summary.runtime,

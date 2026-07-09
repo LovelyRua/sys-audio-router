@@ -65,6 +65,21 @@ sar::platform::WasapiRuntimeSummary make_summary() {
   return summary;
 }
 
+sar::platform::WasapiStreamDiagnostics make_stream_diagnostics() {
+  sar::platform::WasapiStreamDiagnostics diagnostics;
+  diagnostics.state = sar::platform::WasapiStreamState::Started;
+  diagnostics.direction = sar::platform::WasapiStreamDirection::Capture;
+  diagnostics.mix_format.sample_rate = 44100;
+  diagnostics.mix_format.channels = 1;
+  diagnostics.mix_format.frames_per_block = 64;
+  diagnostics.mix_format.bits_per_sample = 32;
+  diagnostics.mix_format.sample_format = sar::platform::AudioSampleFormat::IeeeFloat;
+  diagnostics.buffer_frames = 192;
+  diagnostics.default_period_100ns = 120000;
+  diagnostics.minimum_period_100ns = 40000;
+  return diagnostics;
+}
+
 sar::platform::WasapiRealtimeWorkerStats make_stats() {
   sar::platform::WasapiRealtimeWorkerStats stats;
   stats.loop_cycles = 10;
@@ -165,6 +180,38 @@ int main() {
     if (const auto failure =
             expect(contains(text, "Last stop wait us: 1500"),
                    "Expected runtime stop wait")) {
+      return failure;
+    }
+  }
+
+  {
+    std::ostringstream out;
+    sar::tools::print_wasapi_stream_diagnostics(
+        out, "Capture stream diagnostics", make_stream_diagnostics());
+    const auto text = out.str();
+    if (const auto failure =
+            expect(contains(text, "Capture stream diagnostics"),
+                   "Expected stream diagnostics label")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "State: started"),
+                   "Expected stream diagnostics state")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "Direction: capture"),
+                   "Expected stream diagnostics direction")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "Sample rate: 44100"),
+                   "Expected stream diagnostics sample rate")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "Minimum period 100ns: 40000"),
+                   "Expected stream diagnostics minimum period")) {
       return failure;
     }
   }
