@@ -33,7 +33,7 @@ Use a unique slot for concurrent test runs, for example `engineer-a`,
 `engineer-b`, or `engineer-c`. The slot isolates the remote checkout, build
 directory, and bootstrap file.
 
-The current Windows smoke suite has 40 CTest targets. If a change touches
+The current Windows smoke suite has 41 CTest targets. If a change touches
 realtime, WASAPI, thread lifecycle, sample conversion, graph execution, or
 diagnostics, run the Windows test script before pushing or merging.
 
