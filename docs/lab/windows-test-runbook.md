@@ -103,9 +103,27 @@ To choose a different path:
 "%TEMP%\sar-bootstrap.cmd" C:\src\sys-audio-router
 ```
 
+## Local Archive Measurement
+
+To upload the current local `HEAD`, build only the WASAPI measurement tools, and
+run a render, duplex, or combined measurement:
+
+```bat
+scripts\windows-winrm-local-measure.cmd 192.168.123.3 codex <password> engineer-a render 1000 10 false true
+scripts\windows-winrm-local-measure.cmd 192.168.123.3 codex <password> engineer-a both 5000 10 true false
+```
+
+The eighth argument enables `--require-healthy`. When enabled, the command fails
+on faulted or degraded runtime summaries. The ninth argument allows endpoint
+unavailability so WinRM-only sessions can still verify upload, configure, build,
+and tool invocation on machines where WASAPI endpoints only appear in an
+interactive desktop session. The measurement tools print a stable
+`wasapi_runtime_summary ...` line before the human-readable report so long-run
+automation can parse health, reason code, transfer counts, and error counts.
+
 ## Expected Test Targets
 
-The Windows suite currently has 40 CTest targets, including the portable core
+The Windows suite currently has 41 CTest targets, including the portable core
 smoke tests plus WASAPI stream, graph runner, realtime thread, realtime
 worker/render/duplex loop, runtime summary, preflight, and measure tool smoke
 tests.
