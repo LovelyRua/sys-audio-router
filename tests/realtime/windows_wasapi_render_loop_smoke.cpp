@@ -8,6 +8,7 @@
 #include <chrono>
 #include <iostream>
 #include <memory>
+#include <string>
 #include <thread>
 
 namespace {
@@ -51,6 +52,17 @@ bool has_worker_error_code(
     const char* code) {
   for (const auto& error : errors) {
     if (error.code == code) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool has_worker_error_message(
+    const std::vector<sar::platform::WasapiRealtimeWorkerError>& errors,
+    const std::string& text) {
+  for (const auto& error : errors) {
+    if (error.message.find(text) != std::string::npos) {
       return true;
     }
   }
@@ -109,6 +121,15 @@ int main() {
       return failure;
     }
 
+    const auto mismatched_capture_probe =
+        make_probe(sar::platform::WasapiStreamDirection::Capture, 44100, 4, 96);
+    if (const auto failure =
+            expect(!sar::platform::compatible_wasapi_duplex_sample_rates(
+                       mismatched_capture_probe, render_probe),
+                   "Expected mismatched synthetic capture sample rate")) {
+      return failure;
+    }
+
     sar::graph::Graph passthrough_graph(40, 1, 1, 48000);
     auto errors =
         sar::platform::validate_wasapi_render_graph_preflight(passthrough_graph,
@@ -122,6 +143,21 @@ int main() {
                                                                   render_probe);
     if (const auto failure =
             expect(errors.empty(), "Expected single-node duplex preflight success")) {
+      return failure;
+    }
+
+    sar::graph::Graph empty_graph(46, 1, 1, 48000);
+    errors = sar::platform::validate_wasapi_render_graph_preflight(empty_graph,
+                                                                  render_probe);
+    if (const auto failure =
+            expect(errors.empty(), "Expected empty render graph preflight success")) {
+      return failure;
+    }
+    errors = sar::platform::validate_wasapi_duplex_graph_preflight(empty_graph,
+                                                                  capture_probe,
+                                                                  render_probe);
+    if (const auto failure =
+            expect(errors.empty(), "Expected empty duplex graph preflight success")) {
       return failure;
     }
 
@@ -143,6 +179,11 @@ int main() {
                    "Expected render preflight sample-rate mismatch")) {
       return failure;
     }
+    if (const auto failure =
+            expect(has_worker_error_message(errors, "render stream sample rate"),
+                   "Expected render preflight sample-rate error message")) {
+      return failure;
+    }
 
     sar::graph::Graph render_too_small(43, 1, 127, 48000);
     render_too_small.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
@@ -153,6 +194,33 @@ int main() {
     if (const auto failure =
             expect(has_worker_error_code(errors, "graph_buffer_too_small"),
                    "Expected render preflight graph-buffer failure")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(has_worker_error_message(errors, "render stream shape"),
+                   "Expected render preflight graph-buffer error message")) {
+      return failure;
+    }
+
+    sar::graph::Graph render_too_few_channels(47, 1, 128, 48000);
+    render_too_few_channels.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+    render_too_few_channels.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+    errors = sar::platform::validate_wasapi_render_graph_preflight(render_too_few_channels,
+                                                                  render_probe);
+    if (const auto failure =
+            expect(has_worker_error_code(errors, "graph_buffer_too_small"),
+                   "Expected render channel preflight graph-buffer failure")) {
+      return failure;
+    }
+
+    sar::graph::Graph render_too_few_frames(48, 2, 127, 48000);
+    render_too_few_frames.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+    render_too_few_frames.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+    errors = sar::platform::validate_wasapi_render_graph_preflight(render_too_few_frames,
+                                                                  render_probe);
+    if (const auto failure =
+            expect(has_worker_error_code(errors, "graph_buffer_too_small"),
+                   "Expected render frame preflight graph-buffer failure")) {
       return failure;
     }
 
@@ -176,6 +244,55 @@ int main() {
     if (const auto failure =
             expect(has_worker_error_code(errors, "graph_buffer_too_small"),
                    "Expected duplex preflight graph-buffer failure")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(has_worker_error_message(errors, "duplex stream shapes"),
+                   "Expected duplex preflight graph-buffer error message")) {
+      return failure;
+    }
+
+    sar::graph::Graph duplex_frame_too_small(49, 4, 127, 48000);
+    duplex_frame_too_small.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+    duplex_frame_too_small.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+    errors = sar::platform::validate_wasapi_duplex_graph_preflight(duplex_frame_too_small,
+                                                                  capture_probe,
+                                                                  render_probe);
+    if (const auto failure =
+            expect(has_worker_error_code(errors, "graph_buffer_too_small"),
+                   "Expected duplex frame preflight graph-buffer failure")) {
+      return failure;
+    }
+
+    sar::graph::Graph duplex_capture_rate_mismatch(50, 4, 128, 44100);
+    errors = sar::platform::validate_wasapi_duplex_graph_preflight(
+        duplex_capture_rate_mismatch,
+        capture_probe,
+        render_probe);
+    if (const auto failure =
+            expect(has_worker_error_code(errors, "graph_sample_rate_mismatch"),
+                   "Expected duplex capture sample-rate mismatch")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(has_worker_error_message(errors, "capture stream sample rate"),
+                   "Expected duplex capture sample-rate message priority")) {
+      return failure;
+    }
+
+    const auto render_rate_only_mismatch =
+        make_probe(sar::platform::WasapiStreamDirection::Render, 44100, 2, 128);
+    errors = sar::platform::validate_wasapi_duplex_graph_preflight(duplex_graph,
+                                                                  capture_probe,
+                                                                  render_rate_only_mismatch);
+    if (const auto failure =
+            expect(has_worker_error_code(errors, "graph_sample_rate_mismatch"),
+                   "Expected duplex render sample-rate mismatch")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(has_worker_error_message(errors, "render stream sample rate"),
+                   "Expected duplex render sample-rate message")) {
       return failure;
     }
   }
