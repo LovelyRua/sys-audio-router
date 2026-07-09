@@ -55,8 +55,12 @@ The current session state model is still in-process. IPC, persistence, UI
 binding, and service hosting are future work.
 
 `core/diagnostics` tracks graph version, processed blocks, callback duration,
-peak callback duration, and xrun count. Diagnostics will need to expand as real
-WASAPI loops expose underrun, overrun, drift, and wait-time behavior.
+peak callback duration, and xrun count. WASAPI worker summaries now classify
+runtime health across stopped, healthy, degraded, and faulted states, including
+split capture/render wait timeouts, partial transfers, silent capture, stream
+start/stop failures, and processing failures. Diagnostics will still need to
+expand as real WASAPI loops expose underrun, overrun, drift, and end-to-end
+latency behavior.
 
 ## Platform Layer
 
@@ -97,19 +101,22 @@ WASAPI loops expose underrun, overrun, drift, and wait-time behavior.
 3. Optionally render to a WASAPI output stream.
 
 `WindowsWasapiRealtimeWorker` runs the graph runner in a background thread and
-enters MMCSS `Pro Audio` priority through `WindowsRealtimeThreadScope`.
+enters MMCSS `Pro Audio` priority through `WindowsRealtimeThreadScope`. It
+publishes worker stats and last errors for non-realtime runtime summaries.
 
 `WindowsWasapiRenderLoop` owns a default render stream, graph runner, and
 realtime worker. It is the current high-level entry point for the first measured
-render-only real-device loop.
+render-only real-device loop. Its summary includes render stream diagnostics,
+worker counters, and runtime health.
 
 `WindowsWasapiDuplexLoop` owns default capture and render streams, a graph
 runner, and a realtime worker. It is the current high-level entry point for the
-first measured full-duplex real-device loop.
+first measured full-duplex real-device loop. Its summary includes capture/render
+stream diagnostics, worker counters, and runtime health.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 25 smoke targets. Several tests are
+The Windows CTest suite currently has 26 smoke targets. Several tests are
 synthetic because WinRM sessions may not expose interactive audio endpoints even
 when the VM has a desktop audio stack.
 
