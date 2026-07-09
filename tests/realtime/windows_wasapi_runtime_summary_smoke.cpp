@@ -133,6 +133,9 @@ int main() {
     stats.stream_stop_error_cycles = 8;
     stats.last_capture_idle = true;
     stats.last_render_idle = true;
+    stats.last_captured_frames = 20;
+    stats.last_rendered_frames = 24;
+    stats.last_stop_wait_microseconds = 2500;
     stats.last_capture_wait_timed_out = true;
     stats.last_render_wait_timed_out = true;
     stats.last_capture_partial = true;
@@ -212,6 +215,18 @@ int main() {
     }
     if (const auto failure = expect(summary.rendered_frames == 256,
                                     "Expected copied rendered frames")) {
+      return failure;
+    }
+    if (const auto failure = expect(summary.last_captured_frames == 20,
+                                    "Expected copied last captured frames")) {
+      return failure;
+    }
+    if (const auto failure = expect(summary.last_rendered_frames == 24,
+                                    "Expected copied last rendered frames")) {
+      return failure;
+    }
+    if (const auto failure = expect(summary.last_stop_wait_microseconds == 2500,
+                                    "Expected copied last stop wait")) {
       return failure;
     }
     if (const auto failure =

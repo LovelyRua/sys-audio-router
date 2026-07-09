@@ -39,6 +39,9 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
   summary.stream_stop_error_cycles = stats.stream_stop_error_cycles;
   summary.captured_frames = stats.captured_frames;
   summary.rendered_frames = stats.rendered_frames;
+  summary.last_captured_frames = stats.last_captured_frames;
+  summary.last_rendered_frames = stats.last_rendered_frames;
+  summary.last_stop_wait_microseconds = stats.last_stop_wait_microseconds;
   summary.last_graph_processed = stats.last_graph_processed;
   summary.last_capture_idle = stats.last_capture_idle;
   summary.last_render_idle = stats.last_render_idle;

@@ -37,6 +37,9 @@ struct WasapiRuntimeSummary {
   std::uint64_t stream_stop_error_cycles = 0;
   std::uint64_t captured_frames = 0;
   std::uint64_t rendered_frames = 0;
+  std::uint32_t last_captured_frames = 0;
+  std::uint32_t last_rendered_frames = 0;
+  std::uint64_t last_stop_wait_microseconds = 0;
   std::uint32_t capture_buffer_frames = 0;
   std::uint32_t render_buffer_frames = 0;
   bool has_capture_stream = false;

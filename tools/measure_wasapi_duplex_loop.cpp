@@ -43,6 +43,11 @@ void print_runtime_summary(const sar::platform::WasapiRuntimeSummary& summary) {
   }
   std::cout << "  Capture buffer frames: " << summary.capture_buffer_frames << '\n';
   std::cout << "  Render buffer frames: " << summary.render_buffer_frames << '\n';
+  std::cout << "  Captured frames: " << summary.captured_frames << '\n';
+  std::cout << "  Rendered frames: " << summary.rendered_frames << '\n';
+  std::cout << "  Last captured frames: " << summary.last_captured_frames << '\n';
+  std::cout << "  Last rendered frames: " << summary.last_rendered_frames << '\n';
+  std::cout << "  Last stop wait us: " << summary.last_stop_wait_microseconds << '\n';
 }
 
 void print_worker_stats(const sar::platform::WasapiRealtimeWorkerStats& stats) {
