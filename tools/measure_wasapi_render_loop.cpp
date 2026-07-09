@@ -143,8 +143,8 @@ int main(int argc, char** argv) {
   print_runtime_summary(loop_summary.runtime);
   print_worker_stats(stats);
   print_engine_diagnostics(diagnostics);
-  if (options.require_healthy &&
-      loop_summary.runtime.health != sar::platform::WasapiRuntimeHealth::Healthy) {
+  if (sar::platform::wasapi_runtime_summary_should_fail(loop_summary.runtime,
+                                                        options.require_healthy)) {
     return 1;
   }
   return errors.empty() ? 0 : 1;

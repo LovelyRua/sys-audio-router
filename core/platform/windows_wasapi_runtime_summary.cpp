@@ -16,6 +16,14 @@ const char* wasapi_runtime_health_name(WasapiRuntimeHealth health) noexcept {
   return "unknown";
 }
 
+bool wasapi_runtime_summary_should_fail(const WasapiRuntimeSummary& summary,
+                                        bool require_healthy) noexcept {
+  if (summary.health == WasapiRuntimeHealth::Faulted) {
+    return true;
+  }
+  return require_healthy && summary.health != WasapiRuntimeHealth::Healthy;
+}
+
 WasapiRuntimeSummary summarize_wasapi_runtime(
     const WasapiRealtimeWorkerStats& stats,
     const std::vector<WasapiRealtimeWorkerError>& errors,

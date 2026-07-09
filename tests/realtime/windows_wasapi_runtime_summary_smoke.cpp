@@ -360,6 +360,18 @@ int main() {
                            "Expected healthy runtime summary")) {
       return failure;
     }
+    if (const auto failure =
+            expect(!sar::platform::wasapi_runtime_summary_should_fail(
+                       summary, false),
+                   "Expected healthy summary to pass relaxed health gate")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(!sar::platform::wasapi_runtime_summary_should_fail(
+                       summary, true),
+                   "Expected healthy summary to pass strict health gate")) {
+      return failure;
+    }
   }
 
   {
@@ -375,6 +387,18 @@ int main() {
                            sar::platform::WasapiRuntimeHealth::Faulted,
                            "stream_start_error",
                            "Expected stream-start priority")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::platform::wasapi_runtime_summary_should_fail(
+                       summary, false),
+                   "Expected faulted summary to fail relaxed health gate")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::platform::wasapi_runtime_summary_should_fail(
+                       summary, true),
+                   "Expected faulted summary to fail strict health gate")) {
       return failure;
     }
   }
@@ -421,6 +445,18 @@ int main() {
                            sar::platform::WasapiRuntimeHealth::Degraded,
                            "capture_wait_timeout",
                            "Expected capture timeout summary")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(!sar::platform::wasapi_runtime_summary_should_fail(
+                       summary, false),
+                   "Expected degraded summary to pass relaxed health gate")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(sar::platform::wasapi_runtime_summary_should_fail(
+                       summary, true),
+                   "Expected degraded summary to fail strict health gate")) {
       return failure;
     }
 

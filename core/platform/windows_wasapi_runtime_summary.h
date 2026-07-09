@@ -70,6 +70,10 @@ struct WasapiRuntimeSummary {
 [[nodiscard]] const char* wasapi_runtime_health_name(
     WasapiRuntimeHealth health) noexcept;
 
+[[nodiscard]] bool wasapi_runtime_summary_should_fail(
+    const WasapiRuntimeSummary& summary,
+    bool require_healthy) noexcept;
+
 [[nodiscard]] WasapiRuntimeSummary summarize_wasapi_runtime(
     const WasapiRealtimeWorkerStats& stats,
     const std::vector<WasapiRealtimeWorkerError>& errors,
