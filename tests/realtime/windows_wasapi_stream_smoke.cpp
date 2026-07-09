@@ -68,6 +68,52 @@ bool has_default_output_device() {
 
 int main() {
   {
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_stream_state_name(
+                       sar::platform::WasapiStreamState::Closed)) == "closed",
+                   "Expected closed stream state name")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_stream_state_name(
+                       sar::platform::WasapiStreamState::Open)) == "open",
+                   "Expected open stream state name")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_stream_state_name(
+                       sar::platform::WasapiStreamState::Started)) == "started",
+                   "Expected started stream state name")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_stream_io_status_name(
+                       sar::platform::WasapiStreamIoStatus::Completed)) ==
+                       "completed",
+                   "Expected completed I/O status name")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_stream_io_status_name(
+                       sar::platform::WasapiStreamIoStatus::Idle)) == "idle",
+                   "Expected idle I/O status name")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_stream_io_status_name(
+                       sar::platform::WasapiStreamIoStatus::TimedOut)) == "timed_out",
+                   "Expected timed-out I/O status name")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_stream_io_status_name(
+                       sar::platform::WasapiStreamIoStatus::Failed)) == "failed",
+                   "Expected failed I/O status name")) {
+      return failure;
+    }
+  }
+
+  {
     const auto idle_result = sar::platform::WasapiStreamIoResult::success(0);
     if (const auto failure = expect(idle_result.ok(), "Expected idle I/O success")) {
       return failure;
@@ -88,6 +134,12 @@ int main() {
                    "Expected idle I/O status")) {
       return failure;
     }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_stream_io_status_name(
+                       idle_result.status())) == "idle",
+                   "Expected idle I/O status name from result")) {
+      return failure;
+    }
     if (const auto failure = expect(idle_result.frames() == 0,
                                     "Expected idle I/O zero frames")) {
       return failure;
@@ -105,6 +157,12 @@ int main() {
     if (const auto failure =
             expect(completed_result.status() == sar::platform::WasapiStreamIoStatus::Completed,
                    "Expected completed I/O status")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_stream_io_status_name(
+                       completed_result.status())) == "completed",
+                   "Expected completed I/O status name from result")) {
       return failure;
     }
     if (const auto failure = expect(completed_result.frames() == 256,
@@ -139,6 +197,12 @@ int main() {
     if (const auto failure =
             expect(timeout_result.status() == sar::platform::WasapiStreamIoStatus::TimedOut,
                    "Expected timeout I/O status enum")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_stream_io_status_name(
+                       timeout_result.status())) == "timed_out",
+                   "Expected timeout I/O status name from result")) {
       return failure;
     }
     if (const auto failure = expect(timeout_result.frames() == 0,
@@ -205,6 +269,12 @@ int main() {
                    "Expected failed I/O status")) {
       return failure;
     }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_stream_io_status_name(
+                       failure_result.status())) == "failed",
+                   "Expected failed I/O status name from result")) {
+      return failure;
+    }
     if (const auto failure = expect(failure_result.frames() == 0,
                                     "Expected failed I/O zero frames")) {
       return failure;
@@ -233,6 +303,12 @@ int main() {
                                     "Expected initial closed stream state")) {
       return failure;
     }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_stream_state_name(
+                       stream.state())) == "closed",
+                   "Expected initial closed stream state name")) {
+      return failure;
+    }
 
     auto result = stream.start();
     if (const auto failure = expect(!result.ok(), "Expected start-before-open failure")) {
@@ -249,6 +325,12 @@ int main() {
     }
     if (const auto failure = expect(stream.state() == sar::platform::WasapiStreamState::Open,
                                     "Expected open stream state")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_stream_state_name(
+                       stream.state())) == "open",
+                   "Expected open stream state name")) {
       return failure;
     }
     auto diagnostics = stream.diagnostics();
@@ -272,6 +354,12 @@ int main() {
     }
     if (const auto failure = expect(stream.state() == sar::platform::WasapiStreamState::Started,
                                     "Expected started stream state")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_stream_state_name(
+                       stream.state())) == "started",
+                   "Expected started stream state name")) {
       return failure;
     }
     diagnostics = stream.diagnostics();

@@ -231,6 +231,32 @@ WasapiStreamError sample_conversion_error(SampleConversionStatus status) {
 
 }  // namespace
 
+const char* wasapi_stream_state_name(WasapiStreamState state) noexcept {
+  switch (state) {
+    case WasapiStreamState::Closed:
+      return "closed";
+    case WasapiStreamState::Open:
+      return "open";
+    case WasapiStreamState::Started:
+      return "started";
+  }
+  return "unknown";
+}
+
+const char* wasapi_stream_io_status_name(WasapiStreamIoStatus status) noexcept {
+  switch (status) {
+    case WasapiStreamIoStatus::Completed:
+      return "completed";
+    case WasapiStreamIoStatus::Idle:
+      return "idle";
+    case WasapiStreamIoStatus::TimedOut:
+      return "timed_out";
+    case WasapiStreamIoStatus::Failed:
+      return "failed";
+  }
+  return "unknown";
+}
+
 struct WindowsWasapiStream::Impl {
   ComApartment apartment;
   ComPtr<IMMDeviceEnumerator> enumerator;
