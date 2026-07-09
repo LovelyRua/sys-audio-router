@@ -80,6 +80,14 @@ bool parse_options(int argc, char** argv, Options& options) {
   return true;
 }
 
+void print_probe_errors(const char* label,
+                        const sar::platform::WasapiStreamProbeResult& result) {
+  std::cerr << label << " unavailable\n";
+  for (const auto& error : result.errors()) {
+    std::cerr << error.code << ": " << error.message << '\n';
+  }
+}
+
 void print_worker_stats(const sar::platform::WasapiRealtimeWorkerStats& stats) {
   std::cout << "Worker stats\n";
   std::cout << "  Loop cycles: " << stats.loop_cycles << '\n';
@@ -136,10 +144,7 @@ int main(int argc, char** argv) {
   const auto probe_result =
       sar::platform::probe_default_wasapi_stream(sar::platform::WasapiStreamDirection::Render);
   if (!probe_result.ok()) {
-    std::cerr << "Default render stream unavailable\n";
-    for (const auto& error : probe_result.errors()) {
-      std::cerr << error.code << ": " << error.message << '\n';
-    }
+    print_probe_errors("Default render stream", probe_result);
     return 1;
   }
 
