@@ -304,6 +304,14 @@ if(WIN32)
     windows_wasapi_duplex_loop_measure_bad_timeout
     windows_wasapi_duplex_loop_measure_unknown_arg
     PROPERTIES WILL_FAIL TRUE)
+  set_tests_properties(
+    windows_wasapi_render_loop_measure_help
+    windows_wasapi_render_loop_measure_short_help
+    PROPERTIES PASS_REGULAR_EXPRESSION "--require-healthy")
+  set_tests_properties(
+    windows_wasapi_duplex_loop_measure_help
+    windows_wasapi_duplex_loop_measure_short_help
+    PROPERTIES PASS_REGULAR_EXPRESSION "--require-healthy")
 endif()
 add_test(NAME diagnostics_smoke COMMAND sar_diagnostics_smoke)
 add_test(NAME spsc_ring_buffer_smoke COMMAND sar_spsc_ring_buffer_smoke)
