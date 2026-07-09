@@ -20,6 +20,7 @@ namespace {
 struct Options {
   std::uint32_t duration_ms = 250;
   std::uint32_t timeout_ms = 10;
+  bool require_healthy = false;
   bool show_help = false;
 };
 
@@ -72,6 +73,8 @@ bool parse_options(int argc, char** argv, Options& options) {
       if (!parse_next(options.timeout_ms)) {
         return false;
       }
+    } else if (arg == "--require-healthy") {
+      options.require_healthy = true;
     } else {
       std::cerr << "Unknown argument: " << arg << '\n';
       return false;
@@ -158,7 +161,7 @@ int main(int argc, char** argv) {
   }
   if (options.show_help) {
     std::cout << "Usage: sar_measure_wasapi_duplex_loop "
-                 "[--duration-ms N] [--timeout-ms N]\n";
+                 "[--duration-ms N] [--timeout-ms N] [--require-healthy]\n";
     return 0;
   }
 
@@ -231,5 +234,9 @@ int main(int argc, char** argv) {
   print_runtime_summary(loop_summary.runtime);
   print_worker_stats(loop_summary.worker);
   print_engine_diagnostics(diagnostics);
+  if (options.require_healthy &&
+      loop_summary.runtime.health != sar::platform::WasapiRuntimeHealth::Healthy) {
+    return 1;
+  }
   return errors.empty() ? 0 : 1;
 }

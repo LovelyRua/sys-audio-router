@@ -74,10 +74,12 @@ The current prototype contains:
   and loop graph-shape inspection.
 - `sar_measure_wasapi_render_loop`: command-line default render loop measurement
   tool for real-device smoke runs, including runtime health, reason codes,
-  worker counters, and engine diagnostics.
+  worker counters, engine diagnostics, and an optional `--require-healthy`
+  nonzero exit policy for automation.
 - `sar_measure_wasapi_duplex_loop`: command-line default capture/render loop
   measurement tool for full-duplex real-device smoke runs, including runtime
-  health, reason codes, split capture/render counters, and engine diagnostics.
+  health, reason codes, split capture/render counters, engine diagnostics, and
+  an optional `--require-healthy` nonzero exit policy for automation.
 - `realtime_smoke`: offline processing smoke test.
 - `graph_snapshot_smoke`: offline graph publication smoke test.
 - `graph_builder_smoke`: graph validation and construction smoke test.
