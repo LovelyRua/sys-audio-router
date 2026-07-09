@@ -29,6 +29,14 @@ directory collisions with other engineers:
 scripts\windows-winrm-test.cmd <host> <user> <password> engineer-a
 ```
 
+That script downloads `main` from GitHub on the test machine. To validate the
+current local `HEAD` before pushing, or to avoid GitHub rate limits on the test
+machine, use the local-archive path instead:
+
+```bat
+scripts\windows-winrm-local-test.cmd <host> <user> <password> engineer-a
+```
+
 The current local Codex environment does not have `cmake`, `cl`, `ninja`, or `g++` available in `PATH`, so the first smoke test has not been compiled locally yet.
 
 Use `scripts\check-toolchain.cmd` to inspect the local Windows toolchain.
