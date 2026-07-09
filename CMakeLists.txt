@@ -181,12 +181,14 @@ if(WIN32)
 
   add_executable(sar_measure_wasapi_render_loop
     tools/measure_wasapi_render_loop.cpp
+    tools/wasapi_measure_options.cpp
   )
 
   target_link_libraries(sar_measure_wasapi_render_loop PRIVATE sar_core)
 
   add_executable(sar_measure_wasapi_duplex_loop
     tools/measure_wasapi_duplex_loop.cpp
+    tools/wasapi_measure_options.cpp
   )
 
   target_link_libraries(sar_measure_wasapi_duplex_loop PRIVATE sar_core)
