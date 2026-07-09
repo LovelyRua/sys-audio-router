@@ -89,6 +89,14 @@ void print_probe(const char* label, const sar::platform::WasapiStreamProbe& prob
   std::cout << "  Buffer frames: " << probe.buffer_frames << '\n';
 }
 
+void print_probe_errors(const char* label,
+                        const sar::platform::WasapiStreamProbeResult& result) {
+  std::cerr << label << " unavailable\n";
+  for (const auto& error : result.errors()) {
+    std::cerr << error.code << ": " << error.message << '\n';
+  }
+}
+
 void print_runtime_summary(const sar::platform::WasapiRuntimeSummary& summary) {
   std::cout << "Runtime summary\n";
   std::cout << "  Health: "
@@ -156,20 +164,14 @@ int main(int argc, char** argv) {
 
   const auto capture_probe_result =
       sar::platform::probe_default_wasapi_stream(sar::platform::WasapiStreamDirection::Capture);
-  if (!capture_probe_result.ok()) {
-    std::cerr << "Default capture stream unavailable\n";
-    for (const auto& error : capture_probe_result.errors()) {
-      std::cerr << error.code << ": " << error.message << '\n';
-    }
-    return 1;
-  }
-
   const auto render_probe_result =
       sar::platform::probe_default_wasapi_stream(sar::platform::WasapiStreamDirection::Render);
-  if (!render_probe_result.ok()) {
-    std::cerr << "Default render stream unavailable\n";
-    for (const auto& error : render_probe_result.errors()) {
-      std::cerr << error.code << ": " << error.message << '\n';
+  if (!capture_probe_result.ok() || !render_probe_result.ok()) {
+    if (!capture_probe_result.ok()) {
+      print_probe_errors("Default capture stream", capture_probe_result);
+    }
+    if (!render_probe_result.ok()) {
+      print_probe_errors("Default render stream", render_probe_result);
     }
     return 1;
   }
@@ -181,6 +183,12 @@ int main(int argc, char** argv) {
   std::cout << "Measurement\n";
   std::cout << "  Duration ms: " << options.duration_ms << '\n';
   std::cout << "  Timeout ms: " << options.timeout_ms << '\n';
+
+  if (capture_probe.mix_format.sample_rate != render_probe.mix_format.sample_rate) {
+    std::cerr << "duplex_sample_rate_mismatch: Default WASAPI capture and render "
+                 "streams need a sample-rate adapter before duplex use.\n";
+    return 1;
+  }
 
   const auto channels =
       std::max(capture_probe.mix_format.channels, render_probe.mix_format.channels);
