@@ -114,9 +114,14 @@ runner, and a realtime worker. It is the current high-level entry point for the
 first measured full-duplex real-device loop. Its summary includes capture/render
 stream diagnostics, worker counters, and runtime health.
 
+The Windows command-line tools can inspect endpoints and run short real-device
+measurements for render-only and full-duplex WASAPI paths. These tools print
+runtime health, reason codes, worker counters, and engine diagnostics for lab
+captures.
+
 ## Current Testing Model
 
-The Windows CTest suite currently has 26 smoke targets. Several tests are
+The Windows CTest suite currently has 27 smoke targets. Several tests are
 synthetic because WinRM sessions may not expose interactive audio endpoints even
 when the VM has a desktop audio stack.
 

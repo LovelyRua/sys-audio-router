@@ -178,6 +178,12 @@ if(WIN32)
   )
 
   target_link_libraries(sar_measure_wasapi_render_loop PRIVATE sar_core)
+
+  add_executable(sar_measure_wasapi_duplex_loop
+    tools/measure_wasapi_duplex_loop.cpp
+  )
+
+  target_link_libraries(sar_measure_wasapi_duplex_loop PRIVATE sar_core)
 endif()
 
 add_executable(sar_diagnostics_smoke
@@ -239,6 +245,8 @@ if(WIN32)
     COMMAND sar_windows_wasapi_duplex_loop_smoke)
   add_test(NAME windows_wasapi_render_loop_measure_help
     COMMAND sar_measure_wasapi_render_loop --help)
+  add_test(NAME windows_wasapi_duplex_loop_measure_help
+    COMMAND sar_measure_wasapi_duplex_loop --help)
 endif()
 add_test(NAME diagnostics_smoke COMMAND sar_diagnostics_smoke)
 add_test(NAME spsc_ring_buffer_smoke COMMAND sar_spsc_ring_buffer_smoke)
