@@ -192,6 +192,13 @@ if(WIN32)
   )
 
   target_link_libraries(sar_measure_wasapi_duplex_loop PRIVATE sar_core)
+
+  add_executable(sar_wasapi_measure_options_smoke
+    tests/realtime/wasapi_measure_options_smoke.cpp
+    tools/wasapi_measure_options.cpp
+  )
+
+  target_link_libraries(sar_wasapi_measure_options_smoke PRIVATE sar_core)
 endif()
 
 add_executable(sar_diagnostics_smoke
@@ -277,6 +284,8 @@ if(WIN32)
     COMMAND sar_measure_wasapi_duplex_loop --timeout-ms -1)
   add_test(NAME windows_wasapi_duplex_loop_measure_unknown_arg
     COMMAND sar_measure_wasapi_duplex_loop --definitely-not-a-real-option)
+  add_test(NAME wasapi_measure_options_smoke
+    COMMAND sar_wasapi_measure_options_smoke)
   set_tests_properties(
     windows_wasapi_render_loop_measure_missing_duration
     windows_wasapi_render_loop_measure_bad_duration
