@@ -40,6 +40,9 @@ sar::platform::WasapiRealtimeWorkerStats make_active_stats() {
   stats.graph_processed_cycles = 8;
   stats.captured_frames = 256;
   stats.rendered_frames = 256;
+  stats.last_captured_frames = 64;
+  stats.last_rendered_frames = 64;
+  stats.last_stop_wait_microseconds = 1200;
   stats.last_graph_processed = true;
   return stats;
 }
@@ -214,15 +217,57 @@ int main() {
                                     "Expected copied rendered frames")) {
       return failure;
     }
+    if (const auto failure = expect(summary.last_captured_frames == 64,
+                                    "Expected copied last captured frames")) {
+      return failure;
+    }
+    if (const auto failure = expect(summary.last_rendered_frames == 64,
+                                    "Expected copied last rendered frames")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.last_stop_wait_microseconds == 1200,
+                   "Expected copied stop wait duration")) {
+      return failure;
+    }
     if (const auto failure =
             expect(summary.has_capture_stream && summary.has_render_stream,
                    "Expected copied stream presence")) {
       return failure;
     }
     if (const auto failure =
+            expect(summary.capture_sample_rate == 48000 &&
+                       summary.render_sample_rate == 48000,
+                   "Expected copied stream sample rates")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.capture_channels == 4 && summary.render_channels == 2,
+                   "Expected copied stream channel counts")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.capture_frames_per_block == 96 &&
+                       summary.render_frames_per_block == 128,
+                   "Expected copied stream frames per block")) {
+      return failure;
+    }
+    if (const auto failure =
             expect(summary.capture_buffer_frames == 96 &&
                        summary.render_buffer_frames == 128,
                    "Expected copied stream buffer frames")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.capture_default_period_100ns == 100000 &&
+                       summary.render_default_period_100ns == 100000,
+                   "Expected copied default stream periods")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.capture_minimum_period_100ns == 30000 &&
+                       summary.render_minimum_period_100ns == 30000,
+                   "Expected copied minimum stream periods")) {
       return failure;
     }
     if (const auto failure =
@@ -252,8 +297,21 @@ int main() {
                                     "Expected capture-only buffer frames")) {
       return failure;
     }
+    if (const auto failure =
+            expect(summary.capture_sample_rate == 48000 &&
+                       summary.capture_channels == 2 &&
+                       summary.capture_frames_per_block == 64,
+                   "Expected capture-only stream shape")) {
+      return failure;
+    }
     if (const auto failure = expect(summary.render_buffer_frames == 0,
                                     "Expected no render buffer frames")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.render_sample_rate == 0 && summary.render_channels == 0 &&
+                       summary.render_frames_per_block == 0,
+                   "Expected no render stream shape")) {
       return failure;
     }
 
@@ -272,6 +330,19 @@ int main() {
     }
     if (const auto failure = expect(summary.render_buffer_frames == 128,
                                     "Expected render-only buffer frames")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.capture_sample_rate == 0 && summary.capture_channels == 0 &&
+                       summary.capture_frames_per_block == 0,
+                   "Expected no capture stream shape")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.render_sample_rate == 48000 &&
+                       summary.render_channels == 2 &&
+                       summary.render_frames_per_block == 128,
+                   "Expected render-only stream shape")) {
       return failure;
     }
   }

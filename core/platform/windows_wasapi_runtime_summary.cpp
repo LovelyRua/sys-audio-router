@@ -39,6 +39,9 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
   summary.stream_stop_error_cycles = stats.stream_stop_error_cycles;
   summary.captured_frames = stats.captured_frames;
   summary.rendered_frames = stats.rendered_frames;
+  summary.last_captured_frames = stats.last_captured_frames;
+  summary.last_rendered_frames = stats.last_rendered_frames;
+  summary.last_stop_wait_microseconds = stats.last_stop_wait_microseconds;
   summary.last_graph_processed = stats.last_graph_processed;
   summary.last_capture_idle = stats.last_capture_idle;
   summary.last_render_idle = stats.last_render_idle;
@@ -51,11 +54,24 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
 
   if (capture_diagnostics != nullptr) {
     summary.has_capture_stream = true;
+    summary.capture_sample_rate = capture_diagnostics->mix_format.sample_rate;
+    summary.capture_channels = capture_diagnostics->mix_format.channels;
+    summary.capture_frames_per_block =
+        capture_diagnostics->mix_format.frames_per_block;
     summary.capture_buffer_frames = capture_diagnostics->buffer_frames;
+    summary.capture_default_period_100ns =
+        capture_diagnostics->default_period_100ns;
+    summary.capture_minimum_period_100ns =
+        capture_diagnostics->minimum_period_100ns;
   }
   if (render_diagnostics != nullptr) {
     summary.has_render_stream = true;
+    summary.render_sample_rate = render_diagnostics->mix_format.sample_rate;
+    summary.render_channels = render_diagnostics->mix_format.channels;
+    summary.render_frames_per_block = render_diagnostics->mix_format.frames_per_block;
     summary.render_buffer_frames = render_diagnostics->buffer_frames;
+    summary.render_default_period_100ns = render_diagnostics->default_period_100ns;
+    summary.render_minimum_period_100ns = render_diagnostics->minimum_period_100ns;
   }
 
   if (!errors.empty()) {
