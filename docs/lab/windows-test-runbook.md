@@ -120,6 +120,9 @@ and tool invocation on machines where WASAPI endpoints only appear in an
 interactive desktop session. The measurement tools print a stable
 `wasapi_runtime_summary ...` line before the human-readable report so long-run
 automation can parse health, reason code, transfer counts, and error counts.
+The same line also carries stream shape, period, partial/silent transfer, and
+last-cycle flag fields so CI and lab scripts can diagnose most loop failures
+without scraping the human-readable sections.
 
 ## Expected Test Targets
 

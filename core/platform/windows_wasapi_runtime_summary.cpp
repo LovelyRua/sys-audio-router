@@ -4,6 +4,14 @@
 
 namespace sar::platform {
 
+namespace {
+
+const char* bool_token(bool value) noexcept {
+  return value ? "1" : "0";
+}
+
+}  // namespace
+
 const char* wasapi_runtime_health_name(WasapiRuntimeHealth health) noexcept {
   switch (health) {
     case WasapiRuntimeHealth::Stopped:
@@ -41,7 +49,10 @@ std::string format_wasapi_runtime_summary_line(
          << " render_wait_timeout_cycles=" << summary.render_wait_timeout_cycles
          << " capture_partial_cycles=" << summary.capture_partial_cycles
          << " render_partial_cycles=" << summary.render_partial_cycles
+         << " capture_partial_frames=" << summary.capture_partial_frames
+         << " render_partial_frames=" << summary.render_partial_frames
          << " capture_silent_cycles=" << summary.capture_silent_cycles
+         << " capture_silent_frames=" << summary.capture_silent_frames
          << " process_error_cycles=" << summary.process_error_cycles
          << " stream_start_error_cycles=" << summary.stream_start_error_cycles
          << " stream_stop_error_cycles=" << summary.stream_stop_error_cycles
@@ -58,7 +69,31 @@ std::string format_wasapi_runtime_summary_line(
          << " render_frames_per_block=" << summary.render_frames_per_block
          << " capture_buffer_frames=" << summary.capture_buffer_frames
          << " render_buffer_frames=" << summary.render_buffer_frames
-         << " error_count=" << summary.error_count;
+         << " capture_default_period_100ns="
+         << summary.capture_default_period_100ns
+         << " render_default_period_100ns="
+         << summary.render_default_period_100ns
+         << " capture_minimum_period_100ns="
+         << summary.capture_minimum_period_100ns
+         << " render_minimum_period_100ns="
+         << summary.render_minimum_period_100ns
+         << " has_capture_stream=" << bool_token(summary.has_capture_stream)
+         << " has_render_stream=" << bool_token(summary.has_render_stream)
+         << " last_graph_processed="
+         << bool_token(summary.last_graph_processed)
+         << " last_capture_idle=" << bool_token(summary.last_capture_idle)
+         << " last_render_idle=" << bool_token(summary.last_render_idle)
+         << " last_capture_wait_timed_out="
+         << bool_token(summary.last_capture_wait_timed_out)
+         << " last_render_wait_timed_out="
+         << bool_token(summary.last_render_wait_timed_out)
+         << " last_capture_partial="
+         << bool_token(summary.last_capture_partial)
+         << " last_render_partial=" << bool_token(summary.last_render_partial)
+         << " last_capture_silent="
+         << bool_token(summary.last_capture_silent)
+         << " error_count=" << summary.error_count
+         << " first_error_code=" << summary.first_error_code;
   return stream.str();
 }
 
