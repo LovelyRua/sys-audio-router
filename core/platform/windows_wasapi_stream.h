@@ -16,6 +16,9 @@ enum class WasapiStreamState {
   Started,
 };
 
+[[nodiscard]] const char* wasapi_stream_state_name(
+    WasapiStreamState state) noexcept;
+
 struct WasapiStreamError {
   std::string code;
   std::string message;
@@ -52,6 +55,9 @@ enum class WasapiStreamIoStatus {
   TimedOut,
   Failed,
 };
+
+[[nodiscard]] const char* wasapi_stream_io_status_name(
+    WasapiStreamIoStatus status) noexcept;
 
 class WasapiStreamIoResult {
  public:
