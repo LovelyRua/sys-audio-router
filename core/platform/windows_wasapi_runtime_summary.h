@@ -74,6 +74,9 @@ struct WasapiRuntimeSummary {
     const WasapiRuntimeSummary& summary,
     bool require_healthy) noexcept;
 
+[[nodiscard]] std::string format_wasapi_runtime_summary_line(
+    const WasapiRuntimeSummary& summary);
+
 [[nodiscard]] WasapiRuntimeSummary summarize_wasapi_runtime(
     const WasapiRealtimeWorkerStats& stats,
     const std::vector<WasapiRealtimeWorkerError>& errors,

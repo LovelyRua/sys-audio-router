@@ -31,6 +31,7 @@ void print_probe_errors(const char* label,
 }
 
 void print_runtime_summary(const sar::platform::WasapiRuntimeSummary& summary) {
+  std::cout << sar::platform::format_wasapi_runtime_summary_line(summary) << '\n';
   std::cout << "Runtime summary\n";
   std::cout << "  Health: "
             << sar::platform::wasapi_runtime_health_name(summary.health) << '\n';

@@ -1,5 +1,7 @@
 #include "core/platform/windows_wasapi_runtime_summary.h"
 
+#include <sstream>
+
 namespace sar::platform {
 
 const char* wasapi_runtime_health_name(WasapiRuntimeHealth health) noexcept {
@@ -22,6 +24,31 @@ bool wasapi_runtime_summary_should_fail(const WasapiRuntimeSummary& summary,
     return true;
   }
   return require_healthy && summary.health != WasapiRuntimeHealth::Healthy;
+}
+
+std::string format_wasapi_runtime_summary_line(
+    const WasapiRuntimeSummary& summary) {
+  std::ostringstream stream;
+  stream << "wasapi_runtime_summary"
+         << " health=" << wasapi_runtime_health_name(summary.health)
+         << " reason_code=" << summary.reason_code
+         << " loop_cycles=" << summary.loop_cycles
+         << " graph_processed_cycles=" << summary.graph_processed_cycles
+         << " idle_cycles=" << summary.idle_cycles
+         << " wait_timeout_cycles=" << summary.wait_timeout_cycles
+         << " capture_wait_timeout_cycles="
+         << summary.capture_wait_timeout_cycles
+         << " render_wait_timeout_cycles=" << summary.render_wait_timeout_cycles
+         << " capture_partial_cycles=" << summary.capture_partial_cycles
+         << " render_partial_cycles=" << summary.render_partial_cycles
+         << " capture_silent_cycles=" << summary.capture_silent_cycles
+         << " process_error_cycles=" << summary.process_error_cycles
+         << " stream_start_error_cycles=" << summary.stream_start_error_cycles
+         << " stream_stop_error_cycles=" << summary.stream_stop_error_cycles
+         << " captured_frames=" << summary.captured_frames
+         << " rendered_frames=" << summary.rendered_frames
+         << " error_count=" << summary.error_count;
+  return stream.str();
 }
 
 WasapiRuntimeSummary summarize_wasapi_runtime(

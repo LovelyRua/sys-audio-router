@@ -117,6 +117,22 @@ int main() {
                                     "Expected no errors in empty summary")) {
       return failure;
     }
+    const auto summary_line =
+        sar::platform::format_wasapi_runtime_summary_line(summary);
+    if (const auto failure =
+            expect(summary_line ==
+                       "wasapi_runtime_summary health=stopped "
+                       "reason_code=no_cycles loop_cycles=0 "
+                       "graph_processed_cycles=0 idle_cycles=0 "
+                       "wait_timeout_cycles=0 capture_wait_timeout_cycles=0 "
+                       "render_wait_timeout_cycles=0 capture_partial_cycles=0 "
+                       "render_partial_cycles=0 capture_silent_cycles=0 "
+                       "process_error_cycles=0 stream_start_error_cycles=0 "
+                       "stream_stop_error_cycles=0 captured_frames=0 "
+                       "rendered_frames=0 error_count=0",
+                   "Expected no-cycle machine-readable summary line")) {
+      return failure;
+    }
   }
 
   {
@@ -280,6 +296,35 @@ int main() {
                        summary.last_capture_partial && summary.last_render_partial &&
                        summary.last_capture_silent,
                    "Expected copied last-cycle flags")) {
+      return failure;
+    }
+    const auto summary_line =
+        sar::platform::format_wasapi_runtime_summary_line(summary);
+    if (const auto failure =
+            expect(summary_line.find("health=faulted") != std::string::npos,
+                   "Expected summary line health")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("reason_code=stream_start_error") !=
+                       std::string::npos,
+                   "Expected summary line reason code")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("wait_timeout_cycles=2") !=
+                       std::string::npos,
+                   "Expected summary line timeout count")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("captured_frames=256") != std::string::npos,
+                   "Expected summary line captured frames")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("rendered_frames=256") != std::string::npos,
+                   "Expected summary line rendered frames")) {
       return failure;
     }
   }
