@@ -143,6 +143,12 @@ if(WIN32)
 
   target_link_libraries(sar_windows_wasapi_graph_runner_smoke PRIVATE sar_core)
 
+  add_executable(sar_windows_wasapi_loop_preflight_smoke
+    tests/realtime/windows_wasapi_loop_preflight_smoke.cpp
+  )
+
+  target_link_libraries(sar_windows_wasapi_loop_preflight_smoke PRIVATE sar_core)
+
   add_executable(sar_windows_realtime_thread_smoke
     tests/realtime/windows_realtime_thread_smoke.cpp
   )
@@ -251,6 +257,8 @@ if(WIN32)
   add_test(NAME windows_wasapi_stream_smoke COMMAND sar_windows_wasapi_stream_smoke)
   add_test(NAME windows_wasapi_graph_runner_smoke
            COMMAND sar_windows_wasapi_graph_runner_smoke)
+  add_test(NAME windows_wasapi_loop_preflight_smoke
+           COMMAND sar_windows_wasapi_loop_preflight_smoke)
   add_test(NAME windows_realtime_thread_smoke COMMAND sar_windows_realtime_thread_smoke)
   add_test(NAME windows_wasapi_realtime_worker_smoke
            COMMAND sar_windows_wasapi_realtime_worker_smoke)
