@@ -126,6 +126,8 @@ class WindowsWasapiStream {
   [[nodiscard]] WasapiStreamDiagnostics diagnostics() const noexcept;
 
  private:
+  friend WasapiStreamOpenResult open_wasapi_stream_shell(
+      WasapiStreamProbe probe);
   friend WasapiStreamOpenResult open_default_wasapi_stream_shell(
       WasapiStreamDirection direction,
       WasapiStreamMode mode);
@@ -159,5 +161,8 @@ class WasapiStreamOpenResult {
 [[nodiscard]] WasapiStreamOpenResult open_default_wasapi_stream_shell(
     WasapiStreamDirection direction,
     WasapiStreamMode mode = WasapiStreamMode::Endpoint);
+
+[[nodiscard]] WasapiStreamOpenResult open_wasapi_stream_shell(
+    WasapiStreamProbe probe);
 
 }  // namespace sar::platform

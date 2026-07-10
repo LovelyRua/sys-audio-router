@@ -534,6 +534,36 @@ int main() {
   }
 
   {
+    auto invalid_encoding_probe = make_probe();
+    invalid_encoding_probe.device_id =
+        std::string(1, static_cast<char>(0xFF));
+    const auto result =
+        sar::platform::open_wasapi_stream_shell(std::move(invalid_encoding_probe));
+    if (const auto failure = expect(!result.ok(),
+                                    "Expected invalid native device ID rejection")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            result.errors().front().code == "invalid_device_id_encoding",
+            "Expected invalid native device ID encoding error")) {
+      return failure;
+    }
+  }
+
+  {
+    const auto result = sar::platform::open_wasapi_stream_shell(make_probe());
+    if (const auto failure = expect(!result.ok(),
+                                    "Expected missing selected device rejection")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            result.errors().front().code == "wasapi_device_lookup_failed",
+            "Expected selected device lookup error")) {
+      return failure;
+    }
+  }
+
+  {
     sar::platform::WindowsWasapiStream stream;
     auto invalid_probe = make_probe();
     invalid_probe.buffer_frames = 0;
@@ -726,6 +756,17 @@ int main() {
     if (const auto failure =
             expect(stream.state() == sar::platform::WasapiStreamState::Open,
                    "Expected default stream shell to stop")) {
+      return failure;
+    }
+
+    auto selected_result =
+        sar::platform::open_wasapi_stream_shell(stream.probe());
+    if (!selected_result.ok()) {
+      return 1;
+    }
+    if (const auto failure = expect(selected_result.stream().probe().device_id ==
+                                        stream.probe().device_id,
+                                    "Expected selected native stream device ID")) {
       return failure;
     }
 

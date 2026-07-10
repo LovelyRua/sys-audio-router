@@ -9,16 +9,20 @@ suggest changes.
 
 Engineer A owns:
 
-- `core/platform/windows_*`
-- `tests/realtime/windows_*`
-- Windows backend lifecycle, WASAPI streams, graph runner, realtime worker, and
-  high-level loop wrappers.
+- `core/platform/windows_wasapi_stream*`
+- `core/platform/windows_wasapi_graph_runner*`
+- `core/platform/windows_wasapi_realtime_worker*`
+- `core/platform/windows_wasapi_device_provider*`
+- `core/platform/windows_realtime_thread*`
+- Matching low-level Windows smoke tests.
+- Windows device discovery, stream lifecycle, buffer pumping, graph runner,
+  realtime worker, and MMCSS primitives.
 - Cross-workstream integration, release readiness, and merges to `main`.
 - Shared integration files listed below.
 
-Current focus: connect the loopback capture stream to a dedicated high-level
-loop wrapper. Engineer A does not implement measurement CLI changes in the same
-work item; those are handed to Engineer C after the backend API lands.
+Current focus: stable device-selected endpoint APIs, loopback capture primitives,
+and realtime worker correctness. High-level loop wrappers and measurement CLI
+changes are handed to Engineer C after the backend API lands.
 
 ## Engineer B: Portable Engine And Control Plane
 
@@ -45,15 +49,21 @@ Engineer C owns:
 - `core/platform/sample_converter.*`
 - `tools/**`
 - `scripts/**`
+- `core/platform/windows_wasapi_render_loop.*`
+- `core/platform/windows_wasapi_duplex_loop.*`
+- `core/platform/windows_wasapi_runtime_summary.*`
+- `core/platform/windows_wasapi_loop_preflight.*`
 - `tests/realtime/wasapi_measure_*`
+- Matching render/duplex/loop/preflight/runtime-summary smoke tests.
 - Sample-converter, diagnostics, and test-infrastructure coverage.
 - `docs/lab/**`
 
-Current focus: measurement/reporting tools, soak-test automation, sample
-conversion diagnostics, and reliable multi-user test scripts. Engineer C must
-not edit WASAPI stream, graph runner, realtime worker, or high-level loop
-implementations. When a tool needs a new backend field, C requests the field
-from A and builds against it after it lands.
+Current focus: high-level render/duplex/loopback wrappers,
+measurement/reporting tools, soak-test automation, sample conversion
+diagnostics, and reliable multi-user test scripts. Engineer C must not edit
+WASAPI stream, graph runner, realtime worker, device provider, or MMCSS
+implementations. When a wrapper or tool needs a new backend primitive, C
+requests it from A and builds against it after it lands.
 
 ## Shared Integration Files
 

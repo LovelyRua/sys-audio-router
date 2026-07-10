@@ -145,6 +145,18 @@ int main() {
                  "Expected invalid loopback direction error")) {
     return failure;
   }
+  const auto empty_device_id = sar::platform::probe_wasapi_stream(
+      "", sar::platform::WasapiStreamDirection::Render);
+  if (const auto failure = expect(!empty_device_id.ok(),
+                                  "Expected empty selected device ID rejection")) {
+    return failure;
+  }
+  if (const auto failure =
+          expect(empty_device_id.errors().front().code ==
+                     "invalid_device_id_encoding",
+                 "Expected invalid selected device ID encoding error")) {
+    return failure;
+  }
   if (const auto failure =
           expect(std::string(sar::platform::wasapi_stream_direction_name(
                      sar::platform::WasapiStreamDirection::Capture)) == "capture",
@@ -171,6 +183,24 @@ int main() {
       return failure;
     }
 
+    const auto selected_result = sar::platform::probe_wasapi_stream(
+        result.probe().device_id, sar::platform::WasapiStreamDirection::Render);
+    if (!selected_result.ok()) {
+      return 1;
+    }
+    if (const auto failure = verify_probe_contract(
+            selected_result.probe(),
+            sar::platform::WasapiStreamDirection::Render,
+            sar::platform::WasapiStreamMode::Endpoint,
+            "selected render")) {
+      return failure;
+    }
+    if (const auto failure = expect(selected_result.probe().device_id ==
+                                        result.probe().device_id,
+                                    "Expected selected render device ID")) {
+      return failure;
+    }
+
     const auto loopback_result = sar::platform::probe_default_wasapi_stream(
         sar::platform::WasapiStreamDirection::Capture,
         sar::platform::WasapiStreamMode::Loopback);
@@ -185,6 +215,18 @@ int main() {
             sar::platform::WasapiStreamDirection::Capture,
             sar::platform::WasapiStreamMode::Loopback,
             "loopback capture")) {
+      return failure;
+    }
+    const auto selected_loopback_result = sar::platform::probe_wasapi_stream(
+        result.probe().device_id,
+        sar::platform::WasapiStreamDirection::Capture,
+        sar::platform::WasapiStreamMode::Loopback);
+    if (!selected_loopback_result.ok()) {
+      return 1;
+    }
+    if (const auto failure = expect(selected_loopback_result.probe().device_id ==
+                                        result.probe().device_id,
+                                    "Expected selected loopback render device ID")) {
       return failure;
     }
   }

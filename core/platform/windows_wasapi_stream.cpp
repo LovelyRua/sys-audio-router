@@ -144,8 +144,28 @@ std::string hresult_hex(HRESULT result) {
   return buffer;
 }
 
-EDataFlow data_flow(WasapiStreamDirection direction) noexcept {
-  return direction == WasapiStreamDirection::Render ? eRender : eCapture;
+std::wstring utf8_to_wide(const std::string& value) {
+  if (value.empty()) {
+    return {};
+  }
+
+  const auto size = MultiByteToWideChar(
+      CP_UTF8, MB_ERR_INVALID_CHARS, value.c_str(), -1, nullptr, 0);
+  if (size <= 1) {
+    return {};
+  }
+
+  std::wstring result(static_cast<std::size_t>(size), L'\0');
+  if (MultiByteToWideChar(CP_UTF8,
+                          MB_ERR_INVALID_CHARS,
+                          value.c_str(),
+                          -1,
+                          result.data(),
+                          size) != size) {
+    return {};
+  }
+  result.pop_back();
+  return result;
 }
 
 std::vector<WasapiStreamError> validate_probe(const WasapiStreamProbe& probe) {
@@ -772,18 +792,14 @@ WasapiStreamOpenResult::WasapiStreamOpenResult(WindowsWasapiStream stream,
                                                std::vector<WasapiStreamError> errors)
     : stream_(std::move(stream)), errors_(std::move(errors)) {}
 
-WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection direction,
-                                                        WasapiStreamMode mode) {
-  auto probe_result = probe_default_wasapi_stream(direction, mode);
-  if (!probe_result.ok()) {
-    return WasapiStreamOpenResult::failure(convert_probe_errors(probe_result.errors()));
-  }
-
+WasapiStreamOpenResult open_wasapi_stream_shell(WasapiStreamProbe probe) {
   WindowsWasapiStream stream;
-  auto open_result = stream.open(probe_result.probe());
+  auto open_result = stream.open(std::move(probe));
   if (!open_result.ok()) {
     return WasapiStreamOpenResult::failure(open_result.errors());
   }
+  const auto direction = stream.probe().direction;
+  const auto mode = stream.probe().mode;
 
   auto impl = std::make_unique<WindowsWasapiStream::Impl>();
   if (!impl->apartment.ok()) {
@@ -809,18 +825,22 @@ WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection di
     });
   }
 
-  const auto endpoint_direction = mode == WasapiStreamMode::Loopback
-                                      ? WasapiStreamDirection::Render
-                                      : direction;
-  const auto endpoint_result = impl->enumerator->GetDefaultAudioEndpoint(
-      data_flow(endpoint_direction),
-      eConsole,
-      impl->device.put());
+  const auto wide_device_id = utf8_to_wide(stream.probe().device_id);
+  if (wide_device_id.empty()) {
+    return WasapiStreamOpenResult::failure({
+        {
+            "invalid_device_id_encoding",
+            "WASAPI device ID must be valid non-empty UTF-8.",
+        },
+    });
+  }
+  const auto endpoint_result =
+      impl->enumerator->GetDevice(wide_device_id.c_str(), impl->device.put());
   if (FAILED(endpoint_result) || !impl->device) {
     return WasapiStreamOpenResult::failure({
         {
-            "wasapi_default_endpoint_failed",
-            "WASAPI default endpoint query failed with " + hresult_hex(endpoint_result) + ".",
+            "wasapi_device_lookup_failed",
+            "WASAPI device lookup failed with " + hresult_hex(endpoint_result) + ".",
         },
     });
   }
@@ -848,6 +868,17 @@ WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection di
         },
     });
   }
+  if (impl->wave_format->nSamplesPerSec != stream.probe().mix_format.sample_rate ||
+      impl->wave_format->nChannels != stream.probe().mix_format.channels ||
+      impl->wave_format->wBitsPerSample !=
+          stream.probe().mix_format.bits_per_sample) {
+    return WasapiStreamOpenResult::failure({
+        {
+            "wasapi_probe_format_changed",
+            "WASAPI device mix format changed after it was probed.",
+        },
+    });
+  }
 
   const auto stream_flags = AUDCLNT_STREAMFLAGS_EVENTCALLBACK |
                             (mode == WasapiStreamMode::Loopback
@@ -864,6 +895,27 @@ WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection di
         {
             "wasapi_initialize_failed",
             "WASAPI shared stream initialization failed with " + hresult_hex(init_result) + ".",
+        },
+    });
+  }
+
+  UINT32 native_buffer_frames = 0;
+  const auto buffer_size_result =
+      impl->audio_client->GetBufferSize(&native_buffer_frames);
+  if (FAILED(buffer_size_result) || native_buffer_frames == 0) {
+    return WasapiStreamOpenResult::failure({
+        {
+            "wasapi_buffer_size_failed",
+            "WASAPI buffer size query failed with " +
+                hresult_hex(buffer_size_result) + ".",
+        },
+    });
+  }
+  if (native_buffer_frames != stream.probe().buffer_frames) {
+    return WasapiStreamOpenResult::failure({
+        {
+            "wasapi_probe_buffer_changed",
+            "WASAPI device buffer size changed after it was probed.",
         },
     });
   }
@@ -914,20 +966,9 @@ WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection di
       });
     }
 
-    UINT32 render_buffer_frames = 0;
-    const auto buffer_size_result = impl->audio_client->GetBufferSize(&render_buffer_frames);
-    if (FAILED(buffer_size_result) || render_buffer_frames == 0) {
-      return WasapiStreamOpenResult::failure({
-          {
-              "wasapi_render_buffer_size_failed",
-              "WASAPI render buffer size query failed with " + hresult_hex(buffer_size_result) + ".",
-          },
-      });
-    }
-
     BYTE* render_buffer = nullptr;
     const auto get_buffer_result =
-        impl->render_client->GetBuffer(render_buffer_frames, &render_buffer);
+        impl->render_client->GetBuffer(native_buffer_frames, &render_buffer);
     if (FAILED(get_buffer_result) || render_buffer == nullptr) {
       return WasapiStreamOpenResult::failure({
           {
@@ -938,7 +979,8 @@ WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection di
     }
 
     const auto release_result =
-        impl->render_client->ReleaseBuffer(render_buffer_frames, AUDCLNT_BUFFERFLAGS_SILENT);
+        impl->render_client->ReleaseBuffer(native_buffer_frames,
+                                           AUDCLNT_BUFFERFLAGS_SILENT);
     if (FAILED(release_result)) {
       return WasapiStreamOpenResult::failure({
           {
@@ -964,6 +1006,15 @@ WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection di
   stream.impl_ = std::move(impl);
 
   return WasapiStreamOpenResult::success(std::move(stream));
+}
+
+WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection direction,
+                                                        WasapiStreamMode mode) {
+  auto probe_result = probe_default_wasapi_stream(direction, mode);
+  if (!probe_result.ok()) {
+    return WasapiStreamOpenResult::failure(convert_probe_errors(probe_result.errors()));
+  }
+  return open_wasapi_stream_shell(probe_result.probe());
 }
 
 }  // namespace sar::platform

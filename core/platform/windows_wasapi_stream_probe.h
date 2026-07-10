@@ -60,4 +60,9 @@ class WasapiStreamProbeResult {
     WasapiStreamDirection direction,
     WasapiStreamMode mode = WasapiStreamMode::Endpoint);
 
+[[nodiscard]] WasapiStreamProbeResult probe_wasapi_stream(
+    const std::string& device_id,
+    WasapiStreamDirection direction,
+    WasapiStreamMode mode = WasapiStreamMode::Endpoint);
+
 }  // namespace sar::platform

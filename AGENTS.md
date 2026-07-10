@@ -65,8 +65,9 @@ diagnostics, run the Windows test script before pushing or merging.
 
 - Follow `docs/development/team-workstreams.md`. Engineer ownership is divided by
   implementation area so parallel branches do not edit the same files.
-- Engineer A owns Windows backend implementation and integration. Engineer B
-  owns the portable realtime, graph, and control layers. Engineer C owns
+- Engineer A owns low-level Windows stream, device, runner, worker, and MMCSS
+  primitives plus integration. Engineer B owns the portable realtime, graph,
+  and control layers. Engineer C owns high-level Windows loop wrappers,
   diagnostics, sample conversion, tools, scripts, and lab infrastructure.
 - Only Engineer A pushes or merges `main`. Engineers B and C work on named
   branches and submit PRs.

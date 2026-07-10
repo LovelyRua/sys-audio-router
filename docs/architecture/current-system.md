@@ -91,6 +91,8 @@ clock drift, and end-to-end latency behavior.
 `WindowsWasapiStream` currently supports:
 
 - Default endpoint probing.
+- Device-ID endpoint probing and native stream opening for explicit hardware
+  selection.
 - Default render-endpoint loopback probing and capture stream opening.
 - Shared-mode WASAPI initialization.
 - Event-driven stream handles.

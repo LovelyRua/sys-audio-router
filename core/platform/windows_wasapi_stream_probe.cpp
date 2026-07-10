@@ -111,8 +111,33 @@ std::string wide_to_utf8(const wchar_t* value) {
     return {};
   }
 
-  std::string result(static_cast<std::size_t>(size - 1), '\0');
+  std::string result(static_cast<std::size_t>(size), '\0');
   WideCharToMultiByte(CP_UTF8, 0, value, -1, result.data(), size, nullptr, nullptr);
+  result.pop_back();
+  return result;
+}
+
+std::wstring utf8_to_wide(const std::string& value) {
+  if (value.empty()) {
+    return {};
+  }
+
+  const auto size = MultiByteToWideChar(
+      CP_UTF8, MB_ERR_INVALID_CHARS, value.c_str(), -1, nullptr, 0);
+  if (size <= 1) {
+    return {};
+  }
+
+  std::wstring result(static_cast<std::size_t>(size), L'\0');
+  if (MultiByteToWideChar(CP_UTF8,
+                          MB_ERR_INVALID_CHARS,
+                          value.c_str(),
+                          -1,
+                          result.data(),
+                          size) != size) {
+    return {};
+  }
+  result.pop_back();
   return result;
 }
 
@@ -246,8 +271,12 @@ WasapiStreamProbeResult::WasapiStreamProbeResult(
     std::vector<WasapiStreamProbeError> errors)
     : probe_(std::move(probe)), errors_(std::move(errors)) {}
 
-WasapiStreamProbeResult probe_default_wasapi_stream(WasapiStreamDirection direction,
-                                                    WasapiStreamMode mode) {
+namespace {
+
+WasapiStreamProbeResult probe_wasapi_stream_impl(
+    const std::string* requested_device_id,
+    WasapiStreamDirection direction,
+    WasapiStreamMode mode) {
   if (mode == WasapiStreamMode::Loopback &&
       direction != WasapiStreamDirection::Capture) {
     return WasapiStreamProbeResult::failure({
@@ -256,6 +285,19 @@ WasapiStreamProbeResult probe_default_wasapi_stream(WasapiStreamDirection direct
             "WASAPI loopback mode is only valid for capture streams.",
         },
     });
+  }
+
+  std::wstring wide_requested_device_id;
+  if (requested_device_id != nullptr) {
+    wide_requested_device_id = utf8_to_wide(*requested_device_id);
+    if (wide_requested_device_id.empty()) {
+      return WasapiStreamProbeResult::failure({
+          {
+              "invalid_device_id_encoding",
+              "WASAPI device ID must be valid non-empty UTF-8.",
+          },
+      });
+    }
   }
 
   ComApartment apartment;
@@ -284,18 +326,29 @@ WasapiStreamProbeResult probe_default_wasapi_stream(WasapiStreamDirection direct
   }
 
   ComPtr<IMMDevice> device;
-  const auto endpoint_direction = mode == WasapiStreamMode::Loopback
-                                      ? WasapiStreamDirection::Render
-                                      : direction;
-  const auto endpoint_result = enumerator->GetDefaultAudioEndpoint(
-      data_flow(endpoint_direction),
-      eConsole,
-      device.put());
+  HRESULT endpoint_result = E_FAIL;
+  if (requested_device_id == nullptr) {
+    const auto endpoint_direction = mode == WasapiStreamMode::Loopback
+                                        ? WasapiStreamDirection::Render
+                                        : direction;
+    endpoint_result = enumerator->GetDefaultAudioEndpoint(
+        data_flow(endpoint_direction), eConsole, device.put());
+  } else {
+    endpoint_result =
+        enumerator->GetDevice(wide_requested_device_id.c_str(), device.put());
+  }
   if (FAILED(endpoint_result) || !device) {
+    const auto code = requested_device_id == nullptr
+                          ? "wasapi_default_endpoint_failed"
+                          : "wasapi_device_lookup_failed";
+    const auto operation = requested_device_id == nullptr
+                               ? "default endpoint query"
+                               : "device lookup";
     return WasapiStreamProbeResult::failure({
         {
-            "wasapi_default_endpoint_failed",
-            "WASAPI default endpoint query failed with " + hresult_hex(endpoint_result) + ".",
+            code,
+            "WASAPI " + std::string(operation) + " failed with " +
+                hresult_hex(endpoint_result) + ".",
         },
     });
   }
@@ -385,6 +438,19 @@ WasapiStreamProbeResult probe_default_wasapi_stream(WasapiStreamDirection direct
 
   CoTaskMemFree(wave_format);
   return WasapiStreamProbeResult::success(std::move(probe));
+}
+
+}  // namespace
+
+WasapiStreamProbeResult probe_default_wasapi_stream(WasapiStreamDirection direction,
+                                                    WasapiStreamMode mode) {
+  return probe_wasapi_stream_impl(nullptr, direction, mode);
+}
+
+WasapiStreamProbeResult probe_wasapi_stream(const std::string& device_id,
+                                            WasapiStreamDirection direction,
+                                            WasapiStreamMode mode) {
+  return probe_wasapi_stream_impl(&device_id, direction, mode);
 }
 
 }  // namespace sar::platform
