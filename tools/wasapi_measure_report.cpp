@@ -6,17 +6,6 @@ namespace sar::tools {
 
 namespace {
 
-const char* wasapi_stream_direction_name(
-    platform::WasapiStreamDirection direction) noexcept {
-  switch (direction) {
-    case platform::WasapiStreamDirection::Render:
-      return "render";
-    case platform::WasapiStreamDirection::Capture:
-      return "capture";
-  }
-  return "unknown";
-}
-
 const char* audio_sample_format_name(
     platform::AudioSampleFormat format) noexcept {
   switch (format) {
@@ -89,7 +78,8 @@ void print_wasapi_stream_diagnostics(
     const platform::WasapiStreamDiagnostics& diagnostics) {
   out << "wasapi_stream_diagnostics"
       << " state=" << platform::wasapi_stream_state_name(diagnostics.state)
-      << " direction=" << wasapi_stream_direction_name(diagnostics.direction)
+      << " direction="
+      << platform::wasapi_stream_direction_name(diagnostics.direction)
       << " sample_rate=" << diagnostics.mix_format.sample_rate
       << " channels=" << diagnostics.mix_format.channels
       << " frames_per_block=" << diagnostics.mix_format.frames_per_block
@@ -104,7 +94,8 @@ void print_wasapi_stream_diagnostics(
       << '\n';
   out << label << '\n';
   out << "  State: " << platform::wasapi_stream_state_name(diagnostics.state) << '\n';
-  out << "  Direction: " << wasapi_stream_direction_name(diagnostics.direction) << '\n';
+  out << "  Direction: "
+      << platform::wasapi_stream_direction_name(diagnostics.direction) << '\n';
   out << "  Sample rate: " << diagnostics.mix_format.sample_rate << '\n';
   out << "  Channels: " << diagnostics.mix_format.channels << '\n';
   out << "  Frames per block: " << diagnostics.mix_format.frames_per_block << '\n';

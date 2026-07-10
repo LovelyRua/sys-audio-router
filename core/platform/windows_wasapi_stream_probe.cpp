@@ -200,6 +200,16 @@ AudioFormat to_audio_format(const WAVEFORMATEX& format) {
 
 }  // namespace
 
+const char* wasapi_stream_direction_name(WasapiStreamDirection direction) noexcept {
+  switch (direction) {
+    case WasapiStreamDirection::Render:
+      return "render";
+    case WasapiStreamDirection::Capture:
+      return "capture";
+  }
+  return "unknown";
+}
+
 WasapiStreamProbeResult WasapiStreamProbeResult::success(WasapiStreamProbe probe) {
   return {std::move(probe), {}};
 }

@@ -13,6 +13,9 @@ enum class WasapiStreamDirection {
   Capture,
 };
 
+[[nodiscard]] const char* wasapi_stream_direction_name(
+    WasapiStreamDirection direction) noexcept;
+
 struct WasapiStreamProbe {
   WasapiStreamDirection direction = WasapiStreamDirection::Render;
   std::string device_id;
