@@ -17,6 +17,19 @@ const char* wasapi_stream_direction_name(
   return "unknown";
 }
 
+const char* audio_sample_format_name(
+    platform::AudioSampleFormat format) noexcept {
+  switch (format) {
+    case platform::AudioSampleFormat::Unknown:
+      return "unknown";
+    case platform::AudioSampleFormat::PcmInt:
+      return "pcm_int";
+    case platform::AudioSampleFormat::IeeeFloat:
+      return "ieee_float";
+  }
+  return "unknown";
+}
+
 }  // namespace
 
 void print_wasapi_probe(std::ostream& out,
@@ -74,12 +87,32 @@ void print_wasapi_stream_diagnostics(
     std::ostream& out,
     const char* label,
     const platform::WasapiStreamDiagnostics& diagnostics) {
+  out << "wasapi_stream_diagnostics"
+      << " state=" << platform::wasapi_stream_state_name(diagnostics.state)
+      << " direction=" << wasapi_stream_direction_name(diagnostics.direction)
+      << " sample_rate=" << diagnostics.mix_format.sample_rate
+      << " channels=" << diagnostics.mix_format.channels
+      << " frames_per_block=" << diagnostics.mix_format.frames_per_block
+      << " bits_per_sample=" << diagnostics.mix_format.bits_per_sample
+      << " valid_bits_per_sample="
+      << diagnostics.mix_format.valid_bits_per_sample
+      << " sample_format="
+      << audio_sample_format_name(diagnostics.mix_format.sample_format)
+      << " buffer_frames=" << diagnostics.buffer_frames
+      << " default_period_100ns=" << diagnostics.default_period_100ns
+      << " minimum_period_100ns=" << diagnostics.minimum_period_100ns
+      << '\n';
   out << label << '\n';
   out << "  State: " << platform::wasapi_stream_state_name(diagnostics.state) << '\n';
   out << "  Direction: " << wasapi_stream_direction_name(diagnostics.direction) << '\n';
   out << "  Sample rate: " << diagnostics.mix_format.sample_rate << '\n';
   out << "  Channels: " << diagnostics.mix_format.channels << '\n';
   out << "  Frames per block: " << diagnostics.mix_format.frames_per_block << '\n';
+  out << "  Bits per sample: " << diagnostics.mix_format.bits_per_sample << '\n';
+  out << "  Valid bits per sample: "
+      << diagnostics.mix_format.valid_bits_per_sample << '\n';
+  out << "  Sample format: "
+      << audio_sample_format_name(diagnostics.mix_format.sample_format) << '\n';
   out << "  Buffer frames: " << diagnostics.buffer_frames << '\n';
   out << "  Default period 100ns: " << diagnostics.default_period_100ns << '\n';
   out << "  Minimum period 100ns: " << diagnostics.minimum_period_100ns << '\n';

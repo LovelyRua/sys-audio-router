@@ -73,6 +73,7 @@ sar::platform::WasapiStreamDiagnostics make_stream_diagnostics() {
   diagnostics.mix_format.channels = 1;
   diagnostics.mix_format.frames_per_block = 64;
   diagnostics.mix_format.bits_per_sample = 32;
+  diagnostics.mix_format.valid_bits_per_sample = 24;
   diagnostics.mix_format.sample_format = sar::platform::AudioSampleFormat::IeeeFloat;
   diagnostics.buffer_frames = 192;
   diagnostics.default_period_100ns = 120000;
@@ -195,6 +196,13 @@ int main() {
       return failure;
     }
     if (const auto failure =
+            expect(contains(text,
+                            "wasapi_stream_diagnostics state=started "
+                            "direction=capture sample_rate=44100"),
+                   "Expected machine-readable stream diagnostics")) {
+      return failure;
+    }
+    if (const auto failure =
             expect(contains(text, "State: started"),
                    "Expected stream diagnostics state")) {
       return failure;
@@ -207,6 +215,36 @@ int main() {
     if (const auto failure =
             expect(contains(text, "Sample rate: 44100"),
                    "Expected stream diagnostics sample rate")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "bits_per_sample=32"),
+                   "Expected stream diagnostics bit depth token")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "valid_bits_per_sample=24"),
+                   "Expected stream diagnostics valid bit depth token")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "sample_format=ieee_float"),
+                   "Expected stream diagnostics sample format token")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "Bits per sample: 32"),
+                   "Expected stream diagnostics bit depth")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "Valid bits per sample: 24"),
+                   "Expected stream diagnostics valid bit depth")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "Sample format: ieee_float"),
+                   "Expected stream diagnostics sample format")) {
       return failure;
     }
     if (const auto failure =

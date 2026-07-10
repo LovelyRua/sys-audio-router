@@ -123,6 +123,9 @@ automation can parse health, reason code, transfer counts, and error counts.
 The same line also carries stream shape, period, partial/silent transfer, and
 last-cycle flag fields so CI and lab scripts can diagnose most loop failures
 without scraping the human-readable sections.
+When a stream opens, the tools also print `wasapi_stream_diagnostics ...` lines
+with state, direction, sample format, bit depth, buffer size, and device period
+fields before the matching human-readable stream diagnostics block.
 
 ## Expected Test Targets
 
