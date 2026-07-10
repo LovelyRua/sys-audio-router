@@ -34,6 +34,12 @@ struct WasapiStreamDiagnostics {
   std::uint64_t minimum_period_100ns = 0;
 };
 
+struct WasapiClockSnapshot {
+  std::uint64_t position = 0;
+  std::uint64_t qpc_position_100ns = 0;
+  std::uint64_t frequency = 0;
+};
+
 class WasapiStreamResult {
  public:
   static WasapiStreamResult success();
@@ -118,6 +124,7 @@ class WindowsWasapiStream {
   [[nodiscard]] WasapiStreamIoResult capture_once(
       realtime::AudioBuffer& destination,
       std::uint32_t timeout_ms) noexcept;
+  [[nodiscard]] bool read_clock(WasapiClockSnapshot& snapshot) noexcept;
   void request_stop() noexcept;
   void close() noexcept;
 

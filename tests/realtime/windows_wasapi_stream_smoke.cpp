@@ -428,6 +428,21 @@ int main() {
                                     "Expected diagnostics buffer frames")) {
       return failure;
     }
+    sar::platform::WasapiClockSnapshot synthetic_clock{
+        .position = 1,
+        .qpc_position_100ns = 2,
+        .frequency = 3,
+    };
+    if (const auto failure = expect(!stream.read_clock(synthetic_clock),
+                                    "Expected synthetic stream without native clock")) {
+      return failure;
+    }
+    if (const auto failure = expect(synthetic_clock.position == 0 &&
+                                        synthetic_clock.qpc_position_100ns == 0 &&
+                                        synthetic_clock.frequency == 0,
+                                    "Expected failed clock read to clear snapshot")) {
+      return failure;
+    }
 
     result = stream.start();
     if (const auto failure = expect(result.ok(), "Expected stream start success")) {
@@ -735,6 +750,15 @@ int main() {
     if (const auto failure =
             expect(stream.state() == sar::platform::WasapiStreamState::Started,
                    "Expected default stream shell to start")) {
+      return failure;
+    }
+    sar::platform::WasapiClockSnapshot clock_snapshot;
+    if (const auto failure = expect(stream.read_clock(clock_snapshot),
+                                    "Expected native WASAPI clock snapshot")) {
+      return failure;
+    }
+    if (const auto failure = expect(clock_snapshot.frequency > 0,
+                                    "Expected native WASAPI clock frequency")) {
       return failure;
     }
     sar::realtime::AudioBuffer render_buffer(stream.probe().mix_format.channels,

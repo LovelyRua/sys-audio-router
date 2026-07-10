@@ -291,8 +291,10 @@ struct WindowsWasapiStream::Impl {
   ComPtr<IMMDeviceEnumerator> enumerator;
   ComPtr<IMMDevice> device;
   ComPtr<IAudioClient> audio_client;
+  ComPtr<IAudioClock> audio_clock;
   ComPtr<IAudioRenderClient> render_client;
   ComPtr<IAudioCaptureClient> capture_client;
+  UINT64 clock_frequency = 0;
   UniqueHandle samples_ready_event;
   UniqueHandle stop_requested_event;
   WAVEFORMATEX* wave_format = nullptr;
@@ -725,6 +727,24 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
       packet_frames, data_discontinuity, timestamp_error);
 }
 
+bool WindowsWasapiStream::read_clock(WasapiClockSnapshot& snapshot) noexcept {
+  snapshot = {};
+  if (!impl_ || !impl_->audio_clock || impl_->clock_frequency == 0) {
+    return false;
+  }
+
+  UINT64 position = 0;
+  UINT64 qpc_position = 0;
+  if (FAILED(impl_->audio_clock->GetPosition(&position, &qpc_position))) {
+    return false;
+  }
+
+  snapshot.position = position;
+  snapshot.qpc_position_100ns = qpc_position;
+  snapshot.frequency = impl_->clock_frequency;
+  return true;
+}
+
 void WindowsWasapiStream::request_stop() noexcept {
   if (impl_ && impl_->stop_requested_event.valid()) {
     SetEvent(impl_->stop_requested_event.get());
@@ -916,6 +936,29 @@ WasapiStreamOpenResult open_wasapi_stream_shell(WasapiStreamProbe probe) {
         {
             "wasapi_probe_buffer_changed",
             "WASAPI device buffer size changed after it was probed.",
+        },
+    });
+  }
+
+  const auto clock_result = impl->audio_client->GetService(
+      __uuidof(IAudioClock),
+      reinterpret_cast<void**>(impl->audio_clock.put()));
+  if (FAILED(clock_result) || !impl->audio_clock) {
+    return WasapiStreamOpenResult::failure({
+        {
+            "wasapi_clock_client_failed",
+            "WASAPI audio clock query failed with " + hresult_hex(clock_result) + ".",
+        },
+    });
+  }
+  const auto frequency_result =
+      impl->audio_clock->GetFrequency(&impl->clock_frequency);
+  if (FAILED(frequency_result) || impl->clock_frequency == 0) {
+    return WasapiStreamOpenResult::failure({
+        {
+            "wasapi_clock_frequency_failed",
+            "WASAPI audio clock frequency query failed with " +
+                hresult_hex(frequency_result) + ".",
         },
     });
   }

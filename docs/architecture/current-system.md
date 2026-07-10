@@ -97,6 +97,8 @@ clock drift, and end-to-end latency behavior.
 - Shared-mode WASAPI initialization.
 - Event-driven stream handles.
 - `IAudioRenderClient` and `IAudioCaptureClient` ownership.
+- `IAudioClock` ownership with allocation-free raw position, frequency, and QPC
+  snapshots for future drift and latency analysis.
 - Explicit endpoint/loopback stream mode diagnostics.
 - Render priming with a silent buffer.
 - Start/stop lifecycle.
