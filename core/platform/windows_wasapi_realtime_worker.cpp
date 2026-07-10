@@ -130,6 +130,10 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   render_partial_frames_.store(0);
   capture_silent_cycles_.store(0);
   capture_silent_frames_.store(0);
+  capture_discontinuity_cycles_.store(0);
+  capture_discontinuity_frames_.store(0);
+  capture_timestamp_error_cycles_.store(0);
+  capture_timestamp_error_frames_.store(0);
   stream_start_error_cycles_.store(0);
   stream_stop_error_cycles_.store(0);
   process_error_cycles_.store(0);
@@ -145,6 +149,8 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   last_capture_partial_.store(false);
   last_render_partial_.store(false);
   last_capture_silent_.store(false);
+  last_capture_discontinuity_.store(false);
+  last_capture_timestamp_error_.store(false);
   last_stop_wait_microseconds_.store(0);
   set_errors({});
   running_.store(true);
@@ -191,6 +197,10 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.render_partial_frames = render_partial_frames_.load();
   result.capture_silent_cycles = capture_silent_cycles_.load();
   result.capture_silent_frames = capture_silent_frames_.load();
+  result.capture_discontinuity_cycles = capture_discontinuity_cycles_.load();
+  result.capture_discontinuity_frames = capture_discontinuity_frames_.load();
+  result.capture_timestamp_error_cycles = capture_timestamp_error_cycles_.load();
+  result.capture_timestamp_error_frames = capture_timestamp_error_frames_.load();
   result.stream_start_error_cycles = stream_start_error_cycles_.load();
   result.stream_stop_error_cycles = stream_stop_error_cycles_.load();
   result.process_error_cycles = process_error_cycles_.load();
@@ -206,6 +216,8 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.last_capture_partial = last_capture_partial_.load();
   result.last_render_partial = last_render_partial_.load();
   result.last_capture_silent = last_capture_silent_.load();
+  result.last_capture_discontinuity = last_capture_discontinuity_.load();
+  result.last_capture_timestamp_error = last_capture_timestamp_error_.load();
   result.last_stop_wait_microseconds = last_stop_wait_microseconds_.load();
   return result;
 }
@@ -267,6 +279,8 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     last_capture_partial_.store(result.stats().capture_partial);
     last_render_partial_.store(result.stats().render_partial);
     last_capture_silent_.store(result.stats().capture_silent);
+    last_capture_discontinuity_.store(result.stats().capture_data_discontinuity);
+    last_capture_timestamp_error_.store(result.stats().capture_timestamp_error);
     if (result.stats().graph_processed) {
       graph_processed_cycles_.fetch_add(1);
     }
@@ -300,6 +314,14 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     if (result.stats().capture_silent) {
       capture_silent_cycles_.fetch_add(1);
       capture_silent_frames_.fetch_add(result.stats().capture_silent_frames);
+    }
+    if (result.stats().capture_data_discontinuity) {
+      capture_discontinuity_cycles_.fetch_add(1);
+      capture_discontinuity_frames_.fetch_add(result.stats().captured_frames);
+    }
+    if (result.stats().capture_timestamp_error) {
+      capture_timestamp_error_cycles_.fetch_add(1);
+      capture_timestamp_error_frames_.fetch_add(result.stats().captured_frames);
     }
   }
 

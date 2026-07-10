@@ -26,6 +26,8 @@ struct WasapiGraphRunnerStats {
   bool capture_partial = false;
   bool render_partial = false;
   bool capture_silent = false;
+  bool capture_data_discontinuity = false;
+  bool capture_timestamp_error = false;
 };
 
 class WasapiGraphRunnerResult {

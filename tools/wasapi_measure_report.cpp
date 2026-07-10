@@ -138,6 +138,14 @@ void print_wasapi_worker_stats(
   out << "  Render partial frames: " << stats.render_partial_frames << '\n';
   out << "  Capture silent cycles: " << stats.capture_silent_cycles << '\n';
   out << "  Capture silent frames: " << stats.capture_silent_frames << '\n';
+  out << "  Capture discontinuity cycles: "
+      << stats.capture_discontinuity_cycles << '\n';
+  out << "  Capture discontinuity frames: "
+      << stats.capture_discontinuity_frames << '\n';
+  out << "  Capture timestamp error cycles: "
+      << stats.capture_timestamp_error_cycles << '\n';
+  out << "  Capture timestamp error frames: "
+      << stats.capture_timestamp_error_frames << '\n';
   out << "  Captured frames: " << stats.captured_frames << '\n';
   out << "  Rendered frames: " << stats.rendered_frames << '\n';
   out << "  Last captured frames: " << stats.last_captured_frames << '\n';

@@ -143,6 +143,16 @@ int main() {
                                     "Expected graph-only worker without silent capture frames")) {
       return failure;
     }
+    if (const auto failure = expect(stats.capture_discontinuity_cycles == 0 &&
+                                        stats.capture_discontinuity_frames == 0,
+                                    "Expected graph-only worker without discontinuities")) {
+      return failure;
+    }
+    if (const auto failure = expect(stats.capture_timestamp_error_cycles == 0 &&
+                                        stats.capture_timestamp_error_frames == 0,
+                                    "Expected graph-only worker without timestamp errors")) {
+      return failure;
+    }
     if (const auto failure = expect(stats.stream_start_error_cycles == 0,
                                     "Expected graph-only worker without stream start errors")) {
       return failure;
@@ -191,6 +201,11 @@ int main() {
     }
     if (const auto failure = expect(!stats.last_capture_silent,
                                     "Expected graph-only worker last cycle without silent capture")) {
+      return failure;
+    }
+    if (const auto failure = expect(!stats.last_capture_discontinuity &&
+                                        !stats.last_capture_timestamp_error,
+                                    "Expected graph-only worker last cycle without capture errors")) {
       return failure;
     }
     if (const auto failure = expect(stats.process_error_cycles == 0,

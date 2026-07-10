@@ -294,24 +294,29 @@ const std::vector<WasapiStreamError>& WasapiStreamResult::errors() const noexcep
 WasapiStreamResult::WasapiStreamResult(std::vector<WasapiStreamError> errors)
     : errors_(std::move(errors)) {}
 
-WasapiStreamIoResult WasapiStreamIoResult::success(std::uint32_t frames) {
+WasapiStreamIoResult WasapiStreamIoResult::success(std::uint32_t frames,
+                                                   bool data_discontinuity,
+                                                   bool timestamp_error) {
   const auto status = frames == 0 ? WasapiStreamIoStatus::Idle
                                   : WasapiStreamIoStatus::Completed;
-  return {frames, status, false, {}};
+  return {frames, status, false, data_discontinuity, timestamp_error, {}};
 }
 
-WasapiStreamIoResult WasapiStreamIoResult::success_silent(std::uint32_t frames) {
+WasapiStreamIoResult WasapiStreamIoResult::success_silent(
+    std::uint32_t frames,
+    bool data_discontinuity,
+    bool timestamp_error) {
   const auto status = frames == 0 ? WasapiStreamIoStatus::Idle
                                   : WasapiStreamIoStatus::Completed;
-  return {frames, status, frames > 0, {}};
+  return {frames, status, frames > 0, data_discontinuity, timestamp_error, {}};
 }
 
 WasapiStreamIoResult WasapiStreamIoResult::timeout() {
-  return {0, WasapiStreamIoStatus::TimedOut, false, {}};
+  return {0, WasapiStreamIoStatus::TimedOut, false, false, false, {}};
 }
 
 WasapiStreamIoResult WasapiStreamIoResult::failure(std::vector<WasapiStreamError> errors) {
-  return {0, WasapiStreamIoStatus::Failed, false, std::move(errors)};
+  return {0, WasapiStreamIoStatus::Failed, false, false, false, std::move(errors)};
 }
 
 bool WasapiStreamIoResult::ok() const noexcept {
@@ -334,6 +339,14 @@ bool WasapiStreamIoResult::silent() const noexcept {
   return silent_;
 }
 
+bool WasapiStreamIoResult::data_discontinuity() const noexcept {
+  return data_discontinuity_;
+}
+
+bool WasapiStreamIoResult::timestamp_error() const noexcept {
+  return timestamp_error_;
+}
+
 bool WasapiStreamIoResult::timed_out() const noexcept {
   return status_ == WasapiStreamIoStatus::TimedOut;
 }
@@ -345,8 +358,15 @@ const std::vector<WasapiStreamError>& WasapiStreamIoResult::errors() const noexc
 WasapiStreamIoResult::WasapiStreamIoResult(std::uint32_t frames,
                                            WasapiStreamIoStatus status,
                                            bool silent,
+                                           bool data_discontinuity,
+                                           bool timestamp_error,
                                            std::vector<WasapiStreamError> errors)
-    : frames_(frames), status_(status), silent_(silent), errors_(std::move(errors)) {}
+    : frames_(frames),
+      status_(status),
+      silent_(silent),
+      data_discontinuity_(data_discontinuity),
+      timestamp_error_(timestamp_error),
+      errors_(std::move(errors)) {}
 
 WindowsWasapiStream::WindowsWasapiStream() = default;
 
@@ -610,10 +630,16 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
     });
   }
 
+  const auto data_discontinuity =
+      (flags & AUDCLNT_BUFFERFLAGS_DATA_DISCONTINUITY) != 0;
+  const auto timestamp_error =
+      (flags & AUDCLNT_BUFFERFLAGS_TIMESTAMP_ERROR) != 0;
   if ((flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0) {
-    return WasapiStreamIoResult::success_silent(packet_frames);
+    return WasapiStreamIoResult::success_silent(
+        packet_frames, data_discontinuity, timestamp_error);
   }
-  return WasapiStreamIoResult::success(packet_frames);
+  return WasapiStreamIoResult::success(
+      packet_frames, data_discontinuity, timestamp_error);
 }
 
 void WindowsWasapiStream::close() noexcept {

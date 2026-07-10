@@ -53,6 +53,14 @@ std::string format_wasapi_runtime_summary_line(
          << " render_partial_frames=" << summary.render_partial_frames
          << " capture_silent_cycles=" << summary.capture_silent_cycles
          << " capture_silent_frames=" << summary.capture_silent_frames
+         << " capture_discontinuity_cycles="
+         << summary.capture_discontinuity_cycles
+         << " capture_discontinuity_frames="
+         << summary.capture_discontinuity_frames
+         << " capture_timestamp_error_cycles="
+         << summary.capture_timestamp_error_cycles
+         << " capture_timestamp_error_frames="
+         << summary.capture_timestamp_error_frames
          << " process_error_cycles=" << summary.process_error_cycles
          << " stream_start_error_cycles=" << summary.stream_start_error_cycles
          << " stream_stop_error_cycles=" << summary.stream_stop_error_cycles
@@ -92,6 +100,10 @@ std::string format_wasapi_runtime_summary_line(
          << " last_render_partial=" << bool_token(summary.last_render_partial)
          << " last_capture_silent="
          << bool_token(summary.last_capture_silent)
+         << " last_capture_discontinuity="
+         << bool_token(summary.last_capture_discontinuity)
+         << " last_capture_timestamp_error="
+         << bool_token(summary.last_capture_timestamp_error)
          << " error_count=" << summary.error_count
          << " first_error_code=" << summary.first_error_code;
   return stream.str();
@@ -115,6 +127,10 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
   summary.render_partial_frames = stats.render_partial_frames;
   summary.capture_silent_cycles = stats.capture_silent_cycles;
   summary.capture_silent_frames = stats.capture_silent_frames;
+  summary.capture_discontinuity_cycles = stats.capture_discontinuity_cycles;
+  summary.capture_discontinuity_frames = stats.capture_discontinuity_frames;
+  summary.capture_timestamp_error_cycles = stats.capture_timestamp_error_cycles;
+  summary.capture_timestamp_error_frames = stats.capture_timestamp_error_frames;
   summary.process_error_cycles = stats.process_error_cycles;
   summary.stream_start_error_cycles = stats.stream_start_error_cycles;
   summary.stream_stop_error_cycles = stats.stream_stop_error_cycles;
@@ -131,6 +147,8 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
   summary.last_capture_partial = stats.last_capture_partial;
   summary.last_render_partial = stats.last_render_partial;
   summary.last_capture_silent = stats.last_capture_silent;
+  summary.last_capture_discontinuity = stats.last_capture_discontinuity;
+  summary.last_capture_timestamp_error = stats.last_capture_timestamp_error;
   summary.error_count = errors.size();
 
   if (capture_diagnostics != nullptr) {
@@ -182,6 +200,22 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
     summary.health = WasapiRuntimeHealth::Faulted;
     summary.reason_code = "stream_stop_error";
     summary.reason = "A WASAPI stream failed to stop cleanly.";
+    return summary;
+  }
+
+  if (stats.capture_discontinuity_cycles > 0) {
+    summary.health = WasapiRuntimeHealth::Degraded;
+    summary.reason_code = "capture_discontinuity";
+    summary.reason =
+        "WASAPI reported one or more discontinuities in the capture stream.";
+    return summary;
+  }
+
+  if (stats.capture_timestamp_error_cycles > 0) {
+    summary.health = WasapiRuntimeHealth::Degraded;
+    summary.reason_code = "capture_timestamp_error";
+    summary.reason =
+        "WASAPI reported one or more invalid capture packet timestamps.";
     return summary;
   }
 

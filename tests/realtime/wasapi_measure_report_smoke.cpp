@@ -97,6 +97,10 @@ sar::platform::WasapiRealtimeWorkerStats make_stats() {
   stats.render_partial_frames = 10;
   stats.capture_silent_cycles = 11;
   stats.capture_silent_frames = 12;
+  stats.capture_discontinuity_cycles = 13;
+  stats.capture_discontinuity_frames = 14;
+  stats.capture_timestamp_error_cycles = 15;
+  stats.capture_timestamp_error_frames = 16;
   stats.captured_frames = 960;
   stats.rendered_frames = 1280;
   stats.last_captured_frames = 96;
@@ -271,6 +275,16 @@ int main() {
     if (const auto failure =
             expect(contains(text, "Stream stop error cycles: 14"),
                    "Expected stream stop error count")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "Capture discontinuity cycles: 13"),
+                   "Expected capture discontinuity count")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "Capture timestamp error frames: 16"),
+                   "Expected capture timestamp error frames")) {
       return failure;
     }
   }

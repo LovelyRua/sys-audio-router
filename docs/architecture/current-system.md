@@ -58,9 +58,11 @@ binding, and service hosting are future work.
 peak callback duration, and xrun count. WASAPI worker summaries now classify
 runtime health across stopped, healthy, degraded, and faulted states, including
 split capture/render wait timeouts, partial transfers, silent capture, stream
-start/stop failures, processing failures, last transferred frame counts, and
-last stop wait duration. Diagnostics will still need to expand as real WASAPI
-loops expose underrun, overrun, drift, and end-to-end latency behavior.
+start/stop failures, processing failures, capture data discontinuities, capture
+timestamp errors, last transferred frame counts, and last stop wait duration.
+WASAPI capture discontinuities also increment the engine xrun counter.
+Diagnostics will still need to expand as real loops expose render underrun,
+clock drift, and end-to-end latency behavior.
 
 ## Platform Layer
 
@@ -118,8 +120,8 @@ The Windows command-line tools can inspect endpoints and run short real-device
 measurements for render-only and full-duplex WASAPI paths. These tools print
 runtime health, reason codes, stream diagnostics lines, stream shape,
 transferred-frame summaries, stop wait duration, partial/silent transfer
-counters, last-cycle flags, worker counters, and engine diagnostics for lab
-captures.
+counters, capture discontinuity/timestamp counters, last-cycle flags, worker
+counters, and engine diagnostics for lab captures.
 
 ## Current Testing Model
 

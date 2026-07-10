@@ -61,8 +61,12 @@ enum class WasapiStreamIoStatus {
 
 class WasapiStreamIoResult {
  public:
-  static WasapiStreamIoResult success(std::uint32_t frames);
-  static WasapiStreamIoResult success_silent(std::uint32_t frames);
+  static WasapiStreamIoResult success(std::uint32_t frames,
+                                      bool data_discontinuity = false,
+                                      bool timestamp_error = false);
+  static WasapiStreamIoResult success_silent(std::uint32_t frames,
+                                             bool data_discontinuity = false,
+                                             bool timestamp_error = false);
   static WasapiStreamIoResult timeout();
   static WasapiStreamIoResult failure(std::vector<WasapiStreamError> errors);
 
@@ -71,6 +75,8 @@ class WasapiStreamIoResult {
   [[nodiscard]] WasapiStreamIoStatus status() const noexcept;
   [[nodiscard]] bool idle() const noexcept;
   [[nodiscard]] bool silent() const noexcept;
+  [[nodiscard]] bool data_discontinuity() const noexcept;
+  [[nodiscard]] bool timestamp_error() const noexcept;
   [[nodiscard]] bool timed_out() const noexcept;
   [[nodiscard]] const std::vector<WasapiStreamError>& errors() const noexcept;
 
@@ -78,11 +84,15 @@ class WasapiStreamIoResult {
   WasapiStreamIoResult(std::uint32_t frames,
                        WasapiStreamIoStatus status,
                        bool silent,
+                       bool data_discontinuity,
+                       bool timestamp_error,
                        std::vector<WasapiStreamError> errors);
 
   std::uint32_t frames_ = 0;
   WasapiStreamIoStatus status_ = WasapiStreamIoStatus::Idle;
   bool silent_ = false;
+  bool data_discontinuity_ = false;
+  bool timestamp_error_ = false;
   std::vector<WasapiStreamError> errors_;
 };
 

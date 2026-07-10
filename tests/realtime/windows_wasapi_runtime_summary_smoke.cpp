@@ -129,6 +129,10 @@ int main() {
                        "render_partial_cycles=0 capture_partial_frames=0 "
                        "render_partial_frames=0 capture_silent_cycles=0 "
                        "capture_silent_frames=0 "
+                       "capture_discontinuity_cycles=0 "
+                       "capture_discontinuity_frames=0 "
+                       "capture_timestamp_error_cycles=0 "
+                       "capture_timestamp_error_frames=0 "
                        "process_error_cycles=0 stream_start_error_cycles=0 "
                        "stream_stop_error_cycles=0 captured_frames=0 "
                        "rendered_frames=0 last_captured_frames=0 "
@@ -146,6 +150,8 @@ int main() {
                        "last_render_idle=0 last_capture_wait_timed_out=0 "
                        "last_render_wait_timed_out=0 last_capture_partial=0 "
                        "last_render_partial=0 last_capture_silent=0 "
+                       "last_capture_discontinuity=0 "
+                       "last_capture_timestamp_error=0 "
                        "error_count=0 first_error_code=",
                    "Expected no-cycle machine-readable summary line")) {
       return failure;
@@ -164,6 +170,10 @@ int main() {
     stats.render_partial_frames = 16;
     stats.capture_silent_cycles = 5;
     stats.capture_silent_frames = 32;
+    stats.capture_discontinuity_cycles = 2;
+    stats.capture_discontinuity_frames = 48;
+    stats.capture_timestamp_error_cycles = 1;
+    stats.capture_timestamp_error_frames = 24;
     stats.process_error_cycles = 6;
     stats.stream_start_error_cycles = 7;
     stats.stream_stop_error_cycles = 8;
@@ -177,6 +187,8 @@ int main() {
     stats.last_capture_partial = true;
     stats.last_render_partial = true;
     stats.last_capture_silent = true;
+    stats.last_capture_discontinuity = true;
+    stats.last_capture_timestamp_error = true;
 
     const auto capture_diagnostics = make_stream_diagnostics(
         sar::platform::WasapiStreamDirection::Capture, 48000, 4, 96);
@@ -231,6 +243,16 @@ int main() {
     }
     if (const auto failure = expect(summary.capture_silent_frames == 32,
                                     "Expected copied silent capture frames")) {
+      return failure;
+    }
+    if (const auto failure = expect(summary.capture_discontinuity_cycles == 2 &&
+                                        summary.capture_discontinuity_frames == 48,
+                                    "Expected copied capture discontinuities")) {
+      return failure;
+    }
+    if (const auto failure = expect(summary.capture_timestamp_error_cycles == 1 &&
+                                        summary.capture_timestamp_error_frames == 24,
+                                    "Expected copied capture timestamp errors")) {
       return failure;
     }
     if (const auto failure = expect(summary.process_error_cycles == 6,
@@ -311,7 +333,9 @@ int main() {
                        summary.last_capture_wait_timed_out &&
                        summary.last_render_wait_timed_out &&
                        summary.last_capture_partial && summary.last_render_partial &&
-                       summary.last_capture_silent,
+                       summary.last_capture_silent &&
+                       summary.last_capture_discontinuity &&
+                       summary.last_capture_timestamp_error,
                    "Expected copied last-cycle flags")) {
       return failure;
     }
@@ -350,6 +374,18 @@ int main() {
             expect(summary_line.find("capture_silent_frames=32") !=
                        std::string::npos,
                    "Expected summary line silent capture frames")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("capture_discontinuity_frames=48") !=
+                       std::string::npos,
+                   "Expected summary line capture discontinuity frames")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("capture_timestamp_error_frames=24") !=
+                       std::string::npos,
+                   "Expected summary line capture timestamp error frames")) {
       return failure;
     }
     if (const auto failure =
@@ -460,6 +496,18 @@ int main() {
             expect(summary_line.find("last_capture_silent=1") !=
                        std::string::npos,
                    "Expected summary line last capture silent flag")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("last_capture_discontinuity=1") !=
+                       std::string::npos,
+                   "Expected summary line last capture discontinuity flag")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("last_capture_timestamp_error=1") !=
+                       std::string::npos,
+                   "Expected summary line last capture timestamp error flag")) {
       return failure;
     }
   }
@@ -610,6 +658,37 @@ int main() {
                            sar::platform::WasapiRuntimeHealth::Faulted,
                            "stream_stop_error",
                            "Expected stream-stop priority")) {
+      return failure;
+    }
+  }
+
+  {
+    auto stats = make_active_stats();
+    stats.capture_discontinuity_cycles = 1;
+    stats.capture_discontinuity_frames = 64;
+    stats.capture_timestamp_error_cycles = 1;
+    const auto summary =
+        sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
+    if (const auto failure =
+            expect_summary(summary,
+                           sar::platform::WasapiRuntimeHealth::Degraded,
+                           "capture_discontinuity",
+                           "Expected capture discontinuity priority")) {
+      return failure;
+    }
+  }
+
+  {
+    auto stats = make_active_stats();
+    stats.capture_timestamp_error_cycles = 1;
+    stats.capture_timestamp_error_frames = 64;
+    const auto summary =
+        sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
+    if (const auto failure =
+            expect_summary(summary,
+                           sar::platform::WasapiRuntimeHealth::Degraded,
+                           "capture_timestamp_error",
+                           "Expected capture timestamp error summary")) {
       return failure;
     }
   }

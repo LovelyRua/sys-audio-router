@@ -186,6 +186,11 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
     }
     stats.captured_frames = capture_result.frames();
     stats.capture_silent = capture_result.silent();
+    stats.capture_data_discontinuity = capture_result.data_discontinuity();
+    stats.capture_timestamp_error = capture_result.timestamp_error();
+    if (stats.capture_data_discontinuity) {
+      diagnostics.xrun_count += 1;
+    }
     if (stats.capture_silent) {
       stats.capture_silent_frames = stats.captured_frames;
     }

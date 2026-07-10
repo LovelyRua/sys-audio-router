@@ -213,6 +213,14 @@ int main() {
                                     "Expected timeout I/O not silent")) {
       return failure;
     }
+    if (const auto failure = expect(!timeout_result.data_discontinuity(),
+                                    "Expected timeout I/O without discontinuity")) {
+      return failure;
+    }
+    if (const auto failure = expect(!timeout_result.timestamp_error(),
+                                    "Expected timeout I/O without timestamp error")) {
+      return failure;
+    }
 
     const auto silent_result = sar::platform::WasapiStreamIoResult::success_silent(128);
     if (const auto failure = expect(silent_result.ok(), "Expected silent I/O success")) {
@@ -236,6 +244,30 @@ int main() {
     }
     if (const auto failure = expect(!silent_result.timed_out(),
                                     "Expected silent I/O not timed out")) {
+      return failure;
+    }
+
+    const auto discontinuous_result =
+        sar::platform::WasapiStreamIoResult::success(128, true, true);
+    if (const auto failure = expect(discontinuous_result.data_discontinuity(),
+                                    "Expected capture discontinuity flag")) {
+      return failure;
+    }
+    if (const auto failure = expect(discontinuous_result.timestamp_error(),
+                                    "Expected capture timestamp error flag")) {
+      return failure;
+    }
+    if (const auto failure = expect(!discontinuous_result.silent(),
+                                    "Expected discontinuous non-silent I/O")) {
+      return failure;
+    }
+
+    const auto discontinuous_silent_result =
+        sar::platform::WasapiStreamIoResult::success_silent(64, true, false);
+    if (const auto failure = expect(discontinuous_silent_result.silent() &&
+                                        discontinuous_silent_result.data_discontinuity() &&
+                                        !discontinuous_silent_result.timestamp_error(),
+                                    "Expected independent silent and discontinuity flags")) {
       return failure;
     }
 
@@ -285,6 +317,11 @@ int main() {
     }
     if (const auto failure = expect(!failure_result.silent(),
                                     "Expected failed I/O not silent")) {
+      return failure;
+    }
+    if (const auto failure = expect(!failure_result.data_discontinuity() &&
+                                        !failure_result.timestamp_error(),
+                                    "Expected failed I/O without capture flags")) {
       return failure;
     }
     if (const auto failure = expect(!failure_result.timed_out(),
