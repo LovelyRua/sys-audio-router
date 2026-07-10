@@ -1,5 +1,9 @@
 # Development
 
+The three parallel worktrees use directory and interface ownership defined in
+[`docs/development/team-workstreams.md`](development/team-workstreams.md). Read
+that document before choosing a task or creating a branch.
+
 ## Toolchain
 
 The initial core prototype is standard C++20 with CMake.

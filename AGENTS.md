@@ -63,6 +63,18 @@ diagnostics, run the Windows test script before pushing or merging.
 
 ## Collaboration Style
 
+- Follow `docs/development/team-workstreams.md`. Engineer ownership is divided by
+  implementation area so parallel branches do not edit the same files.
+- Engineer A owns Windows backend implementation and integration. Engineer B
+  owns the portable realtime, graph, and control layers. Engineer C owns
+  diagnostics, sample conversion, tools, scripts, and lab infrastructure.
+- Only Engineer A pushes or merges `main`. Engineers B and C work on named
+  branches and submit PRs.
+- Do not edit another engineer's owned implementation files to complete a task.
+  Request a small public API handoff and continue after the owner lands it.
+- Shared integration files such as `CMakeLists.txt`, `AGENTS.md`, the roadmap,
+  and current-system architecture are edited by Engineer A unless explicitly
+  delegated for one PR.
 - Read the nearby code and docs before changing an area.
 - Preserve existing patterns unless a clearer local abstraction is needed.
 - Separate risky platform work into small commits.
