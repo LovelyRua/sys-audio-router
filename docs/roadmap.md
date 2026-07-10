@@ -56,10 +56,10 @@ Exit criteria:
 
 Purpose: connect the engine to real Windows audio devices.
 
-Status: underway. WASAPI endpoint enumeration, default stream probing,
-shared-mode event-driven stream handles, single-cycle render/capture pumping,
-graph runner orchestration, MMCSS scope, and a realtime worker shell exist. The
-next milestone is a measured real-device loop.
+Status: underway. WASAPI endpoint enumeration, default endpoint and render
+loopback probing, shared-mode event-driven stream handles, single-cycle
+render/capture pumping, graph runner orchestration, MMCSS scope, and a realtime
+worker shell exist. The next milestone is a measured real-device loop.
 
 Deliverables:
 

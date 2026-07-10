@@ -43,9 +43,14 @@ int expect(bool condition, const char* message) {
 
 int verify_probe_contract(const sar::platform::WasapiStreamProbe& probe,
                           sar::platform::WasapiStreamDirection direction,
+                          sar::platform::WasapiStreamMode mode,
                           const char* label) {
   if (const auto failure = expect(probe.direction == direction,
                                   "Expected probed WASAPI direction")) {
+    return failure;
+  }
+  if (const auto failure = expect(probe.mode == mode,
+                                  "Expected probed WASAPI mode")) {
     return failure;
   }
   if (const auto failure = expect(!probe.device_id.empty(),
@@ -116,6 +121,31 @@ int main() {
     return failure;
   }
   if (const auto failure =
+          expect(std::string(sar::platform::wasapi_stream_mode_name(
+                     sar::platform::WasapiStreamMode::Endpoint)) == "endpoint",
+                 "Expected endpoint stream mode name")) {
+    return failure;
+  }
+  if (const auto failure =
+          expect(std::string(sar::platform::wasapi_stream_mode_name(
+                     sar::platform::WasapiStreamMode::Loopback)) == "loopback",
+                 "Expected loopback stream mode name")) {
+    return failure;
+  }
+  const auto invalid_loopback = sar::platform::probe_default_wasapi_stream(
+      sar::platform::WasapiStreamDirection::Render,
+      sar::platform::WasapiStreamMode::Loopback);
+  if (const auto failure = expect(!invalid_loopback.ok(),
+                                  "Expected render loopback probe rejection")) {
+    return failure;
+  }
+  if (const auto failure =
+          expect(invalid_loopback.errors().front().code ==
+                     "invalid_loopback_direction",
+                 "Expected invalid loopback direction error")) {
+    return failure;
+  }
+  if (const auto failure =
           expect(std::string(sar::platform::wasapi_stream_direction_name(
                      sar::platform::WasapiStreamDirection::Capture)) == "capture",
                  "Expected capture stream direction name")) {
@@ -136,7 +166,25 @@ int main() {
     }
     if (const auto failure = verify_probe_contract(result.probe(),
                                                    sar::platform::WasapiStreamDirection::Render,
+                                                   sar::platform::WasapiStreamMode::Endpoint,
                                                    "render")) {
+      return failure;
+    }
+
+    const auto loopback_result = sar::platform::probe_default_wasapi_stream(
+        sar::platform::WasapiStreamDirection::Capture,
+        sar::platform::WasapiStreamMode::Loopback);
+    if (!loopback_result.ok()) {
+      for (const auto& error : loopback_result.errors()) {
+        std::cerr << error.code << ": " << error.message << '\n';
+      }
+      return 1;
+    }
+    if (const auto failure = verify_probe_contract(
+            loopback_result.probe(),
+            sar::platform::WasapiStreamDirection::Capture,
+            sar::platform::WasapiStreamMode::Loopback,
+            "loopback capture")) {
       return failure;
     }
   }
@@ -154,6 +202,7 @@ int main() {
     }
     if (const auto failure = verify_probe_contract(result.probe(),
                                                    sar::platform::WasapiStreamDirection::Capture,
+                                                   sar::platform::WasapiStreamMode::Endpoint,
                                                    "capture")) {
       return failure;
     }

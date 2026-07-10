@@ -69,6 +69,7 @@ sar::platform::WasapiStreamDiagnostics make_stream_diagnostics() {
   sar::platform::WasapiStreamDiagnostics diagnostics;
   diagnostics.state = sar::platform::WasapiStreamState::Started;
   diagnostics.direction = sar::platform::WasapiStreamDirection::Capture;
+  diagnostics.mode = sar::platform::WasapiStreamMode::Loopback;
   diagnostics.mix_format.sample_rate = 44100;
   diagnostics.mix_format.channels = 1;
   diagnostics.mix_format.frames_per_block = 64;
@@ -154,6 +155,10 @@ int main() {
                    "Expected probe frames per block")) {
       return failure;
     }
+    if (const auto failure = expect(contains(text, "Mode: endpoint"),
+                                    "Expected probe endpoint mode")) {
+      return failure;
+    }
     if (const auto failure =
             expect(contains(text, "Default period 100ns: 100000"),
                    "Expected probe default period")) {
@@ -217,7 +222,7 @@ int main() {
     if (const auto failure =
             expect(contains(text,
                             "wasapi_stream_diagnostics state=started "
-                            "direction=capture sample_rate=44100"),
+                            "direction=capture mode=loopback sample_rate=44100"),
                    "Expected machine-readable stream diagnostics")) {
       return failure;
     }
@@ -229,6 +234,10 @@ int main() {
     if (const auto failure =
             expect(contains(text, "Direction: capture"),
                    "Expected stream diagnostics direction")) {
+      return failure;
+    }
+    if (const auto failure = expect(contains(text, "Mode: loopback"),
+                                    "Expected stream diagnostics loopback mode")) {
       return failure;
     }
     if (const auto failure =

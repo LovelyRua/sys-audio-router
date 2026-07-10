@@ -210,6 +210,16 @@ const char* wasapi_stream_direction_name(WasapiStreamDirection direction) noexce
   return "unknown";
 }
 
+const char* wasapi_stream_mode_name(WasapiStreamMode mode) noexcept {
+  switch (mode) {
+    case WasapiStreamMode::Endpoint:
+      return "endpoint";
+    case WasapiStreamMode::Loopback:
+      return "loopback";
+  }
+  return "unknown";
+}
+
 WasapiStreamProbeResult WasapiStreamProbeResult::success(WasapiStreamProbe probe) {
   return {std::move(probe), {}};
 }
@@ -236,7 +246,18 @@ WasapiStreamProbeResult::WasapiStreamProbeResult(
     std::vector<WasapiStreamProbeError> errors)
     : probe_(std::move(probe)), errors_(std::move(errors)) {}
 
-WasapiStreamProbeResult probe_default_wasapi_stream(WasapiStreamDirection direction) {
+WasapiStreamProbeResult probe_default_wasapi_stream(WasapiStreamDirection direction,
+                                                    WasapiStreamMode mode) {
+  if (mode == WasapiStreamMode::Loopback &&
+      direction != WasapiStreamDirection::Capture) {
+    return WasapiStreamProbeResult::failure({
+        {
+            "invalid_loopback_direction",
+            "WASAPI loopback mode is only valid for capture streams.",
+        },
+    });
+  }
+
   ComApartment apartment;
   if (!apartment.ok()) {
     return WasapiStreamProbeResult::failure({
@@ -263,8 +284,11 @@ WasapiStreamProbeResult probe_default_wasapi_stream(WasapiStreamDirection direct
   }
 
   ComPtr<IMMDevice> device;
+  const auto endpoint_direction = mode == WasapiStreamMode::Loopback
+                                      ? WasapiStreamDirection::Render
+                                      : direction;
   const auto endpoint_result = enumerator->GetDefaultAudioEndpoint(
-      data_flow(direction),
+      data_flow(endpoint_direction),
       eConsole,
       device.put());
   if (FAILED(endpoint_result) || !device) {
@@ -314,8 +338,11 @@ WasapiStreamProbeResult probe_default_wasapi_stream(WasapiStreamDirection direct
     });
   }
 
+  const auto stream_flags = mode == WasapiStreamMode::Loopback
+                                ? AUDCLNT_STREAMFLAGS_LOOPBACK
+                                : 0;
   const auto init_result = audio_client->Initialize(AUDCLNT_SHAREMODE_SHARED,
-                                                   0,
+                                                   stream_flags,
                                                    0,
                                                    0,
                                                    wave_format,
@@ -344,6 +371,7 @@ WasapiStreamProbeResult probe_default_wasapi_stream(WasapiStreamDirection direct
 
   WasapiStreamProbe probe;
   probe.direction = direction;
+  probe.mode = mode;
   probe.device_id = device_id(*device);
   probe.device_label = friendly_name(*device);
   if (probe.device_label.empty()) {

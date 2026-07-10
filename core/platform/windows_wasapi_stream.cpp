@@ -151,6 +151,13 @@ EDataFlow data_flow(WasapiStreamDirection direction) noexcept {
 std::vector<WasapiStreamError> validate_probe(const WasapiStreamProbe& probe) {
   std::vector<WasapiStreamError> errors;
 
+  if (probe.mode == WasapiStreamMode::Loopback &&
+      probe.direction != WasapiStreamDirection::Capture) {
+    errors.push_back({
+        "invalid_loopback_direction",
+        "WASAPI loopback mode is only valid for capture streams.",
+    });
+  }
   if (probe.device_id.empty()) {
     errors.push_back({"empty_device_id", "WASAPI stream probe device ID must not be empty."});
   }
@@ -725,6 +732,7 @@ WasapiStreamDiagnostics WindowsWasapiStream::diagnostics() const noexcept {
   WasapiStreamDiagnostics diagnostics;
   diagnostics.state = state_;
   diagnostics.direction = probe_.direction;
+  diagnostics.mode = probe_.mode;
   diagnostics.mix_format = probe_.mix_format;
   diagnostics.buffer_frames = probe_.buffer_frames;
   diagnostics.default_period_100ns = probe_.default_period_100ns;
@@ -764,8 +772,9 @@ WasapiStreamOpenResult::WasapiStreamOpenResult(WindowsWasapiStream stream,
                                                std::vector<WasapiStreamError> errors)
     : stream_(std::move(stream)), errors_(std::move(errors)) {}
 
-WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection direction) {
-  auto probe_result = probe_default_wasapi_stream(direction);
+WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection direction,
+                                                        WasapiStreamMode mode) {
+  auto probe_result = probe_default_wasapi_stream(direction, mode);
   if (!probe_result.ok()) {
     return WasapiStreamOpenResult::failure(convert_probe_errors(probe_result.errors()));
   }
@@ -800,8 +809,11 @@ WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection di
     });
   }
 
+  const auto endpoint_direction = mode == WasapiStreamMode::Loopback
+                                      ? WasapiStreamDirection::Render
+                                      : direction;
   const auto endpoint_result = impl->enumerator->GetDefaultAudioEndpoint(
-      data_flow(direction),
+      data_flow(endpoint_direction),
       eConsole,
       impl->device.put());
   if (FAILED(endpoint_result) || !impl->device) {
@@ -837,8 +849,12 @@ WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection di
     });
   }
 
+  const auto stream_flags = AUDCLNT_STREAMFLAGS_EVENTCALLBACK |
+                            (mode == WasapiStreamMode::Loopback
+                                 ? AUDCLNT_STREAMFLAGS_LOOPBACK
+                                 : 0);
   const auto init_result = impl->audio_client->Initialize(AUDCLNT_SHAREMODE_SHARED,
-                                                         AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+                                                         stream_flags,
                                                          0,
                                                          0,
                                                          impl->wave_format,

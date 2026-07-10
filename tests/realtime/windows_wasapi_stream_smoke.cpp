@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <string>
+#include <utility>
 
 namespace {
 
@@ -489,6 +490,51 @@ int main() {
 
   {
     sar::platform::WindowsWasapiStream stream;
+    auto invalid_loopback_probe = make_probe();
+    invalid_loopback_probe.mode = sar::platform::WasapiStreamMode::Loopback;
+    const auto invalid_loopback_result = stream.open(invalid_loopback_probe);
+    if (const auto failure = expect(!invalid_loopback_result.ok(),
+                                    "Expected render loopback stream rejection")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            has_error_code(invalid_loopback_result, "invalid_loopback_direction"),
+            "Expected invalid loopback direction stream error")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiStream stream;
+    auto loopback_probe = make_probe();
+    loopback_probe.direction = sar::platform::WasapiStreamDirection::Capture;
+    loopback_probe.mode = sar::platform::WasapiStreamMode::Loopback;
+    const auto open_result = stream.open(std::move(loopback_probe));
+    if (const auto failure = expect(open_result.ok(),
+                                    "Expected synthetic loopback stream open")) {
+      return failure;
+    }
+    if (const auto failure = expect(stream.diagnostics().mode ==
+                                        sar::platform::WasapiStreamMode::Loopback,
+                                    "Expected loopback diagnostics mode")) {
+      return failure;
+    }
+    const auto start_result = stream.start();
+    if (const auto failure = expect(start_result.ok(),
+                                    "Expected synthetic loopback stream start")) {
+      return failure;
+    }
+    sar::realtime::AudioBuffer capture_buffer(2, 480);
+    const auto capture_result = stream.capture_once(capture_buffer, 0);
+    if (const auto failure = expect(!capture_result.ok(),
+                                    "Expected synthetic loopback without native client")) {
+      return failure;
+    }
+    stream.close();
+  }
+
+  {
+    sar::platform::WindowsWasapiStream stream;
     auto invalid_probe = make_probe();
     invalid_probe.buffer_frames = 0;
     invalid_probe.mix_format.bits_per_sample = 0;
@@ -681,6 +727,37 @@ int main() {
             expect(stream.state() == sar::platform::WasapiStreamState::Open,
                    "Expected default stream shell to stop")) {
       return failure;
+    }
+
+    auto loopback_result = sar::platform::open_default_wasapi_stream_shell(
+        sar::platform::WasapiStreamDirection::Capture,
+        sar::platform::WasapiStreamMode::Loopback);
+    if (!loopback_result.ok()) {
+      for (const auto& error : loopback_result.errors()) {
+        std::cerr << error.code << ": " << error.message << '\n';
+      }
+      return 1;
+    }
+    auto loopback_stream = loopback_result.take_stream();
+    if (const auto failure = expect(loopback_stream.probe().mode ==
+                                        sar::platform::WasapiStreamMode::Loopback,
+                                    "Expected native loopback stream mode")) {
+      return failure;
+    }
+    start_result = loopback_stream.start();
+    if (!start_result.ok()) {
+      return 1;
+    }
+    sar::realtime::AudioBuffer loopback_buffer(
+        loopback_stream.probe().mix_format.channels,
+        loopback_stream.probe().buffer_frames);
+    io_result = loopback_stream.capture_once(loopback_buffer, 0);
+    if (!io_result.ok()) {
+      return 1;
+    }
+    stop_result = loopback_stream.stop();
+    if (!stop_result.ok()) {
+      return 1;
     }
   }
 

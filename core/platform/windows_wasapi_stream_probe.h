@@ -13,11 +13,19 @@ enum class WasapiStreamDirection {
   Capture,
 };
 
+enum class WasapiStreamMode {
+  Endpoint,
+  Loopback,
+};
+
 [[nodiscard]] const char* wasapi_stream_direction_name(
     WasapiStreamDirection direction) noexcept;
+[[nodiscard]] const char* wasapi_stream_mode_name(
+    WasapiStreamMode mode) noexcept;
 
 struct WasapiStreamProbe {
   WasapiStreamDirection direction = WasapiStreamDirection::Render;
+  WasapiStreamMode mode = WasapiStreamMode::Endpoint;
   std::string device_id;
   std::string device_label;
   AudioFormat mix_format;
@@ -49,6 +57,7 @@ class WasapiStreamProbeResult {
 };
 
 [[nodiscard]] WasapiStreamProbeResult probe_default_wasapi_stream(
-    WasapiStreamDirection direction);
+    WasapiStreamDirection direction,
+    WasapiStreamMode mode = WasapiStreamMode::Endpoint);
 
 }  // namespace sar::platform

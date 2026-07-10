@@ -30,6 +30,7 @@ void print_wasapi_probe(std::ostream& out,
                         const platform::WasapiStreamProbe& probe) {
   out << label << '\n';
   out << "  Device: " << probe.device_label << '\n';
+  out << "  Mode: " << platform::wasapi_stream_mode_name(probe.mode) << '\n';
   out << "  Sample rate: " << probe.mix_format.sample_rate << '\n';
   out << "  Channels: " << probe.mix_format.channels << '\n';
   out << "  Frames per block: " << probe.mix_format.frames_per_block << '\n';
@@ -89,6 +90,7 @@ void print_wasapi_stream_diagnostics(
       << " state=" << platform::wasapi_stream_state_name(diagnostics.state)
       << " direction="
       << platform::wasapi_stream_direction_name(diagnostics.direction)
+      << " mode=" << platform::wasapi_stream_mode_name(diagnostics.mode)
       << " sample_rate=" << diagnostics.mix_format.sample_rate
       << " channels=" << diagnostics.mix_format.channels
       << " frames_per_block=" << diagnostics.mix_format.frames_per_block
@@ -105,6 +107,7 @@ void print_wasapi_stream_diagnostics(
   out << "  State: " << platform::wasapi_stream_state_name(diagnostics.state) << '\n';
   out << "  Direction: "
       << platform::wasapi_stream_direction_name(diagnostics.direction) << '\n';
+  out << "  Mode: " << platform::wasapi_stream_mode_name(diagnostics.mode) << '\n';
   out << "  Sample rate: " << diagnostics.mix_format.sample_rate << '\n';
   out << "  Channels: " << diagnostics.mix_format.channels << '\n';
   out << "  Frames per block: " << diagnostics.mix_format.frames_per_block << '\n';

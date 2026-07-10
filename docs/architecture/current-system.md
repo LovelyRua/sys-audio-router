@@ -55,7 +55,9 @@ The current session state model is still in-process. IPC, persistence, UI
 binding, and service hosting are future work.
 
 `core/diagnostics` tracks graph version, processed blocks, callback duration,
-peak callback duration, and xrun count. WASAPI worker summaries now classify
+peak callback duration, and xrun count. The worker mirrors per-run xrun totals
+and last, peak, total, and average callback duration without cross-thread reads
+of the mutable engine diagnostics. WASAPI worker summaries now classify
 runtime health across stopped, healthy, degraded, and faulted states, including
 split capture/render wait timeouts, partial transfers, silent capture, stream
 start/stop failures, processing failures, capture data discontinuities, capture
@@ -89,9 +91,11 @@ clock drift, and end-to-end latency behavior.
 `WindowsWasapiStream` currently supports:
 
 - Default endpoint probing.
+- Default render-endpoint loopback probing and capture stream opening.
 - Shared-mode WASAPI initialization.
 - Event-driven stream handles.
 - `IAudioRenderClient` and `IAudioCaptureClient` ownership.
+- Explicit endpoint/loopback stream mode diagnostics.
 - Render priming with a silent buffer.
 - Start/stop lifecycle.
 - Single-cycle `render_once` and `capture_once` calls that can be woken by the
@@ -146,6 +150,8 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 ## Known Gaps
 
 - No always-on real-device render/capture loop has been measured yet.
+- Loopback capture has a native stream API but not yet a dedicated high-level
+  loop wrapper or measurement tool.
 - No virtual ASIO driver implementation exists yet.
 - No virtual WDM/WASAPI driver implementation exists yet.
 - No UI exists yet.

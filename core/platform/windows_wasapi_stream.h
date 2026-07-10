@@ -27,6 +27,7 @@ struct WasapiStreamError {
 struct WasapiStreamDiagnostics {
   WasapiStreamState state = WasapiStreamState::Closed;
   WasapiStreamDirection direction = WasapiStreamDirection::Render;
+  WasapiStreamMode mode = WasapiStreamMode::Endpoint;
   AudioFormat mix_format;
   std::uint32_t buffer_frames = 0;
   std::uint64_t default_period_100ns = 0;
@@ -126,7 +127,8 @@ class WindowsWasapiStream {
 
  private:
   friend WasapiStreamOpenResult open_default_wasapi_stream_shell(
-      WasapiStreamDirection direction);
+      WasapiStreamDirection direction,
+      WasapiStreamMode mode);
 
   struct Impl;
 
@@ -155,6 +157,7 @@ class WasapiStreamOpenResult {
 };
 
 [[nodiscard]] WasapiStreamOpenResult open_default_wasapi_stream_shell(
-    WasapiStreamDirection direction);
+    WasapiStreamDirection direction,
+    WasapiStreamMode mode = WasapiStreamMode::Endpoint);
 
 }  // namespace sar::platform
