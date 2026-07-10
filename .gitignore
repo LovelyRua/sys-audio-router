@@ -22,6 +22,7 @@ credentials/
 
 # Local scratch
 tmp/
+.codegraph/
 
 # Local collaborator worktrees/clones nested under this coordination checkout
 system-audio-route-a/
