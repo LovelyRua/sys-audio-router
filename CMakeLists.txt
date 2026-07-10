@@ -52,6 +52,12 @@ add_executable(sar_realtime_smoke
 
 target_link_libraries(sar_realtime_smoke PRIVATE sar_core)
 
+add_executable(sar_atomic_float_parameter_smoke
+  tests/realtime/atomic_float_parameter_smoke.cpp
+)
+
+target_link_libraries(sar_atomic_float_parameter_smoke PRIVATE sar_core)
+
 add_executable(sar_graph_snapshot_smoke
   tests/realtime/graph_snapshot_smoke.cpp
 )
@@ -248,6 +254,7 @@ target_link_libraries(sar_spsc_ring_buffer_threaded_smoke PRIVATE sar_core)
 
 enable_testing()
 add_test(NAME realtime_smoke COMMAND sar_realtime_smoke)
+add_test(NAME atomic_float_parameter_smoke COMMAND sar_atomic_float_parameter_smoke)
 add_test(NAME graph_snapshot_smoke COMMAND sar_graph_snapshot_smoke)
 add_test(NAME graph_builder_smoke COMMAND sar_graph_builder_smoke)
 add_test(NAME route_matrix_smoke COMMAND sar_route_matrix_smoke)

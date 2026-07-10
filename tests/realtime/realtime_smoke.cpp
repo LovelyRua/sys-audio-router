@@ -67,6 +67,35 @@ int main() {
     return 1;
   }
 
+  sar::graph::MuteNode mute(true);
+  const sar::realtime::ProcessContext context{
+      .sample_rate = 48000,
+      .frames = input.frames(),
+      .block_index = 0,
+  };
+  mute.process(context, input, output);
+  for (std::size_t channel = 0; channel < output.channels(); ++channel) {
+    for (const auto sample : output.channel(channel)) {
+      if (!sar::tests::nearly_equal(sample, 0.0F)) {
+        std::cerr << "Expected muted node to produce silence\n";
+        return 1;
+      }
+    }
+  }
+
+  mute.set_muted(false);
+  mute.process(context, input, output);
+  for (std::size_t channel = 0; channel < output.channels(); ++channel) {
+    const auto source = input.channel(channel);
+    const auto destination = output.channel(channel);
+    for (std::size_t frame = 0; frame < output.frames(); ++frame) {
+      if (!sar::tests::nearly_equal(destination[frame], source[frame])) {
+        std::cerr << "Expected unmuted node to copy input\n";
+        return 1;
+      }
+    }
+  }
+
   std::cout << "Realtime smoke test passed. peak_callback_seconds="
             << diagnostics.peak_callback_seconds << '\n';
   return 0;
