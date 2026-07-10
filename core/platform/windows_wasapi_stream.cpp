@@ -265,6 +265,7 @@ struct WindowsWasapiStream::Impl {
   ComPtr<IAudioRenderClient> render_client;
   ComPtr<IAudioCaptureClient> capture_client;
   UniqueHandle samples_ready_event;
+  UniqueHandle stop_requested_event;
   WAVEFORMATEX* wave_format = nullptr;
 
   ~Impl() {
@@ -274,6 +275,37 @@ struct WindowsWasapiStream::Impl {
     }
   }
 };
+
+namespace {
+
+enum class WasapiEventWaitStatus {
+  SamplesReady,
+  StopRequested,
+  TimedOut,
+  Failed,
+};
+
+WasapiEventWaitStatus wait_for_stream_event(HANDLE samples_ready_event,
+                                            HANDLE stop_requested_event,
+                                            std::uint32_t timeout_ms) noexcept {
+  HANDLE events[] = {
+      samples_ready_event,
+      stop_requested_event,
+  };
+  const auto wait_result = WaitForMultipleObjects(2, events, FALSE, timeout_ms);
+  if (wait_result == WAIT_OBJECT_0) {
+    return WasapiEventWaitStatus::SamplesReady;
+  }
+  if (wait_result == WAIT_OBJECT_0 + 1) {
+    return WasapiEventWaitStatus::StopRequested;
+  }
+  if (wait_result == WAIT_TIMEOUT) {
+    return WasapiEventWaitStatus::TimedOut;
+  }
+  return WasapiEventWaitStatus::Failed;
+}
+
+}  // namespace
 
 WasapiStreamResult WasapiStreamResult::success() {
   return WasapiStreamResult({});
@@ -405,6 +437,9 @@ WasapiStreamResult WindowsWasapiStream::start() {
   }
 
   if (impl_ && impl_->audio_client) {
+    if (impl_->stop_requested_event.valid()) {
+      ResetEvent(impl_->stop_requested_event.get());
+    }
     const auto start_result = impl_->audio_client->Start();
     if (FAILED(start_result)) {
       return WasapiStreamResult::failure({
@@ -460,17 +495,22 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
     });
   }
   if (!impl_ || !impl_->audio_client || !impl_->render_client ||
-      !impl_->samples_ready_event.valid()) {
+      !impl_->samples_ready_event.valid() || !impl_->stop_requested_event.valid()) {
     return WasapiStreamIoResult::failure({
         {"native_stream_unavailable", "WASAPI render requires a native opened stream."},
     });
   }
 
-  const auto wait_result = WaitForSingleObject(impl_->samples_ready_event.get(), timeout_ms);
-  if (wait_result == WAIT_TIMEOUT) {
+  const auto wait_result = wait_for_stream_event(impl_->samples_ready_event.get(),
+                                                impl_->stop_requested_event.get(),
+                                                timeout_ms);
+  if (wait_result == WasapiEventWaitStatus::StopRequested) {
+    return WasapiStreamIoResult::success(0);
+  }
+  if (wait_result == WasapiEventWaitStatus::TimedOut) {
     return WasapiStreamIoResult::timeout();
   }
-  if (wait_result != WAIT_OBJECT_0) {
+  if (wait_result != WasapiEventWaitStatus::SamplesReady) {
     return WasapiStreamIoResult::failure({
         {"wasapi_event_wait_failed", "WASAPI render event wait failed."},
     });
@@ -548,17 +588,23 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
         {"wrong_stream_direction", "WASAPI capture requires a capture stream."},
     });
   }
-  if (!impl_ || !impl_->capture_client || !impl_->samples_ready_event.valid()) {
+  if (!impl_ || !impl_->capture_client || !impl_->samples_ready_event.valid() ||
+      !impl_->stop_requested_event.valid()) {
     return WasapiStreamIoResult::failure({
         {"native_stream_unavailable", "WASAPI capture requires a native opened stream."},
     });
   }
 
-  const auto wait_result = WaitForSingleObject(impl_->samples_ready_event.get(), timeout_ms);
-  if (wait_result == WAIT_TIMEOUT) {
+  const auto wait_result = wait_for_stream_event(impl_->samples_ready_event.get(),
+                                                impl_->stop_requested_event.get(),
+                                                timeout_ms);
+  if (wait_result == WasapiEventWaitStatus::StopRequested) {
+    return WasapiStreamIoResult::success(0);
+  }
+  if (wait_result == WasapiEventWaitStatus::TimedOut) {
     return WasapiStreamIoResult::timeout();
   }
-  if (wait_result != WAIT_OBJECT_0) {
+  if (wait_result != WasapiEventWaitStatus::SamplesReady) {
     return WasapiStreamIoResult::failure({
         {"wasapi_event_wait_failed", "WASAPI capture event wait failed."},
     });
@@ -640,6 +686,12 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
   }
   return WasapiStreamIoResult::success(
       packet_frames, data_discontinuity, timestamp_error);
+}
+
+void WindowsWasapiStream::request_stop() noexcept {
+  if (impl_ && impl_->stop_requested_event.valid()) {
+    SetEvent(impl_->stop_requested_event.get());
+  }
 }
 
 void WindowsWasapiStream::close() noexcept {
@@ -797,6 +849,17 @@ WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection di
         {
             "wasapi_event_create_failed",
             "WASAPI samples-ready event creation failed with " + hresult_hex(error) + ".",
+        },
+    });
+  }
+
+  impl->stop_requested_event.reset(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+  if (!impl->stop_requested_event.valid()) {
+    const auto error = HRESULT_FROM_WIN32(GetLastError());
+    return WasapiStreamOpenResult::failure({
+        {
+            "wasapi_stop_event_create_failed",
+            "WASAPI stop event creation failed with " + hresult_hex(error) + ".",
         },
     });
   }

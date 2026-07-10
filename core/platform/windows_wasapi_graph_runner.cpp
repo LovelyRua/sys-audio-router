@@ -166,6 +166,15 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::stop_streams() noexcept {
   return WasapiGraphRunnerResult::success({});
 }
 
+void WindowsWasapiGraphRunner::request_stop() noexcept {
+  if (render_stream_ != nullptr) {
+    render_stream_->request_stop();
+  }
+  if (capture_stream_ != nullptr) {
+    capture_stream_->request_stop();
+  }
+}
+
 WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics,

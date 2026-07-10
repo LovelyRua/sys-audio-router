@@ -193,6 +193,7 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
 
 void WindowsWasapiRealtimeWorker::stop() noexcept {
   stop_requested_.store(true);
+  runner_.request_stop();
   if (worker_.joinable()) {
     const auto started = std::chrono::steady_clock::now();
     worker_.join();

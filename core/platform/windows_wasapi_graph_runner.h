@@ -67,6 +67,7 @@ class WindowsWasapiGraphRunner {
 
   [[nodiscard]] WasapiGraphRunnerResult start_streams() noexcept;
   [[nodiscard]] WasapiGraphRunnerResult stop_streams() noexcept;
+  void request_stop() noexcept;
   [[nodiscard]] WasapiGraphRunnerResult process_once(
       graph::Graph& graph,
       diagnostics::EngineDiagnostics& diagnostics,
