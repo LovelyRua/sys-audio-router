@@ -290,14 +290,17 @@ int main() {
 
     const auto start_result = worker.start(0);
     if (const auto failure =
-            expect(start_result.ok(), "Expected closed-stream worker thread start")) {
+            expect(!start_result.ok(), "Expected closed-stream worker start failure")) {
       return failure;
     }
-
-    for (int attempt = 0; attempt < 100 && worker.running(); ++attempt) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    if (const auto failure = expect(has_error_code(start_result.errors(), "stream_not_open"),
+                                    "Expected synchronous stream_not_open result")) {
+      return failure;
     }
-    worker.stop();
+    if (const auto failure = expect(!worker.running(),
+                                    "Expected failed startup worker to be stopped")) {
+      return failure;
+    }
 
     const auto errors = worker.last_errors();
     if (const auto failure = expect(has_error_code(errors, "stream_not_open"),

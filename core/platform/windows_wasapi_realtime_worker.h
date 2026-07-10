@@ -5,6 +5,7 @@
 #include "core/platform/windows_wasapi_graph_runner.h"
 
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -84,6 +85,7 @@ class WindowsWasapiRealtimeWorker {
 
  private:
   void run(std::uint32_t timeout_ms) noexcept;
+  void publish_startup_result(bool succeeded) noexcept;
   void set_errors(std::vector<WasapiRealtimeWorkerError> errors);
 
   WindowsWasapiGraphRunner& runner_;
@@ -121,6 +123,10 @@ class WindowsWasapiRealtimeWorker {
   std::atomic_bool last_render_partial_ = false;
   std::atomic_bool last_capture_silent_ = false;
   std::atomic_uint64_t last_stop_wait_microseconds_ = 0;
+  std::mutex startup_mutex_;
+  std::condition_variable startup_condition_;
+  bool startup_complete_ = false;
+  bool startup_succeeded_ = false;
   mutable std::mutex errors_mutex_;
   std::vector<WasapiRealtimeWorkerError> last_errors_;
   std::thread worker_;
