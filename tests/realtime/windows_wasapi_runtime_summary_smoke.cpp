@@ -142,7 +142,11 @@ int main() {
                        "render_default_period_100ns=0 "
                        "capture_minimum_period_100ns=0 "
                        "render_minimum_period_100ns=0 "
-                       "error_count=0",
+                       "last_graph_processed=0 last_capture_idle=0 "
+                       "last_render_idle=0 last_capture_wait_timed_out=0 "
+                       "last_render_wait_timed_out=0 last_capture_partial=0 "
+                       "last_render_partial=0 last_capture_silent=0 "
+                       "error_count=0 first_error_code=",
                    "Expected no-cycle machine-readable summary line")) {
       return failure;
     }
@@ -420,6 +424,42 @@ int main() {
             expect(summary_line.find("render_minimum_period_100ns=30000") !=
                        std::string::npos,
                    "Expected summary line render minimum period")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("last_graph_processed=1") !=
+                       std::string::npos,
+                   "Expected summary line last graph flag")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("last_capture_wait_timed_out=1") !=
+                       std::string::npos,
+                   "Expected summary line last capture timeout flag")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("last_render_wait_timed_out=1") !=
+                       std::string::npos,
+                   "Expected summary line last render timeout flag")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("last_capture_partial=1") !=
+                       std::string::npos,
+                   "Expected summary line last capture partial flag")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("last_render_partial=1") !=
+                       std::string::npos,
+                   "Expected summary line last render partial flag")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("last_capture_silent=1") !=
+                       std::string::npos,
+                   "Expected summary line last capture silent flag")) {
       return failure;
     }
   }
@@ -711,6 +751,20 @@ int main() {
             expect(summary.first_error_message ==
                        "Synthetic stream has no native WASAPI client.",
                    "Expected first explicit error message")) {
+      return failure;
+    }
+    const auto summary_line =
+        sar::platform::format_wasapi_runtime_summary_line(summary);
+    if (const auto failure =
+            expect(summary_line.find("error_count=2") != std::string::npos,
+                   "Expected summary line explicit error count")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find(
+                       "first_error_code=native_stream_unavailable") !=
+                       std::string::npos,
+                   "Expected summary line first error code")) {
       return failure;
     }
   }

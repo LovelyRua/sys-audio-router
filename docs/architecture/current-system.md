@@ -117,7 +117,8 @@ stream diagnostics, worker counters, and runtime health.
 The Windows command-line tools can inspect endpoints and run short real-device
 measurements for render-only and full-duplex WASAPI paths. These tools print
 runtime health, reason codes, stream shape, transferred-frame summaries, stop
-wait duration, worker counters, and engine diagnostics for lab captures.
+wait duration, partial/silent transfer counters, last-cycle flags, worker
+counters, and engine diagnostics for lab captures.
 
 ## Current Testing Model
 
