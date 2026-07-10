@@ -283,13 +283,6 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
     return summary;
   }
 
-  if (stats.capture_silent_cycles > 0) {
-    summary.health = WasapiRuntimeHealth::Degraded;
-    summary.reason_code = "silent_capture";
-    summary.reason = "One or more capture cycles returned silent audio.";
-    return summary;
-  }
-
   if (stats.idle_cycles > 0) {
     summary.health = WasapiRuntimeHealth::Degraded;
     summary.reason_code = "idle_cycle";
