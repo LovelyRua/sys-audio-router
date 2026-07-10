@@ -104,7 +104,9 @@ clock drift, and end-to-end latency behavior.
 
 `WindowsWasapiRealtimeWorker` runs the graph runner in a background thread and
 enters MMCSS `Pro Audio` priority through `WindowsRealtimeThreadScope`. It
-publishes worker stats and last errors for non-realtime runtime summaries.
+waits for COM, MMCSS, and stream startup to complete before `start()` reports
+success, then publishes worker stats and last errors for non-realtime runtime
+summaries.
 
 `WindowsWasapiRenderLoop` owns a default render stream, graph runner, and
 realtime worker. It is the current high-level entry point for the first measured

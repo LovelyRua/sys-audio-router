@@ -11,6 +11,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <system_error>
 #include <utility>
 
 namespace sar::platform {
@@ -152,11 +153,40 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   last_capture_discontinuity_.store(false);
   last_capture_timestamp_error_.store(false);
   last_stop_wait_microseconds_.store(0);
+  {
+    std::lock_guard lock(startup_mutex_);
+    startup_complete_ = false;
+    startup_succeeded_ = false;
+  }
   set_errors({});
   running_.store(true);
-  worker_ = std::thread([this, timeout_ms] {
-    run(timeout_ms);
-  });
+  try {
+    worker_ = std::thread([this, timeout_ms] {
+      run(timeout_ms);
+    });
+  } catch (const std::system_error& error) {
+    running_.store(false);
+    auto errors = std::vector<WasapiRealtimeWorkerError>{
+        {"worker_thread_start_failed",
+         "WASAPI realtime worker thread creation failed: " +
+             std::string(error.what())},
+    };
+    set_errors(errors);
+    return WasapiRealtimeWorkerResult::failure(std::move(errors));
+  }
+
+  bool startup_succeeded = false;
+  {
+    std::unique_lock lock(startup_mutex_);
+    startup_condition_.wait(lock, [this] { return startup_complete_; });
+    startup_succeeded = startup_succeeded_;
+  }
+  if (!startup_succeeded) {
+    if (worker_.joinable()) {
+      worker_.join();
+    }
+    return WasapiRealtimeWorkerResult::failure(last_errors());
+  }
 
   return WasapiRealtimeWorkerResult::success();
 }
@@ -238,6 +268,7 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
         },
     });
     running_.store(false);
+    publish_startup_result(false);
     return;
   }
 
@@ -247,6 +278,7 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
   if (!realtime_result.ok()) {
     set_errors(convert_errors(realtime_result.errors()));
     running_.store(false);
+    publish_startup_result(false);
     return;
   }
 
@@ -255,8 +287,11 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     stream_start_error_cycles_.fetch_add(1);
     set_errors(convert_errors(start_result.errors()));
     running_.store(false);
+    publish_startup_result(false);
     return;
   }
+
+  publish_startup_result(true);
 
   while (!stop_requested_.load()) {
     auto result = runner_.process_once(graph_, diagnostics_, timeout_ms);
@@ -334,6 +369,15 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
   }
 
   running_.store(false);
+}
+
+void WindowsWasapiRealtimeWorker::publish_startup_result(bool succeeded) noexcept {
+  {
+    std::lock_guard lock(startup_mutex_);
+    startup_succeeded_ = succeeded;
+    startup_complete_ = true;
+  }
+  startup_condition_.notify_one();
 }
 
 void WindowsWasapiRealtimeWorker::set_errors(
