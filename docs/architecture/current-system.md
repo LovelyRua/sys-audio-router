@@ -29,7 +29,8 @@ context structures. The graph currently consumes and produces
 
 - `Graph`: linear graph executor with diagnostics updates.
 - `Node`: realtime processor interface.
-- `GainNode` and passthrough behavior used by smoke tests.
+- `GainNode`, `MuteNode`, and passthrough behavior used by smoke tests.
+- Lock-free finite float parameter publishing for scalar node controls.
 - Graph builder and graph snapshot publishing.
 - Route matrix core for channel routing and summing experiments.
 
