@@ -5,6 +5,7 @@
 #include "tests/realtime/test_helpers.h"
 
 #include <iostream>
+#include <limits>
 #include <memory>
 
 namespace {
@@ -46,6 +47,23 @@ int main() {
 
   if (diagnostics.graph_version != 1 || diagnostics.processed_blocks != 1000) {
     std::cerr << "Unexpected diagnostics state\n";
+    return 1;
+  }
+
+  sar::graph::GainNode gain(0.75F);
+  if (!gain.set_gain(0.25F)) {
+    std::cerr << "Expected finite gain update to succeed\n";
+    return 1;
+  }
+  if (gain.set_gain(std::numeric_limits<float>::quiet_NaN()) ||
+      !sar::tests::nearly_equal(gain.gain(), 0.25F)) {
+    std::cerr << "Expected non-finite gain update to preserve the active coefficient\n";
+    return 1;
+  }
+
+  sar::graph::GainNode invalid_gain(std::numeric_limits<float>::infinity());
+  if (!sar::tests::nearly_equal(invalid_gain.gain(), 0.0F)) {
+    std::cerr << "Expected non-finite initial gain to become silence\n";
     return 1;
   }
 

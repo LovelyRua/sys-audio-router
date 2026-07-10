@@ -29,9 +29,9 @@ class RouteMatrix {
   [[nodiscard]] std::string_view output_label(std::size_t output_channel) const noexcept;
 
   void clear_routes() noexcept;
-  void set_gain(std::size_t input_channel,
-                std::size_t output_channel,
-                float gain) noexcept;
+  [[nodiscard]] bool set_gain(std::size_t input_channel,
+                              std::size_t output_channel,
+                              float gain) noexcept;
   [[nodiscard]] float gain(std::size_t input_channel,
                            std::size_t output_channel) const noexcept;
 

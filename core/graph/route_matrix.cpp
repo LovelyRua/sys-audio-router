@@ -1,6 +1,7 @@
 #include "core/graph/route_matrix.h"
 
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
@@ -109,14 +110,16 @@ void RouteMatrix::clear_routes() noexcept {
   std::ranges::fill(gains_, 0.0F);
 }
 
-void RouteMatrix::set_gain(std::size_t input_channel,
+bool RouteMatrix::set_gain(std::size_t input_channel,
                            std::size_t output_channel,
                            float gain) noexcept {
-  if (input_channel >= input_channels_ || output_channel >= output_channels_) {
-    return;
+  if (input_channel >= input_channels_ || output_channel >= output_channels_ ||
+      !std::isfinite(gain)) {
+    return false;
   }
 
   gains_[index(input_channel, output_channel)] = gain;
+  return true;
 }
 
 float RouteMatrix::gain(std::size_t input_channel,
