@@ -208,6 +208,14 @@ if(WIN32)
 
   target_link_libraries(sar_measure_wasapi_duplex_loop PRIVATE sar_core)
 
+  add_executable(sar_measure_wasapi_loopback_loop
+    tools/measure_wasapi_loopback_loop.cpp
+    tools/wasapi_measure_options.cpp
+    tools/wasapi_measure_report.cpp
+  )
+
+  target_link_libraries(sar_measure_wasapi_loopback_loop PRIVATE sar_core)
+
   add_executable(sar_wasapi_measure_options_smoke
     tests/realtime/wasapi_measure_options_smoke.cpp
     tools/wasapi_measure_options.cpp
@@ -310,6 +318,18 @@ if(WIN32)
     COMMAND sar_measure_wasapi_duplex_loop --timeout-ms -1)
   add_test(NAME windows_wasapi_duplex_loop_measure_unknown_arg
     COMMAND sar_measure_wasapi_duplex_loop --definitely-not-a-real-option)
+  add_test(NAME windows_wasapi_loopback_loop_measure_help
+    COMMAND sar_measure_wasapi_loopback_loop --help)
+  add_test(NAME windows_wasapi_loopback_loop_measure_short_help
+    COMMAND sar_measure_wasapi_loopback_loop -h)
+  add_test(NAME windows_wasapi_loopback_loop_measure_missing_duration
+    COMMAND sar_measure_wasapi_loopback_loop --duration-ms)
+  add_test(NAME windows_wasapi_loopback_loop_measure_bad_duration
+    COMMAND sar_measure_wasapi_loopback_loop --duration-ms abc)
+  add_test(NAME windows_wasapi_loopback_loop_measure_bad_timeout
+    COMMAND sar_measure_wasapi_loopback_loop --timeout-ms -1)
+  add_test(NAME windows_wasapi_loopback_loop_measure_unknown_arg
+    COMMAND sar_measure_wasapi_loopback_loop --definitely-not-a-real-option)
   add_test(NAME wasapi_measure_options_smoke
     COMMAND sar_wasapi_measure_options_smoke)
   add_test(NAME wasapi_measure_report_smoke
@@ -323,6 +343,10 @@ if(WIN32)
     windows_wasapi_duplex_loop_measure_bad_duration
     windows_wasapi_duplex_loop_measure_bad_timeout
     windows_wasapi_duplex_loop_measure_unknown_arg
+    windows_wasapi_loopback_loop_measure_missing_duration
+    windows_wasapi_loopback_loop_measure_bad_duration
+    windows_wasapi_loopback_loop_measure_bad_timeout
+    windows_wasapi_loopback_loop_measure_unknown_arg
     PROPERTIES WILL_FAIL TRUE)
   set_tests_properties(
     windows_wasapi_render_loop_measure_help
@@ -331,6 +355,8 @@ if(WIN32)
   set_tests_properties(
     windows_wasapi_duplex_loop_measure_help
     windows_wasapi_duplex_loop_measure_short_help
+    windows_wasapi_loopback_loop_measure_help
+    windows_wasapi_loopback_loop_measure_short_help
     PROPERTIES PASS_REGULAR_EXPRESSION "--require-healthy")
 endif()
 add_test(NAME diagnostics_smoke COMMAND sar_diagnostics_smoke)
