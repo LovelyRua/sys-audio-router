@@ -19,6 +19,10 @@ const char* audio_sample_format_name(
   return "unknown";
 }
 
+const char* bool_token(bool value) noexcept {
+  return value ? "1" : "0";
+}
+
 }  // namespace
 
 void print_wasapi_probe(std::ostream& out,
@@ -112,6 +116,52 @@ void print_wasapi_stream_diagnostics(
 void print_wasapi_worker_stats(
     std::ostream& out,
     const platform::WasapiRealtimeWorkerStats& stats) {
+  out << "wasapi_worker_stats"
+      << " loop_cycles=" << stats.loop_cycles
+      << " graph_processed_cycles=" << stats.graph_processed_cycles
+      << " idle_cycles=" << stats.idle_cycles
+      << " capture_idle_cycles=" << stats.capture_idle_cycles
+      << " render_idle_cycles=" << stats.render_idle_cycles
+      << " wait_timeout_cycles=" << stats.wait_timeout_cycles
+      << " capture_wait_timeout_cycles=" << stats.capture_wait_timeout_cycles
+      << " render_wait_timeout_cycles=" << stats.render_wait_timeout_cycles
+      << " capture_partial_cycles=" << stats.capture_partial_cycles
+      << " capture_partial_frames=" << stats.capture_partial_frames
+      << " render_partial_cycles=" << stats.render_partial_cycles
+      << " render_partial_frames=" << stats.render_partial_frames
+      << " capture_silent_cycles=" << stats.capture_silent_cycles
+      << " capture_silent_frames=" << stats.capture_silent_frames
+      << " capture_discontinuity_cycles="
+      << stats.capture_discontinuity_cycles
+      << " capture_discontinuity_frames="
+      << stats.capture_discontinuity_frames
+      << " capture_timestamp_error_cycles="
+      << stats.capture_timestamp_error_cycles
+      << " capture_timestamp_error_frames="
+      << stats.capture_timestamp_error_frames
+      << " stream_start_error_cycles=" << stats.stream_start_error_cycles
+      << " stream_stop_error_cycles=" << stats.stream_stop_error_cycles
+      << " process_error_cycles=" << stats.process_error_cycles
+      << " captured_frames=" << stats.captured_frames
+      << " rendered_frames=" << stats.rendered_frames
+      << " last_captured_frames=" << stats.last_captured_frames
+      << " last_rendered_frames=" << stats.last_rendered_frames
+      << " last_stop_wait_us=" << stats.last_stop_wait_microseconds
+      << " last_graph_processed=" << bool_token(stats.last_graph_processed)
+      << " last_capture_idle=" << bool_token(stats.last_capture_idle)
+      << " last_render_idle=" << bool_token(stats.last_render_idle)
+      << " last_capture_wait_timed_out="
+      << bool_token(stats.last_capture_wait_timed_out)
+      << " last_render_wait_timed_out="
+      << bool_token(stats.last_render_wait_timed_out)
+      << " last_capture_partial=" << bool_token(stats.last_capture_partial)
+      << " last_render_partial=" << bool_token(stats.last_render_partial)
+      << " last_capture_silent=" << bool_token(stats.last_capture_silent)
+      << " last_capture_discontinuity="
+      << bool_token(stats.last_capture_discontinuity)
+      << " last_capture_timestamp_error="
+      << bool_token(stats.last_capture_timestamp_error)
+      << '\n';
   out << "Worker stats\n";
   out << "  Loop cycles: " << stats.loop_cycles << '\n';
   out << "  Graph processed cycles: " << stats.graph_processed_cycles << '\n';
