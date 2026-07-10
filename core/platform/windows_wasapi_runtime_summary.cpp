@@ -67,6 +67,8 @@ std::string format_wasapi_runtime_summary_line(
          << " xrun_count=" << summary.xrun_count
          << " last_callback_ns=" << summary.last_callback_nanoseconds
          << " peak_callback_ns=" << summary.peak_callback_nanoseconds
+         << " total_callback_ns=" << summary.total_callback_nanoseconds
+         << " average_callback_ns=" << summary.average_callback_nanoseconds
          << " captured_frames=" << summary.captured_frames
          << " rendered_frames=" << summary.rendered_frames
          << " last_captured_frames=" << summary.last_captured_frames
@@ -140,6 +142,11 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
   summary.xrun_count = stats.xrun_count;
   summary.last_callback_nanoseconds = stats.last_callback_nanoseconds;
   summary.peak_callback_nanoseconds = stats.peak_callback_nanoseconds;
+  summary.total_callback_nanoseconds = stats.total_callback_nanoseconds;
+  if (stats.graph_processed_cycles > 0) {
+    summary.average_callback_nanoseconds =
+        stats.total_callback_nanoseconds / stats.graph_processed_cycles;
+  }
   summary.captured_frames = stats.captured_frames;
   summary.rendered_frames = stats.rendered_frames;
   summary.last_captured_frames = stats.last_captured_frames;

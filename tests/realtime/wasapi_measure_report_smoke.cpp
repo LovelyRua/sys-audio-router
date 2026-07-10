@@ -111,6 +111,7 @@ sar::platform::WasapiRealtimeWorkerStats make_stats() {
   stats.xrun_count = 16;
   stats.last_callback_nanoseconds = 17000;
   stats.peak_callback_nanoseconds = 18000;
+  stats.total_callback_nanoseconds = 153000;
   stats.last_stop_wait_microseconds = 1500;
   stats.last_graph_processed = true;
   stats.last_capture_idle = false;
@@ -309,6 +310,10 @@ int main() {
                                     "Expected machine-readable peak callback duration")) {
       return failure;
     }
+    if (const auto failure = expect(contains(text, "total_callback_ns=153000"),
+                                    "Expected machine-readable total callback duration")) {
+      return failure;
+    }
     if (const auto failure =
             expect(contains(text, "last_graph_processed=1"),
                    "Expected machine-readable graph processed flag")) {
@@ -355,6 +360,10 @@ int main() {
     }
     if (const auto failure = expect(contains(text, "Peak callback ns: 18000"),
                                     "Expected worker peak callback duration")) {
+      return failure;
+    }
+    if (const auto failure = expect(contains(text, "Total callback ns: 153000"),
+                                    "Expected worker total callback duration")) {
       return failure;
     }
   }

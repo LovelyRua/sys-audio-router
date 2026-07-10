@@ -225,6 +225,12 @@ int main() {
                                     "Expected peak callback duration to cover last callback")) {
       return failure;
     }
+    if (const auto failure =
+            expect(stats.total_callback_nanoseconds >=
+                       stats.last_callback_nanoseconds,
+                   "Expected total callback duration to cover last callback")) {
+      return failure;
+    }
     if (const auto failure = expect(worker.last_errors().empty(),
                                     "Expected no worker errors")) {
       return failure;

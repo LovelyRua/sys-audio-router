@@ -148,6 +148,7 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   xrun_count_.store(0);
   last_callback_nanoseconds_.store(0);
   peak_callback_nanoseconds_.store(0);
+  total_callback_nanoseconds_.store(0);
   captured_frames_.store(0);
   rendered_frames_.store(0);
   last_captured_frames_.store(0);
@@ -249,6 +250,7 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.xrun_count = xrun_count_.load();
   result.last_callback_nanoseconds = last_callback_nanoseconds_.load();
   result.peak_callback_nanoseconds = peak_callback_nanoseconds_.load();
+  result.total_callback_nanoseconds = total_callback_nanoseconds_.load();
   result.captured_frames = captured_frames_.load();
   result.rendered_frames = rendered_frames_.load();
   result.last_captured_frames = last_captured_frames_.load();
@@ -343,6 +345,7 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
       const auto last_callback_nanoseconds =
           seconds_to_nanoseconds(diagnostics_.last_callback_seconds);
       last_callback_nanoseconds_.store(last_callback_nanoseconds);
+      total_callback_nanoseconds_.fetch_add(last_callback_nanoseconds);
       const auto peak_callback_nanoseconds = peak_callback_nanoseconds_.load();
       if (last_callback_nanoseconds > peak_callback_nanoseconds) {
         peak_callback_nanoseconds_.store(last_callback_nanoseconds);

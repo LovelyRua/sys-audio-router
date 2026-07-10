@@ -77,6 +77,8 @@ void print_wasapi_runtime_summary(
   out << "  Xruns: " << summary.xrun_count << '\n';
   out << "  Last callback ns: " << summary.last_callback_nanoseconds << '\n';
   out << "  Peak callback ns: " << summary.peak_callback_nanoseconds << '\n';
+  out << "  Total callback ns: " << summary.total_callback_nanoseconds << '\n';
+  out << "  Average callback ns: " << summary.average_callback_nanoseconds << '\n';
 }
 
 void print_wasapi_stream_diagnostics(
@@ -148,6 +150,7 @@ void print_wasapi_worker_stats(
       << " xrun_count=" << stats.xrun_count
       << " last_callback_ns=" << stats.last_callback_nanoseconds
       << " peak_callback_ns=" << stats.peak_callback_nanoseconds
+      << " total_callback_ns=" << stats.total_callback_nanoseconds
       << " captured_frames=" << stats.captured_frames
       << " rendered_frames=" << stats.rendered_frames
       << " last_captured_frames=" << stats.last_captured_frames
@@ -203,6 +206,7 @@ void print_wasapi_worker_stats(
   out << "  Xruns: " << stats.xrun_count << '\n';
   out << "  Last callback ns: " << stats.last_callback_nanoseconds << '\n';
   out << "  Peak callback ns: " << stats.peak_callback_nanoseconds << '\n';
+  out << "  Total callback ns: " << stats.total_callback_nanoseconds << '\n';
   out << "  Last stop wait us: " << stats.last_stop_wait_microseconds << '\n';
 }
 
