@@ -53,6 +53,7 @@ enum class WasapiStreamIoStatus {
   Completed,
   Idle,
   TimedOut,
+  Cancelled,
   Failed,
 };
 
@@ -68,6 +69,7 @@ class WasapiStreamIoResult {
                                              bool data_discontinuity = false,
                                              bool timestamp_error = false);
   static WasapiStreamIoResult timeout();
+  static WasapiStreamIoResult cancellation();
   static WasapiStreamIoResult failure(std::vector<WasapiStreamError> errors);
 
   [[nodiscard]] bool ok() const noexcept;
@@ -78,6 +80,7 @@ class WasapiStreamIoResult {
   [[nodiscard]] bool data_discontinuity() const noexcept;
   [[nodiscard]] bool timestamp_error() const noexcept;
   [[nodiscard]] bool timed_out() const noexcept;
+  [[nodiscard]] bool cancelled() const noexcept;
   [[nodiscard]] const std::vector<WasapiStreamError>& errors() const noexcept;
 
  private:
@@ -110,10 +113,12 @@ class WindowsWasapiStream {
   [[nodiscard]] WasapiStreamResult stop();
   [[nodiscard]] WasapiStreamIoResult render_once(
       const realtime::AudioBuffer& source,
-      std::uint32_t timeout_ms) noexcept;
+      std::uint32_t timeout_ms,
+      void* cancellation_event = nullptr) noexcept;
   [[nodiscard]] WasapiStreamIoResult capture_once(
       realtime::AudioBuffer& destination,
-      std::uint32_t timeout_ms) noexcept;
+      std::uint32_t timeout_ms,
+      void* cancellation_event = nullptr) noexcept;
   void close() noexcept;
 
   [[nodiscard]] WasapiStreamState state() const noexcept;

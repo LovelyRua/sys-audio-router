@@ -107,6 +107,12 @@ int main() {
     }
     if (const auto failure =
             expect(std::string(sar::platform::wasapi_stream_io_status_name(
+                       sar::platform::WasapiStreamIoStatus::Cancelled)) == "cancelled",
+                   "Expected cancelled I/O status name")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_stream_io_status_name(
                        sar::platform::WasapiStreamIoStatus::Failed)) == "failed",
                    "Expected failed I/O status name")) {
       return failure;
@@ -219,6 +225,43 @@ int main() {
     }
     if (const auto failure = expect(!timeout_result.timestamp_error(),
                                     "Expected timeout I/O without timestamp error")) {
+      return failure;
+    }
+    if (const auto failure = expect(!timeout_result.cancelled(),
+                                    "Expected timeout I/O not cancelled")) {
+      return failure;
+    }
+
+    const auto cancelled_result = sar::platform::WasapiStreamIoResult::cancellation();
+    if (const auto failure = expect(cancelled_result.ok(),
+                                    "Expected cancelled I/O success")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(cancelled_result.status() == sar::platform::WasapiStreamIoStatus::Cancelled,
+                   "Expected cancelled I/O status enum")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(std::string(sar::platform::wasapi_stream_io_status_name(
+                       cancelled_result.status())) == "cancelled",
+                   "Expected cancelled I/O status name from result")) {
+      return failure;
+    }
+    if (const auto failure = expect(cancelled_result.frames() == 0,
+                                    "Expected cancelled I/O zero frames")) {
+      return failure;
+    }
+    if (const auto failure = expect(cancelled_result.cancelled(),
+                                    "Expected cancelled I/O flag")) {
+      return failure;
+    }
+    if (const auto failure = expect(!cancelled_result.timed_out(),
+                                    "Expected cancelled I/O not timed out")) {
+      return failure;
+    }
+    if (const auto failure = expect(!cancelled_result.idle(),
+                                    "Expected cancelled I/O not idle")) {
       return failure;
     }
 

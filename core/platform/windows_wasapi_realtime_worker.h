@@ -139,6 +139,7 @@ class WindowsWasapiRealtimeWorker {
   std::condition_variable startup_condition_;
   bool startup_complete_ = false;
   bool startup_succeeded_ = false;
+  void* stop_event_ = nullptr;
   mutable std::mutex errors_mutex_;
   std::vector<WasapiRealtimeWorkerError> last_errors_;
   std::thread worker_;

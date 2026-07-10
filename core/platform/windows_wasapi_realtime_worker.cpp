@@ -104,6 +104,10 @@ WindowsWasapiRealtimeWorker::WindowsWasapiRealtimeWorker(
 
 WindowsWasapiRealtimeWorker::~WindowsWasapiRealtimeWorker() {
   stop();
+  if (stop_event_ != nullptr) {
+    CloseHandle(static_cast<HANDLE>(stop_event_));
+    stop_event_ = nullptr;
+  }
 }
 
 WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t timeout_ms) {
@@ -114,6 +118,33 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   }
   if (worker_.joinable()) {
     worker_.join();
+  }
+
+  if (stop_event_ == nullptr) {
+    stop_event_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (stop_event_ == nullptr) {
+      const auto error = HRESULT_FROM_WIN32(GetLastError());
+      auto errors = std::vector<WasapiRealtimeWorkerError>{
+          {
+              "worker_stop_event_create_failed",
+              "WASAPI realtime worker stop event creation failed with " +
+                  hresult_hex(error) + ".",
+          },
+      };
+      set_errors(errors);
+      return WasapiRealtimeWorkerResult::failure(std::move(errors));
+    }
+  } else if (ResetEvent(static_cast<HANDLE>(stop_event_)) == 0) {
+    const auto error = HRESULT_FROM_WIN32(GetLastError());
+    auto errors = std::vector<WasapiRealtimeWorkerError>{
+        {
+            "worker_stop_event_reset_failed",
+            "WASAPI realtime worker stop event reset failed with " +
+                hresult_hex(error) + ".",
+        },
+    };
+    set_errors(errors);
+    return WasapiRealtimeWorkerResult::failure(std::move(errors));
   }
 
   stop_requested_.store(false);
@@ -193,6 +224,9 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
 
 void WindowsWasapiRealtimeWorker::stop() noexcept {
   stop_requested_.store(true);
+  if (stop_event_ != nullptr) {
+    static_cast<void>(SetEvent(static_cast<HANDLE>(stop_event_)));
+  }
   if (worker_.joinable()) {
     const auto started = std::chrono::steady_clock::now();
     worker_.join();
@@ -294,11 +328,14 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
   publish_startup_result(true);
 
   while (!stop_requested_.load()) {
-    auto result = runner_.process_once(graph_, diagnostics_, timeout_ms);
+    auto result = runner_.process_once(graph_, diagnostics_, timeout_ms, stop_event_);
     if (!result.ok()) {
       process_error_cycles_.fetch_add(1);
       set_errors(convert_errors(result.errors()));
       stop_requested_.store(true);
+      break;
+    }
+    if (result.stats().cancelled) {
       break;
     }
     loop_cycles_.fetch_add(1);

@@ -229,6 +229,44 @@ WasapiStreamError sample_conversion_error(SampleConversionStatus status) {
   return {"sample_conversion_failed", "Sample conversion failed."};
 }
 
+WasapiStreamIoResult wait_for_samples(HANDLE samples_ready_event,
+                                      void* cancellation_event,
+                                      std::uint32_t timeout_ms,
+                                      const char* direction) noexcept {
+  if (cancellation_event == nullptr) {
+    const auto wait_result = WaitForSingleObject(samples_ready_event, timeout_ms);
+    if (wait_result == WAIT_OBJECT_0) {
+      return WasapiStreamIoResult::success(1);
+    }
+    if (wait_result == WAIT_TIMEOUT) {
+      return WasapiStreamIoResult::timeout();
+    }
+    return WasapiStreamIoResult::failure({
+        {"wasapi_event_wait_failed",
+         std::string("WASAPI ") + direction + " event wait failed."},
+    });
+  }
+
+  HANDLE events[2] = {
+      static_cast<HANDLE>(cancellation_event),
+      samples_ready_event,
+  };
+  const auto wait_result = WaitForMultipleObjects(2, events, FALSE, timeout_ms);
+  if (wait_result == WAIT_OBJECT_0) {
+    return WasapiStreamIoResult::cancellation();
+  }
+  if (wait_result == WAIT_OBJECT_0 + 1) {
+    return WasapiStreamIoResult::success(1);
+  }
+  if (wait_result == WAIT_TIMEOUT) {
+    return WasapiStreamIoResult::timeout();
+  }
+  return WasapiStreamIoResult::failure({
+      {"wasapi_event_wait_failed",
+       std::string("WASAPI ") + direction + " event wait failed."},
+  });
+}
+
 }  // namespace
 
 const char* wasapi_stream_state_name(WasapiStreamState state) noexcept {
@@ -251,6 +289,8 @@ const char* wasapi_stream_io_status_name(WasapiStreamIoStatus status) noexcept {
       return "idle";
     case WasapiStreamIoStatus::TimedOut:
       return "timed_out";
+    case WasapiStreamIoStatus::Cancelled:
+      return "cancelled";
     case WasapiStreamIoStatus::Failed:
       return "failed";
   }
@@ -315,6 +355,10 @@ WasapiStreamIoResult WasapiStreamIoResult::timeout() {
   return {0, WasapiStreamIoStatus::TimedOut, false, false, false, {}};
 }
 
+WasapiStreamIoResult WasapiStreamIoResult::cancellation() {
+  return {0, WasapiStreamIoStatus::Cancelled, false, false, false, {}};
+}
+
 WasapiStreamIoResult WasapiStreamIoResult::failure(std::vector<WasapiStreamError> errors) {
   return {0, WasapiStreamIoStatus::Failed, false, false, false, std::move(errors)};
 }
@@ -349,6 +393,10 @@ bool WasapiStreamIoResult::timestamp_error() const noexcept {
 
 bool WasapiStreamIoResult::timed_out() const noexcept {
   return status_ == WasapiStreamIoStatus::TimedOut;
+}
+
+bool WasapiStreamIoResult::cancelled() const noexcept {
+  return status_ == WasapiStreamIoStatus::Cancelled;
 }
 
 const std::vector<WasapiStreamError>& WasapiStreamIoResult::errors() const noexcept {
@@ -448,7 +496,8 @@ WasapiStreamResult WindowsWasapiStream::stop() {
 
 WasapiStreamIoResult WindowsWasapiStream::render_once(
     const realtime::AudioBuffer& source,
-    std::uint32_t timeout_ms) noexcept {
+    std::uint32_t timeout_ms,
+    void* cancellation_event) noexcept {
   if (state_ != WasapiStreamState::Started) {
     return WasapiStreamIoResult::failure({
         {"stream_not_started", "WASAPI render requires a started stream."},
@@ -466,14 +515,10 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
     });
   }
 
-  const auto wait_result = WaitForSingleObject(impl_->samples_ready_event.get(), timeout_ms);
-  if (wait_result == WAIT_TIMEOUT) {
-    return WasapiStreamIoResult::timeout();
-  }
-  if (wait_result != WAIT_OBJECT_0) {
-    return WasapiStreamIoResult::failure({
-        {"wasapi_event_wait_failed", "WASAPI render event wait failed."},
-    });
+  const auto wait_result =
+      wait_for_samples(impl_->samples_ready_event.get(), cancellation_event, timeout_ms, "render");
+  if (wait_result.cancelled() || wait_result.timed_out() || !wait_result.ok()) {
+    return wait_result;
   }
 
   UINT32 padding_frames = 0;
@@ -537,7 +582,8 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
 
 WasapiStreamIoResult WindowsWasapiStream::capture_once(
     realtime::AudioBuffer& destination,
-    std::uint32_t timeout_ms) noexcept {
+    std::uint32_t timeout_ms,
+    void* cancellation_event) noexcept {
   if (state_ != WasapiStreamState::Started) {
     return WasapiStreamIoResult::failure({
         {"stream_not_started", "WASAPI capture requires a started stream."},
@@ -554,14 +600,10 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
     });
   }
 
-  const auto wait_result = WaitForSingleObject(impl_->samples_ready_event.get(), timeout_ms);
-  if (wait_result == WAIT_TIMEOUT) {
-    return WasapiStreamIoResult::timeout();
-  }
-  if (wait_result != WAIT_OBJECT_0) {
-    return WasapiStreamIoResult::failure({
-        {"wasapi_event_wait_failed", "WASAPI capture event wait failed."},
-    });
+  const auto wait_result =
+      wait_for_samples(impl_->samples_ready_event.get(), cancellation_event, timeout_ms, "capture");
+  if (wait_result.cancelled() || wait_result.timed_out() || !wait_result.ok()) {
+    return wait_result;
   }
 
   UINT32 packet_frames = 0;

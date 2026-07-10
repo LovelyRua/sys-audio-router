@@ -23,6 +23,7 @@ struct WasapiGraphRunnerStats {
   bool render_stream_idle = false;
   bool capture_wait_timed_out = false;
   bool render_wait_timed_out = false;
+  bool cancelled = false;
   bool capture_partial = false;
   bool render_partial = false;
   bool capture_silent = false;
@@ -70,7 +71,8 @@ class WindowsWasapiGraphRunner {
   [[nodiscard]] WasapiGraphRunnerResult process_once(
       graph::Graph& graph,
       diagnostics::EngineDiagnostics& diagnostics,
-      std::uint32_t timeout_ms) noexcept;
+      std::uint32_t timeout_ms,
+      void* cancellation_event = nullptr) noexcept;
 
  private:
   WindowsWasapiStream* capture_stream_ = nullptr;
