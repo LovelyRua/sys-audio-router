@@ -62,6 +62,13 @@ std::vector<WasapiRealtimeWorkerError> convert_errors(
   return converted;
 }
 
+std::uint64_t seconds_to_nanoseconds(double seconds) noexcept {
+  if (seconds <= 0.0) {
+    return 0;
+  }
+  return static_cast<std::uint64_t>(seconds * 1'000'000'000.0);
+}
+
 std::vector<WasapiRealtimeWorkerError> convert_errors(
     const std::vector<WindowsRealtimeThreadError>& errors) {
   std::vector<WasapiRealtimeWorkerError> converted;
@@ -138,6 +145,9 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   stream_start_error_cycles_.store(0);
   stream_stop_error_cycles_.store(0);
   process_error_cycles_.store(0);
+  xrun_count_.store(0);
+  last_callback_nanoseconds_.store(0);
+  peak_callback_nanoseconds_.store(0);
   captured_frames_.store(0);
   rendered_frames_.store(0);
   last_captured_frames_.store(0);
@@ -153,6 +163,7 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   last_capture_discontinuity_.store(false);
   last_capture_timestamp_error_.store(false);
   last_stop_wait_microseconds_.store(0);
+  xrun_baseline_ = diagnostics_.xrun_count;
   {
     std::lock_guard lock(startup_mutex_);
     startup_complete_ = false;
@@ -235,6 +246,9 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.stream_start_error_cycles = stream_start_error_cycles_.load();
   result.stream_stop_error_cycles = stream_stop_error_cycles_.load();
   result.process_error_cycles = process_error_cycles_.load();
+  result.xrun_count = xrun_count_.load();
+  result.last_callback_nanoseconds = last_callback_nanoseconds_.load();
+  result.peak_callback_nanoseconds = peak_callback_nanoseconds_.load();
   result.captured_frames = captured_frames_.load();
   result.rendered_frames = rendered_frames_.load();
   result.last_captured_frames = last_captured_frames_.load();
@@ -305,6 +319,10 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     if (result.stats().cancelled) {
       break;
     }
+    const auto xrun_count = diagnostics_.xrun_count;
+    xrun_count_.store(xrun_count >= xrun_baseline_
+                          ? xrun_count - xrun_baseline_
+                          : 0);
     loop_cycles_.fetch_add(1);
     captured_frames_.fetch_add(result.stats().captured_frames);
     rendered_frames_.fetch_add(result.stats().rendered_frames);
@@ -322,6 +340,13 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     last_capture_timestamp_error_.store(result.stats().capture_timestamp_error);
     if (result.stats().graph_processed) {
       graph_processed_cycles_.fetch_add(1);
+      const auto last_callback_nanoseconds =
+          seconds_to_nanoseconds(diagnostics_.last_callback_seconds);
+      last_callback_nanoseconds_.store(last_callback_nanoseconds);
+      const auto peak_callback_nanoseconds = peak_callback_nanoseconds_.load();
+      if (last_callback_nanoseconds > peak_callback_nanoseconds) {
+        peak_callback_nanoseconds_.store(last_callback_nanoseconds);
+      }
     }
     if (!result.stats().graph_processed || result.stats().capture_stream_idle ||
         result.stats().render_stream_idle) {

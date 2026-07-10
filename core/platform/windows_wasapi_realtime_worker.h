@@ -41,6 +41,9 @@ struct WasapiRealtimeWorkerStats {
   std::uint64_t stream_start_error_cycles = 0;
   std::uint64_t stream_stop_error_cycles = 0;
   std::uint64_t process_error_cycles = 0;
+  std::uint64_t xrun_count = 0;
+  std::uint64_t last_callback_nanoseconds = 0;
+  std::uint64_t peak_callback_nanoseconds = 0;
   std::uint64_t captured_frames = 0;
   std::uint64_t rendered_frames = 0;
   std::uint32_t last_captured_frames = 0;
@@ -120,6 +123,9 @@ class WindowsWasapiRealtimeWorker {
   std::atomic_uint64_t stream_start_error_cycles_ = 0;
   std::atomic_uint64_t stream_stop_error_cycles_ = 0;
   std::atomic_uint64_t process_error_cycles_ = 0;
+  std::atomic_uint64_t xrun_count_ = 0;
+  std::atomic_uint64_t last_callback_nanoseconds_ = 0;
+  std::atomic_uint64_t peak_callback_nanoseconds_ = 0;
   std::atomic_uint64_t captured_frames_ = 0;
   std::atomic_uint64_t rendered_frames_ = 0;
   std::atomic<std::uint32_t> last_captured_frames_ = 0;
@@ -135,6 +141,7 @@ class WindowsWasapiRealtimeWorker {
   std::atomic_bool last_capture_discontinuity_ = false;
   std::atomic_bool last_capture_timestamp_error_ = false;
   std::atomic_uint64_t last_stop_wait_microseconds_ = 0;
+  std::uint64_t xrun_baseline_ = 0;
   std::mutex startup_mutex_;
   std::condition_variable startup_condition_;
   bool startup_complete_ = false;

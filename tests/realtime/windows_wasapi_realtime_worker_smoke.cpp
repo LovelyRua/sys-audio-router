@@ -212,6 +212,19 @@ int main() {
                                     "Expected graph-only worker without process errors")) {
       return failure;
     }
+    if (const auto failure = expect(stats.xrun_count == diagnostics.xrun_count,
+                                    "Expected worker xrun snapshot to match diagnostics")) {
+      return failure;
+    }
+    if (const auto failure = expect(stats.last_callback_nanoseconds > 0,
+                                    "Expected worker callback duration")) {
+      return failure;
+    }
+    if (const auto failure = expect(stats.peak_callback_nanoseconds >=
+                                        stats.last_callback_nanoseconds,
+                                    "Expected peak callback duration to cover last callback")) {
+      return failure;
+    }
     if (const auto failure = expect(worker.last_errors().empty(),
                                     "Expected no worker errors")) {
       return failure;

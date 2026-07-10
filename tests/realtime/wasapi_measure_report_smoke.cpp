@@ -108,6 +108,9 @@ sar::platform::WasapiRealtimeWorkerStats make_stats() {
   stats.stream_start_error_cycles = 13;
   stats.stream_stop_error_cycles = 14;
   stats.process_error_cycles = 15;
+  stats.xrun_count = 16;
+  stats.last_callback_nanoseconds = 17000;
+  stats.peak_callback_nanoseconds = 18000;
   stats.last_stop_wait_microseconds = 1500;
   stats.last_graph_processed = true;
   stats.last_capture_idle = false;
@@ -294,6 +297,18 @@ int main() {
                    "Expected machine-readable stop wait")) {
       return failure;
     }
+    if (const auto failure = expect(contains(text, "xrun_count=16"),
+                                    "Expected machine-readable xrun count")) {
+      return failure;
+    }
+    if (const auto failure = expect(contains(text, "last_callback_ns=17000"),
+                                    "Expected machine-readable callback duration")) {
+      return failure;
+    }
+    if (const auto failure = expect(contains(text, "peak_callback_ns=18000"),
+                                    "Expected machine-readable peak callback duration")) {
+      return failure;
+    }
     if (const auto failure =
             expect(contains(text, "last_graph_processed=1"),
                    "Expected machine-readable graph processed flag")) {
@@ -332,6 +347,14 @@ int main() {
     if (const auto failure =
             expect(contains(text, "Capture timestamp error frames: 16"),
                    "Expected capture timestamp error frames")) {
+      return failure;
+    }
+    if (const auto failure = expect(contains(text, "Xruns: 16"),
+                                    "Expected worker xrun count")) {
+      return failure;
+    }
+    if (const auto failure = expect(contains(text, "Peak callback ns: 18000"),
+                                    "Expected worker peak callback duration")) {
       return failure;
     }
   }

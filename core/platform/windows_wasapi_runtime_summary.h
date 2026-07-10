@@ -39,6 +39,9 @@ struct WasapiRuntimeSummary {
   std::uint64_t process_error_cycles = 0;
   std::uint64_t stream_start_error_cycles = 0;
   std::uint64_t stream_stop_error_cycles = 0;
+  std::uint64_t xrun_count = 0;
+  std::uint64_t last_callback_nanoseconds = 0;
+  std::uint64_t peak_callback_nanoseconds = 0;
   std::uint64_t captured_frames = 0;
   std::uint64_t rendered_frames = 0;
   std::uint32_t last_captured_frames = 0;

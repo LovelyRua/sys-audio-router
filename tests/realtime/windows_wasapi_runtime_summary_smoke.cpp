@@ -134,7 +134,8 @@ int main() {
                        "capture_timestamp_error_cycles=0 "
                        "capture_timestamp_error_frames=0 "
                        "process_error_cycles=0 stream_start_error_cycles=0 "
-                       "stream_stop_error_cycles=0 captured_frames=0 "
+                       "stream_stop_error_cycles=0 xrun_count=0 "
+                       "last_callback_ns=0 peak_callback_ns=0 captured_frames=0 "
                        "rendered_frames=0 last_captured_frames=0 "
                        "last_rendered_frames=0 last_stop_wait_us=0 "
                        "has_capture_stream=0 has_render_stream=0 "
@@ -177,6 +178,9 @@ int main() {
     stats.process_error_cycles = 6;
     stats.stream_start_error_cycles = 7;
     stats.stream_stop_error_cycles = 8;
+    stats.xrun_count = 9;
+    stats.last_callback_nanoseconds = 17000;
+    stats.peak_callback_nanoseconds = 23000;
     stats.last_capture_idle = true;
     stats.last_render_idle = true;
     stats.last_captured_frames = 20;
@@ -265,6 +269,16 @@ int main() {
     }
     if (const auto failure = expect(summary.stream_stop_error_cycles == 8,
                                     "Expected copied stream stop error cycles")) {
+      return failure;
+    }
+    if (const auto failure = expect(summary.xrun_count == 9,
+                                    "Expected copied xrun count")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.last_callback_nanoseconds == 17000 &&
+                       summary.peak_callback_nanoseconds == 23000,
+                   "Expected copied callback durations")) {
       return failure;
     }
     if (const auto failure = expect(summary.captured_frames == 256,
@@ -414,6 +428,17 @@ int main() {
             expect(summary_line.find("last_stop_wait_us=2500") !=
                        std::string::npos,
                    "Expected summary line stop wait")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("xrun_count=9") != std::string::npos,
+                   "Expected summary line xrun count")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary_line.find("peak_callback_ns=23000") !=
+                       std::string::npos,
+                   "Expected summary line callback duration")) {
       return failure;
     }
     if (const auto failure =
@@ -737,6 +762,20 @@ int main() {
                            sar::platform::WasapiRuntimeHealth::Degraded,
                            "wait_timeout",
                            "Expected combined timeout summary")) {
+      return failure;
+    }
+  }
+
+  {
+    auto stats = make_active_stats();
+    stats.xrun_count = 1;
+    const auto summary =
+        sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
+    if (const auto failure =
+            expect_summary(summary,
+                           sar::platform::WasapiRuntimeHealth::Degraded,
+                           "engine_xrun",
+                           "Expected engine xrun summary")) {
       return failure;
     }
   }
