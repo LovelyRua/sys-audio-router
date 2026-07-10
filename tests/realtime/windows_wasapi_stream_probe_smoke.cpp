@@ -2,6 +2,7 @@
 #include "core/platform/windows_wasapi_stream_probe.h"
 
 #include <iostream>
+#include <string>
 
 namespace {
 
@@ -108,6 +109,19 @@ int verify_probe_contract(const sar::platform::WasapiStreamProbe& probe,
 }  // namespace
 
 int main() {
+  if (const auto failure =
+          expect(std::string(sar::platform::wasapi_stream_direction_name(
+                     sar::platform::WasapiStreamDirection::Render)) == "render",
+                 "Expected render stream direction name")) {
+    return failure;
+  }
+  if (const auto failure =
+          expect(std::string(sar::platform::wasapi_stream_direction_name(
+                     sar::platform::WasapiStreamDirection::Capture)) == "capture",
+                 "Expected capture stream direction name")) {
+    return failure;
+  }
+
   const auto availability = default_endpoint_availability();
   if (!availability.render) {
     std::cout << "Windows WASAPI stream probe skipped: no default output endpoint\n";
