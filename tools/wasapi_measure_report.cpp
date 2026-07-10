@@ -146,6 +146,8 @@ void print_wasapi_worker_stats(
       << stats.capture_timestamp_error_frames
       << " stream_start_error_cycles=" << stats.stream_start_error_cycles
       << " stream_stop_error_cycles=" << stats.stream_stop_error_cycles
+      << " stream_wait_cancellation_cycles="
+      << stats.stream_wait_cancellation_cycles
       << " process_error_cycles=" << stats.process_error_cycles
       << " xrun_count=" << stats.xrun_count
       << " last_callback_ns=" << stats.last_callback_nanoseconds
@@ -202,6 +204,8 @@ void print_wasapi_worker_stats(
   out << "  Last rendered frames: " << stats.last_rendered_frames << '\n';
   out << "  Stream start error cycles: " << stats.stream_start_error_cycles << '\n';
   out << "  Stream stop error cycles: " << stats.stream_stop_error_cycles << '\n';
+  out << "  Stream wait cancellation cycles: "
+      << stats.stream_wait_cancellation_cycles << '\n';
   out << "  Process error cycles: " << stats.process_error_cycles << '\n';
   out << "  Xruns: " << stats.xrun_count << '\n';
   out << "  Last callback ns: " << stats.last_callback_nanoseconds << '\n';

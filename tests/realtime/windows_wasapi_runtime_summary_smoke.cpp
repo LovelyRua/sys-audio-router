@@ -134,10 +134,9 @@ int main() {
                        "capture_timestamp_error_cycles=0 "
                        "capture_timestamp_error_frames=0 "
                        "process_error_cycles=0 stream_start_error_cycles=0 "
-                       "stream_stop_error_cycles=0 xrun_count=0 "
-                       "last_callback_ns=0 peak_callback_ns=0 "
-                       "total_callback_ns=0 average_callback_ns=0 "
-                       "captured_frames=0 "
+                       "stream_stop_error_cycles=0 stream_wait_cancellation_cycles=0 "
+                       "xrun_count=0 last_callback_ns=0 peak_callback_ns=0 "
+                       "total_callback_ns=0 average_callback_ns=0 captured_frames=0 "
                        "rendered_frames=0 last_captured_frames=0 "
                        "last_rendered_frames=0 last_stop_wait_us=0 "
                        "has_capture_stream=0 has_render_stream=0 "
@@ -180,6 +179,7 @@ int main() {
     stats.process_error_cycles = 6;
     stats.stream_start_error_cycles = 7;
     stats.stream_stop_error_cycles = 8;
+    stats.stream_wait_cancellation_cycles = 9;
     stats.xrun_count = 9;
     stats.last_callback_nanoseconds = 17000;
     stats.peak_callback_nanoseconds = 23000;
@@ -272,6 +272,11 @@ int main() {
     }
     if (const auto failure = expect(summary.stream_stop_error_cycles == 8,
                                     "Expected copied stream stop error cycles")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(summary.stream_wait_cancellation_cycles == 9,
+                   "Expected copied stream wait cancellation cycles")) {
       return failure;
     }
     if (const auto failure = expect(summary.xrun_count == 9,

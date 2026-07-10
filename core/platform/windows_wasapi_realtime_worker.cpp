@@ -144,6 +144,7 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   capture_timestamp_error_frames_.store(0);
   stream_start_error_cycles_.store(0);
   stream_stop_error_cycles_.store(0);
+  stream_wait_cancellation_cycles_.store(0);
   process_error_cycles_.store(0);
   xrun_count_.store(0);
   last_callback_nanoseconds_.store(0);
@@ -246,6 +247,7 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.capture_timestamp_error_frames = capture_timestamp_error_frames_.load();
   result.stream_start_error_cycles = stream_start_error_cycles_.load();
   result.stream_stop_error_cycles = stream_stop_error_cycles_.load();
+  result.stream_wait_cancellation_cycles = stream_wait_cancellation_cycles_.load();
   result.process_error_cycles = process_error_cycles_.load();
   result.xrun_count = xrun_count_.load();
   result.last_callback_nanoseconds = last_callback_nanoseconds_.load();
@@ -319,6 +321,7 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
       break;
     }
     if (result.stats().cancelled) {
+      stream_wait_cancellation_cycles_.fetch_add(1);
       break;
     }
     const auto xrun_count = diagnostics_.xrun_count;

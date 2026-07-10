@@ -64,6 +64,8 @@ std::string format_wasapi_runtime_summary_line(
          << " process_error_cycles=" << summary.process_error_cycles
          << " stream_start_error_cycles=" << summary.stream_start_error_cycles
          << " stream_stop_error_cycles=" << summary.stream_stop_error_cycles
+         << " stream_wait_cancellation_cycles="
+         << summary.stream_wait_cancellation_cycles
          << " xrun_count=" << summary.xrun_count
          << " last_callback_ns=" << summary.last_callback_nanoseconds
          << " peak_callback_ns=" << summary.peak_callback_nanoseconds
@@ -139,6 +141,7 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
   summary.process_error_cycles = stats.process_error_cycles;
   summary.stream_start_error_cycles = stats.stream_start_error_cycles;
   summary.stream_stop_error_cycles = stats.stream_stop_error_cycles;
+  summary.stream_wait_cancellation_cycles = stats.stream_wait_cancellation_cycles;
   summary.xrun_count = stats.xrun_count;
   summary.last_callback_nanoseconds = stats.last_callback_nanoseconds;
   summary.peak_callback_nanoseconds = stats.peak_callback_nanoseconds;

@@ -40,6 +40,7 @@ struct WasapiRealtimeWorkerStats {
   std::uint64_t capture_timestamp_error_frames = 0;
   std::uint64_t stream_start_error_cycles = 0;
   std::uint64_t stream_stop_error_cycles = 0;
+  std::uint64_t stream_wait_cancellation_cycles = 0;
   std::uint64_t process_error_cycles = 0;
   std::uint64_t xrun_count = 0;
   std::uint64_t last_callback_nanoseconds = 0;
@@ -123,6 +124,7 @@ class WindowsWasapiRealtimeWorker {
   std::atomic_uint64_t capture_timestamp_error_frames_ = 0;
   std::atomic_uint64_t stream_start_error_cycles_ = 0;
   std::atomic_uint64_t stream_stop_error_cycles_ = 0;
+  std::atomic_uint64_t stream_wait_cancellation_cycles_ = 0;
   std::atomic_uint64_t process_error_cycles_ = 0;
   std::atomic_uint64_t xrun_count_ = 0;
   std::atomic_uint64_t last_callback_nanoseconds_ = 0;

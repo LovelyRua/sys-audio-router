@@ -107,6 +107,7 @@ sar::platform::WasapiRealtimeWorkerStats make_stats() {
   stats.last_rendered_frames = 128;
   stats.stream_start_error_cycles = 13;
   stats.stream_stop_error_cycles = 14;
+  stats.stream_wait_cancellation_cycles = 15;
   stats.process_error_cycles = 15;
   stats.xrun_count = 16;
   stats.last_callback_nanoseconds = 17000;
@@ -315,6 +316,11 @@ int main() {
       return failure;
     }
     if (const auto failure =
+            expect(contains(text, "stream_wait_cancellation_cycles=15"),
+                   "Expected machine-readable stream wait cancellation count")) {
+      return failure;
+    }
+    if (const auto failure =
             expect(contains(text, "last_graph_processed=1"),
                    "Expected machine-readable graph processed flag")) {
       return failure;
@@ -342,6 +348,11 @@ int main() {
     if (const auto failure =
             expect(contains(text, "Stream stop error cycles: 14"),
                    "Expected stream stop error count")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "Stream wait cancellation cycles: 15"),
+                   "Expected stream wait cancellation count")) {
       return failure;
     }
     if (const auto failure =
