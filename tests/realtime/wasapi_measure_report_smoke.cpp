@@ -109,6 +109,16 @@ sar::platform::WasapiRealtimeWorkerStats make_stats() {
   stats.stream_stop_error_cycles = 14;
   stats.process_error_cycles = 15;
   stats.last_stop_wait_microseconds = 1500;
+  stats.last_graph_processed = true;
+  stats.last_capture_idle = false;
+  stats.last_render_idle = true;
+  stats.last_capture_wait_timed_out = false;
+  stats.last_render_wait_timed_out = true;
+  stats.last_capture_partial = true;
+  stats.last_render_partial = false;
+  stats.last_capture_silent = true;
+  stats.last_capture_discontinuity = true;
+  stats.last_capture_timestamp_error = false;
   return stats;
 }
 
@@ -262,6 +272,43 @@ int main() {
     std::ostringstream out;
     sar::tools::print_wasapi_worker_stats(out, make_stats());
     const auto text = out.str();
+    if (const auto failure =
+            expect(contains(text,
+                            "wasapi_worker_stats loop_cycles=10 "
+                            "graph_processed_cycles=9 idle_cycles=1"),
+                   "Expected machine-readable worker stats")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "capture_wait_timeout_cycles=5"),
+                   "Expected machine-readable capture timeout count")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "render_partial_frames=10"),
+                   "Expected machine-readable render partial frames")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "last_stop_wait_us=1500"),
+                   "Expected machine-readable stop wait")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "last_graph_processed=1"),
+                   "Expected machine-readable graph processed flag")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "last_render_wait_timed_out=1"),
+                   "Expected machine-readable render timeout flag")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "last_capture_timestamp_error=0"),
+                   "Expected machine-readable timestamp flag")) {
+      return failure;
+    }
     if (const auto failure =
             expect(contains(text, "Loop cycles: 10"),
                    "Expected worker loop cycles")) {
