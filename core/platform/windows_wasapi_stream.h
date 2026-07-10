@@ -113,12 +113,11 @@ class WindowsWasapiStream {
   [[nodiscard]] WasapiStreamResult stop();
   [[nodiscard]] WasapiStreamIoResult render_once(
       const realtime::AudioBuffer& source,
-      std::uint32_t timeout_ms,
-      void* cancellation_event = nullptr) noexcept;
+      std::uint32_t timeout_ms) noexcept;
   [[nodiscard]] WasapiStreamIoResult capture_once(
       realtime::AudioBuffer& destination,
-      std::uint32_t timeout_ms,
-      void* cancellation_event = nullptr) noexcept;
+      std::uint32_t timeout_ms) noexcept;
+  void request_stop() noexcept;
   void close() noexcept;
 
   [[nodiscard]] WasapiStreamState state() const noexcept;

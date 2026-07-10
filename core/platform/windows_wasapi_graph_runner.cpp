@@ -166,11 +166,19 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::stop_streams() noexcept {
   return WasapiGraphRunnerResult::success({});
 }
 
+void WindowsWasapiGraphRunner::request_stop() noexcept {
+  if (render_stream_ != nullptr) {
+    render_stream_->request_stop();
+  }
+  if (capture_stream_ != nullptr) {
+    capture_stream_->request_stop();
+  }
+}
+
 WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics,
-    std::uint32_t timeout_ms,
-    void* cancellation_event) noexcept {
+    std::uint32_t timeout_ms) noexcept {
   WasapiGraphRunnerStats stats;
 
   auto sample_rate_errors =
@@ -181,8 +189,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
 
   if (capture_stream_ != nullptr) {
     input_.clear();
-    auto capture_result =
-        capture_stream_->capture_once(input_, timeout_ms, cancellation_event);
+    auto capture_result = capture_stream_->capture_once(input_, timeout_ms);
     if (!capture_result.ok()) {
       return WasapiGraphRunnerResult::failure(capture_result.errors());
     }
@@ -223,8 +230,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
   stats.graph_processed = true;
 
   if (render_stream_ != nullptr) {
-    auto render_result =
-        render_stream_->render_once(output_, timeout_ms, cancellation_event);
+    auto render_result = render_stream_->render_once(output_, timeout_ms);
     if (!render_result.ok()) {
       return WasapiGraphRunnerResult::failure(render_result.errors());
     }

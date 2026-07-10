@@ -68,11 +68,11 @@ class WindowsWasapiGraphRunner {
 
   [[nodiscard]] WasapiGraphRunnerResult start_streams() noexcept;
   [[nodiscard]] WasapiGraphRunnerResult stop_streams() noexcept;
+  void request_stop() noexcept;
   [[nodiscard]] WasapiGraphRunnerResult process_once(
       graph::Graph& graph,
       diagnostics::EngineDiagnostics& diagnostics,
-      std::uint32_t timeout_ms,
-      void* cancellation_event = nullptr) noexcept;
+      std::uint32_t timeout_ms) noexcept;
 
  private:
   WindowsWasapiStream* capture_stream_ = nullptr;

@@ -94,8 +94,8 @@ clock drift, and end-to-end latency behavior.
 - `IAudioRenderClient` and `IAudioCaptureClient` ownership.
 - Render priming with a silent buffer.
 - Start/stop lifecycle.
-- Single-cycle `render_once` and `capture_once` calls with optional cancellation
-  wait handles for realtime shutdown.
+- Single-cycle `render_once` and `capture_once` calls that can be woken by the
+  stream-owned stop event during realtime shutdown.
 
 `WindowsWasapiGraphRunner` orchestrates one processing cycle:
 
@@ -107,8 +107,9 @@ clock drift, and end-to-end latency behavior.
 enters MMCSS `Pro Audio` priority through `WindowsRealtimeThreadScope`. It
 waits for COM, MMCSS, and stream startup to complete before `start()` reports
 success, then publishes worker stats and last errors for non-realtime runtime
-summaries. `stop()` signals a manual-reset stop event so event-driven WASAPI
-render/capture waits can wake promptly without being counted as wait timeouts.
+summaries. `stop()` requests the graph runner to signal each native WASAPI
+stream's stop event before joining the worker thread, so event-driven render and
+capture waits wake promptly without being counted as wait timeouts.
 
 `WindowsWasapiRenderLoop` owns a default render stream, graph runner, and
 realtime worker. It is the current high-level entry point for the first measured
