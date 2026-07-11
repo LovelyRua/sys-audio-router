@@ -31,7 +31,7 @@ successful reads do not construct an optional result object.
 
 - `Graph`: linear graph executor with diagnostics updates.
 - `Node`: realtime processor interface.
-- `GainNode`, `MuteNode`, and passthrough behavior used by smoke tests.
+- `GainNode`, `MuteNode`, `MeterNode`, and passthrough behavior used by smoke tests.
 - Lock-free finite float parameter publishing for scalar node controls.
 - Graph builder and graph snapshot publishing. Snapshot processing uses an
   allocation-free raw-pointer read on the realtime path; graph ownership stays
