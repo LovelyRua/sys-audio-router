@@ -68,6 +68,54 @@ void MuteNode::process(const realtime::ProcessContext& context,
   output.copy_from(input);
 }
 
+void MeterNode::reset() noexcept {
+  static_cast<void>(peak_.set(0.0F));
+  static_cast<void>(rms_.set(0.0F));
+}
+
+float MeterNode::peak() const noexcept {
+  return peak_.get();
+}
+
+float MeterNode::rms() const noexcept {
+  return rms_.get();
+}
+
+void MeterNode::process(const realtime::ProcessContext& context,
+                        const realtime::AudioBuffer& input,
+                        realtime::AudioBuffer& output) noexcept {
+  (void)context;
+  output.copy_from(input);
+
+  const auto channels = output.channels();
+  const auto frames = output.frames();
+  const auto sample_count = channels * frames;
+  if (sample_count == 0) {
+    reset();
+    return;
+  }
+
+  float block_peak = 0.0F;
+  double square_sum = 0.0;
+  for (std::size_t channel = 0; channel < channels; ++channel) {
+    const auto samples = output.channel(channel);
+    for (const auto sample : samples) {
+      if (!std::isfinite(sample)) {
+        continue;
+      }
+      block_peak = std::max(block_peak, std::fabs(sample));
+      square_sum += static_cast<double>(sample) * static_cast<double>(sample);
+    }
+  }
+
+  const auto block_rms = std::isfinite(square_sum)
+                             ? static_cast<float>(std::sqrt(square_sum /
+                                                             static_cast<double>(sample_count)))
+                             : 0.0F;
+  static_cast<void>(peak_.set(block_peak));
+  static_cast<void>(rms_.set(std::isfinite(block_rms) ? block_rms : 0.0F));
+}
+
 Graph::Graph(std::uint64_t version,
              std::size_t channels,
              std::size_t frames,

@@ -58,4 +58,21 @@ class MuteNode final : public Node {
   std::atomic_uint32_t muted_;
 };
 
+class MeterNode final : public Node {
+ public:
+  MeterNode() noexcept = default;
+
+  void reset() noexcept;
+  [[nodiscard]] float peak() const noexcept;
+  [[nodiscard]] float rms() const noexcept;
+
+  void process(const realtime::ProcessContext& context,
+               const realtime::AudioBuffer& input,
+               realtime::AudioBuffer& output) noexcept override;
+
+ private:
+  realtime::AtomicFloatParameter peak_;
+  realtime::AtomicFloatParameter rms_;
+};
+
 }  // namespace sar::graph
