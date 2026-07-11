@@ -62,11 +62,14 @@ sar::platform::WasapiRuntimeSummary make_summary() {
   summary.last_captured_frames = 96;
   summary.last_rendered_frames = 128;
   summary.last_stop_wait_microseconds = 1500;
-  summary.fifo_fill_frames = 144;
-  summary.fifo_underflow_cycles = 2;
-  summary.fifo_underflow_frames = 48;
-  summary.fifo_overflow_cycles = 3;
-  summary.fifo_overflow_frames = 72;
+  summary.capture_fifo_fill_frames = 144;
+  summary.render_fifo_fill_frames = 96;
+  summary.capture_fifo_overflow_cycles = 2;
+  summary.capture_fifo_overflow_frames = 48;
+  summary.render_fifo_overflow_cycles = 3;
+  summary.render_fifo_overflow_frames = 72;
+  summary.render_fifo_underflow_cycles = 4;
+  summary.render_fifo_underflow_frames = 24;
   return summary;
 }
 
@@ -138,11 +141,14 @@ sar::diagnostics::EngineDiagnostics make_diagnostics() {
   diagnostics.graph_version = 42;
   diagnostics.processed_blocks = 99;
   diagnostics.xrun_count = 3;
-  diagnostics.fifo_fill_frames = 144;
-  diagnostics.fifo_underflow_cycles = 2;
-  diagnostics.fifo_underflow_frames = 48;
-  diagnostics.fifo_overflow_cycles = 3;
-  diagnostics.fifo_overflow_frames = 72;
+  diagnostics.capture_fifo_fill_frames = 144;
+  diagnostics.render_fifo_fill_frames = 96;
+  diagnostics.capture_fifo_overflow_cycles = 2;
+  diagnostics.capture_fifo_overflow_frames = 48;
+  diagnostics.render_fifo_overflow_cycles = 3;
+  diagnostics.render_fifo_overflow_frames = 72;
+  diagnostics.render_fifo_underflow_cycles = 4;
+  diagnostics.render_fifo_underflow_frames = 24;
   diagnostics.last_callback_seconds = 0.001;
   diagnostics.peak_callback_seconds = 0.002;
   return diagnostics;
@@ -218,17 +224,21 @@ int main() {
       return failure;
     }
     if (const auto failure =
-            expect(contains(text, "fifo_fill_frames=144") &&
-                       contains(text, "fifo_underflow_cycles=2") &&
-                       contains(text, "fifo_underflow_frames=48") &&
-                       contains(text, "fifo_overflow_cycles=3") &&
-                       contains(text, "fifo_overflow_frames=72"),
+            expect(contains(text, "capture_fifo_fill_frames=144") &&
+                       contains(text, "render_fifo_fill_frames=96") &&
+                       contains(text, "capture_fifo_overflow_cycles=2") &&
+                       contains(text, "capture_fifo_overflow_frames=48") &&
+                       contains(text, "render_fifo_overflow_cycles=3") &&
+                       contains(text, "render_fifo_overflow_frames=72") &&
+                       contains(text, "render_fifo_underflow_cycles=4") &&
+                       contains(text, "render_fifo_underflow_frames=24"),
                    "Expected machine-readable runtime FIFO diagnostics")) {
       return failure;
     }
     if (const auto failure =
-            expect(contains(text, "FIFO fill frames: 144") &&
-                       contains(text, "FIFO overflow frames: 72"),
+            expect(contains(text, "Capture FIFO fill frames: 144") &&
+                       contains(text, "Render FIFO fill frames: 96") &&
+                       contains(text, "Render FIFO underflow frames: 24"),
                    "Expected readable runtime FIFO diagnostics")) {
       return failure;
     }
@@ -429,11 +439,14 @@ int main() {
     }
     if (const auto failure =
             expect(contains(text, "engine_diagnostics graph_version=42") &&
-                       contains(text, "fifo_fill_frames=144") &&
-                       contains(text, "fifo_underflow_cycles=2") &&
-                       contains(text, "fifo_underflow_frames=48") &&
-                       contains(text, "fifo_overflow_cycles=3") &&
-                       contains(text, "fifo_overflow_frames=72"),
+                       contains(text, "capture_fifo_fill_frames=144") &&
+                       contains(text, "render_fifo_fill_frames=96") &&
+                       contains(text, "capture_fifo_overflow_cycles=2") &&
+                       contains(text, "capture_fifo_overflow_frames=48") &&
+                       contains(text, "render_fifo_overflow_cycles=3") &&
+                       contains(text, "render_fifo_overflow_frames=72") &&
+                       contains(text, "render_fifo_underflow_cycles=4") &&
+                       contains(text, "render_fifo_underflow_frames=24"),
                    "Expected machine-readable engine FIFO diagnostics")) {
       return failure;
     }

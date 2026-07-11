@@ -11,11 +11,14 @@ int main() {
   sar::realtime::AudioBuffer output(2, 64);
   sar::diagnostics::EngineDiagnostics diagnostics;
 
-  if (diagnostics.fifo_fill_frames != 0 ||
-      diagnostics.fifo_underflow_cycles != 0 ||
-      diagnostics.fifo_underflow_frames != 0 ||
-      diagnostics.fifo_overflow_cycles != 0 ||
-      diagnostics.fifo_overflow_frames != 0) {
+  if (diagnostics.capture_fifo_fill_frames != 0 ||
+      diagnostics.render_fifo_fill_frames != 0 ||
+      diagnostics.capture_fifo_overflow_cycles != 0 ||
+      diagnostics.capture_fifo_overflow_frames != 0 ||
+      diagnostics.render_fifo_overflow_cycles != 0 ||
+      diagnostics.render_fifo_overflow_frames != 0 ||
+      diagnostics.render_fifo_underflow_cycles != 0 ||
+      diagnostics.render_fifo_underflow_frames != 0) {
     std::cerr << "FIFO diagnostics should default to zero\n";
     return 1;
   }

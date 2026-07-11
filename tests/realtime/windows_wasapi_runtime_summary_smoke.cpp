@@ -135,9 +135,14 @@ int main() {
                        "capture_timestamp_error_frames=0 "
                        "process_error_cycles=0 stream_start_error_cycles=0 "
                        "stream_stop_error_cycles=0 stream_wait_cancellation_cycles=0 "
-                       "xrun_count=0 fifo_fill_frames=0 "
-                       "fifo_underflow_cycles=0 fifo_underflow_frames=0 "
-                       "fifo_overflow_cycles=0 fifo_overflow_frames=0 "
+                       "xrun_count=0 capture_fifo_fill_frames=0 "
+                       "render_fifo_fill_frames=0 "
+                       "capture_fifo_overflow_cycles=0 "
+                       "capture_fifo_overflow_frames=0 "
+                       "render_fifo_overflow_cycles=0 "
+                       "render_fifo_overflow_frames=0 "
+                       "render_fifo_underflow_cycles=0 "
+                       "render_fifo_underflow_frames=0 "
                        "last_callback_ns=0 peak_callback_ns=0 "
                        "total_callback_ns=0 average_callback_ns=0 captured_frames=0 "
                        "rendered_frames=0 last_captured_frames=0 "
@@ -166,34 +171,46 @@ int main() {
   {
     auto stats = make_active_stats();
     sar::diagnostics::EngineDiagnostics diagnostics;
-    diagnostics.fifo_fill_frames = 144;
-    diagnostics.fifo_underflow_cycles = 2;
-    diagnostics.fifo_underflow_frames = 48;
-    diagnostics.fifo_overflow_cycles = 3;
-    diagnostics.fifo_overflow_frames = 72;
+    diagnostics.capture_fifo_fill_frames = 144;
+    diagnostics.render_fifo_fill_frames = 96;
+    diagnostics.capture_fifo_overflow_cycles = 2;
+    diagnostics.capture_fifo_overflow_frames = 48;
+    diagnostics.render_fifo_overflow_cycles = 3;
+    diagnostics.render_fifo_overflow_frames = 72;
+    diagnostics.render_fifo_underflow_cycles = 4;
+    diagnostics.render_fifo_underflow_frames = 24;
     const auto summary = sar::platform::summarize_wasapi_runtime(
         stats, {}, nullptr, nullptr, &diagnostics);
     if (const auto failure =
-            expect(summary.fifo_fill_frames == 144 &&
-                       summary.fifo_underflow_cycles == 2 &&
-                       summary.fifo_underflow_frames == 48 &&
-                       summary.fifo_overflow_cycles == 3 &&
-                       summary.fifo_overflow_frames == 72,
+            expect(summary.capture_fifo_fill_frames == 144 &&
+                       summary.render_fifo_fill_frames == 96 &&
+                       summary.capture_fifo_overflow_cycles == 2 &&
+                       summary.capture_fifo_overflow_frames == 48 &&
+                       summary.render_fifo_overflow_cycles == 3 &&
+                       summary.render_fifo_overflow_frames == 72 &&
+                       summary.render_fifo_underflow_cycles == 4 &&
+                       summary.render_fifo_underflow_frames == 24,
                    "Expected copied FIFO diagnostics")) {
       return failure;
     }
     const auto summary_line =
         sar::platform::format_wasapi_runtime_summary_line(summary);
     if (const auto failure =
-            expect(summary_line.find("fifo_fill_frames=144") !=
+            expect(summary_line.find("capture_fifo_fill_frames=144") !=
                            std::string::npos &&
-                       summary_line.find("fifo_underflow_cycles=2") !=
+                       summary_line.find("render_fifo_fill_frames=96") !=
                            std::string::npos &&
-                       summary_line.find("fifo_underflow_frames=48") !=
+                       summary_line.find("capture_fifo_overflow_cycles=2") !=
                            std::string::npos &&
-                       summary_line.find("fifo_overflow_cycles=3") !=
+                       summary_line.find("capture_fifo_overflow_frames=48") !=
                            std::string::npos &&
-                       summary_line.find("fifo_overflow_frames=72") !=
+                       summary_line.find("render_fifo_overflow_cycles=3") !=
+                           std::string::npos &&
+                       summary_line.find("render_fifo_overflow_frames=72") !=
+                           std::string::npos &&
+                       summary_line.find("render_fifo_underflow_cycles=4") !=
+                           std::string::npos &&
+                       summary_line.find("render_fifo_underflow_frames=24") !=
                            std::string::npos,
                    "Expected machine-readable FIFO diagnostics")) {
       return failure;
