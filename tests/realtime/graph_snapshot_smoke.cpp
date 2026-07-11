@@ -5,8 +5,10 @@
 #include "core/realtime/audio_buffer.h"
 #include "tests/realtime/test_helpers.h"
 
+#include <atomic>
 #include <iostream>
 #include <memory>
+#include <thread>
 
 namespace {
 
@@ -63,6 +65,35 @@ int main() {
                                        frame);
       }
     }
+  }
+
+  std::atomic_bool failed = false;
+  std::thread processor([&] {
+    sar::realtime::AudioBuffer thread_output(2, 128);
+    sar::diagnostics::EngineDiagnostics thread_diagnostics;
+    for (int cycle = 0; cycle < 2000; ++cycle) {
+      publisher.process(input, thread_output, thread_diagnostics);
+      const auto version = thread_diagnostics.graph_version;
+      const auto sample = thread_output.channel(0)[0];
+      if ((version != 1 && version != 2) ||
+          (!sar::tests::nearly_equal(sample, 0.5F) &&
+           !sar::tests::nearly_equal(sample, 0.25F))) {
+        failed.store(true, std::memory_order_relaxed);
+        return;
+      }
+    }
+  });
+
+  for (int cycle = 0; cycle < 200; ++cycle) {
+    publisher.publish(make_graph(cycle % 2 == 0 ? 1 : 2,
+                                 input.channels(),
+                                 input.frames(),
+                                 cycle % 2 == 0 ? kFirstGain : kSecondGain));
+  }
+  processor.join();
+  if (failed.load(std::memory_order_relaxed)) {
+    std::cerr << "Concurrent graph publish produced an invalid snapshot\n";
+    return 1;
   }
 
   std::cout << "Graph snapshot smoke test passed. processed_blocks="
