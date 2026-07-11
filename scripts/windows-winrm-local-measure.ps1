@@ -167,8 +167,15 @@ try {
       Import-Module (Join-Path $repoDir "scripts\windows-wasapi-soak-runner.psm1") -Force
       $soakOutput = @(Invoke-WasapiSoak -Mode $Mode -Iterations $Iterations -RunMeasurement {
         param($modeName, $iteration)
-        & $executables[$modeName] @measureArgs | Write-Host
-        return $LASTEXITCODE
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+          & $executables[$modeName] @measureArgs 2>&1 | Write-Host
+          $measurementExitCode = $LASTEXITCODE
+        } finally {
+          $ErrorActionPreference = $previousErrorActionPreference
+        }
+        return $measurementExitCode
       })
       $soakOutput[0..($soakOutput.Count - 2)] | Write-Output
       $soakResult = $soakOutput[-1]
