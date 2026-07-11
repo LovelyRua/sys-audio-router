@@ -20,6 +20,9 @@ class PlanarAudioFifo {
 
   [[nodiscard]] std::size_t push(const AudioBuffer& source,
                                  std::size_t frames) noexcept;
+  [[nodiscard]] std::size_t peek(AudioBuffer& destination,
+                                 std::size_t frames) const noexcept;
+  [[nodiscard]] std::size_t consume(std::size_t frames) noexcept;
   [[nodiscard]] std::size_t pop(AudioBuffer& destination,
                                 std::size_t frames) noexcept;
   void clear() noexcept;

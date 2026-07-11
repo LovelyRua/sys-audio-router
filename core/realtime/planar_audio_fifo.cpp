@@ -67,8 +67,8 @@ std::size_t PlanarAudioFifo::push(const AudioBuffer& source,
   return transferred;
 }
 
-std::size_t PlanarAudioFifo::pop(AudioBuffer& destination,
-                                 std::size_t frames) noexcept {
+std::size_t PlanarAudioFifo::peek(AudioBuffer& destination,
+                                  std::size_t frames) const noexcept {
   if (destination.channels() != channels_) {
     return 0;
   }
@@ -87,8 +87,20 @@ std::size_t PlanarAudioFifo::pop(AudioBuffer& destination,
     std::copy_n(fifo_channel, second, destination_channel.data() + first);
   }
 
-  read_frame_ = (read_frame_ + transferred) % capacity_frames_;
-  available_frames_ -= transferred;
+  return transferred;
+}
+
+std::size_t PlanarAudioFifo::consume(std::size_t frames) noexcept {
+  const auto consumed = std::min(frames, available_frames_);
+  read_frame_ = (read_frame_ + consumed) % capacity_frames_;
+  available_frames_ -= consumed;
+  return consumed;
+}
+
+std::size_t PlanarAudioFifo::pop(AudioBuffer& destination,
+                                 std::size_t frames) noexcept {
+  const auto transferred = peek(destination, frames);
+  (void)consume(transferred);
   return transferred;
 }
 
