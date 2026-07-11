@@ -31,7 +31,10 @@ context structures. The graph currently consumes and produces
 - `Node`: realtime processor interface.
 - `GainNode`, `MuteNode`, and passthrough behavior used by smoke tests.
 - Lock-free finite float parameter publishing for scalar node controls.
-- Graph builder and graph snapshot publishing.
+- Graph builder and graph snapshot publishing. Snapshot processing uses an
+  allocation-free raw-pointer read on the realtime path; graph ownership stays
+  on the publisher/control side, which waits for an audio reader quiescence
+  point before releasing the previous snapshot.
 - Route matrix core for channel routing and summing experiments.
 
 The graph is still intentionally simple. Branching graph execution, bus summing,
