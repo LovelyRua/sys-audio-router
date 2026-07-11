@@ -267,6 +267,12 @@ add_executable(sar_audio_block_timeline_smoke
 
 target_link_libraries(sar_audio_block_timeline_smoke PRIVATE sar_core)
 
+add_executable(sar_clock_drift_estimator_smoke
+  tests/realtime/clock_drift_estimator_smoke.cpp
+)
+
+target_link_libraries(sar_clock_drift_estimator_smoke PRIVATE sar_core)
+
 add_executable(sar_xrun_detection_smoke
   tests/realtime/xrun_detection_smoke.cpp
 )
@@ -383,5 +389,6 @@ add_test(NAME diagnostics_smoke COMMAND sar_diagnostics_smoke)
 add_test(NAME spsc_ring_buffer_smoke COMMAND sar_spsc_ring_buffer_smoke)
 add_test(NAME process_context_smoke COMMAND sar_process_context_smoke)
 add_test(NAME audio_block_timeline_smoke COMMAND sar_audio_block_timeline_smoke)
+add_test(NAME clock_drift_estimator_smoke COMMAND sar_clock_drift_estimator_smoke)
 add_test(NAME xrun_detection_smoke COMMAND sar_xrun_detection_smoke)
 add_test(NAME spsc_ring_buffer_threaded_smoke COMMAND sar_spsc_ring_buffer_threaded_smoke)
