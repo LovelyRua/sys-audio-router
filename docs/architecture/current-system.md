@@ -72,6 +72,15 @@ WASAPI capture discontinuities also increment the engine xrun counter.
 Diagnostics will still need to expand as real loops expose render underrun,
 clock drift, and end-to-end latency behavior.
 
+`core/realtime/audio_block_timeline.h` defines the portable clock-boundary data
+model. A `ClockDomain` gives an independently paced sample clock a stable ID and
+nominal sample rate. An `AudioBlockTimeline` locates one non-empty block by frame
+position within that domain and classifies same-domain blocks as overlapping,
+contiguous, or separated by a gap. Blocks from different domains are explicitly
+not comparable. A future clock-domain bridge must therefore retain source and
+destination timelines separately; drift estimation, buffering policy, and ASRC
+remain outside this model and are not implemented yet.
+
 ## Platform Layer
 
 `core/platform` contains the platform-facing pieces:
@@ -152,7 +161,7 @@ counters, and engine diagnostics for lab captures.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 48 smoke targets. Several tests are
+The Windows CTest suite currently has 49 smoke targets. Several tests are
 synthetic because WinRM sessions may not expose interactive audio endpoints even
 when the VM has a desktop audio stack.
 
