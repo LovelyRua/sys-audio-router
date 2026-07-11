@@ -85,6 +85,7 @@ try {
     )
 
     $ErrorActionPreference = "Stop"
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
     $repoDir = Join-Path $env:USERPROFILE "src\sys-audio-router-$SafeSlot"
     $buildDir = "build-$SafeSlot"
     $cmdFile = "C:\Windows\Temp\sar-local-measure-$SafeSlot.cmd"
