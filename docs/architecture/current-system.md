@@ -78,8 +78,15 @@ nominal sample rate. An `AudioBlockTimeline` locates one non-empty block by fram
 position within that domain and classifies same-domain blocks as overlapping,
 contiguous, or separated by a gap. Blocks from different domains are explicitly
 not comparable. A future clock-domain bridge must therefore retain source and
-destination timelines separately; drift estimation, buffering policy, and ASRC
-remain outside this model and are not implemented yet.
+destination timelines separately; buffering policy and ASRC remain outside this
+model and are not implemented yet.
+
+`core/realtime/clock_drift_estimator.h` provides the portable, allocation-free
+measurement primitive for one clock domain. Given two strictly ordered frame/QPC
+samples, it reports the observed sample rate and its error from the domain's
+nominal rate in parts per million. Zero elapsed time, frame or QPC rollback and
+wraparound, domain mismatch, invalid nominal rates, and non-finite calculations
+produce an invalid estimate instead of a partial result.
 
 ## Platform Layer
 
