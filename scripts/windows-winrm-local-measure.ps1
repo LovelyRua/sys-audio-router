@@ -168,6 +168,7 @@ try {
       $soakOutput = @(Invoke-WasapiSoak -Mode $Mode -Iterations $Iterations -RunMeasurement {
         param($modeName, $iteration)
         $previousErrorActionPreference = $ErrorActionPreference
+        $measurementExitCode = 1
         $ErrorActionPreference = "Continue"
         try {
           & $executables[$modeName] @measureArgs 2>&1 | Write-Host
