@@ -284,6 +284,18 @@ int main() {
                                   "Expected valid render clock frequency")) {
     return failure;
   }
+  if (const auto failure = expect(!final_summary.capture_drift.valid ||
+                                      (std::isfinite(final_summary.capture_drift.observed_sample_rate) &&
+                                       std::isfinite(final_summary.capture_drift.nominal_error_ppm)),
+                                  "Expected finite capture drift estimate")) {
+    return failure;
+  }
+  if (const auto failure = expect(!final_summary.render_drift.valid ||
+                                      (std::isfinite(final_summary.render_drift.observed_sample_rate) &&
+                                       std::isfinite(final_summary.render_drift.nominal_error_ppm)),
+                                  "Expected finite render drift estimate")) {
+    return failure;
+  }
   if (const auto failure =
           expect(final_summary.runtime.health !=
                      sar::platform::WasapiRuntimeHealth::Faulted,

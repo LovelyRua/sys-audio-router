@@ -2,6 +2,7 @@
 
 #include "core/diagnostics/engine_diagnostics.h"
 #include "core/graph/graph.h"
+#include "core/realtime/clock_drift_estimator.h"
 #include "core/platform/windows_wasapi_realtime_worker.h"
 #include "core/platform/windows_wasapi_runtime_summary.h"
 #include "core/platform/windows_wasapi_stream.h"
@@ -24,6 +25,8 @@ struct WasapiDuplexLoopSummary {
   WasapiRuntimeSummary runtime;
   WasapiClockSnapshot capture_clock;
   WasapiClockSnapshot render_clock;
+  realtime::ClockDriftEstimate capture_drift;
+  realtime::ClockDriftEstimate render_drift;
   std::int64_t frame_balance = 0;
   bool capture_clock_available = false;
   bool render_clock_available = false;
@@ -62,6 +65,10 @@ class WindowsWasapiDuplexLoop {
   WindowsWasapiStream render_stream_;
   WindowsWasapiGraphRunner runner_;
   WindowsWasapiRealtimeWorker worker_;
+  WasapiClockSnapshot capture_clock_baseline_;
+  WasapiClockSnapshot render_clock_baseline_;
+  bool capture_clock_baseline_available_ = false;
+  bool render_clock_baseline_available_ = false;
 };
 
 class WasapiDuplexLoopOpenResult {

@@ -41,7 +41,16 @@ WindowsWasapiDuplexLoop::~WindowsWasapiDuplexLoop() {
 }
 
 WasapiRealtimeWorkerResult WindowsWasapiDuplexLoop::start(std::uint32_t timeout_ms) {
-  return worker_.start(timeout_ms);
+  capture_clock_baseline_available_ = false;
+  render_clock_baseline_available_ = false;
+  const auto result = worker_.start(timeout_ms);
+  if (result.ok()) {
+    capture_clock_baseline_available_ =
+        capture_stream_.read_clock(capture_clock_baseline_);
+    render_clock_baseline_available_ =
+        render_stream_.read_clock(render_clock_baseline_);
+  }
+  return result;
 }
 
 void WindowsWasapiDuplexLoop::stop() noexcept {
@@ -84,6 +93,20 @@ WasapiDuplexLoopSummary WindowsWasapiDuplexLoop::summary() const {
       result.worker, errors, &result.capture_stream, &result.render_stream);
   result.capture_clock_available = capture_stream_.read_clock(result.capture_clock);
   result.render_clock_available = render_stream_.read_clock(result.render_clock);
+  if (capture_clock_baseline_available_ && result.capture_clock_available) {
+    const realtime::ClockDomain domain{1, capture_probe().mix_format.sample_rate};
+    result.capture_drift = realtime::ClockDriftEstimator::estimate(
+        {domain, capture_clock_baseline_.position,
+         capture_clock_baseline_.qpc_position_100ns},
+        {domain, result.capture_clock.position, result.capture_clock.qpc_position_100ns});
+  }
+  if (render_clock_baseline_available_ && result.render_clock_available) {
+    const realtime::ClockDomain domain{2, render_probe().mix_format.sample_rate};
+    result.render_drift = realtime::ClockDriftEstimator::estimate(
+        {domain, render_clock_baseline_.position,
+         render_clock_baseline_.qpc_position_100ns},
+        {domain, result.render_clock.position, result.render_clock.qpc_position_100ns});
+  }
   result.frame_balance =
       signed_frame_balance(result.worker.captured_frames, result.worker.rendered_frames);
   return result;

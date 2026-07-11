@@ -114,6 +114,13 @@ int main(int argc, char** argv) {
             << " render_position=" << loop_summary.render_clock.position
             << " render_qpc_100ns=" << loop_summary.render_clock.qpc_position_100ns
             << " render_frequency=" << loop_summary.render_clock.frequency
+            << " capture_drift_valid=" << (loop_summary.capture_drift.valid ? 1 : 0)
+            << " capture_observed_rate="
+            << loop_summary.capture_drift.observed_sample_rate
+            << " capture_error_ppm=" << loop_summary.capture_drift.nominal_error_ppm
+            << " render_drift_valid=" << (loop_summary.render_drift.valid ? 1 : 0)
+            << " render_observed_rate=" << loop_summary.render_drift.observed_sample_rate
+            << " render_error_ppm=" << loop_summary.render_drift.nominal_error_ppm
             << " frame_balance=" << loop_summary.frame_balance << '\n';
   std::cout << "Duplex clocks\n";
   std::cout << "  Capture available: "
@@ -128,6 +135,18 @@ int main(int argc, char** argv) {
   std::cout << "  Render QPC 100ns: " << loop_summary.render_clock.qpc_position_100ns
             << '\n';
   std::cout << "  Render frequency: " << loop_summary.render_clock.frequency << '\n';
+  std::cout << "  Capture drift valid: "
+            << (loop_summary.capture_drift.valid ? "yes" : "no") << '\n';
+  std::cout << "  Capture observed sample rate: "
+            << loop_summary.capture_drift.observed_sample_rate << '\n';
+  std::cout << "  Capture nominal error ppm: "
+            << loop_summary.capture_drift.nominal_error_ppm << '\n';
+  std::cout << "  Render drift valid: "
+            << (loop_summary.render_drift.valid ? "yes" : "no") << '\n';
+  std::cout << "  Render observed sample rate: "
+            << loop_summary.render_drift.observed_sample_rate << '\n';
+  std::cout << "  Render nominal error ppm: "
+            << loop_summary.render_drift.nominal_error_ppm << '\n';
   std::cout << "  Captured-rendered frame balance: " << loop_summary.frame_balance
             << '\n';
   sar::tools::print_wasapi_runtime_summary(std::cout, loop_summary.runtime);
