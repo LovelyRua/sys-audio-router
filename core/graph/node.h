@@ -25,7 +25,7 @@ class GainNode final : public Node {
  public:
   explicit GainNode(float gain) noexcept;
 
-  void set_gain(float gain) noexcept;
+  [[nodiscard]] bool set_gain(float gain) noexcept;
   [[nodiscard]] float gain() const noexcept;
 
   void process(const realtime::ProcessContext& context,

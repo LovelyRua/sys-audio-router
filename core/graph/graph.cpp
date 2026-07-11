@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 
 namespace sar::graph {
 
@@ -19,10 +20,14 @@ void PassthroughNode::process(const realtime::ProcessContext& context,
   }
 }
 
-GainNode::GainNode(float gain) noexcept : gain_(gain) {}
+GainNode::GainNode(float gain) noexcept : gain_(std::isfinite(gain) ? gain : 0.0F) {}
 
-void GainNode::set_gain(float gain) noexcept {
+bool GainNode::set_gain(float gain) noexcept {
+  if (!std::isfinite(gain)) {
+    return false;
+  }
   gain_ = gain;
+  return true;
 }
 
 float GainNode::gain() const noexcept {

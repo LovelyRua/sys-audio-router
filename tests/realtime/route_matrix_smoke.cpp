@@ -4,6 +4,7 @@
 #include "tests/realtime/test_helpers.h"
 
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string_view>
 #include <vector>
@@ -55,9 +56,19 @@ int main() {
     return failure;
   }
 
-  matrix.set_gain(0, 0, 1.0F);
-  matrix.set_gain(1, 0, 0.5F);
-  matrix.set_gain(1, 1, 1.0F);
+  if (const auto failure = expect(matrix.set_gain(0, 0, 1.0F) &&
+                                  matrix.set_gain(1, 0, 0.5F) &&
+                                  matrix.set_gain(1, 1, 1.0F),
+                                  "Expected finite route gains to be accepted")) {
+    return failure;
+  }
+  if (const auto failure =
+          expect(!matrix.set_gain(0, 0, std::numeric_limits<float>::quiet_NaN()) &&
+                     !matrix.set_gain(2, 0, 1.0F) &&
+                     sar::tests::nearly_equal(matrix.gain(0, 0), 1.0F),
+                 "Expected invalid route gains to preserve the active crosspoint")) {
+    return failure;
+  }
 
   matrix.process(input, output);
 
@@ -75,6 +86,13 @@ int main() {
     if (!sar::tests::nearly_equal(out_right[frame], expected_right)) {
       return sar::tests::fail_sample("Unexpected right matrix output", 1, frame);
     }
+  }
+
+  if (const auto failure = expect(!matrix.set_gain(0, 1,
+                                                    std::numeric_limits<float>::infinity()) &&
+                                  sar::tests::nearly_equal(matrix.gain(0, 1), 0.0F),
+                                  "Expected infinite route gain to be rejected")) {
+    return failure;
   }
 
   {

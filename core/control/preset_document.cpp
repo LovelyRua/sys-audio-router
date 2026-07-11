@@ -245,9 +245,9 @@ PresetMatrixBuildResult build_route_matrix(const PresetDocument& preset) {
     if (route.muted) {
       continue;
     }
-    matrix->set_gain(input_indices.at(route.input_id),
-                     output_indices.at(route.output_id),
-                     route.gain);
+    static_cast<void>(matrix->set_gain(input_indices.at(route.input_id),
+                                       output_indices.at(route.output_id),
+                                       route.gain));
   }
 
   return PresetMatrixBuildResult::success(std::move(matrix));
