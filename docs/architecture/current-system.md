@@ -24,6 +24,10 @@ WASAPI capture/render stream
 `core/realtime` contains fixed-size planar float audio buffers and process
 context structures. The graph currently consumes and produces
 `realtime::AudioBuffer`.
+`realtime::PlanarAudioFifo` provides fixed-channel, fixed-capacity buffering for
+a single-threaded realtime runner. It allocates only during construction;
+partial `push` and `pop` calls return the transferred frame count so overflow
+and underflow policy remain with the caller.
 Its SPSC queue exposes a destination-based dequeue for realtime consumers, so
 successful reads do not construct an optional result object.
 
