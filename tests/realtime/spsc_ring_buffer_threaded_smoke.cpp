@@ -23,8 +23,8 @@ int main() {
   std::thread consumer([&queue, &producer_done, &failed]() {
     int expected = 0;
     while (expected < kItemCount) {
-      const auto value = queue.pop();
-      if (!value.has_value()) {
+      int value = 0;
+      if (!queue.try_pop(value)) {
         if (producer_done.load(std::memory_order_acquire)) {
           failed.store(true, std::memory_order_release);
           return;
@@ -33,7 +33,7 @@ int main() {
         continue;
       }
 
-      if (*value != expected) {
+      if (value != expected) {
         failed.store(true, std::memory_order_release);
         return;
       }

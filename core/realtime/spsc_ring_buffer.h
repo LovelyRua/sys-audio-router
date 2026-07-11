@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <type_traits>
@@ -13,10 +14,7 @@ template <typename T>
 class SpscRingBuffer {
  public:
   explicit SpscRingBuffer(std::size_t capacity)
-      : capacity_(capacity + 1), buffer_(capacity_) {
-    if (capacity == 0) {
-      throw std::invalid_argument("SpscRingBuffer requires non-zero capacity");
-    }
+      : capacity_(checked_capacity(capacity)), buffer_(capacity_) {
     static_assert(std::is_default_constructible_v<T>);
     static_assert(std::is_copy_constructible_v<T>);
     static_assert(std::is_copy_assignable_v<T>);
@@ -51,18 +49,34 @@ class SpscRingBuffer {
   }
 
   [[nodiscard]] std::optional<T> pop() noexcept {
-    const auto read = read_index_.load(std::memory_order_relaxed);
-
-    if (read == write_index_.load(std::memory_order_acquire)) {
+    T value{};
+    if (!try_pop(value)) {
       return std::nullopt;
     }
-
-    auto value = buffer_[read];
-    read_index_.store(increment(read), std::memory_order_release);
     return value;
   }
 
+  // Use this form on a realtime consumer to avoid constructing an optional
+  // result object for every successful dequeue.
+  [[nodiscard]] bool try_pop(T& value) noexcept {
+    const auto read = read_index_.load(std::memory_order_relaxed);
+    if (read == write_index_.load(std::memory_order_acquire)) {
+      return false;
+    }
+
+    value = buffer_[read];
+    read_index_.store(increment(read), std::memory_order_release);
+    return true;
+  }
+
  private:
+  [[nodiscard]] static std::size_t checked_capacity(std::size_t capacity) {
+    if (capacity == 0 || capacity == std::numeric_limits<std::size_t>::max()) {
+      throw std::invalid_argument("SpscRingBuffer capacity must be non-zero and finite");
+    }
+    return capacity + 1;
+  }
+
   [[nodiscard]] std::size_t increment(std::size_t value) const noexcept {
     return (value + 1) % capacity_;
   }

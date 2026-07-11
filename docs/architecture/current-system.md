@@ -24,6 +24,8 @@ WASAPI capture/render stream
 `core/realtime` contains fixed-size planar float audio buffers and process
 context structures. The graph currently consumes and produces
 `realtime::AudioBuffer`.
+Its SPSC queue exposes a destination-based dequeue for realtime consumers, so
+successful reads do not construct an optional result object.
 
 `core/graph` contains:
 
