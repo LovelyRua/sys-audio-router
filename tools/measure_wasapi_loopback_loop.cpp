@@ -67,8 +67,11 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  std::cout << "wasapi_lifecycle phase=started mode=loopback\n" << std::flush;
   std::this_thread::sleep_for(std::chrono::milliseconds(options.duration_ms));
+  std::cout << "wasapi_lifecycle phase=stopping mode=loopback\n" << std::flush;
   loop->stop();
+  std::cout << "wasapi_lifecycle phase=stopped mode=loopback\n" << std::flush;
 
   const auto errors = loop->last_errors();
   if (!errors.empty()) {
