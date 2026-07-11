@@ -62,6 +62,11 @@ sar::platform::WasapiRuntimeSummary make_summary() {
   summary.last_captured_frames = 96;
   summary.last_rendered_frames = 128;
   summary.last_stop_wait_microseconds = 1500;
+  summary.fifo_fill_frames = 144;
+  summary.fifo_underflow_cycles = 2;
+  summary.fifo_underflow_frames = 48;
+  summary.fifo_overflow_cycles = 3;
+  summary.fifo_overflow_frames = 72;
   return summary;
 }
 
@@ -133,6 +138,11 @@ sar::diagnostics::EngineDiagnostics make_diagnostics() {
   diagnostics.graph_version = 42;
   diagnostics.processed_blocks = 99;
   diagnostics.xrun_count = 3;
+  diagnostics.fifo_fill_frames = 144;
+  diagnostics.fifo_underflow_cycles = 2;
+  diagnostics.fifo_underflow_frames = 48;
+  diagnostics.fifo_overflow_cycles = 3;
+  diagnostics.fifo_overflow_frames = 72;
   diagnostics.last_callback_seconds = 0.001;
   diagnostics.peak_callback_seconds = 0.002;
   return diagnostics;
@@ -205,6 +215,21 @@ int main() {
     if (const auto failure =
             expect(contains(text, "Last stop wait us: 1500"),
                    "Expected runtime stop wait")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "fifo_fill_frames=144") &&
+                       contains(text, "fifo_underflow_cycles=2") &&
+                       contains(text, "fifo_underflow_frames=48") &&
+                       contains(text, "fifo_overflow_cycles=3") &&
+                       contains(text, "fifo_overflow_frames=72"),
+                   "Expected machine-readable runtime FIFO diagnostics")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "FIFO fill frames: 144") &&
+                       contains(text, "FIFO overflow frames: 72"),
+                   "Expected readable runtime FIFO diagnostics")) {
       return failure;
     }
   }
@@ -400,6 +425,16 @@ int main() {
     if (const auto failure =
             expect(contains(text, "Xruns: 3"),
                    "Expected xrun count")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "engine_diagnostics graph_version=42") &&
+                       contains(text, "fifo_fill_frames=144") &&
+                       contains(text, "fifo_underflow_cycles=2") &&
+                       contains(text, "fifo_underflow_frames=48") &&
+                       contains(text, "fifo_overflow_cycles=3") &&
+                       contains(text, "fifo_overflow_frames=72"),
+                   "Expected machine-readable engine FIFO diagnostics")) {
       return failure;
     }
   }

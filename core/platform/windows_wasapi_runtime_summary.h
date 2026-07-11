@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/diagnostics/engine_diagnostics.h"
 #include "core/platform/windows_wasapi_realtime_worker.h"
 #include "core/platform/windows_wasapi_stream.h"
 
@@ -41,6 +42,11 @@ struct WasapiRuntimeSummary {
   std::uint64_t stream_stop_error_cycles = 0;
   std::uint64_t stream_wait_cancellation_cycles = 0;
   std::uint64_t xrun_count = 0;
+  std::uint64_t fifo_fill_frames = 0;
+  std::uint64_t fifo_underflow_cycles = 0;
+  std::uint64_t fifo_underflow_frames = 0;
+  std::uint64_t fifo_overflow_cycles = 0;
+  std::uint64_t fifo_overflow_frames = 0;
   std::uint64_t last_callback_nanoseconds = 0;
   std::uint64_t peak_callback_nanoseconds = 0;
   std::uint64_t total_callback_nanoseconds = 0;
@@ -93,6 +99,7 @@ struct WasapiRuntimeSummary {
     const WasapiRealtimeWorkerStats& stats,
     const std::vector<WasapiRealtimeWorkerError>& errors,
     const WasapiStreamDiagnostics* capture_diagnostics,
-    const WasapiStreamDiagnostics* render_diagnostics);
+    const WasapiStreamDiagnostics* render_diagnostics,
+    const diagnostics::EngineDiagnostics* engine_diagnostics = nullptr);
 
 }  // namespace sar::platform

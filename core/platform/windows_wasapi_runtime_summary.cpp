@@ -67,6 +67,11 @@ std::string format_wasapi_runtime_summary_line(
          << " stream_wait_cancellation_cycles="
          << summary.stream_wait_cancellation_cycles
          << " xrun_count=" << summary.xrun_count
+         << " fifo_fill_frames=" << summary.fifo_fill_frames
+         << " fifo_underflow_cycles=" << summary.fifo_underflow_cycles
+         << " fifo_underflow_frames=" << summary.fifo_underflow_frames
+         << " fifo_overflow_cycles=" << summary.fifo_overflow_cycles
+         << " fifo_overflow_frames=" << summary.fifo_overflow_frames
          << " last_callback_ns=" << summary.last_callback_nanoseconds
          << " peak_callback_ns=" << summary.peak_callback_nanoseconds
          << " total_callback_ns=" << summary.total_callback_nanoseconds
@@ -120,7 +125,8 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
     const WasapiRealtimeWorkerStats& stats,
     const std::vector<WasapiRealtimeWorkerError>& errors,
     const WasapiStreamDiagnostics* capture_diagnostics,
-    const WasapiStreamDiagnostics* render_diagnostics) {
+    const WasapiStreamDiagnostics* render_diagnostics,
+    const diagnostics::EngineDiagnostics* engine_diagnostics) {
   WasapiRuntimeSummary summary;
   summary.loop_cycles = stats.loop_cycles;
   summary.graph_processed_cycles = stats.graph_processed_cycles;
@@ -166,6 +172,14 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
   summary.last_capture_discontinuity = stats.last_capture_discontinuity;
   summary.last_capture_timestamp_error = stats.last_capture_timestamp_error;
   summary.error_count = errors.size();
+
+  if (engine_diagnostics != nullptr) {
+    summary.fifo_fill_frames = engine_diagnostics->fifo_fill_frames;
+    summary.fifo_underflow_cycles = engine_diagnostics->fifo_underflow_cycles;
+    summary.fifo_underflow_frames = engine_diagnostics->fifo_underflow_frames;
+    summary.fifo_overflow_cycles = engine_diagnostics->fifo_overflow_cycles;
+    summary.fifo_overflow_frames = engine_diagnostics->fifo_overflow_frames;
+  }
 
   if (capture_diagnostics != nullptr) {
     summary.has_capture_stream = true;
