@@ -132,10 +132,15 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::start_streams() noexcept {
   if (render_stream_ != nullptr) {
     auto result = render_stream_->start();
     if (!result.ok()) {
+      auto errors = result.errors();
       if (capture_stream_ != nullptr) {
-        static_cast<void>(capture_stream_->stop());
+        auto rollback_result = capture_stream_->stop();
+        if (!rollback_result.ok()) {
+          errors.insert(errors.end(), rollback_result.errors().begin(),
+                        rollback_result.errors().end());
+        }
       }
-      return WasapiGraphRunnerResult::failure(result.errors());
+      return WasapiGraphRunnerResult::failure(std::move(errors));
     }
   }
 

@@ -11,6 +11,7 @@
 
 #include <chrono>
 #include <cstdio>
+#include <iterator>
 #include <system_error>
 #include <utility>
 
@@ -291,20 +292,29 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     return;
   }
 
-  WindowsRealtimeThreadScope realtime_scope;
-  const auto realtime_result =
-      WindowsRealtimeThreadScope::enter_current_thread(realtime_scope);
-  if (!realtime_result.ok()) {
-    set_errors(convert_errors(realtime_result.errors()));
+  const auto start_result = runner_.start_streams();
+  if (!start_result.ok()) {
+    stream_start_error_cycles_.fetch_add(1);
+    set_errors(convert_errors(start_result.errors()));
     running_.store(false);
     publish_startup_result(false);
     return;
   }
 
-  const auto start_result = runner_.start_streams();
-  if (!start_result.ok()) {
-    stream_start_error_cycles_.fetch_add(1);
-    set_errors(convert_errors(start_result.errors()));
+  WindowsRealtimeThreadScope realtime_scope;
+  const auto realtime_result =
+      WindowsRealtimeThreadScope::enter_current_thread(realtime_scope);
+  if (!realtime_result.ok()) {
+    auto errors = convert_errors(realtime_result.errors());
+    const auto rollback_result = runner_.stop_streams();
+    if (!rollback_result.ok()) {
+      stream_stop_error_cycles_.fetch_add(1);
+      auto rollback_errors = convert_errors(rollback_result.errors());
+      errors.insert(errors.end(),
+                    std::make_move_iterator(rollback_errors.begin()),
+                    std::make_move_iterator(rollback_errors.end()));
+    }
+    set_errors(std::move(errors));
     running_.store(false);
     publish_startup_result(false);
     return;
@@ -394,6 +404,8 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
       capture_timestamp_error_frames_.fetch_add(result.stats().captured_frames);
     }
   }
+
+  realtime_scope.reset();
 
   const auto stop_result = runner_.stop_streams();
   if (!stop_result.ok()) {
