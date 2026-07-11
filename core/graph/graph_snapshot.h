@@ -21,8 +21,15 @@ class GraphSnapshotPublisher {
                diagnostics::EngineDiagnostics& diagnostics) noexcept;
 
  private:
-  std::atomic<std::shared_ptr<Graph>> graph_;
+  void lock_control() const noexcept;
+  void unlock_control() const noexcept;
+
+  // Ownership and reclamation stay on the control/publisher side. The audio
+  // path only observes this raw pointer while holding an active reader slot.
+  mutable std::atomic_flag control_lock_ = ATOMIC_FLAG_INIT;
+  std::shared_ptr<Graph> graph_;
+  std::atomic<Graph*> active_graph_ = nullptr;
+  std::atomic_uint32_t active_processors_ = 0;
 };
 
 }  // namespace sar::graph
-

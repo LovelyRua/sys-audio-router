@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cmath>
 
 namespace sar::graph {
 
@@ -20,24 +19,21 @@ void PassthroughNode::process(const realtime::ProcessContext& context,
   }
 }
 
-GainNode::GainNode(float gain) noexcept : gain_(std::isfinite(gain) ? gain : 0.0F) {}
+GainNode::GainNode(float gain) noexcept : gain_(gain) {}
 
 bool GainNode::set_gain(float gain) noexcept {
-  if (!std::isfinite(gain)) {
-    return false;
-  }
-  gain_ = gain;
-  return true;
+  return gain_.set(gain);
 }
 
 float GainNode::gain() const noexcept {
-  return gain_;
+  return gain_.get();
 }
 
 void GainNode::process(const realtime::ProcessContext& context,
                        const realtime::AudioBuffer& input,
                        realtime::AudioBuffer& output) noexcept {
   (void)context;
+  const auto gain = gain_.get();
   const auto channels = std::min(input.channels(), output.channels());
   const auto frames = std::min(input.frames(), output.frames());
 
@@ -45,9 +41,30 @@ void GainNode::process(const realtime::ProcessContext& context,
     const auto source = input.channel(channel_index);
     auto destination = output.channel(channel_index);
     for (std::size_t frame = 0; frame < frames; ++frame) {
-      destination[frame] = source[frame] * gain_;
+      destination[frame] = source[frame] * gain;
     }
   }
+}
+
+MuteNode::MuteNode(bool muted) noexcept : muted_(muted ? 1U : 0U) {}
+
+void MuteNode::set_muted(bool muted) noexcept {
+  muted_.store(muted ? 1U : 0U, std::memory_order_relaxed);
+}
+
+bool MuteNode::muted() const noexcept {
+  return muted_.load(std::memory_order_relaxed) != 0;
+}
+
+void MuteNode::process(const realtime::ProcessContext& context,
+                       const realtime::AudioBuffer& input,
+                       realtime::AudioBuffer& output) noexcept {
+  (void)context;
+  if (muted()) {
+    output.clear();
+    return;
+  }
+  output.copy_from(input);
 }
 
 Graph::Graph(std::uint64_t version,
