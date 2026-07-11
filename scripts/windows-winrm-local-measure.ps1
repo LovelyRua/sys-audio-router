@@ -5,7 +5,7 @@ param(
   [string]$Password,
   [string]$Slot = "local-measure",
   [string]$RepoRoot = "",
-  [ValidateSet("render", "duplex", "both")]
+  [ValidateSet("render", "duplex", "loopback", "both", "all")]
   [string]$Mode = "render",
   [uint32]$DurationMs = 1000,
   [uint32]$TimeoutMs = 10,
@@ -125,6 +125,16 @@ try {
       }
       if ($Mode -eq "duplex" -or $Mode -eq "both") {
         $targets += "sar_measure_wasapi_duplex_loop"
+        $runs += "`"%CD%\$buildDir\sar_measure_wasapi_duplex_loop.exe`" $measureArgs"
+      }
+      if ($Mode -eq "loopback" -or $Mode -eq "all") {
+        $targets += "sar_measure_wasapi_loopback_loop"
+        $runs += "`"%CD%\$buildDir\sar_measure_wasapi_loopback_loop.exe`" $measureArgs"
+      }
+      if ($Mode -eq "all") {
+        $targets += "sar_measure_wasapi_render_loop"
+        $targets += "sar_measure_wasapi_duplex_loop"
+        $runs += "`"%CD%\$buildDir\sar_measure_wasapi_render_loop.exe`" $measureArgs"
         $runs += "`"%CD%\$buildDir\sar_measure_wasapi_duplex_loop.exe`" $measureArgs"
       }
       if ($targets.Count -eq 0) {
