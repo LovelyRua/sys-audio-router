@@ -7,8 +7,8 @@ where the project is going; this file describes the current executable shape.
 
 The project is still pre-alpha. The portable realtime core, graph execution
 prototype, control session shell, Windows WASAPI stream shell, graph runner,
-realtime worker, render and duplex loop wrappers, sample conversion helpers,
-and smoke-test harness are in place.
+realtime worker, render, duplex, and loopback loop wrappers, sample conversion
+helpers, and smoke-test harness are in place.
 
 The next major milestone is the first measured real-device loop:
 
@@ -84,6 +84,8 @@ clock drift, and end-to-end latency behavior.
 - Windows realtime worker shell.
 - Windows render-only loop wrapper for the first default-output device path.
 - Windows duplex loop wrapper for the first default capture/render path.
+- Windows loopback capture wrapper for routing default system output into the
+  graph without feeding it back to the same render endpoint.
 - Windows MMCSS realtime thread scope.
 
 ## Windows WASAPI Flow
@@ -129,8 +131,14 @@ runner, and a realtime worker. It is the current high-level entry point for the
 first measured full-duplex real-device loop. Its summary includes capture/render
 stream diagnostics, worker counters, and runtime health.
 
+`WindowsWasapiLoopbackLoop` owns a capture-only loopback stream, graph runner,
+and realtime worker. It exposes the underlying WASAPI clock snapshot and keeps
+the graph output unconnected until a deliberate render or virtual-endpoint
+route is selected.
+
 The Windows command-line tools can inspect endpoints and run short real-device
-measurements for render-only and full-duplex WASAPI paths. These tools print
+measurements for render-only, full-duplex, and loopback-capture WASAPI paths.
+These tools print
 runtime health, reason codes, stream diagnostics lines, stream shape,
 transferred-frame summaries, stop wait duration, partial/silent transfer
 counters, capture discontinuity/timestamp counters, last-cycle flags, worker
@@ -138,7 +146,7 @@ counters, and engine diagnostics for lab captures.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 41 smoke targets. Several tests are
+The Windows CTest suite currently has 48 smoke targets. Several tests are
 synthetic because WinRM sessions may not expose interactive audio endpoints even
 when the VM has a desktop audio stack.
 
@@ -154,8 +162,8 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 ## Known Gaps
 
 - No always-on real-device render/capture loop has been measured yet.
-- Loopback capture has a native stream API but not yet a dedicated high-level
-  loop wrapper or measurement tool.
+- Loopback capture is not yet connected to a selectable render destination or
+  virtual endpoint.
 - No virtual ASIO driver implementation exists yet.
 - No virtual WDM/WASAPI driver implementation exists yet.
 - No UI exists yet.

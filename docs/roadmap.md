@@ -59,8 +59,8 @@ Purpose: connect the engine to real Windows audio devices.
 Status: underway. WASAPI endpoint enumeration, default and device-ID endpoint
 probing, render loopback probing, shared-mode event-driven stream handles,
 single-cycle render/capture pumping, graph runner orchestration, MMCSS scope,
-and a realtime worker shell exist. The next milestone is a measured real-device
-loop.
+realtime worker shell, and a capture-only loopback wrapper and measurement tool
+exist. The next milestone is a measured real-device loop.
 
 Deliverables:
 

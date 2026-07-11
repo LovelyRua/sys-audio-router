@@ -35,6 +35,7 @@ class WindowsWasapiLoopbackLoop {
   [[nodiscard]] bool running() const noexcept;
   [[nodiscard]] const WasapiStreamProbe& capture_probe() const noexcept;
   [[nodiscard]] WasapiStreamDiagnostics capture_diagnostics() const noexcept;
+  [[nodiscard]] bool read_clock(WasapiClockSnapshot& snapshot) noexcept;
   [[nodiscard]] WasapiRealtimeWorkerStats stats() const noexcept;
   [[nodiscard]] WasapiLoopbackLoopSummary summary() const;
   [[nodiscard]] std::vector<WasapiRealtimeWorkerError> last_errors() const;
@@ -55,8 +56,10 @@ class WindowsWasapiLoopbackLoop {
 
 class WasapiLoopbackLoopOpenResult {
  public:
-  static WasapiLoopbackLoopOpenResult success(std::unique_ptr<WindowsWasapiLoopbackLoop> loop);
-  static WasapiLoopbackLoopOpenResult failure(std::vector<WasapiRealtimeWorkerError> errors);
+  static WasapiLoopbackLoopOpenResult success(
+      std::unique_ptr<WindowsWasapiLoopbackLoop> loop);
+  static WasapiLoopbackLoopOpenResult failure(
+      std::vector<WasapiRealtimeWorkerError> errors);
   [[nodiscard]] bool ok() const noexcept;
   [[nodiscard]] WindowsWasapiLoopbackLoop& loop() noexcept;
   [[nodiscard]] const WindowsWasapiLoopbackLoop& loop() const noexcept;
