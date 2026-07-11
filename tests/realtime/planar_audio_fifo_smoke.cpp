@@ -38,6 +38,9 @@ int main() {
       std::declval<const AudioBuffer&>(), 1)));
   static_assert(noexcept(std::declval<PlanarAudioFifo&>().pop(
       std::declval<AudioBuffer&>(), 1)));
+  static_assert(noexcept(std::declval<const PlanarAudioFifo&>().peek(
+      std::declval<AudioBuffer&>(), 1)));
+  static_assert(noexcept(std::declval<PlanarAudioFifo&>().consume(1)));
 
   bool rejected = false;
   try {
@@ -82,6 +85,40 @@ int main() {
   AudioBuffer wrong_channels(1, 4);
   assert(fifo.push(wrong_channels, 4) == 0);
   assert(fifo.pop(wrong_channels, 4) == 0);
+
+  // Build a wrapped read region for the two-stage render contract.
+  fifo.clear();
+  assert(fifo.push(first, 4) == 4);
+  assert(fifo.consume(3) == 3);
+  assert(fifo.push(second, 4) == 4);
+  output.clear();
+  assert(fifo.peek(output, 8) == 5);
+  assert(fifo.available_frames() == 5);
+  expect_frame(output, 0, 10.0F, 3);
+  for (std::size_t frame = 0; frame < 4; ++frame) {
+    expect_frame(output, frame + 1, 20.0F, frame);
+  }
+
+  AudioBuffer repeated(2, 8);
+  repeated.clear();
+  assert(fifo.peek(repeated, 5) == 5);
+  for (std::size_t channel = 0; channel < 2; ++channel) {
+    for (std::size_t frame = 0; frame < 5; ++frame) {
+      assert(repeated.channel(channel)[frame] == output.channel(channel)[frame]);
+    }
+  }
+  assert(fifo.peek(wrong_channels, 4) == 0);
+  assert(fifo.available_frames() == 5);
+
+  assert(fifo.consume(2) == 2);
+  assert(fifo.available_frames() == 3);
+  output.clear();
+  assert(fifo.peek(output, 8) == 3);
+  for (std::size_t frame = 0; frame < 3; ++frame) {
+    expect_frame(output, frame, 20.0F, frame + 1);
+  }
+  assert(fifo.consume(99) == 3);
+  assert(fifo.consume(1) == 0);
 
   AudioBuffer small(2, 2);
   fill(small, 30.0F);
