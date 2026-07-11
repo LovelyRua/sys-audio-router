@@ -9,6 +9,7 @@ param(
   [string]$Mode = "render",
   [uint32]$DurationMs = 1000,
   [uint32]$TimeoutMs = 10,
+  [uint32]$Iterations = 1,
   [string]$RequireHealthyText = "false",
   [string]$AllowUnavailableText = "false"
 )
@@ -39,6 +40,9 @@ if ($AllowUnavailableText -match '^(1|true|yes|y|on)$') {
 } elseif ($AllowUnavailableText -notmatch '^(0|false|no|n|off)$') {
   throw "AllowUnavailableText must be true/false, yes/no, on/off, or 1/0."
 }
+if ($Iterations -eq 0) {
+  throw "Iterations must be at least one."
+}
 
 $archive = Join-Path $env:TEMP "sar-local-measure-$safeSlot.zip"
 if (Test-Path $archive) {
@@ -67,7 +71,7 @@ try {
 
   Invoke-Command -Session $session -ArgumentList `
       $safeSlot, $remoteArchive, $Mode, $DurationMs, $TimeoutMs, $requireHealthy, `
-      $allowUnavailable `
+      $allowUnavailable, $Iterations `
       -ScriptBlock {
     param(
       [string]$SafeSlot,
@@ -76,7 +80,8 @@ try {
       [uint32]$DurationMs,
       [uint32]$TimeoutMs,
       [bool]$RequireHealthy,
-      [bool]$AllowUnavailable
+      [bool]$AllowUnavailable,
+      [uint32]$Iterations
     )
 
     $ErrorActionPreference = "Stop"
@@ -94,6 +99,7 @@ try {
       Write-Host "Archive:    $RemoteArchive"
       Write-Host "Mode:       $Mode"
       Write-Host "Allow unavailable endpoint: $AllowUnavailable"
+      Write-Host "Iterations: $Iterations"
 
       if (Test-Path $repoDir) {
         Remove-Item -LiteralPath $repoDir -Recurse -Force
@@ -145,15 +151,21 @@ try {
         "cmake --build `"$buildDir`" --target $targetArgs",
         "if errorlevel 1 exit /b 1"
       )
+      $lines += "set /a MEASURE_FAILURES=0"
+      $lines += "for /L %%I in (1,1,$Iterations) do ("
+      $lines += "  echo [soak] iteration %%I/$Iterations"
       foreach ($run in $runs) {
-        $lines += $run
-        if ($AllowUnavailable) {
-          $lines += "if errorlevel 1 echo [measure] measurement failed; allow-unavailable is enabled"
-        } else {
-          $lines += "if errorlevel 1 exit /b 1"
-        }
+        $lines += "  $run"
+        $lines += "  if errorlevel 1 set /a MEASURE_FAILURES+=1"
       }
-      $lines += "exit /b 0"
+      $lines += ")"
+      $lines += "echo [soak] completed iterations=$Iterations failures=%MEASURE_FAILURES%"
+      if ($AllowUnavailable) {
+        $lines += "exit /b 0"
+      } else {
+        $lines += "if not %MEASURE_FAILURES%==0 exit /b 1"
+        $lines += "exit /b 0"
+      }
 
       Set-Content -LiteralPath $cmdFile -Value $lines -Encoding ASCII
       cmd.exe /c "`"$cmdFile`" 2>&1"
