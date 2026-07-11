@@ -76,11 +76,20 @@ void print_wasapi_runtime_summary(
   out << "  Last rendered frames: " << summary.last_rendered_frames << '\n';
   out << "  Last stop wait us: " << summary.last_stop_wait_microseconds << '\n';
   out << "  Xruns: " << summary.xrun_count << '\n';
-  out << "  FIFO fill frames: " << summary.fifo_fill_frames << '\n';
-  out << "  FIFO underflow cycles: " << summary.fifo_underflow_cycles << '\n';
-  out << "  FIFO underflow frames: " << summary.fifo_underflow_frames << '\n';
-  out << "  FIFO overflow cycles: " << summary.fifo_overflow_cycles << '\n';
-  out << "  FIFO overflow frames: " << summary.fifo_overflow_frames << '\n';
+  out << "  Capture FIFO fill frames: " << summary.capture_fifo_fill_frames << '\n';
+  out << "  Render FIFO fill frames: " << summary.render_fifo_fill_frames << '\n';
+  out << "  Capture FIFO overflow cycles: "
+      << summary.capture_fifo_overflow_cycles << '\n';
+  out << "  Capture FIFO overflow frames: "
+      << summary.capture_fifo_overflow_frames << '\n';
+  out << "  Render FIFO overflow cycles: "
+      << summary.render_fifo_overflow_cycles << '\n';
+  out << "  Render FIFO overflow frames: "
+      << summary.render_fifo_overflow_frames << '\n';
+  out << "  Render FIFO underflow cycles: "
+      << summary.render_fifo_underflow_cycles << '\n';
+  out << "  Render FIFO underflow frames: "
+      << summary.render_fifo_underflow_frames << '\n';
   out << "  Last callback ns: " << summary.last_callback_nanoseconds << '\n';
   out << "  Peak callback ns: " << summary.peak_callback_nanoseconds << '\n';
   out << "  Total callback ns: " << summary.total_callback_nanoseconds << '\n';
@@ -229,20 +238,40 @@ void print_wasapi_engine_diagnostics(
       << " graph_version=" << diagnostics.graph_version
       << " processed_blocks=" << diagnostics.processed_blocks
       << " xrun_count=" << diagnostics.xrun_count
-      << " fifo_fill_frames=" << diagnostics.fifo_fill_frames
-      << " fifo_underflow_cycles=" << diagnostics.fifo_underflow_cycles
-      << " fifo_underflow_frames=" << diagnostics.fifo_underflow_frames
-      << " fifo_overflow_cycles=" << diagnostics.fifo_overflow_cycles
-      << " fifo_overflow_frames=" << diagnostics.fifo_overflow_frames << '\n';
+      << " capture_fifo_fill_frames=" << diagnostics.capture_fifo_fill_frames
+      << " render_fifo_fill_frames=" << diagnostics.render_fifo_fill_frames
+      << " capture_fifo_overflow_cycles="
+      << diagnostics.capture_fifo_overflow_cycles
+      << " capture_fifo_overflow_frames="
+      << diagnostics.capture_fifo_overflow_frames
+      << " render_fifo_overflow_cycles="
+      << diagnostics.render_fifo_overflow_cycles
+      << " render_fifo_overflow_frames="
+      << diagnostics.render_fifo_overflow_frames
+      << " render_fifo_underflow_cycles="
+      << diagnostics.render_fifo_underflow_cycles
+      << " render_fifo_underflow_frames="
+      << diagnostics.render_fifo_underflow_frames << '\n';
   out << "Engine diagnostics\n";
   out << "  Graph version: " << diagnostics.graph_version << '\n';
   out << "  Processed blocks: " << diagnostics.processed_blocks << '\n';
   out << "  Xruns: " << diagnostics.xrun_count << '\n';
-  out << "  FIFO fill frames: " << diagnostics.fifo_fill_frames << '\n';
-  out << "  FIFO underflow cycles: " << diagnostics.fifo_underflow_cycles << '\n';
-  out << "  FIFO underflow frames: " << diagnostics.fifo_underflow_frames << '\n';
-  out << "  FIFO overflow cycles: " << diagnostics.fifo_overflow_cycles << '\n';
-  out << "  FIFO overflow frames: " << diagnostics.fifo_overflow_frames << '\n';
+  out << "  Capture FIFO fill frames: " << diagnostics.capture_fifo_fill_frames
+      << '\n';
+  out << "  Render FIFO fill frames: " << diagnostics.render_fifo_fill_frames
+      << '\n';
+  out << "  Capture FIFO overflow cycles: "
+      << diagnostics.capture_fifo_overflow_cycles << '\n';
+  out << "  Capture FIFO overflow frames: "
+      << diagnostics.capture_fifo_overflow_frames << '\n';
+  out << "  Render FIFO overflow cycles: "
+      << diagnostics.render_fifo_overflow_cycles << '\n';
+  out << "  Render FIFO overflow frames: "
+      << diagnostics.render_fifo_overflow_frames << '\n';
+  out << "  Render FIFO underflow cycles: "
+      << diagnostics.render_fifo_underflow_cycles << '\n';
+  out << "  Render FIFO underflow frames: "
+      << diagnostics.render_fifo_underflow_frames << '\n';
   out << "  Last callback seconds: " << diagnostics.last_callback_seconds << '\n';
   out << "  Peak callback seconds: " << diagnostics.peak_callback_seconds << '\n';
 }
