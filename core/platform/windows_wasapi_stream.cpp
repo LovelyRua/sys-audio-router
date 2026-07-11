@@ -727,7 +727,7 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
       packet_frames, data_discontinuity, timestamp_error);
 }
 
-bool WindowsWasapiStream::read_clock(WasapiClockSnapshot& snapshot) noexcept {
+bool WindowsWasapiStream::read_clock(WasapiClockSnapshot& snapshot) const noexcept {
   snapshot = {};
   if (!impl_ || !impl_->audio_clock || impl_->clock_frequency == 0) {
     return false;

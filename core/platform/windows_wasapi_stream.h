@@ -124,7 +124,7 @@ class WindowsWasapiStream {
   [[nodiscard]] WasapiStreamIoResult capture_once(
       realtime::AudioBuffer& destination,
       std::uint32_t timeout_ms) noexcept;
-  [[nodiscard]] bool read_clock(WasapiClockSnapshot& snapshot) noexcept;
+  [[nodiscard]] bool read_clock(WasapiClockSnapshot& snapshot) const noexcept;
   void request_stop() noexcept;
   void close() noexcept;
 

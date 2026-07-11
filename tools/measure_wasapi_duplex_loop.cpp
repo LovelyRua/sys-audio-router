@@ -102,6 +102,31 @@ int main(int argc, char** argv) {
   }
 
   const auto loop_summary = loop->summary();
+  std::cout << "wasapi_duplex_clock"
+            << " capture_available=" << (loop_summary.capture_clock_available ? 1 : 0)
+            << " capture_position=" << loop_summary.capture_clock.position
+            << " capture_qpc_100ns=" << loop_summary.capture_clock.qpc_position_100ns
+            << " capture_frequency=" << loop_summary.capture_clock.frequency
+            << " render_available=" << (loop_summary.render_clock_available ? 1 : 0)
+            << " render_position=" << loop_summary.render_clock.position
+            << " render_qpc_100ns=" << loop_summary.render_clock.qpc_position_100ns
+            << " render_frequency=" << loop_summary.render_clock.frequency
+            << " frame_balance=" << loop_summary.frame_balance << '\n';
+  std::cout << "Duplex clocks\n";
+  std::cout << "  Capture available: "
+            << (loop_summary.capture_clock_available ? "yes" : "no") << '\n';
+  std::cout << "  Capture position: " << loop_summary.capture_clock.position << '\n';
+  std::cout << "  Capture QPC 100ns: "
+            << loop_summary.capture_clock.qpc_position_100ns << '\n';
+  std::cout << "  Capture frequency: " << loop_summary.capture_clock.frequency << '\n';
+  std::cout << "  Render available: "
+            << (loop_summary.render_clock_available ? "yes" : "no") << '\n';
+  std::cout << "  Render position: " << loop_summary.render_clock.position << '\n';
+  std::cout << "  Render QPC 100ns: " << loop_summary.render_clock.qpc_position_100ns
+            << '\n';
+  std::cout << "  Render frequency: " << loop_summary.render_clock.frequency << '\n';
+  std::cout << "  Captured-rendered frame balance: " << loop_summary.frame_balance
+            << '\n';
   sar::tools::print_wasapi_runtime_summary(std::cout, loop_summary.runtime);
   sar::tools::print_wasapi_stream_diagnostics(std::cout,
                                               "Capture stream diagnostics",

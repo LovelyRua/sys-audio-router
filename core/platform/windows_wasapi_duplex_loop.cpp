@@ -2,6 +2,7 @@
 
 #include "core/platform/windows_wasapi_loop_preflight.h"
 
+#include <limits>
 #include <utility>
 
 namespace sar::platform {
@@ -16,6 +17,21 @@ std::vector<WasapiRealtimeWorkerError> convert_errors(
     converted.push_back({error.code, error.message});
   }
   return converted;
+}
+
+std::int64_t signed_frame_balance(std::uint64_t captured,
+                                  std::uint64_t rendered) noexcept {
+  constexpr auto maximum =
+      static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max());
+  if (captured >= rendered) {
+    const auto difference = captured - rendered;
+    return difference > maximum ? std::numeric_limits<std::int64_t>::max()
+                                : static_cast<std::int64_t>(difference);
+  }
+
+  const auto difference = rendered - captured;
+  return difference > maximum ? std::numeric_limits<std::int64_t>::min()
+                              : -static_cast<std::int64_t>(difference);
 }
 
 }  // namespace
@@ -66,6 +82,10 @@ WasapiDuplexLoopSummary WindowsWasapiDuplexLoop::summary() const {
   result.worker = stats();
   result.runtime = summarize_wasapi_runtime(
       result.worker, errors, &result.capture_stream, &result.render_stream);
+  result.capture_clock_available = capture_stream_.read_clock(result.capture_clock);
+  result.render_clock_available = render_stream_.read_clock(result.render_clock);
+  result.frame_balance =
+      signed_frame_balance(result.worker.captured_frames, result.worker.rendered_frames);
   return result;
 }
 

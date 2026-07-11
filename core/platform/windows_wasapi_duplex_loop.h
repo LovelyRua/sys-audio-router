@@ -22,6 +22,11 @@ struct WasapiDuplexLoopSummary {
   WasapiStreamDiagnostics render_stream;
   WasapiRealtimeWorkerStats worker;
   WasapiRuntimeSummary runtime;
+  WasapiClockSnapshot capture_clock;
+  WasapiClockSnapshot render_clock;
+  std::int64_t frame_balance = 0;
+  bool capture_clock_available = false;
+  bool render_clock_available = false;
 };
 
 class WindowsWasapiDuplexLoop {

@@ -197,6 +197,10 @@ int main() {
                                   "Expected initial duplex summary without loop cycles")) {
     return failure;
   }
+  if (const auto failure = expect(initial_summary.frame_balance == 0,
+                                  "Expected initial duplex frame balance zero")) {
+    return failure;
+  }
   if (const auto failure =
           expect(initial_summary.runtime.health ==
                      sar::platform::WasapiRuntimeHealth::Stopped,
@@ -260,6 +264,24 @@ int main() {
   if (const auto failure = expect(final_summary.worker.rendered_frames ==
                                       stats.rendered_frames,
                                   "Expected duplex summary rendered frames")) {
+    return failure;
+  }
+  const auto expected_frame_balance =
+      stats.captured_frames >= stats.rendered_frames
+          ? static_cast<std::int64_t>(stats.captured_frames - stats.rendered_frames)
+          : -static_cast<std::int64_t>(stats.rendered_frames - stats.captured_frames);
+  if (const auto failure = expect(final_summary.frame_balance == expected_frame_balance,
+                                  "Expected duplex summary frame balance")) {
+    return failure;
+  }
+  if (const auto failure = expect(!final_summary.capture_clock_available ||
+                                      final_summary.capture_clock.frequency > 0,
+                                  "Expected valid capture clock frequency")) {
+    return failure;
+  }
+  if (const auto failure = expect(!final_summary.render_clock_available ||
+                                      final_summary.render_clock.frequency > 0,
+                                  "Expected valid render clock frequency")) {
     return failure;
   }
   if (const auto failure =
