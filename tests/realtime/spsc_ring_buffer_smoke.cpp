@@ -1,6 +1,7 @@
 #include "core/realtime/spsc_ring_buffer.h"
 
 #include <iostream>
+#include <limits>
 
 int main() {
   sar::realtime::SpscRingBuffer<int> queue(3);
@@ -26,14 +27,15 @@ int main() {
   }
 
   for (int expected = 1; expected <= 3; ++expected) {
-    const auto value = queue.pop();
-    if (!value.has_value() || *value != expected) {
+    int value = 0;
+    if (!queue.try_pop(value) || value != expected) {
       std::cerr << "Unexpected pop value\n";
       return 1;
     }
   }
 
-  if (queue.pop().has_value()) {
+  int value = 99;
+  if (queue.try_pop(value) || value != 99) {
     std::cerr << "Queue should be empty after popping all values\n";
     return 1;
   }
@@ -43,13 +45,20 @@ int main() {
     return 1;
   }
 
-  const auto wrapped = queue.pop();
-  if (!wrapped.has_value() || *wrapped != 5) {
+  if (!queue.try_pop(value) || value != 5) {
     std::cerr << "Unexpected wraparound value\n";
     return 1;
+  }
+
+  try {
+    sar::realtime::SpscRingBuffer<int> invalid(
+        std::numeric_limits<std::size_t>::max());
+    (void)invalid;
+    std::cerr << "Queue should reject an overflowing capacity\n";
+    return 1;
+  } catch (const std::invalid_argument&) {
   }
 
   std::cout << "SPSC ring buffer smoke test passed\n";
   return 0;
 }
-
