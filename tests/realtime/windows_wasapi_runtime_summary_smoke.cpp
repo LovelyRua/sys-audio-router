@@ -834,18 +834,17 @@ int main() {
   {
     auto stats = make_active_stats();
     stats.capture_silent_cycles = 1;
-    stats.idle_cycles = 1;
     auto summary =
         sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
     if (const auto failure =
             expect_summary(summary,
-                           sar::platform::WasapiRuntimeHealth::Degraded,
-                           "silent_capture",
-                           "Expected silent capture priority")) {
+                           sar::platform::WasapiRuntimeHealth::Healthy,
+                           "running",
+                           "Expected silent capture to remain observable without degrading health")) {
       return failure;
     }
 
-    stats.capture_silent_cycles = 0;
+    stats.idle_cycles = 1;
     summary = sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
     if (const auto failure =
             expect_summary(summary,
