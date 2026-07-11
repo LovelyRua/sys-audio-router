@@ -88,9 +88,9 @@ try {
     $repoDir = Join-Path $env:USERPROFILE "src\sys-audio-router-$SafeSlot"
     $buildDir = "build-$SafeSlot"
     $cmdFile = "C:\Windows\Temp\sar-local-measure-$SafeSlot.cmd"
-    $measureArgs = "--duration-ms $DurationMs --timeout-ms $TimeoutMs"
+    $measureArgs = @("--duration-ms", "$DurationMs", "--timeout-ms", "$TimeoutMs")
     if ($RequireHealthy) {
-      $measureArgs = "$measureArgs --require-healthy"
+      $measureArgs += "--require-healthy"
     }
 
     try {
@@ -124,18 +124,18 @@ try {
       }
 
       $targets = @()
-      $runs = @()
+      $executables = @{}
       if ($Mode -eq "render" -or $Mode -eq "both" -or $Mode -eq "all") {
         $targets += "sar_measure_wasapi_render_loop"
-        $runs += "`"%CD%\$buildDir\sar_measure_wasapi_render_loop.exe`" $measureArgs"
+        $executables.render = Join-Path $repoDir "$buildDir\sar_measure_wasapi_render_loop.exe"
       }
       if ($Mode -eq "duplex" -or $Mode -eq "both" -or $Mode -eq "all") {
         $targets += "sar_measure_wasapi_duplex_loop"
-        $runs += "`"%CD%\$buildDir\sar_measure_wasapi_duplex_loop.exe`" $measureArgs"
+        $executables.duplex = Join-Path $repoDir "$buildDir\sar_measure_wasapi_duplex_loop.exe"
       }
       if ($Mode -eq "loopback" -or $Mode -eq "all") {
         $targets += "sar_measure_wasapi_loopback_loop"
-        $runs += "`"%CD%\$buildDir\sar_measure_wasapi_loopback_loop.exe`" $measureArgs"
+        $executables.loopback = Join-Path $repoDir "$buildDir\sar_measure_wasapi_loopback_loop.exe"
       }
       if ($targets.Count -eq 0) {
         throw "No measurement targets selected for mode '$Mode'."
@@ -155,26 +155,24 @@ try {
         "cmake --build `"$buildDir`" --target $targetArgs",
         "if errorlevel 1 exit /b 1"
       )
-      $lines += "set /a MEASURE_FAILURES=0"
-      $lines += "for /L %%I in (1,1,$Iterations) do ("
-      $lines += "  echo [soak] iteration %%I/$Iterations"
-      foreach ($run in $runs) {
-        $lines += "  $run"
-        $lines += "  if errorlevel 1 set /a MEASURE_FAILURES+=1"
-      }
-      $lines += ")"
-      $lines += "echo [soak] completed iterations=$Iterations failures=%MEASURE_FAILURES%"
-      if ($AllowUnavailable) {
-        $lines += "exit /b 0"
-      } else {
-        $lines += "if not %MEASURE_FAILURES%==0 exit /b 1"
-        $lines += "exit /b 0"
-      }
+      $lines += "exit /b 0"
 
       Set-Content -LiteralPath $cmdFile -Value $lines -Encoding ASCII
       cmd.exe /c "`"$cmdFile`" 2>&1"
       if ($LASTEXITCODE -ne 0) {
         throw "Local WASAPI measurement failed with exit code $LASTEXITCODE."
+      }
+
+      Import-Module (Join-Path $repoDir "scripts\windows-wasapi-soak-runner.psm1") -Force
+      $soakOutput = @(Invoke-WasapiSoak -Mode $Mode -Iterations $Iterations -RunMeasurement {
+        param($modeName, $iteration)
+        & $executables[$modeName] @measureArgs | Write-Host
+        return $LASTEXITCODE
+      })
+      $soakOutput[0..($soakOutput.Count - 2)] | Write-Output
+      $soakResult = $soakOutput[-1]
+      if (!$AllowUnavailable -and $soakResult.FailureCount -ne 0) {
+        throw "Local WASAPI measurement failed in $($soakResult.FailureCount) of $($soakResult.Attempts) attempts."
       }
     } finally {
       if (Test-Path $RemoteArchive) {
