@@ -173,7 +173,7 @@ counters, and engine diagnostics for lab captures.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 55 smoke targets. Several tests are
+The Windows CTest suite currently has 56 smoke targets. Several tests are
 synthetic because WinRM sessions may not expose interactive audio endpoints even
 when the VM has a desktop audio stack.
 
