@@ -48,12 +48,12 @@ class ScriptedWasapiStream final : public platform::WasapiStreamIo {
     stop_result_ = std::move(result);
   }
 
-  [[nodiscard]] platform::WasapiStreamResult start() override {
+  [[nodiscard]] platform::WasapiStreamResult start() noexcept override {
     ++start_calls_;
     return start_result_;
   }
 
-  [[nodiscard]] platform::WasapiStreamResult stop() override {
+  [[nodiscard]] platform::WasapiStreamResult stop() noexcept override {
     ++stop_calls_;
     return stop_result_;
   }
