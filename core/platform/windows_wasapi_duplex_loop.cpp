@@ -91,7 +91,8 @@ WasapiDuplexLoopSummary WindowsWasapiDuplexLoop::summary() const {
   result.render_stream = render_diagnostics();
   result.worker = stats();
   result.runtime = summarize_wasapi_runtime(
-      result.worker, errors, &result.capture_stream, &result.render_stream);
+      result.worker, errors, &result.capture_stream, &result.render_stream,
+      &diagnostics_);
   result.capture_clock_available = capture_stream_.read_clock(result.capture_clock);
   result.render_clock_available = render_stream_.read_clock(result.render_clock);
   if (capture_clock_baseline_available_ && result.capture_clock_available) {
@@ -124,6 +125,7 @@ WindowsWasapiDuplexLoop::WindowsWasapiDuplexLoop(
     diagnostics::EngineDiagnostics& diagnostics)
     : capture_stream_(std::move(capture_stream)),
       render_stream_(std::move(render_stream)),
+      diagnostics_(diagnostics),
       runner_(&capture_stream_,
               &render_stream_,
               capture_stream_.probe().mix_format.channels,

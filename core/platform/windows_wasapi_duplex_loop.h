@@ -63,6 +63,7 @@ class WindowsWasapiDuplexLoop {
 
   WindowsWasapiStream capture_stream_;
   WindowsWasapiStream render_stream_;
+  diagnostics::EngineDiagnostics& diagnostics_;
   WindowsWasapiGraphRunner runner_;
   WindowsWasapiRealtimeWorker worker_;
   WasapiClockSnapshot capture_clock_baseline_;
