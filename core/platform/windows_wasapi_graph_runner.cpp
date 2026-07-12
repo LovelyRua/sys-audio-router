@@ -369,10 +369,6 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
         ++diagnostics.xrun_count;
       }
     }
-  } else if (!render_has_space) {
-    ++diagnostics.render_fifo_overflow_cycles;
-    diagnostics.render_fifo_overflow_frames +=
-        graph_block_frames_ - render_path_->fifo.free_frames();
   }
 
   if (render_stream_ != nullptr && render_path_->fifo.available_frames() > 0) {
@@ -385,6 +381,9 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
       return WasapiGraphRunnerResult::failure(render_result.errors());
     }
     if (render_result.cancelled()) {
+      diagnostics.capture_fifo_fill_frames =
+          capture_path_ ? capture_path_->fifo.available_frames() : 0;
+      diagnostics.render_fifo_fill_frames = render_path_->fifo.available_frames();
       stats.cancelled = true;
       return WasapiGraphRunnerResult::success(stats);
     }

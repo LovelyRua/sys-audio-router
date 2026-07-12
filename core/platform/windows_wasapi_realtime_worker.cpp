@@ -330,10 +330,6 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
       stop_requested_.store(true);
       break;
     }
-    if (result.stats().cancelled) {
-      stream_wait_cancellation_cycles_.fetch_add(1);
-      break;
-    }
     const auto xrun_count = diagnostics_.xrun_count;
     xrun_count_.store(xrun_count >= xrun_baseline_
                           ? xrun_count - xrun_baseline_
@@ -402,6 +398,10 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     if (result.stats().capture_timestamp_error) {
       capture_timestamp_error_cycles_.fetch_add(1);
       capture_timestamp_error_frames_.fetch_add(result.stats().captured_frames);
+    }
+    if (result.stats().cancelled) {
+      stream_wait_cancellation_cycles_.fetch_add(1);
+      break;
     }
   }
 

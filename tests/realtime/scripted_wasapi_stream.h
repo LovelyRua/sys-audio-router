@@ -70,10 +70,12 @@ class ScriptedWasapiStream final : public platform::WasapiStreamIo {
 
     auto step = std::move(render_steps_.front());
     render_steps_.pop_front();
+    std::uint32_t committed_frames = 0;
     if (step.status == platform::WasapiStreamIoStatus::Completed) {
       RenderSubmission submission;
       submission.frames = std::min<std::uint32_t>(
           {step.writable_frames, static_cast<std::uint32_t>(source.frames()), frames});
+      committed_frames = submission.frames;
       submission.samples.resize(source.channels());
       for (std::size_t channel = 0; channel < source.channels(); ++channel) {
         const auto source_samples = source.channel(channel);
@@ -82,7 +84,7 @@ class ScriptedWasapiStream final : public platform::WasapiStreamIo {
       }
       render_submissions_.push_back(std::move(submission));
     }
-    return make_result(step.writable_frames, step.status, false, false, false,
+    return make_result(committed_frames, step.status, false, false, false,
                        std::move(step.errors));
   }
 
