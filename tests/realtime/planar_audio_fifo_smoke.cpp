@@ -1,4 +1,5 @@
 #include "core/realtime/planar_audio_fifo.h"
+#include "tests/realtime/fifo_runner_test_fixture.h"
 
 #include <cassert>
 #include <cstddef>
@@ -141,6 +142,66 @@ int main() {
       expect_frame(cycle_output, frame, base, frame);
     }
   }
+
+  using sar::tests::fifo_runner::Event;
+  using sar::tests::fifo_runner::EventKind;
+  using sar::tests::fifo_runner::Fixture;
+  using sar::tests::fifo_runner::assert_conservation;
+
+  const Fixture runner(4, 8, 8);
+
+  const auto capture_two_plus_two = runner.run({
+      {EventKind::capture, 2},
+      {EventKind::capture, 2},
+  });
+  assert(capture_two_plus_two.graph_blocks == 1);
+  assert(capture_two_plus_two.graph_input_frames == 4);
+  assert(capture_two_plus_two.capture_backlog == 0);
+  assert(capture_two_plus_two.render_backlog == 4);
+  assert_conservation(capture_two_plus_two);
+
+  const auto render_one_plus_one_plus_two = runner.run({
+      {EventKind::capture, 4},
+      {EventKind::render, 1},
+      {EventKind::render, 1},
+      {EventKind::render, 2},
+  });
+  assert(render_one_plus_one_plus_two.render_committed == 4);
+  assert(render_one_plus_one_plus_two.render_underflow == 0);
+  assert(render_one_plus_one_plus_two.render_backlog == 0);
+  assert_conservation(render_one_plus_one_plus_two);
+
+  const auto idle_backlog = runner.run({
+      {EventKind::capture, 2},
+      {EventKind::idle},
+      {EventKind::idle},
+  });
+  assert(idle_backlog.idle_events == 2);
+  assert(idle_backlog.capture_backlog == 2);
+  assert(idle_backlog.graph_blocks == 0);
+  assert_conservation(idle_backlog);
+
+  const Fixture bounded_runner(4, 4, 4);
+  const auto overflow = bounded_runner.run({
+      {EventKind::capture, 4},
+      {EventKind::capture, 4},
+  });
+  assert(overflow.graph_blocks == 2);
+  assert(overflow.render_backlog == 4);
+  assert(overflow.render_dropped == 4);
+  assert_conservation(overflow);
+
+  const auto cancellation = runner.run({
+      {EventKind::capture, 2},
+      {EventKind::cancel},
+      {EventKind::capture, 2},
+      {EventKind::render, 4},
+  });
+  assert(cancellation.cancelled);
+  assert(cancellation.capture_offered == 2);
+  assert(cancellation.capture_backlog == 2);
+  assert(cancellation.render_requested == 0);
+  assert_conservation(cancellation);
 
   std::cout << "Planar audio FIFO smoke test passed\n";
   return 0;
