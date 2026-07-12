@@ -146,6 +146,7 @@ class WindowsWasapiRealtimeWorker {
   std::atomic_bool last_capture_timestamp_error_ = false;
   std::atomic_uint64_t last_stop_wait_microseconds_ = 0;
   std::uint64_t xrun_baseline_ = 0;
+  std::mutex lifecycle_mutex_;
   std::mutex startup_mutex_;
   std::condition_variable startup_condition_;
   bool startup_complete_ = false;

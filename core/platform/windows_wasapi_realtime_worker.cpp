@@ -115,6 +115,7 @@ WindowsWasapiRealtimeWorker::~WindowsWasapiRealtimeWorker() {
 }
 
 WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t timeout_ms) {
+  std::lock_guard lifecycle_lock(lifecycle_mutex_);
   if (running_.load()) {
     return WasapiRealtimeWorkerResult::failure({
         {"worker_already_running", "WASAPI realtime worker is already running."},
@@ -206,6 +207,7 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
 }
 
 void WindowsWasapiRealtimeWorker::stop() noexcept {
+  std::lock_guard lifecycle_lock(lifecycle_mutex_);
   stop_requested_.store(true);
   runner_.request_stop();
   if (worker_.joinable()) {

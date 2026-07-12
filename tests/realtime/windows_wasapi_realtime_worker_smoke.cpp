@@ -2,7 +2,9 @@
 
 #include "core/graph/node.h"
 
+#include <atomic>
 #include <chrono>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -267,6 +269,37 @@ int main() {
     const auto duplicate_start = worker.start(0);
     if (const auto failure = expect(!duplicate_start.ok(),
                                     "Expected duplicate worker start failure")) {
+      return failure;
+    }
+    worker.stop();
+  }
+
+  {
+    sar::platform::WindowsWasapiGraphRunner runner(nullptr, nullptr, 2, 16);
+    sar::graph::Graph graph(14, 2, 16);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    sar::platform::WindowsWasapiRealtimeWorker worker(runner, graph, diagnostics);
+    std::atomic_int ready = 0;
+    std::atomic_bool go = false;
+    bool first_started = false;
+    bool second_started = false;
+    const auto start_worker = [&](bool& started) {
+      ready.fetch_add(1);
+      while (!go.load()) {
+        std::this_thread::yield();
+      }
+      started = worker.start(0).ok();
+    };
+    std::thread first(start_worker, std::ref(first_started));
+    std::thread second(start_worker, std::ref(second_started));
+    while (ready.load() != 2) {
+      std::this_thread::yield();
+    }
+    go.store(true);
+    first.join();
+    second.join();
+    if (const auto failure = expect(first_started != second_started,
+                                    "Expected exactly one concurrent start to succeed")) {
       return failure;
     }
     worker.stop();
