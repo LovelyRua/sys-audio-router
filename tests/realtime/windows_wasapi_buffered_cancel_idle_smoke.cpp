@@ -50,10 +50,14 @@ void idle_drains_backlog() {
   sar::platform::WindowsWasapiGraphRunner runner(&capture, &render, 1, 1, 4, 4, 4, 8);
   auto route = graph();
   sar::diagnostics::EngineDiagnostics diagnostics;
-  assert(runner.process_once(route, diagnostics, 1).stats().rendered_frames == 1);
+  const auto first = runner.process_once(route, diagnostics, 1);
+  assert(first.ok() && first.stats().graph_processed);
+  assert(first.stats().rendered_frames == 1);
+  assert(diagnostics.render_fifo_fill_frames == 3);
   const auto idle = runner.process_once(route, diagnostics, 1);
   assert(idle.ok() && idle.stats().capture_stream_idle);
   assert(!idle.stats().graph_processed && idle.stats().rendered_frames == 3);
+  assert(diagnostics.render_fifo_fill_frames == 0);
   assert((rendered(render) == std::vector<float>{1, 2, 3, 4}));
 }
 
@@ -70,9 +74,12 @@ void cancellation_preserves_queues() {
   auto route = graph();
   sar::diagnostics::EngineDiagnostics diagnostics;
   assert(runner.process_once(route, diagnostics, 1).ok());
+  assert(diagnostics.capture_fifo_fill_frames == 2);
   const auto cancelled = runner.process_once(route, diagnostics, 1);
   assert(cancelled.ok() && cancelled.stats().cancelled);
+  assert(!cancelled.stats().graph_processed);
   assert(runner.process_once(route, diagnostics, 1).stats().graph_processed);
+  assert(diagnostics.capture_fifo_fill_frames == 0);
   assert((rendered(render) == std::vector<float>{1, 2, 3, 4}));
 
   sar::tests::ScriptedWasapiStream capture2(
@@ -88,8 +95,12 @@ void cancellation_preserves_queues() {
   sar::diagnostics::EngineDiagnostics diagnostics2;
   const auto render_cancelled = runner2.process_once(route2, diagnostics2, 1);
   assert(render_cancelled.stats().cancelled && render_cancelled.stats().graph_processed);
+  assert(render2.render_submissions().empty());
   assert(diagnostics2.render_fifo_fill_frames == 4);
-  assert(runner2.process_once(route2, diagnostics2, 1).stats().rendered_frames == 4);
+  const auto resumed = runner2.process_once(route2, diagnostics2, 1);
+  assert(resumed.ok() && !resumed.stats().graph_processed);
+  assert(resumed.stats().rendered_frames == 4);
+  assert(diagnostics2.render_fifo_fill_frames == 0);
   assert((rendered(render2) == std::vector<float>{5, 6, 7, 8}));
 }
 }  // namespace
