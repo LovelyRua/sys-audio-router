@@ -110,8 +110,8 @@ class WasapiStreamIo {
  public:
   virtual ~WasapiStreamIo() = default;
 
-  [[nodiscard]] virtual WasapiStreamResult start() = 0;
-  [[nodiscard]] virtual WasapiStreamResult stop() = 0;
+  [[nodiscard]] virtual WasapiStreamResult start() noexcept = 0;
+  [[nodiscard]] virtual WasapiStreamResult stop() noexcept = 0;
   [[nodiscard]] virtual WasapiStreamIoResult render_once(
       const realtime::AudioBuffer& source,
       std::uint32_t timeout_ms) noexcept = 0;
@@ -132,8 +132,8 @@ class WindowsWasapiStream final : public WasapiStreamIo {
   ~WindowsWasapiStream() override;
 
   [[nodiscard]] WasapiStreamResult open(WasapiStreamProbe probe);
-  [[nodiscard]] WasapiStreamResult start() override;
-  [[nodiscard]] WasapiStreamResult stop() override;
+  [[nodiscard]] WasapiStreamResult start() noexcept override;
+  [[nodiscard]] WasapiStreamResult stop() noexcept override;
   [[nodiscard]] WasapiStreamIoResult render_once(
       const realtime::AudioBuffer& source,
       std::uint32_t timeout_ms) noexcept override;

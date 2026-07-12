@@ -441,9 +441,23 @@ WasapiStreamIoResult::WasapiStreamIoResult(std::uint32_t frames,
 
 WindowsWasapiStream::WindowsWasapiStream() = default;
 
-WindowsWasapiStream::WindowsWasapiStream(WindowsWasapiStream&&) noexcept = default;
+WindowsWasapiStream::WindowsWasapiStream(WindowsWasapiStream&& other) noexcept
+    : state_(std::exchange(other.state_, WasapiStreamState::Closed)),
+      probe_(std::move(other.probe_)),
+      impl_(std::move(other.impl_)) {
+  other.probe_ = {};
+}
 
-WindowsWasapiStream& WindowsWasapiStream::operator=(WindowsWasapiStream&&) noexcept = default;
+WindowsWasapiStream& WindowsWasapiStream::operator=(WindowsWasapiStream&& other) noexcept {
+  if (this != &other) {
+    close();
+    state_ = std::exchange(other.state_, WasapiStreamState::Closed);
+    probe_ = std::move(other.probe_);
+    impl_ = std::move(other.impl_);
+    other.probe_ = {};
+  }
+  return *this;
+}
 
 WindowsWasapiStream::~WindowsWasapiStream() = default;
 
@@ -465,7 +479,7 @@ WasapiStreamResult WindowsWasapiStream::open(WasapiStreamProbe probe) {
   return WasapiStreamResult::success();
 }
 
-WasapiStreamResult WindowsWasapiStream::start() {
+WasapiStreamResult WindowsWasapiStream::start() noexcept {
   if (state_ == WasapiStreamState::Started) {
     return WasapiStreamResult::success();
   }
@@ -494,7 +508,7 @@ WasapiStreamResult WindowsWasapiStream::start() {
   return WasapiStreamResult::success();
 }
 
-WasapiStreamResult WindowsWasapiStream::stop() {
+WasapiStreamResult WindowsWasapiStream::stop() noexcept {
   if (state_ == WasapiStreamState::Open) {
     return WasapiStreamResult::success();
   }
