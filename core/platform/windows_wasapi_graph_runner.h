@@ -4,9 +4,11 @@
 #include "core/graph/graph.h"
 #include "core/platform/windows_wasapi_stream.h"
 #include "core/realtime/audio_buffer.h"
+#include "core/realtime/planar_audio_fifo.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -60,6 +62,14 @@ class WindowsWasapiGraphRunner {
                            std::size_t capture_frames,
                            std::size_t render_channels,
                            std::size_t render_frames);
+  WindowsWasapiGraphRunner(WasapiStreamIo* capture_stream,
+                           WasapiStreamIo* render_stream,
+                           std::size_t input_channels,
+                           std::size_t output_channels,
+                           std::size_t graph_block_frames,
+                           std::size_t capture_packet_capacity_frames,
+                           std::size_t render_packet_capacity_frames,
+                           std::size_t fifo_capacity_frames);
 
   [[nodiscard]] realtime::AudioBuffer& input_buffer() noexcept;
   [[nodiscard]] const realtime::AudioBuffer& input_buffer() const noexcept;
@@ -75,10 +85,27 @@ class WindowsWasapiGraphRunner {
       std::uint32_t timeout_ms) noexcept;
 
  private:
+  struct BufferedPath {
+    BufferedPath(std::size_t channels,
+                 std::size_t packet_frames,
+                 std::size_t fifo_frames);
+
+    realtime::AudioBuffer packet;
+    realtime::PlanarAudioFifo fifo;
+  };
+
+  [[nodiscard]] WasapiGraphRunnerResult process_buffered_once(
+      graph::Graph& graph,
+      diagnostics::EngineDiagnostics& diagnostics,
+      std::uint32_t timeout_ms) noexcept;
+
   WasapiStreamIo* capture_stream_ = nullptr;
   WasapiStreamIo* render_stream_ = nullptr;
   realtime::AudioBuffer input_;
   realtime::AudioBuffer output_;
+  std::size_t graph_block_frames_ = 0;
+  std::optional<BufferedPath> capture_path_;
+  std::optional<BufferedPath> render_path_;
 };
 
 }  // namespace sar::platform

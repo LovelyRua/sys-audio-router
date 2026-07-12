@@ -2,6 +2,7 @@
 
 #include "core/platform/windows_wasapi_loop_preflight.h"
 
+#include <algorithm>
 #include <limits>
 #include <utility>
 
@@ -126,9 +127,12 @@ WindowsWasapiDuplexLoop::WindowsWasapiDuplexLoop(
       runner_(&capture_stream_,
               &render_stream_,
               capture_stream_.probe().mix_format.channels,
-              capture_stream_.probe().buffer_frames,
               render_stream_.probe().mix_format.channels,
-              render_stream_.probe().buffer_frames),
+              graph.frames(),
+              capture_stream_.probe().buffer_frames,
+              render_stream_.probe().buffer_frames,
+              graph.frames() + std::max(capture_stream_.probe().buffer_frames,
+                                        render_stream_.probe().buffer_frames)),
       worker_(runner_, graph, diagnostics) {}
 
 WasapiDuplexLoopOpenResult WasapiDuplexLoopOpenResult::success(
