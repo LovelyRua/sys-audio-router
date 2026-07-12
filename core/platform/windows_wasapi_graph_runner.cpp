@@ -31,8 +31,8 @@ std::vector<WasapiStreamError> validate_graph_shape(
 
 std::vector<WasapiStreamError> validate_graph_sample_rate(
     const graph::Graph& graph,
-    const WindowsWasapiStream* capture_stream,
-    const WindowsWasapiStream* render_stream) {
+    const WasapiStreamIo* capture_stream,
+    const WasapiStreamIo* render_stream) {
   if (capture_stream != nullptr &&
       graph.sample_rate() != capture_stream->probe().mix_format.sample_rate) {
     return {
@@ -83,8 +83,8 @@ WasapiGraphRunnerResult::WasapiGraphRunnerResult(WasapiGraphRunnerStats stats,
                                                  std::vector<WasapiStreamError> errors)
     : stats_(stats), errors_(std::move(errors)) {}
 
-WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(WindowsWasapiStream* capture_stream,
-                                                   WindowsWasapiStream* render_stream,
+WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(WasapiStreamIo* capture_stream,
+                                                   WasapiStreamIo* render_stream,
                                                    std::size_t channels,
                                                    std::size_t frames)
     : WindowsWasapiGraphRunner(capture_stream,
@@ -94,8 +94,8 @@ WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(WindowsWasapiStream* capture_
                                channels,
                                frames) {}
 
-WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(WindowsWasapiStream* capture_stream,
-                                                   WindowsWasapiStream* render_stream,
+WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(WasapiStreamIo* capture_stream,
+                                                   WasapiStreamIo* render_stream,
                                                    std::size_t capture_channels,
                                                    std::size_t capture_frames,
                                                    std::size_t render_channels,

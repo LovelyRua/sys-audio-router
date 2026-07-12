@@ -50,12 +50,12 @@ class WasapiGraphRunnerResult {
 
 class WindowsWasapiGraphRunner {
  public:
-  WindowsWasapiGraphRunner(WindowsWasapiStream* capture_stream,
-                           WindowsWasapiStream* render_stream,
+  WindowsWasapiGraphRunner(WasapiStreamIo* capture_stream,
+                           WasapiStreamIo* render_stream,
                            std::size_t channels,
                            std::size_t frames);
-  WindowsWasapiGraphRunner(WindowsWasapiStream* capture_stream,
-                           WindowsWasapiStream* render_stream,
+  WindowsWasapiGraphRunner(WasapiStreamIo* capture_stream,
+                           WasapiStreamIo* render_stream,
                            std::size_t capture_channels,
                            std::size_t capture_frames,
                            std::size_t render_channels,
@@ -75,8 +75,8 @@ class WindowsWasapiGraphRunner {
       std::uint32_t timeout_ms) noexcept;
 
  private:
-  WindowsWasapiStream* capture_stream_ = nullptr;
-  WindowsWasapiStream* render_stream_ = nullptr;
+  WasapiStreamIo* capture_stream_ = nullptr;
+  WasapiStreamIo* render_stream_ = nullptr;
   realtime::AudioBuffer input_;
   realtime::AudioBuffer output_;
 };

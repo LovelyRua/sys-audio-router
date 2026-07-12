@@ -106,30 +106,46 @@ class WasapiStreamIoResult {
   std::vector<WasapiStreamError> errors_;
 };
 
-class WindowsWasapiStream {
+class WasapiStreamIo {
+ public:
+  virtual ~WasapiStreamIo() = default;
+
+  [[nodiscard]] virtual WasapiStreamResult start() = 0;
+  [[nodiscard]] virtual WasapiStreamResult stop() = 0;
+  [[nodiscard]] virtual WasapiStreamIoResult render_once(
+      const realtime::AudioBuffer& source,
+      std::uint32_t timeout_ms) noexcept = 0;
+  [[nodiscard]] virtual WasapiStreamIoResult capture_once(
+      realtime::AudioBuffer& destination,
+      std::uint32_t timeout_ms) noexcept = 0;
+  virtual void request_stop() noexcept = 0;
+  [[nodiscard]] virtual const WasapiStreamProbe& probe() const noexcept = 0;
+};
+
+class WindowsWasapiStream final : public WasapiStreamIo {
  public:
   WindowsWasapiStream();
   WindowsWasapiStream(WindowsWasapiStream&&) noexcept;
   WindowsWasapiStream& operator=(WindowsWasapiStream&&) noexcept;
   WindowsWasapiStream(const WindowsWasapiStream&) = delete;
   WindowsWasapiStream& operator=(const WindowsWasapiStream&) = delete;
-  ~WindowsWasapiStream();
+  ~WindowsWasapiStream() override;
 
   [[nodiscard]] WasapiStreamResult open(WasapiStreamProbe probe);
-  [[nodiscard]] WasapiStreamResult start();
-  [[nodiscard]] WasapiStreamResult stop();
+  [[nodiscard]] WasapiStreamResult start() override;
+  [[nodiscard]] WasapiStreamResult stop() override;
   [[nodiscard]] WasapiStreamIoResult render_once(
       const realtime::AudioBuffer& source,
-      std::uint32_t timeout_ms) noexcept;
+      std::uint32_t timeout_ms) noexcept override;
   [[nodiscard]] WasapiStreamIoResult capture_once(
       realtime::AudioBuffer& destination,
-      std::uint32_t timeout_ms) noexcept;
+      std::uint32_t timeout_ms) noexcept override;
   [[nodiscard]] bool read_clock(WasapiClockSnapshot& snapshot) const noexcept;
-  void request_stop() noexcept;
+  void request_stop() noexcept override;
   void close() noexcept;
 
   [[nodiscard]] WasapiStreamState state() const noexcept;
-  [[nodiscard]] const WasapiStreamProbe& probe() const noexcept;
+  [[nodiscard]] const WasapiStreamProbe& probe() const noexcept override;
   [[nodiscard]] WasapiStreamDiagnostics diagnostics() const noexcept;
 
  private:
