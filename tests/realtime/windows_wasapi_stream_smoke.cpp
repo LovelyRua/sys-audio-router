@@ -466,7 +466,8 @@ int main() {
     }
 
     sar::realtime::AudioBuffer render_buffer(2, 480);
-    auto io_result = stream.render_once(render_buffer, 0);
+    auto io_result = stream.render_once(
+        render_buffer, static_cast<std::uint32_t>(render_buffer.frames()), 0);
     if (const auto failure = expect(!io_result.ok(),
                                     "Expected synthetic render pump failure")) {
       return failure;
@@ -763,7 +764,8 @@ int main() {
     }
     sar::realtime::AudioBuffer render_buffer(stream.probe().mix_format.channels,
                                              stream.probe().buffer_frames);
-    auto io_result = stream.render_once(render_buffer, 0);
+    auto io_result = stream.render_once(
+        render_buffer, static_cast<std::uint32_t>(render_buffer.frames()), 0);
     if (!io_result.ok()) {
       for (const auto& error : io_result.errors()) {
         std::cerr << error.code << ": " << error.message << '\n';

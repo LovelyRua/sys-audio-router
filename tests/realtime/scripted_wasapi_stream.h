@@ -60,6 +60,7 @@ class ScriptedWasapiStream final : public platform::WasapiStreamIo {
 
   [[nodiscard]] platform::WasapiStreamIoResult render_once(
       const realtime::AudioBuffer& source,
+      std::uint32_t frames,
       std::uint32_t) noexcept override {
     if (render_steps_.empty()) {
       return platform::WasapiStreamIoResult::failure({
@@ -72,7 +73,7 @@ class ScriptedWasapiStream final : public platform::WasapiStreamIo {
     if (step.status == platform::WasapiStreamIoStatus::Completed) {
       RenderSubmission submission;
       submission.frames = std::min<std::uint32_t>(
-          step.writable_frames, static_cast<std::uint32_t>(source.frames()));
+          {step.writable_frames, static_cast<std::uint32_t>(source.frames()), frames});
       submission.samples.resize(source.channels());
       for (std::size_t channel = 0; channel < source.channels(); ++channel) {
         const auto source_samples = source.channel(channel);

@@ -91,7 +91,7 @@ int main() {
   render.channel(0)[1] = 3.0F;
   render.channel(1)[0] = 4.0F;
   render.channel(1)[1] = 5.0F;
-  const auto rendered = stream.render_once(render, 10);
+  const auto rendered = stream.render_once(render, 4, 10);
   if (const auto failure = expect(rendered.frames() == 2,
                                   "Expected scripted writable render frames")) {
     return failure;
@@ -104,7 +104,7 @@ int main() {
           "Expected actual rendered samples to be recorded")) {
     return failure;
   }
-  const auto cancelled = stream.render_once(render, 10);
+  const auto cancelled = stream.render_once(render, 4, 10);
   if (const auto failure = expect(cancelled.cancelled() && submissions.size() == 1,
                                   "Expected cancelled render without submission")) {
     return failure;

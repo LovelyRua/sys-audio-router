@@ -536,6 +536,7 @@ WasapiStreamResult WindowsWasapiStream::stop() noexcept {
 
 WasapiStreamIoResult WindowsWasapiStream::render_once(
     const realtime::AudioBuffer& source,
+    std::uint32_t frames,
     std::uint32_t timeout_ms) noexcept {
   if (state_ != WasapiStreamState::Started) {
     return WasapiStreamIoResult::failure({
@@ -585,8 +586,8 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
   }
 
   const auto requested_frames = std::min<std::uint32_t>(
-      probe_.buffer_frames - padding_frames,
-      static_cast<std::uint32_t>(source.frames()));
+      {probe_.buffer_frames - padding_frames,
+       static_cast<std::uint32_t>(source.frames()), frames});
   if (requested_frames == 0) {
     return WasapiStreamIoResult::success(0);
   }

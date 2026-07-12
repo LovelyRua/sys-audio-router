@@ -275,7 +275,8 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
   stats.graph_processed = true;
 
   if (render_stream_ != nullptr) {
-    auto render_result = render_stream_->render_once(output_, timeout_ms);
+    auto render_result = render_stream_->render_once(
+        output_, static_cast<std::uint32_t>(output_.frames()), timeout_ms);
     if (!render_result.ok()) {
       return WasapiGraphRunnerResult::failure(render_result.errors());
     }
@@ -378,7 +379,8 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     render_path_->packet.clear();
     const auto staged = render_path_->fifo.peek(
         render_path_->packet, render_path_->packet.frames());
-    auto render_result = render_stream_->render_once(render_path_->packet, timeout_ms);
+    auto render_result = render_stream_->render_once(
+        render_path_->packet, static_cast<std::uint32_t>(staged), timeout_ms);
     if (!render_result.ok()) {
       return WasapiGraphRunnerResult::failure(render_result.errors());
     }

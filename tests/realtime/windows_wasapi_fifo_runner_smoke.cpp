@@ -40,7 +40,7 @@ int main() {
   capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::TimedOut});
   render.enqueue_render({.writable_frames = 1});
   render.enqueue_render({.writable_frames = 1});
-  render.enqueue_render({.writable_frames = 2});
+  render.enqueue_render({.writable_frames = 4});
 
   sar::platform::WindowsWasapiGraphRunner runner(
       &capture, &render, 1, 1, 4, 2, 4, 8);
