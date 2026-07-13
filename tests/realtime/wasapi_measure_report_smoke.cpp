@@ -117,6 +117,9 @@ sar::platform::WasapiRealtimeWorkerStats make_stats() {
   stats.capture_rate_correction_ppm = 12.5;
   stats.capture_resampler_ratio = 0.9999875;
   stats.capture_rate_adapter_active = true;
+  stats.capture_rate_adapter_reset_cycles = 4;
+  stats.minimum_capture_rate_correction_ppm = -22.0;
+  stats.maximum_capture_rate_correction_ppm = 17.0;
   stats.last_captured_frames = 96;
   stats.last_rendered_frames = 128;
   stats.stream_start_error_cycles = 13;
@@ -369,7 +372,10 @@ int main() {
                        contains(text, "capture_resampler_output_frames=940") &&
                        contains(text, "capture_rate_correction_ppm=12.5") &&
                        contains(text, "capture_resampler_ratio=0.999988") &&
-                       contains(text, "capture_rate_adapter_active=1"),
+                       contains(text, "capture_rate_adapter_active=1") &&
+                       contains(text, "capture_rate_adapter_reset_cycles=4") &&
+                       contains(text, "minimum_capture_rate_correction_ppm=-22") &&
+                       contains(text, "maximum_capture_rate_correction_ppm=17"),
                    "Expected machine-readable capture rate statistics")) {
       return failure;
     }
@@ -439,7 +445,10 @@ int main() {
             expect(contains(text, "Capture resampler input frames: 950") &&
                        contains(text, "Capture resampler output frames: 940") &&
                        contains(text, "Capture rate correction ppm: 12.5") &&
-                       contains(text, "Capture rate adapter active: yes"),
+                       contains(text, "Capture rate adapter active: yes") &&
+                       contains(text, "Capture rate adapter reset cycles: 4") &&
+                       contains(text, "Minimum capture rate correction ppm: -22") &&
+                       contains(text, "Maximum capture rate correction ppm: 17"),
                    "Expected readable capture rate statistics")) {
       return failure;
     }

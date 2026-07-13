@@ -71,6 +71,7 @@ int main() {
   const auto result = runner.process_once(graph, diagnostics, 1);
   assert(result.ok());
   assert(result.stats().capture_rate_adapter_active);
+  assert(!result.stats().capture_rate_adapter_reset);
   assert(result.stats().captured_frames == 256);
   assert(result.stats().graph_processed);
   assert(result.stats().capture_resampler_input_frames > 0);

@@ -53,6 +53,9 @@ struct WasapiRealtimeWorkerStats {
   double capture_rate_correction_ppm = 0.0;
   double capture_resampler_ratio = 1.0;
   bool capture_rate_adapter_active = false;
+  std::uint64_t capture_rate_adapter_reset_cycles = 0;
+  double minimum_capture_rate_correction_ppm = 0.0;
+  double maximum_capture_rate_correction_ppm = 0.0;
   std::uint32_t last_captured_frames = 0;
   std::uint32_t last_rendered_frames = 0;
   bool last_graph_processed = false;
@@ -139,9 +142,12 @@ class WindowsWasapiRealtimeWorker {
   std::atomic_uint64_t rendered_frames_ = 0;
   std::atomic_uint64_t capture_resampler_input_frames_ = 0;
   std::atomic_uint64_t capture_resampler_output_frames_ = 0;
-  std::atomic<double> capture_rate_correction_ppm_ = 0.0;
-  std::atomic<double> capture_resampler_ratio_ = 1.0;
+  std::atomic_uint64_t capture_rate_correction_bits_ = 0;
+  std::atomic_uint64_t capture_resampler_ratio_bits_ = 0x3FF0000000000000ULL;
   std::atomic_bool capture_rate_adapter_active_ = false;
+  std::atomic_uint64_t capture_rate_adapter_reset_cycles_ = 0;
+  std::atomic_uint64_t minimum_capture_rate_correction_bits_ = 0;
+  std::atomic_uint64_t maximum_capture_rate_correction_bits_ = 0;
   std::atomic<std::uint32_t> last_captured_frames_ = 0;
   std::atomic<std::uint32_t> last_rendered_frames_ = 0;
   std::atomic_bool last_graph_processed_ = false;

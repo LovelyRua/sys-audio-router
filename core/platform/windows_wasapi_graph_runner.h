@@ -27,6 +27,7 @@ struct WasapiGraphRunnerStats {
   double capture_rate_correction_ppm = 0.0;
   double capture_resampler_ratio = 1.0;
   bool capture_rate_adapter_active = false;
+  bool capture_rate_adapter_reset = false;
   bool graph_processed = false;
   bool capture_stream_idle = false;
   bool render_stream_idle = false;

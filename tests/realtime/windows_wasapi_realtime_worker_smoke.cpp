@@ -188,7 +188,10 @@ int main() {
     }
     if (const auto failure = expect(!stats.capture_rate_adapter_active &&
                                         stats.capture_rate_correction_ppm == 0.0 &&
-                                        stats.capture_resampler_ratio == 1.0,
+                                        stats.capture_resampler_ratio == 1.0 &&
+                                        stats.capture_rate_adapter_reset_cycles == 0 &&
+                                        stats.minimum_capture_rate_correction_ppm == 0.0 &&
+                                        stats.maximum_capture_rate_correction_ppm == 0.0,
                                     "Expected graph-only worker default capture rate stats")) {
       return failure;
     }
@@ -308,7 +311,10 @@ int main() {
                        worker.stats().capture_resampler_output_frames == 0 &&
                        !worker.stats().capture_rate_adapter_active &&
                        worker.stats().capture_rate_correction_ppm == 0.0 &&
-                       worker.stats().capture_resampler_ratio == 1.0,
+                       worker.stats().capture_resampler_ratio == 1.0 &&
+                       worker.stats().capture_rate_adapter_reset_cycles == 0 &&
+                       worker.stats().minimum_capture_rate_correction_ppm == 0.0 &&
+                       worker.stats().maximum_capture_rate_correction_ppm == 0.0,
                    "Expected restart to reset capture rate stats")) {
       return failure;
     }
@@ -370,6 +376,14 @@ int main() {
     if (const auto failure = expect(stats.capture_resampler_ratio < 1.0 &&
                                         std::isfinite(stats.capture_resampler_ratio),
                                     "Expected last capture resampler ratio")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(stats.capture_rate_adapter_reset_cycles == 0 &&
+                       stats.minimum_capture_rate_correction_ppm == 0.0 &&
+                       stats.maximum_capture_rate_correction_ppm >=
+                           stats.capture_rate_correction_ppm,
+                   "Expected capture rate range without adapter resets")) {
       return failure;
     }
   }

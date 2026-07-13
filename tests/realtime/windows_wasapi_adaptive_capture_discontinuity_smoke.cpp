@@ -159,6 +159,7 @@ RunResult run_with_pre_gap_partial() {
   const auto gap = process_cycle(runner, graph, diagnostics);
   assert(gap.ok());
   assert(gap.stats().capture_data_discontinuity);
+  assert(gap.stats().capture_rate_adapter_reset);
   assert(!gap.stats().graph_processed);
   assert(gap.stats().capture_resampler_output_frames == 0);
   assert(diagnostics.capture_fifo_fill_frames == kCaptureFrames);

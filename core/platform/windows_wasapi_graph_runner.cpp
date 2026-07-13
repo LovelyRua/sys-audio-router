@@ -418,6 +418,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
           capture_rate_adapter_->ratio = 1.0;
           capture_rate_adapter_->ratio_set_for_block = false;
           capture_rate_adapter_->primed = false;
+          stats.capture_rate_adapter_reset = true;
         }
       }
 

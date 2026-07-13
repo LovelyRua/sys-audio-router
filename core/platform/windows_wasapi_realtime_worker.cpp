@@ -9,6 +9,8 @@
 #include <Windows.h>
 #include <objbase.h>
 
+#include <algorithm>
+#include <bit>
 #include <chrono>
 #include <cstdio>
 #include <iterator>
@@ -68,6 +70,14 @@ std::uint64_t seconds_to_nanoseconds(double seconds) noexcept {
     return 0;
   }
   return static_cast<std::uint64_t>(seconds * 1'000'000'000.0);
+}
+
+std::uint64_t double_bits(double value) noexcept {
+  return std::bit_cast<std::uint64_t>(value);
+}
+
+double bits_double(std::uint64_t value) noexcept {
+  return std::bit_cast<double>(value);
 }
 
 std::vector<WasapiRealtimeWorkerError> convert_errors(
@@ -156,9 +166,12 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   rendered_frames_.store(0);
   capture_resampler_input_frames_.store(0);
   capture_resampler_output_frames_.store(0);
-  capture_rate_correction_ppm_.store(0.0);
-  capture_resampler_ratio_.store(1.0);
+  capture_rate_correction_bits_.store(double_bits(0.0));
+  capture_resampler_ratio_bits_.store(double_bits(1.0));
   capture_rate_adapter_active_.store(false);
+  capture_rate_adapter_reset_cycles_.store(0);
+  minimum_capture_rate_correction_bits_.store(double_bits(0.0));
+  maximum_capture_rate_correction_bits_.store(double_bits(0.0));
   last_captured_frames_.store(0);
   last_rendered_frames_.store(0);
   last_graph_processed_.store(false);
@@ -265,9 +278,17 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.rendered_frames = rendered_frames_.load();
   result.capture_resampler_input_frames = capture_resampler_input_frames_.load();
   result.capture_resampler_output_frames = capture_resampler_output_frames_.load();
-  result.capture_rate_correction_ppm = capture_rate_correction_ppm_.load();
-  result.capture_resampler_ratio = capture_resampler_ratio_.load();
+  result.capture_rate_correction_ppm =
+      bits_double(capture_rate_correction_bits_.load());
+  result.capture_resampler_ratio =
+      bits_double(capture_resampler_ratio_bits_.load());
   result.capture_rate_adapter_active = capture_rate_adapter_active_.load();
+  result.capture_rate_adapter_reset_cycles =
+      capture_rate_adapter_reset_cycles_.load();
+  result.minimum_capture_rate_correction_ppm =
+      bits_double(minimum_capture_rate_correction_bits_.load());
+  result.maximum_capture_rate_correction_ppm =
+      bits_double(maximum_capture_rate_correction_bits_.load());
   result.last_captured_frames = last_captured_frames_.load();
   result.last_rendered_frames = last_rendered_frames_.load();
   result.last_graph_processed = last_graph_processed_.load();
@@ -353,9 +374,25 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
         result.stats().capture_resampler_input_frames);
     capture_resampler_output_frames_.fetch_add(
         result.stats().capture_resampler_output_frames);
-    capture_rate_correction_ppm_.store(result.stats().capture_rate_correction_ppm);
-    capture_resampler_ratio_.store(result.stats().capture_resampler_ratio);
+    capture_rate_correction_bits_.store(
+        double_bits(result.stats().capture_rate_correction_ppm));
+    capture_resampler_ratio_bits_.store(
+        double_bits(result.stats().capture_resampler_ratio));
     capture_rate_adapter_active_.store(result.stats().capture_rate_adapter_active);
+    if (result.stats().capture_rate_adapter_reset) {
+      capture_rate_adapter_reset_cycles_.fetch_add(1);
+    }
+    if (result.stats().capture_rate_adapter_active) {
+      const auto correction = result.stats().capture_rate_correction_ppm;
+      const auto minimum =
+          bits_double(minimum_capture_rate_correction_bits_.load());
+      const auto maximum =
+          bits_double(maximum_capture_rate_correction_bits_.load());
+      minimum_capture_rate_correction_bits_.store(
+          double_bits(std::min(minimum, correction)));
+      maximum_capture_rate_correction_bits_.store(
+          double_bits(std::max(maximum, correction)));
+    }
     last_captured_frames_.store(result.stats().captured_frames);
     last_rendered_frames_.store(result.stats().rendered_frames);
     last_graph_processed_.store(result.stats().graph_processed);

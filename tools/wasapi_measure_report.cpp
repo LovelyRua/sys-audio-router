@@ -181,6 +181,12 @@ void print_wasapi_worker_stats(
       << " capture_resampler_ratio=" << stats.capture_resampler_ratio
       << " capture_rate_adapter_active="
       << bool_token(stats.capture_rate_adapter_active)
+      << " capture_rate_adapter_reset_cycles="
+      << stats.capture_rate_adapter_reset_cycles
+      << " minimum_capture_rate_correction_ppm="
+      << stats.minimum_capture_rate_correction_ppm
+      << " maximum_capture_rate_correction_ppm="
+      << stats.maximum_capture_rate_correction_ppm
       << " last_captured_frames=" << stats.last_captured_frames
       << " last_rendered_frames=" << stats.last_rendered_frames
       << " last_stop_wait_us=" << stats.last_stop_wait_microseconds
@@ -235,6 +241,12 @@ void print_wasapi_worker_stats(
   out << "  Capture resampler ratio: " << stats.capture_resampler_ratio << '\n';
   out << "  Capture rate adapter active: "
       << (stats.capture_rate_adapter_active ? "yes" : "no") << '\n';
+  out << "  Capture rate adapter reset cycles: "
+      << stats.capture_rate_adapter_reset_cycles << '\n';
+  out << "  Minimum capture rate correction ppm: "
+      << stats.minimum_capture_rate_correction_ppm << '\n';
+  out << "  Maximum capture rate correction ppm: "
+      << stats.maximum_capture_rate_correction_ppm << '\n';
   out << "  Last captured frames: " << stats.last_captured_frames << '\n';
   out << "  Last rendered frames: " << stats.last_rendered_frames << '\n';
   out << "  Stream start error cycles: " << stats.stream_start_error_cycles << '\n';
