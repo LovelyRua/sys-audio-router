@@ -69,7 +69,8 @@ class WindowsWasapiGraphRunner {
                            std::size_t graph_block_frames,
                            std::size_t capture_packet_capacity_frames,
                            std::size_t render_packet_capacity_frames,
-                           std::size_t fifo_capacity_frames);
+                           std::size_t fifo_capacity_frames,
+                           bool prime_render_silence = false);
 
   [[nodiscard]] realtime::AudioBuffer& input_buffer() noexcept;
   [[nodiscard]] const realtime::AudioBuffer& input_buffer() const noexcept;

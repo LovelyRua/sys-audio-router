@@ -120,7 +120,8 @@ WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(
     std::size_t graph_block_frames,
     std::size_t capture_packet_capacity_frames,
     std::size_t render_packet_capacity_frames,
-    std::size_t fifo_capacity_frames)
+    std::size_t fifo_capacity_frames,
+    bool prime_render_silence)
     : capture_stream_(capture_stream),
       render_stream_(render_stream),
       input_(input_channels, graph_block_frames),
@@ -138,6 +139,9 @@ WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(
   if (render_stream != nullptr) {
     render_path_.emplace(output_channels, render_packet_capacity_frames,
                          fifo_capacity_frames);
+    if (prime_render_silence) {
+      static_cast<void>(render_path_->fifo.push(output_, graph_block_frames_));
+    }
   }
 }
 

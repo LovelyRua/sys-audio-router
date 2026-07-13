@@ -134,7 +134,8 @@ WindowsWasapiDuplexLoop::WindowsWasapiDuplexLoop(
               capture_stream_.probe().buffer_frames,
               render_stream_.probe().buffer_frames,
               graph.frames() + std::max(capture_stream_.probe().buffer_frames,
-                                        render_stream_.probe().buffer_frames)),
+                                        render_stream_.probe().buffer_frames),
+              true),
       worker_(runner_, graph, diagnostics) {}
 
 WasapiDuplexLoopOpenResult WasapiDuplexLoopOpenResult::success(
