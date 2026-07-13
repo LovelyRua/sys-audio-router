@@ -365,11 +365,23 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
   diagnostics.render_fifo_fill_frames =
       render_path_ ? render_path_->fifo.available_frames() : 0;
 
-  const bool capture_ready =
-      !capture_path_ || capture_path_->fifo.available_frames() >= graph_block_frames_;
-  const bool render_has_space =
-      !render_path_ || render_path_->fifo.free_frames() >= graph_block_frames_;
-  if (capture_ready && render_has_space) {
+  constexpr std::size_t kMaximumGraphBlocksPerCycle = 8;
+  const auto graph_limit = render_master_ ? kMaximumGraphBlocksPerCycle : 1;
+  const auto desired_render_fill = render_path_
+      ? std::min(render_path_->fifo.capacity_frames(),
+                 render_path_->packet.frames() + graph_block_frames_)
+      : std::size_t{0};
+  for (std::size_t block_index = 0; block_index < graph_limit; ++block_index) {
+    const bool capture_ready =
+        !capture_path_ || capture_path_->fifo.available_frames() >= graph_block_frames_;
+    const bool render_has_space =
+        !render_path_ ||
+        (render_path_->fifo.free_frames() >= graph_block_frames_ &&
+         (!render_master_ ||
+          render_path_->fifo.available_frames() < desired_render_fill));
+    if (!capture_ready || !render_has_space) {
+      break;
+    }
     if (capture_path_) {
       static_cast<void>(capture_path_->fifo.pop(input_, graph_block_frames_));
     }

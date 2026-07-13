@@ -143,6 +143,31 @@ void duplex_starvation_waits_and_submits_silence() {
   assert(diagnostics.render_fifo_underflow_frames == 3);
   assert((rendered(render) == std::vector<float>{0, 0, 0, 0, 0, 0, 0}));
 }
+
+void duplex_refills_multiple_graph_blocks_to_target() {
+  sar::tests::ScriptedWasapiStream capture(
+      probe(sar::platform::WasapiStreamDirection::Capture, 4));
+  sar::tests::ScriptedWasapiStream render(
+      probe(sar::platform::WasapiStreamDirection::Render, 4));
+  capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::TimedOut});
+  capture.enqueue_capture({.frames = 4, .samples = {{1, 2, 3, 4}}});
+  capture.enqueue_capture({.frames = 4, .samples = {{5, 6, 7, 8}}});
+  capture.enqueue_capture({.frames = 4, .samples = {{9, 10, 11, 12}}});
+  capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::TimedOut});
+  render.enqueue_render({.writable_frames = 4});
+  render.enqueue_render({.writable_frames = 4});
+  sar::platform::WindowsWasapiGraphRunner runner(
+      &capture, &render, 1, 1, 4, 4, 4, 16, true);
+  auto route = graph();
+  sar::diagnostics::EngineDiagnostics diagnostics;
+  assert(runner.process_once(route, diagnostics, 25).stats().rendered_frames == 4);
+  const auto refilled = runner.process_once(route, diagnostics, 25);
+  assert(refilled.ok() && refilled.stats().captured_frames == 12);
+  assert(refilled.stats().graph_processed && diagnostics.processed_blocks == 2);
+  assert(diagnostics.capture_fifo_fill_frames == 4);
+  assert(diagnostics.render_fifo_fill_frames == 4);
+  assert((rendered(render) == std::vector<float>{0, 0, 0, 0, 1, 2, 3, 4}));
+}
 }  // namespace
 
 int main() {
@@ -150,5 +175,6 @@ int main() {
   cancellation_preserves_queues();
   duplex_prime_supplies_render_before_capture();
   duplex_starvation_waits_and_submits_silence();
+  duplex_refills_multiple_graph_blocks_to_target();
   return 0;
 }
