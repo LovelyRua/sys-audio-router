@@ -154,6 +154,11 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   total_callback_nanoseconds_.store(0);
   captured_frames_.store(0);
   rendered_frames_.store(0);
+  capture_resampler_input_frames_.store(0);
+  capture_resampler_output_frames_.store(0);
+  capture_rate_correction_ppm_.store(0.0);
+  capture_resampler_ratio_.store(1.0);
+  capture_rate_adapter_active_.store(false);
   last_captured_frames_.store(0);
   last_rendered_frames_.store(0);
   last_graph_processed_.store(false);
@@ -258,6 +263,11 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.total_callback_nanoseconds = total_callback_nanoseconds_.load();
   result.captured_frames = captured_frames_.load();
   result.rendered_frames = rendered_frames_.load();
+  result.capture_resampler_input_frames = capture_resampler_input_frames_.load();
+  result.capture_resampler_output_frames = capture_resampler_output_frames_.load();
+  result.capture_rate_correction_ppm = capture_rate_correction_ppm_.load();
+  result.capture_resampler_ratio = capture_resampler_ratio_.load();
+  result.capture_rate_adapter_active = capture_rate_adapter_active_.load();
   result.last_captured_frames = last_captured_frames_.load();
   result.last_rendered_frames = last_rendered_frames_.load();
   result.last_graph_processed = last_graph_processed_.load();
@@ -339,6 +349,13 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     loop_cycles_.fetch_add(1);
     captured_frames_.fetch_add(result.stats().captured_frames);
     rendered_frames_.fetch_add(result.stats().rendered_frames);
+    capture_resampler_input_frames_.fetch_add(
+        result.stats().capture_resampler_input_frames);
+    capture_resampler_output_frames_.fetch_add(
+        result.stats().capture_resampler_output_frames);
+    capture_rate_correction_ppm_.store(result.stats().capture_rate_correction_ppm);
+    capture_resampler_ratio_.store(result.stats().capture_resampler_ratio);
+    capture_rate_adapter_active_.store(result.stats().capture_rate_adapter_active);
     last_captured_frames_.store(result.stats().captured_frames);
     last_rendered_frames_.store(result.stats().rendered_frames);
     last_graph_processed_.store(result.stats().graph_processed);

@@ -1,9 +1,12 @@
 #include "core/platform/windows_wasapi_realtime_worker.h"
 
 #include "core/graph/node.h"
+#include "tests/realtime/scripted_wasapi_stream.h"
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
+#include <cstdint>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -45,6 +48,29 @@ sar::platform::WasapiStreamProbe make_render_probe() {
   probe.minimum_period_100ns = 30000;
   probe.buffer_frames = 16;
   return probe;
+}
+
+sar::platform::WasapiStreamProbe make_adaptive_probe(
+    sar::platform::WasapiStreamDirection direction) {
+  sar::platform::WasapiStreamProbe probe;
+  probe.direction = direction;
+  probe.mode = sar::platform::WasapiStreamMode::Endpoint;
+  probe.buffer_frames = 64;
+  probe.mix_format.sample_rate = 48000;
+  probe.mix_format.channels = 1;
+  probe.mix_format.frames_per_block = 64;
+  probe.mix_format.bits_per_sample = 32;
+  probe.mix_format.valid_bits_per_sample = 32;
+  probe.mix_format.sample_format = sar::platform::AudioSampleFormat::IeeeFloat;
+  return probe;
+}
+
+std::vector<float> adaptive_samples(std::uint32_t first_frame) {
+  std::vector<float> result(64);
+  for (std::uint32_t frame = 0; frame < result.size(); ++frame) {
+    result[frame] = static_cast<float>(first_frame + frame) / 320.0F;
+  }
+  return result;
 }
 
 }  // namespace
@@ -153,6 +179,17 @@ int main() {
     if (const auto failure = expect(stats.capture_timestamp_error_cycles == 0 &&
                                         stats.capture_timestamp_error_frames == 0,
                                     "Expected graph-only worker without timestamp errors")) {
+      return failure;
+    }
+    if (const auto failure = expect(stats.capture_resampler_input_frames == 0 &&
+                                        stats.capture_resampler_output_frames == 0,
+                                    "Expected graph-only worker without resampler frames")) {
+      return failure;
+    }
+    if (const auto failure = expect(!stats.capture_rate_adapter_active &&
+                                        stats.capture_rate_correction_ppm == 0.0 &&
+                                        stats.capture_resampler_ratio == 1.0,
+                                    "Expected graph-only worker default capture rate stats")) {
       return failure;
     }
     if (const auto failure = expect(stats.stream_start_error_cycles == 0,
@@ -266,12 +303,75 @@ int main() {
                                     "Expected restart to reset stream stop errors")) {
       return failure;
     }
+    if (const auto failure =
+            expect(worker.stats().capture_resampler_input_frames == 0 &&
+                       worker.stats().capture_resampler_output_frames == 0 &&
+                       !worker.stats().capture_rate_adapter_active &&
+                       worker.stats().capture_rate_correction_ppm == 0.0 &&
+                       worker.stats().capture_resampler_ratio == 1.0,
+                   "Expected restart to reset capture rate stats")) {
+      return failure;
+    }
     const auto duplicate_start = worker.start(0);
     if (const auto failure = expect(!duplicate_start.ok(),
                                     "Expected duplicate worker start failure")) {
       return failure;
     }
     worker.stop();
+  }
+
+  {
+    sar::tests::ScriptedWasapiStream capture(
+        make_adaptive_probe(sar::platform::WasapiStreamDirection::Capture));
+    sar::tests::ScriptedWasapiStream render(
+        make_adaptive_probe(sar::platform::WasapiStreamDirection::Render));
+    for (std::uint32_t packet = 0; packet < 5; ++packet) {
+      capture.enqueue_capture(
+          {.frames = 64, .samples = {adaptive_samples(packet * 64)}});
+    }
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Cancelled});
+    render.enqueue_render({.writable_frames = 64});
+    render.enqueue_render({.writable_frames = 64});
+
+    sar::platform::WindowsWasapiGraphRunner runner(
+        &capture, &render, 1, 1, 64, 64, 64, 256, true, true);
+    sar::graph::Graph graph(15, 1, 64, 48000);
+    graph.add_node(std::make_unique<sar::graph::PassthroughNode>());
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    sar::platform::WindowsWasapiRealtimeWorker worker(runner, graph, diagnostics);
+
+    const auto start_result = worker.start(1);
+    if (const auto failure =
+            expect(start_result.ok(), "Expected adaptive capture worker start")) {
+      return failure;
+    }
+    for (int attempt = 0; attempt < 100 && worker.running(); ++attempt) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    worker.stop();
+
+    const auto stats = worker.stats();
+    if (const auto failure = expect(stats.capture_resampler_input_frames > 64,
+                                    "Expected accumulated resampler input frames")) {
+      return failure;
+    }
+    if (const auto failure = expect(stats.capture_resampler_output_frames == 128,
+                                    "Expected accumulated resampler output frames")) {
+      return failure;
+    }
+    if (const auto failure = expect(stats.capture_rate_adapter_active,
+                                    "Expected last capture rate adapter state")) {
+      return failure;
+    }
+    if (const auto failure = expect(stats.capture_rate_correction_ppm > 0.0,
+                                    "Expected last capture rate correction")) {
+      return failure;
+    }
+    if (const auto failure = expect(stats.capture_resampler_ratio < 1.0 &&
+                                        std::isfinite(stats.capture_resampler_ratio),
+                                    "Expected last capture resampler ratio")) {
+      return failure;
+    }
   }
 
   {

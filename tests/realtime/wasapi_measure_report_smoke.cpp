@@ -112,6 +112,11 @@ sar::platform::WasapiRealtimeWorkerStats make_stats() {
   stats.capture_timestamp_error_frames = 16;
   stats.captured_frames = 960;
   stats.rendered_frames = 1280;
+  stats.capture_resampler_input_frames = 950;
+  stats.capture_resampler_output_frames = 940;
+  stats.capture_rate_correction_ppm = 12.5;
+  stats.capture_resampler_ratio = 0.9999875;
+  stats.capture_rate_adapter_active = true;
   stats.last_captured_frames = 96;
   stats.last_rendered_frames = 128;
   stats.stream_start_error_cycles = 13;
@@ -360,6 +365,15 @@ int main() {
       return failure;
     }
     if (const auto failure =
+            expect(contains(text, "capture_resampler_input_frames=950") &&
+                       contains(text, "capture_resampler_output_frames=940") &&
+                       contains(text, "capture_rate_correction_ppm=12.5") &&
+                       contains(text, "capture_resampler_ratio=0.999988") &&
+                       contains(text, "capture_rate_adapter_active=1"),
+                   "Expected machine-readable capture rate statistics")) {
+      return failure;
+    }
+    if (const auto failure =
             expect(contains(text, "stream_wait_cancellation_cycles=15"),
                    "Expected machine-readable stream wait cancellation count")) {
       return failure;
@@ -419,6 +433,14 @@ int main() {
     }
     if (const auto failure = expect(contains(text, "Total callback ns: 153000"),
                                     "Expected worker total callback duration")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(contains(text, "Capture resampler input frames: 950") &&
+                       contains(text, "Capture resampler output frames: 940") &&
+                       contains(text, "Capture rate correction ppm: 12.5") &&
+                       contains(text, "Capture rate adapter active: yes"),
+                   "Expected readable capture rate statistics")) {
       return failure;
     }
   }
