@@ -649,23 +649,8 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
     });
   }
 
-  const auto wait_result = wait_for_stream_event(impl_->samples_ready_event.get(),
-                                                impl_->stop_requested_event.get(),
-                                                timeout_ms);
-  if (wait_result == WasapiEventWaitStatus::StopRequested) {
-    return WasapiStreamIoResult::cancellation();
-  }
-  if (wait_result == WasapiEventWaitStatus::TimedOut) {
-    return WasapiStreamIoResult::timeout();
-  }
-  if (wait_result != WasapiEventWaitStatus::SamplesReady) {
-    return WasapiStreamIoResult::failure({
-        {"wasapi_event_wait_failed", "WASAPI capture event wait failed."},
-    });
-  }
-
   UINT32 packet_frames = 0;
-  const auto packet_result = impl_->capture_client->GetNextPacketSize(&packet_frames);
+  auto packet_result = impl_->capture_client->GetNextPacketSize(&packet_frames);
   if (FAILED(packet_result)) {
     return WasapiStreamIoResult::failure({
         {
@@ -673,6 +658,34 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
             "WASAPI capture packet query failed with " + hresult_hex(packet_result) + ".",
         },
     });
+  }
+
+  if (packet_frames == 0) {
+    const auto wait_result = wait_for_stream_event(impl_->samples_ready_event.get(),
+                                                  impl_->stop_requested_event.get(),
+                                                  timeout_ms);
+    if (wait_result == WasapiEventWaitStatus::StopRequested) {
+      return WasapiStreamIoResult::cancellation();
+    }
+    if (wait_result == WasapiEventWaitStatus::TimedOut) {
+      return WasapiStreamIoResult::timeout();
+    }
+    if (wait_result != WasapiEventWaitStatus::SamplesReady) {
+      return WasapiStreamIoResult::failure({
+          {"wasapi_event_wait_failed", "WASAPI capture event wait failed."},
+      });
+    }
+
+    packet_result = impl_->capture_client->GetNextPacketSize(&packet_frames);
+    if (FAILED(packet_result)) {
+      return WasapiStreamIoResult::failure({
+          {
+              "wasapi_capture_packet_failed",
+              "WASAPI capture packet query failed with " +
+                  hresult_hex(packet_result) + ".",
+          },
+      });
+    }
   }
   if (packet_frames == 0) {
     return WasapiStreamIoResult::success(0);
