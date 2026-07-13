@@ -128,6 +128,7 @@ class WindowsWasapiGraphRunner {
     bool ratio_set_for_block = false;
     bool primed = false;
     bool recovery_active = false;
+    bool recovery_preroll_pending = false;
   };
 
   [[nodiscard]] WasapiGraphRunnerResult process_buffered_once(

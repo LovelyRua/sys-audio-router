@@ -240,6 +240,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::start_streams() noexcept {
     capture_rate_adapter_->ratio_set_for_block = false;
     capture_rate_adapter_->primed = false;
     capture_rate_adapter_->recovery_active = false;
+    capture_rate_adapter_->recovery_preroll_pending = false;
   }
 
   if (capture_stream_ != nullptr) {
@@ -484,10 +485,13 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
         if (capture_rate_adapter_) {
           capture_path_->fifo.clear();
           capture_rate_adapter_->resampler.reset();
+          capture_rate_adapter_->controller.reset();
           capture_rate_adapter_->output_frames_ready = 0;
+          capture_rate_adapter_->ratio = 1.0;
           capture_rate_adapter_->ratio_set_for_block = false;
           capture_rate_adapter_->primed = false;
           capture_rate_adapter_->recovery_active = true;
+          capture_rate_adapter_->recovery_preroll_pending = true;
           stats.capture_rate_adapter_reset = true;
           stats.capture_rate_adapter_recovering = true;
         }
@@ -533,6 +537,60 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
             break;
           }
           adapter.primed = true;
+        }
+
+        if (adapter.recovery_preroll_pending) {
+          const auto preroll_capacity = adapter.source_planar.frames();
+          const auto extra_preroll_frames =
+              preroll_capacity > graph_block_frames_
+                  ? std::min(graph_block_frames_,
+                             preroll_capacity - graph_block_frames_)
+                  : std::size_t{0};
+          const auto preroll_frames =
+              graph_block_frames_ + extra_preroll_frames;
+          static_cast<void>(capture_path_->fifo.peek(adapter.source_planar, 1));
+          for (std::size_t channel = 0; channel < input_.channels(); ++channel) {
+            const auto edge_sample = adapter.source_planar.channel(channel)[0];
+            std::fill_n(adapter.source_planar.channel(channel).begin(),
+                        preroll_frames, edge_sample);
+          }
+          interleave_planar(adapter.source_planar, preroll_frames,
+                            adapter.source_interleaved);
+
+          std::size_t preroll_frames_used = 0;
+          constexpr std::size_t kMaximumPrerollPasses = 8;
+          for (std::size_t pass = 0;
+               pass < kMaximumPrerollPasses &&
+               preroll_frames_used < preroll_frames;
+               ++pass) {
+            const auto remaining_frames = preroll_frames - preroll_frames_used;
+            const auto input_offset = preroll_frames_used * input_.channels();
+            auto preroll_result = adapter.resampler.process(
+                std::span<const float>(adapter.source_interleaved).subspan(
+                    input_offset, remaining_frames * input_.channels()),
+                static_cast<std::uint32_t>(remaining_frames),
+                adapter.output_interleaved,
+                static_cast<std::uint32_t>(graph_block_frames_),
+                1.0);
+            if (!preroll_result.ok()) {
+              return WasapiGraphRunnerResult::failure({{
+                  "capture_resampler_preroll_failed",
+                  "Adaptive capture resampler recovery pre-roll failed.",
+              }});
+            }
+            if (preroll_result.input_frames_used == 0 &&
+                preroll_result.output_frames_generated == 0) {
+              break;
+            }
+            preroll_frames_used += preroll_result.input_frames_used;
+          }
+          if (preroll_frames_used != preroll_frames) {
+            return WasapiGraphRunnerResult::failure({{
+                "capture_resampler_preroll_stalled",
+                "Adaptive capture resampler recovery pre-roll made no progress.",
+            }});
+          }
+          adapter.recovery_preroll_pending = false;
         }
 
         bool attempted_internal_drain = false;

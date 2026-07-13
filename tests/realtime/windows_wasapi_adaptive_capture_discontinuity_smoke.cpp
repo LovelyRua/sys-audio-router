@@ -113,18 +113,18 @@ RunResult run_post_gap_baseline() {
   graph.add_node(std::move(recorder));
   sar::diagnostics::EngineDiagnostics diagnostics;
 
-  for (std::size_t cycle = 0; cycle < 3; ++cycle) {
+  for (std::size_t cycle = 0; cycle < 2; ++cycle) {
     enqueue_capture_packet(capture, kPostGapSample, cycle == 0);
     end_capture_cycle(capture, render);
     const auto result = process_cycle(runner, graph, diagnostics);
     assert(result.ok());
     assert(result.stats().capture_rate_adapter_active);
-    assert(result.stats().graph_processed == (cycle == 2));
+    assert(result.stats().graph_processed == (cycle == 1));
     assert_no_capture_overflow(diagnostics);
   }
 
   assert(recorder_ptr->process_calls() == 1);
-  assert(render.render_submissions().size() == 3);
+  assert(render.render_submissions().size() == 2);
   return {recorder_ptr->observed(),
           render.render_submissions().back().samples.front()};
 }
@@ -172,23 +172,20 @@ RunResult run_with_pre_gap_partial() {
   assert(recorder_ptr->process_calls() == 0);
   assert_no_capture_overflow(diagnostics);
 
-  for (std::size_t cycle = 0; cycle < 2; ++cycle) {
-    enqueue_capture_packet(capture, kPostGapSample);
-    end_capture_cycle(capture, render);
-    const auto result = process_cycle(runner, graph, diagnostics);
-    assert(result.ok());
-    assert(result.stats().graph_processed == (cycle == 1));
-    assert(result.stats().capture_rate_adapter_recovering == (cycle == 0));
-    assert(result.stats().render_recovery_silence == (cycle == 0));
-    assert(result.stats().render_recovery_silence_frames ==
-           (cycle == 0 ? kGraphFrames : 0));
-    assert(diagnostics.render_fifo_underflow_cycles == 2);
-    assert(diagnostics.render_fifo_underflow_frames == 2 * kGraphFrames);
-    assert_no_capture_overflow(diagnostics);
-  }
+  enqueue_capture_packet(capture, kPostGapSample);
+  end_capture_cycle(capture, render);
+  const auto recovered = process_cycle(runner, graph, diagnostics);
+  assert(recovered.ok());
+  assert(recovered.stats().graph_processed);
+  assert(!recovered.stats().capture_rate_adapter_recovering);
+  assert(!recovered.stats().render_recovery_silence);
+  assert(recovered.stats().render_recovery_silence_frames == 0);
+  assert(diagnostics.render_fifo_underflow_cycles == 1);
+  assert(diagnostics.render_fifo_underflow_frames == kGraphFrames);
+  assert_no_capture_overflow(diagnostics);
 
   assert(recorder_ptr->process_calls() == 1);
-  assert(render.render_submissions().size() == 4);
+  assert(render.render_submissions().size() == 3);
   return {recorder_ptr->observed(),
           render.render_submissions().back().samples.front()};
 }
