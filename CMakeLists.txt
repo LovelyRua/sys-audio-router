@@ -40,6 +40,7 @@ add_library(sar_core
   core/platform/mock_audio_device_provider.cpp
   core/platform/sample_converter.cpp
   core/platform/virtual_endpoint.cpp
+  core/realtime/adaptive_resampler.cpp
   core/realtime/audio_buffer.cpp
   core/realtime/fifo_waterline_controller.cpp
   core/realtime/planar_audio_fifo.cpp
@@ -55,6 +56,7 @@ target_include_directories(sar_core
 )
 
 target_compile_features(sar_core PUBLIC cxx_std_20)
+target_link_libraries(sar_core PRIVATE sar_libsamplerate)
 
 if(WIN32)
   target_sources(sar_core PRIVATE
@@ -329,6 +331,12 @@ add_executable(sar_fifo_waterline_controller_smoke
 
 target_link_libraries(sar_fifo_waterline_controller_smoke PRIVATE sar_core)
 
+add_executable(sar_adaptive_resampler_smoke
+  tests/realtime/adaptive_resampler_smoke.cpp
+)
+
+target_link_libraries(sar_adaptive_resampler_smoke PRIVATE sar_core)
+
 add_executable(sar_xrun_detection_smoke
   tests/realtime/xrun_detection_smoke.cpp
 )
@@ -454,5 +462,6 @@ add_test(NAME audio_block_timeline_smoke COMMAND sar_audio_block_timeline_smoke)
 add_test(NAME clock_drift_estimator_smoke COMMAND sar_clock_drift_estimator_smoke)
 add_test(NAME planar_audio_fifo_smoke COMMAND sar_planar_audio_fifo_smoke)
 add_test(NAME fifo_waterline_controller_smoke COMMAND sar_fifo_waterline_controller_smoke)
+add_test(NAME adaptive_resampler_smoke COMMAND sar_adaptive_resampler_smoke)
 add_test(NAME xrun_detection_smoke COMMAND sar_xrun_detection_smoke)
 add_test(NAME spsc_ring_buffer_threaded_smoke COMMAND sar_spsc_ring_buffer_threaded_smoke)

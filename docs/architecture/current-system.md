@@ -88,7 +88,7 @@ position within that domain and classifies same-domain blocks as overlapping,
 contiguous, or separated by a gap. Blocks from different domains are explicitly
 not comparable. A future clock-domain bridge must therefore retain source and
 destination timelines separately; buffering policy and ASRC remain outside this
-model and are not implemented yet.
+model.
 
 `core/realtime/clock_drift_estimator.h` provides the portable, allocation-free
 measurement primitive for one clock domain. Given two strictly ordered frame/QPC
@@ -96,6 +96,13 @@ samples, it reports the observed sample rate and its error from the domain's
 nominal rate in parts per million. Zero elapsed time, frame or QPC rollback and
 wraparound, domain mismatch, invalid nominal rates, and non-finite calculations
 produce an invalid estimate instead of a partial result.
+
+`FifoWaterlineController` converts bounded FIFO fill error into a slew-limited
+parts-per-million correction. `AdaptiveResampler` owns a preinitialized
+libsamplerate sinc converter and applies a caller-supplied ratio without
+allocating or constructing diagnostics in `process()`. The two primitives are
+tested independently; wiring their ratio into the duplex capture path remains
+the next integration step.
 
 ## Platform Layer
 
@@ -189,7 +196,7 @@ not yet evidence of production stability.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 57 smoke targets. Several tests are
+The Windows CTest suite currently has 58 smoke targets. Several tests are
 synthetic because WinRM sessions may not expose interactive audio endpoints even
 when the VM has a desktop audio stack.
 
@@ -204,9 +211,10 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 
 ## Known Gaps
 
-- Full-duplex scheduling is still capture-paced; independent hardware clocks
-  can produce capture discontinuity and render underflow. Render-master
-  scheduling and FIFO waterline drift control are not implemented yet.
+- Full-duplex scheduling is render-master and the portable waterline controller
+  and adaptive resampler exist, but the controller output is not yet wired into
+  duplex capture resampling. Independent hardware clocks can therefore still
+  produce capture discontinuity and render underflow.
 - Multi-hour real-device stability has not been demonstrated yet.
 - Loopback capture is not yet connected to a selectable render destination or
   virtual endpoint.

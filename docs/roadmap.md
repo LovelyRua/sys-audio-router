@@ -65,13 +65,14 @@ single-ended paths when device periods and graph blocks differ. Windows Audio
 Engine sample-rate conversion has also enabled a real shared-mode duplex path
 from the default 44.1 kHz capture endpoint to the 48 kHz render endpoint.
 
-The Windows suite currently contains 56 smoke tests. A strict-healthy two-second
+The Windows suite currently contains 58 smoke tests. A strict-healthy two-second
 render measurement submitted 96,000 frames with zero xruns, wait timeouts, or
 FIFO faults. A five-second duplex measurement processed approximately 240,000
 render-domain frames, but still exposed capture discontinuity and render
-underflow. Phase 2 is therefore not complete: the next priority is render-master
-scheduling with FIFO waterline drift control, followed by long-duration device
-soak testing.
+underflow. Render-master scheduling, a bounded FIFO waterline controller, and a
+portable adaptive-resampler wrapper now exist. Phase 2 is therefore not
+complete: the next priority is wiring that correction path into duplex capture
+resampling, followed by long-duration device soak testing.
 
 Deliverables:
 
