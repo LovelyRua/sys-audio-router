@@ -141,7 +141,9 @@ WindowsWasapiGraphRunner::CaptureRateAdapter::CaptureRateAdapter(
     std::size_t fifo_frames)
     : controller({.target_fill_frames =
                       std::min(std::max(graph_frames, fifo_frames / 2),
-                               fifo_frames - capture_packet_frames)}),
+                               fifo_frames - capture_packet_frames),
+                  .maximum_correction_ppm = 2500.0,
+                  .maximum_slew_ppm_per_second = 250.0}),
       source_planar(channels, fifo_frames),
       source_interleaved(channels * fifo_frames, 0.0F),
       output_interleaved(channels * graph_frames, 0.0F),

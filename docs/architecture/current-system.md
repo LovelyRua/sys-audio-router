@@ -104,6 +104,9 @@ libsamplerate sinc converter and applies a caller-supplied ratio without
 allocating or constructing diagnostics in `process()`. The duplex capture path
 now accumulates complete graph blocks from bounded SRC offers, consumes only
 reported input frames, and resets/re-primes the bridge after discontinuities.
+Its wider duplex correction range covers unusually large independent-clock
+error observed in virtualized and commodity Windows audio stacks while the
+portable controller keeps conservative defaults.
 
 ## Platform Layer
 
