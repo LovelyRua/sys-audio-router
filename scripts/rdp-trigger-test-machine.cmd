@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
-set "HOST=192.168.123.3"
+set "HOST=192.168.123.123"
 set "USER=codex"
 set "PASSWORD="
 
@@ -11,7 +11,7 @@ if not "%~3"=="" set "PASSWORD=%~3"
 
 if "%PASSWORD%"=="" (
   echo Usage: scripts\rdp-trigger-test-machine.cmd [host] [user] [password]
-  echo Example: scripts\rdp-trigger-test-machine.cmd 192.168.123.3 codex password
+  echo Example: scripts\rdp-trigger-test-machine.cmd 192.168.123.123 codex password
   exit /b 1
 )
 

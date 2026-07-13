@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 
-set "HOST=192.168.123.3"
+set "HOST=192.168.123.123"
 set "USER=codex"
 set "PASSWORD="
 set "SLOT=%SAR_TEST_SLOT%"
@@ -25,7 +25,7 @@ if not "%~9"=="" set "ALLOW_UNAVAILABLE=%~9"
 if "%PASSWORD%"=="" (
   echo Usage: scripts\windows-winrm-local-measure.cmd [host] [user] [password] [slot] [mode] [duration-ms] [timeout-ms] [require-healthy] [allow-unavailable]
   echo Set SAR_MEASURE_ITERATIONS for repeated soak runs.
-  echo Example: scripts\windows-winrm-local-measure.cmd 192.168.123.3 codex password engineer-a render 1000 10 true false
+  echo Example: scripts\windows-winrm-local-measure.cmd 192.168.123.123 codex password engineer-a render 1000 10 true false
   echo.
   echo mode can be render, duplex, loopback, both, or all. The optional slot isolates the remote checkout,
   echo build directory, and upload file. This script uploads git archive HEAD from the

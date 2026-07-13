@@ -1,5 +1,5 @@
 param(
-  [string]$HostName = "192.168.123.3",
+  [string]$HostName = "192.168.123.123",
   [string]$UserName = "codex",
   [Parameter(Mandatory = $true)]
   [string]$Password,

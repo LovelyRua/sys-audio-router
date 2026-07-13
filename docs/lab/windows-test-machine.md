@@ -4,7 +4,7 @@ This machine is available for future Windows audio driver, DAW compatibility, an
 
 ## Host
 
-- Address: `192.168.123.3`
+- Address: `192.168.123.123`
 - Access: RDP is enabled.
 - Role: Windows integration test machine.
 

@@ -4,7 +4,7 @@ This runbook describes how to pull the GitHub repository onto the Windows test m
 
 ## Current Access
 
-- Host: `192.168.123.3`
+- Host: `192.168.123.123`
 - RDP: open
 - WinRM: enabled by `scripts/windows-enable-winrm-and-test.cmd` or by running the bootstrap with `SAR_ENABLE_WINRM=1` from an elevated `cmd.exe`
 - SSH: not open during initial probe
@@ -17,7 +17,7 @@ If WinRM is not reachable yet, use RDP or the ESXi web console once to run the b
 From the development machine, this may trigger the bootstrap through RDP without manual desktop interaction:
 
 ```bat
-scripts\rdp-trigger-test-machine.cmd 192.168.123.3 codex <password>
+scripts\rdp-trigger-test-machine.cmd 192.168.123.123 codex <password>
 ```
 
 If the remote Windows host accepts the RDP initial program setting, it will:
@@ -44,15 +44,15 @@ Do not commit credentials to this repository.
 Once WinRM is enabled, run the test machine non-interactively from the development machine:
 
 ```bat
-scripts\windows-winrm-test.cmd 192.168.123.3 codex <password>
+scripts\windows-winrm-test.cmd 192.168.123.123 codex <password>
 ```
 
 For concurrent work, pass a unique slot as the fourth argument:
 
 ```bat
-scripts\windows-winrm-test.cmd 192.168.123.3 codex <password> engineer-a
-scripts\windows-winrm-test.cmd 192.168.123.3 codex <password> engineer-b
-scripts\windows-winrm-test.cmd 192.168.123.3 codex <password> engineer-c
+scripts\windows-winrm-test.cmd 192.168.123.123 codex <password> engineer-a
+scripts\windows-winrm-test.cmd 192.168.123.123 codex <password> engineer-b
+scripts\windows-winrm-test.cmd 192.168.123.123 codex <password> engineer-c
 ```
 
 Each slot uses an isolated remote checkout and build directory:
@@ -109,8 +109,8 @@ To upload the current local `HEAD`, build only the WASAPI measurement tools, and
 run a render, duplex, or combined measurement:
 
 ```bat
-scripts\windows-winrm-local-measure.cmd 192.168.123.3 codex <password> engineer-a render 1000 10 false true
-scripts\windows-winrm-local-measure.cmd 192.168.123.3 codex <password> engineer-a both 5000 10 true false
+scripts\windows-winrm-local-measure.cmd 192.168.123.123 codex <password> engineer-a render 1000 10 false true
+scripts\windows-winrm-local-measure.cmd 192.168.123.123 codex <password> engineer-a both 5000 10 true false
 ```
 
 The eighth argument enables `--require-healthy`. When enabled, the command fails

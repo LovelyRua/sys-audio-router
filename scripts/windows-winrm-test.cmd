@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 
-set "HOST=192.168.123.3"
+set "HOST=192.168.123.123"
 set "USER=codex"
 set "PASSWORD="
 set "SLOT=%SAR_TEST_SLOT%"
@@ -13,7 +13,7 @@ if not "%~4"=="" set "SLOT=%~4"
 
 if "%PASSWORD%"=="" (
   echo Usage: scripts\windows-winrm-test.cmd [host] [user] [password] [slot]
-  echo Example: scripts\windows-winrm-test.cmd 192.168.123.3 codex password engineer-a
+  echo Example: scripts\windows-winrm-test.cmd 192.168.123.123 codex password engineer-a
   echo.
   echo The optional slot isolates the remote checkout, build directory, and bootstrap file.
   echo Use different slots such as engineer-a, engineer-b, and engineer-c for concurrent runs.
