@@ -1,10 +1,34 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(SystemAudioRoute LANGUAGES CXX)
+project(SystemAudioRoute LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+add_library(sar_libsamplerate STATIC
+  third_party/libsamplerate/src/samplerate.c
+  third_party/libsamplerate/src/src_linear.c
+  third_party/libsamplerate/src/src_sinc.c
+  third_party/libsamplerate/src/src_zoh.c
+)
+
+target_include_directories(sar_libsamplerate
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/libsamplerate/include
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/libsamplerate/src
+)
+
+target_compile_definitions(sar_libsamplerate PRIVATE
+  CPU_CLIPS_NEGATIVE=0
+  CPU_CLIPS_POSITIVE=0
+  ENABLE_SINC_FAST_CONVERTER
+  ENABLE_SINC_MEDIUM_CONVERTER
+  HAVE_STDBOOL_H=1
+  PACKAGE="libsamplerate"
+  VERSION="0.2.2"
+)
 
 add_library(sar_core
   core/control/control_command.cpp
