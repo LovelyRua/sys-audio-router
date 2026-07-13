@@ -236,6 +236,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::start_streams() noexcept {
     capture_rate_adapter_->ratio = 1.0;
     capture_rate_adapter_->ratio_set_for_block = false;
     capture_rate_adapter_->primed = false;
+    capture_rate_adapter_->recovery_active = false;
   }
 
   if (capture_stream_ != nullptr) {
@@ -388,6 +389,8 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     stats.capture_rate_correction_ppm =
         capture_rate_adapter_->controller.correction_ppm();
     stats.capture_resampler_ratio = capture_rate_adapter_->ratio;
+    stats.capture_rate_adapter_recovering =
+        capture_rate_adapter_->recovery_active;
   }
   auto sample_rate_errors =
       validate_graph_sample_rate(graph, capture_stream_, render_stream_);
@@ -437,7 +440,9 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
           capture_rate_adapter_->output_frames_ready = 0;
           capture_rate_adapter_->ratio_set_for_block = false;
           capture_rate_adapter_->primed = false;
+          capture_rate_adapter_->recovery_active = true;
           stats.capture_rate_adapter_reset = true;
+          stats.capture_rate_adapter_recovering = true;
         }
       }
 
@@ -571,6 +576,8 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     if (capture_rate_adapter_) {
       capture_rate_adapter_->output_frames_ready = 0;
       capture_rate_adapter_->ratio_set_for_block = false;
+      capture_rate_adapter_->recovery_active = false;
+      stats.capture_rate_adapter_recovering = false;
     }
     if (render_path_) {
       const auto queued = render_path_->fifo.push(output_, graph_block_frames_);
@@ -640,6 +647,10 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     if (stats.rendered_frames > 0) {
       ++diagnostics.render_fifo_underflow_cycles;
       diagnostics.render_fifo_underflow_frames += stats.rendered_frames;
+      if (capture_rate_adapter_ && capture_rate_adapter_->recovery_active) {
+        stats.render_recovery_silence = true;
+        stats.render_recovery_silence_frames = stats.rendered_frames;
+      }
     }
   }
 

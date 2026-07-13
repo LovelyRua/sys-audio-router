@@ -90,6 +90,14 @@ void print_wasapi_runtime_summary(
       << summary.render_fifo_underflow_cycles << '\n';
   out << "  Render FIFO underflow frames: "
       << summary.render_fifo_underflow_frames << '\n';
+  out << "  Render recovery silence cycles: "
+      << summary.render_recovery_silence_cycles << '\n';
+  out << "  Render recovery silence frames: "
+      << summary.render_recovery_silence_frames << '\n';
+  out << "  Capture rate adapter recovering: "
+      << (summary.capture_rate_adapter_recovering ? "yes" : "no") << '\n';
+  out << "  Last render recovery silence: "
+      << (summary.last_render_recovery_silence ? "yes" : "no") << '\n';
   out << "  Last callback ns: " << summary.last_callback_nanoseconds << '\n';
   out << "  Peak callback ns: " << summary.peak_callback_nanoseconds << '\n';
   out << "  Total callback ns: " << summary.total_callback_nanoseconds << '\n';
@@ -181,8 +189,14 @@ void print_wasapi_worker_stats(
       << " capture_resampler_ratio=" << stats.capture_resampler_ratio
       << " capture_rate_adapter_active="
       << bool_token(stats.capture_rate_adapter_active)
+      << " capture_rate_adapter_recovering="
+      << bool_token(stats.capture_rate_adapter_recovering)
       << " capture_rate_adapter_reset_cycles="
       << stats.capture_rate_adapter_reset_cycles
+      << " render_recovery_silence_cycles="
+      << stats.render_recovery_silence_cycles
+      << " render_recovery_silence_frames="
+      << stats.render_recovery_silence_frames
       << " minimum_capture_rate_correction_ppm="
       << stats.minimum_capture_rate_correction_ppm
       << " maximum_capture_rate_correction_ppm="
@@ -204,6 +218,8 @@ void print_wasapi_worker_stats(
       << bool_token(stats.last_capture_discontinuity)
       << " last_capture_timestamp_error="
       << bool_token(stats.last_capture_timestamp_error)
+      << " last_render_recovery_silence="
+      << bool_token(stats.last_render_recovery_silence)
       << '\n';
   out << "Worker stats\n";
   out << "  Loop cycles: " << stats.loop_cycles << '\n';
@@ -241,8 +257,14 @@ void print_wasapi_worker_stats(
   out << "  Capture resampler ratio: " << stats.capture_resampler_ratio << '\n';
   out << "  Capture rate adapter active: "
       << (stats.capture_rate_adapter_active ? "yes" : "no") << '\n';
+  out << "  Capture rate adapter recovering: "
+      << (stats.capture_rate_adapter_recovering ? "yes" : "no") << '\n';
   out << "  Capture rate adapter reset cycles: "
       << stats.capture_rate_adapter_reset_cycles << '\n';
+  out << "  Render recovery silence cycles: "
+      << stats.render_recovery_silence_cycles << '\n';
+  out << "  Render recovery silence frames: "
+      << stats.render_recovery_silence_frames << '\n';
   out << "  Minimum capture rate correction ppm: "
       << stats.minimum_capture_rate_correction_ppm << '\n';
   out << "  Maximum capture rate correction ppm: "

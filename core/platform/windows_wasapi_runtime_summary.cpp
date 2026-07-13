@@ -61,6 +61,10 @@ std::string format_wasapi_runtime_summary_line(
          << summary.capture_timestamp_error_cycles
          << " capture_timestamp_error_frames="
          << summary.capture_timestamp_error_frames
+         << " render_recovery_silence_cycles="
+         << summary.render_recovery_silence_cycles
+         << " render_recovery_silence_frames="
+         << summary.render_recovery_silence_frames
          << " process_error_cycles=" << summary.process_error_cycles
          << " stream_start_error_cycles=" << summary.stream_start_error_cycles
          << " stream_stop_error_cycles=" << summary.stream_stop_error_cycles
@@ -125,6 +129,10 @@ std::string format_wasapi_runtime_summary_line(
          << bool_token(summary.last_capture_discontinuity)
          << " last_capture_timestamp_error="
          << bool_token(summary.last_capture_timestamp_error)
+         << " capture_rate_adapter_recovering="
+         << bool_token(summary.capture_rate_adapter_recovering)
+         << " last_render_recovery_silence="
+         << bool_token(summary.last_render_recovery_silence)
          << " error_count=" << summary.error_count
          << " first_error_code=" << summary.first_error_code;
   return stream.str();
@@ -153,6 +161,10 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
   summary.capture_discontinuity_frames = stats.capture_discontinuity_frames;
   summary.capture_timestamp_error_cycles = stats.capture_timestamp_error_cycles;
   summary.capture_timestamp_error_frames = stats.capture_timestamp_error_frames;
+  summary.render_recovery_silence_cycles =
+      stats.render_recovery_silence_cycles;
+  summary.render_recovery_silence_frames =
+      stats.render_recovery_silence_frames;
   summary.process_error_cycles = stats.process_error_cycles;
   summary.stream_start_error_cycles = stats.stream_start_error_cycles;
   summary.stream_stop_error_cycles = stats.stream_stop_error_cycles;
@@ -180,6 +192,10 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
   summary.last_capture_silent = stats.last_capture_silent;
   summary.last_capture_discontinuity = stats.last_capture_discontinuity;
   summary.last_capture_timestamp_error = stats.last_capture_timestamp_error;
+  summary.capture_rate_adapter_recovering =
+      stats.capture_rate_adapter_recovering;
+  summary.last_render_recovery_silence =
+      stats.last_render_recovery_silence;
   summary.error_count = errors.size();
 
   if (engine_diagnostics != nullptr) {

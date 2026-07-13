@@ -44,6 +44,10 @@ sar::platform::WasapiRealtimeWorkerStats make_active_stats() {
   stats.last_rendered_frames = 64;
   stats.last_stop_wait_microseconds = 1200;
   stats.last_graph_processed = true;
+  stats.render_recovery_silence_cycles = 2;
+  stats.render_recovery_silence_frames = 128;
+  stats.capture_rate_adapter_recovering = true;
+  stats.last_render_recovery_silence = true;
   return stats;
 }
 
@@ -133,6 +137,8 @@ int main() {
                        "capture_discontinuity_frames=0 "
                        "capture_timestamp_error_cycles=0 "
                        "capture_timestamp_error_frames=0 "
+                       "render_recovery_silence_cycles=0 "
+                       "render_recovery_silence_frames=0 "
                        "process_error_cycles=0 stream_start_error_cycles=0 "
                        "stream_stop_error_cycles=0 stream_wait_cancellation_cycles=0 "
                        "xrun_count=0 capture_fifo_fill_frames=0 "
@@ -162,6 +168,8 @@ int main() {
                        "last_render_partial=0 last_capture_silent=0 "
                        "last_capture_discontinuity=0 "
                        "last_capture_timestamp_error=0 "
+                       "capture_rate_adapter_recovering=0 "
+                       "last_render_recovery_silence=0 "
                        "error_count=0 first_error_code=",
                    "Expected no-cycle machine-readable summary line")) {
       return failure;
@@ -189,7 +197,11 @@ int main() {
                        summary.render_fifo_overflow_cycles == 3 &&
                        summary.render_fifo_overflow_frames == 72 &&
                        summary.render_fifo_underflow_cycles == 4 &&
-                       summary.render_fifo_underflow_frames == 24,
+                       summary.render_fifo_underflow_frames == 24 &&
+                       summary.render_recovery_silence_cycles == 2 &&
+                       summary.render_recovery_silence_frames == 128 &&
+                       summary.capture_rate_adapter_recovering &&
+                       summary.last_render_recovery_silence,
                    "Expected copied FIFO diagnostics")) {
       return failure;
     }

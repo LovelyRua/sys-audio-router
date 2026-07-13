@@ -187,8 +187,11 @@ measurements for render-only, full-duplex, and loopback-capture WASAPI paths.
 These tools print
 runtime health, reason codes, stream diagnostics lines, stream shape,
 transferred-frame summaries, stop wait duration, partial/silent transfer
-counters, capture discontinuity/timestamp counters, last-cycle flags, worker
-counters, and engine diagnostics for lab captures.
+counters, capture discontinuity/timestamp counters, adaptive-capture recovery
+state and recovery-silence totals, last-cycle flags, worker counters, and engine
+diagnostics for lab captures. Recovery silence remains part of total render FIFO
+underflow and is also reported as a labeled subset, so a lab run preserves the
+full dropout count while identifying the portion caused by SRC re-priming.
 
 Current real-device evidence includes a strict-healthy 48 kHz render run that
 submitted 96,000 frames over two seconds with zero xruns, wait timeouts, or FIFO
@@ -197,6 +200,12 @@ capture endpoint to the 48 kHz render endpoint and processed approximately
 240,000 render-domain frames. That duplex run still reported capture data
 discontinuity and render underflow, so it is validation of the SRC-enabled path,
 not yet evidence of production stability.
+
+A later 30-second duplex run with a wider controller range completed without
+FIFO overflow and kept capture correction between 0 and about -508 ppm, ending
+near -454 ppm. It observed six capture discontinuities and fourteen render FIFO
+underflow cycles; the recovery-silence counters were added so subsequent runs
+can separate SRC re-priming gaps from unrelated render starvation.
 
 ## Current Testing Model
 

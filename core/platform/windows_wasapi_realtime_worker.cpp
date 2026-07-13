@@ -169,7 +169,10 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   capture_rate_correction_bits_.store(double_bits(0.0));
   capture_resampler_ratio_bits_.store(double_bits(1.0));
   capture_rate_adapter_active_.store(false);
+  capture_rate_adapter_recovering_.store(false);
   capture_rate_adapter_reset_cycles_.store(0);
+  render_recovery_silence_cycles_.store(0);
+  render_recovery_silence_frames_.store(0);
   minimum_capture_rate_correction_bits_.store(double_bits(0.0));
   maximum_capture_rate_correction_bits_.store(double_bits(0.0));
   last_captured_frames_.store(0);
@@ -184,6 +187,7 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   last_capture_silent_.store(false);
   last_capture_discontinuity_.store(false);
   last_capture_timestamp_error_.store(false);
+  last_render_recovery_silence_.store(false);
   last_stop_wait_microseconds_.store(0);
   xrun_baseline_ = diagnostics_.xrun_count;
   {
@@ -283,8 +287,14 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.capture_resampler_ratio =
       bits_double(capture_resampler_ratio_bits_.load());
   result.capture_rate_adapter_active = capture_rate_adapter_active_.load();
+  result.capture_rate_adapter_recovering =
+      capture_rate_adapter_recovering_.load();
   result.capture_rate_adapter_reset_cycles =
       capture_rate_adapter_reset_cycles_.load();
+  result.render_recovery_silence_cycles =
+      render_recovery_silence_cycles_.load();
+  result.render_recovery_silence_frames =
+      render_recovery_silence_frames_.load();
   result.minimum_capture_rate_correction_ppm =
       bits_double(minimum_capture_rate_correction_bits_.load());
   result.maximum_capture_rate_correction_ppm =
@@ -301,6 +311,8 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.last_capture_silent = last_capture_silent_.load();
   result.last_capture_discontinuity = last_capture_discontinuity_.load();
   result.last_capture_timestamp_error = last_capture_timestamp_error_.load();
+  result.last_render_recovery_silence =
+      last_render_recovery_silence_.load();
   result.last_stop_wait_microseconds = last_stop_wait_microseconds_.load();
   return result;
 }
@@ -379,8 +391,15 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     capture_resampler_ratio_bits_.store(
         double_bits(result.stats().capture_resampler_ratio));
     capture_rate_adapter_active_.store(result.stats().capture_rate_adapter_active);
+    capture_rate_adapter_recovering_.store(
+        result.stats().capture_rate_adapter_recovering);
     if (result.stats().capture_rate_adapter_reset) {
       capture_rate_adapter_reset_cycles_.fetch_add(1);
+    }
+    if (result.stats().render_recovery_silence) {
+      render_recovery_silence_cycles_.fetch_add(1);
+      render_recovery_silence_frames_.fetch_add(
+          result.stats().render_recovery_silence_frames);
     }
     if (result.stats().capture_rate_adapter_active) {
       const auto correction = result.stats().capture_rate_correction_ppm;
@@ -405,6 +424,8 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     last_capture_silent_.store(result.stats().capture_silent);
     last_capture_discontinuity_.store(result.stats().capture_data_discontinuity);
     last_capture_timestamp_error_.store(result.stats().capture_timestamp_error);
+    last_render_recovery_silence_.store(
+        result.stats().render_recovery_silence);
     if (result.stats().graph_processed) {
       graph_processed_cycles_.fetch_add(1);
       const auto last_callback_nanoseconds =

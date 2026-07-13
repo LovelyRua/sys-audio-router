@@ -37,6 +37,8 @@ struct WasapiRuntimeSummary {
   std::uint64_t capture_discontinuity_frames = 0;
   std::uint64_t capture_timestamp_error_cycles = 0;
   std::uint64_t capture_timestamp_error_frames = 0;
+  std::uint64_t render_recovery_silence_cycles = 0;
+  std::uint64_t render_recovery_silence_frames = 0;
   std::uint64_t process_error_cycles = 0;
   std::uint64_t stream_start_error_cycles = 0;
   std::uint64_t stream_stop_error_cycles = 0;
@@ -83,6 +85,8 @@ struct WasapiRuntimeSummary {
   bool last_capture_silent = false;
   bool last_capture_discontinuity = false;
   bool last_capture_timestamp_error = false;
+  bool capture_rate_adapter_recovering = false;
+  bool last_render_recovery_silence = false;
   std::size_t error_count = 0;
   std::string first_error_code;
   std::string first_error_message;

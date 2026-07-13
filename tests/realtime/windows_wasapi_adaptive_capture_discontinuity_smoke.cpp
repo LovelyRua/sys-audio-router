@@ -160,10 +160,15 @@ RunResult run_with_pre_gap_partial() {
   assert(gap.ok());
   assert(gap.stats().capture_data_discontinuity);
   assert(gap.stats().capture_rate_adapter_reset);
+  assert(gap.stats().capture_rate_adapter_recovering);
+  assert(gap.stats().render_recovery_silence);
+  assert(gap.stats().render_recovery_silence_frames == kGraphFrames);
   assert(!gap.stats().graph_processed);
   assert(gap.stats().capture_resampler_output_frames == 0);
   assert(diagnostics.capture_fifo_fill_frames == kCaptureFrames);
   assert(diagnostics.xrun_count == 1);
+  assert(diagnostics.render_fifo_underflow_cycles == 1);
+  assert(diagnostics.render_fifo_underflow_frames == kGraphFrames);
   assert(recorder_ptr->process_calls() == 0);
   assert_no_capture_overflow(diagnostics);
 
@@ -173,6 +178,12 @@ RunResult run_with_pre_gap_partial() {
     const auto result = process_cycle(runner, graph, diagnostics);
     assert(result.ok());
     assert(result.stats().graph_processed == (cycle == 1));
+    assert(result.stats().capture_rate_adapter_recovering == (cycle == 0));
+    assert(result.stats().render_recovery_silence == (cycle == 0));
+    assert(result.stats().render_recovery_silence_frames ==
+           (cycle == 0 ? kGraphFrames : 0));
+    assert(diagnostics.render_fifo_underflow_cycles == 2);
+    assert(diagnostics.render_fifo_underflow_frames == 2 * kGraphFrames);
     assert_no_capture_overflow(diagnostics);
   }
 

@@ -117,7 +117,10 @@ sar::platform::WasapiRealtimeWorkerStats make_stats() {
   stats.capture_rate_correction_ppm = 12.5;
   stats.capture_resampler_ratio = 0.9999875;
   stats.capture_rate_adapter_active = true;
+  stats.capture_rate_adapter_recovering = true;
   stats.capture_rate_adapter_reset_cycles = 4;
+  stats.render_recovery_silence_cycles = 5;
+  stats.render_recovery_silence_frames = 640;
   stats.minimum_capture_rate_correction_ppm = -22.0;
   stats.maximum_capture_rate_correction_ppm = 17.0;
   stats.last_captured_frames = 96;
@@ -141,6 +144,7 @@ sar::platform::WasapiRealtimeWorkerStats make_stats() {
   stats.last_capture_silent = true;
   stats.last_capture_discontinuity = true;
   stats.last_capture_timestamp_error = false;
+  stats.last_render_recovery_silence = true;
   return stats;
 }
 
@@ -373,7 +377,11 @@ int main() {
                        contains(text, "capture_rate_correction_ppm=12.5") &&
                        contains(text, "capture_resampler_ratio=0.999988") &&
                        contains(text, "capture_rate_adapter_active=1") &&
+                       contains(text, "capture_rate_adapter_recovering=1") &&
                        contains(text, "capture_rate_adapter_reset_cycles=4") &&
+                       contains(text, "render_recovery_silence_cycles=5") &&
+                       contains(text, "render_recovery_silence_frames=640") &&
+                       contains(text, "last_render_recovery_silence=1") &&
                        contains(text, "minimum_capture_rate_correction_ppm=-22") &&
                        contains(text, "maximum_capture_rate_correction_ppm=17"),
                    "Expected machine-readable capture rate statistics")) {
