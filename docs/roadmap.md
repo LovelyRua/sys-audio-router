@@ -71,8 +71,11 @@ FIFO faults. A five-second duplex measurement processed approximately 240,000
 render-domain frames, but still exposed capture discontinuity and render
 underflow. Render-master scheduling now connects a bounded FIFO waterline
 controller to adaptive capture resampling, with bounded SRC offers and
-discontinuity reset/re-prime behavior. Phase 2 is therefore not complete: the
-next priority is long-duration device soak testing and controller tuning.
+discontinuity reset/re-prime behavior. Native capture and render clock samples
+also provide a smoothed, slew-limited feed-forward term while the FIFO
+controller corrects residual fill error. Feed-forward remained valid in one
+30-second hardware run, but that is path validation rather than an alpha
+stability result. Phase 2 is therefore not complete.
 
 Deliverables:
 
@@ -87,7 +90,45 @@ Exit criteria:
 
 - Physical input to physical output routing.
 - System loopback to engine routing.
-- Multi-hour stability run.
+- Backend alpha gates below pass on supported Windows hardware.
+
+### Backend Alpha Gates
+
+These gates turn the remaining Phase 2 work into repeatable measurements. A
+short hardware run or a synthetic test can validate a path, but neither replaces
+the soak gates.
+
+- **Clock feed-forward:** report valid, invalid, and disabled observer samples,
+  plus time at the final +/-2500 ppm clamp. After the first valid estimate, each
+  duplex soak must keep feed-forward valid for at least 99% of observations and
+  must not remain clamped for more than five consecutive seconds. The FIFO term
+  remains enabled as residual correction; feed-forward is not treated as a
+  replacement for bounded buffering.
+- **Bounded discontinuity recovery:** preserve the existing reset/re-prime rule
+  and prove, with scripted discontinuities and real-device observations, that no
+  pre-discontinuity samples reach the graph. For each discontinuity, graph output
+  must resume within `target_fill_frames + render_buffer_frames` of labeled
+  recovery silence, with zero capture FIFO overflow. Add a per-event maximum so
+  the bound is testable rather than inferred from aggregate counters.
+- **Device invalidation and reopen:** classify
+  `AUDCLNT_E_DEVICE_INVALIDATED` separately, leave the realtime worker without a
+  blocked wait or join, and reopen on the control side. A disable/enable or
+  default-device-change test must resume the selected route within five seconds
+  and three open attempts, or terminate with a stable fault reason; it must not
+  spin or continue using the invalid stream.
+- **Render deadline ordering:** when capture and render are both ready, service
+  render before draining additional capture packets or producing optional graph
+  backlog. A deterministic call-order smoke test must prove the ordering. A
+  hardware run must report zero render wait timeouts and zero render underflow
+  outside explicitly labeled discontinuity-recovery silence.
+- **Long soaks:** first pass an eight-hour duplex run on two distinct physical
+  capture/render pairings, including one pairing with different endpoint mix
+  rates, then pass one 24-hour duplex run. Each run must complete startup and
+  bounded shutdown, process at least 99.99% of the duration-derived render-frame
+  target, and report zero stream faults, processing failures, FIFO overflows,
+  unlabeled render underflows, and wait timeouts. Every reported discontinuity
+  must satisfy the recovery bound above; raw summaries and command lines are
+  retained with the test report.
 
 ## Phase 3: Virtual ASIO v1
 

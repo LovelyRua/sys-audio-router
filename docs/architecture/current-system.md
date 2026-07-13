@@ -21,8 +21,11 @@ WASAPI capture/render stream
 
 Render-only measurements are strict-healthy, while full-duplex measurements
 still expose independent-device clocking behavior. Render-master scheduling now
-drives a bounded FIFO waterline controller and adaptive capture resampler; the
-next backend milestone is long-duration tuning and discontinuity recovery.
+drives a bounded FIFO waterline controller and adaptive capture resampler, with
+native-clock feed-forward supplying the measured clock-rate difference and the
+FIFO controller correcting residual fill error. The feed-forward path has short
+real-device evidence only; bounded discontinuity recovery, device reopen,
+render-deadline ordering, and long soaks remain alpha gates.
 
 ## Portable Core
 
@@ -117,6 +120,12 @@ a lock-free atomic load, while COM calls, sleeping, and filtering remain on the
 observer thread. Three consecutive invalid samples disable feed-forward and
 restore the previous FIFO-only behavior.
 
+This is the current clock feed-forward implementation, not yet an alpha exit
+result. The summary exposes the current feed-forward value and whether it is
+valid at the instant of the query, but does not yet count valid, invalid, or
+disabled observer samples or time spent at the correction clamp. Those counters
+are required to apply the roadmap's long-soak thresholds.
+
 ## Platform Layer
 
 `core/platform` contains the platform-facing pieces:
@@ -195,6 +204,9 @@ its stream, so the subsequent zero-time capture or render pump does not wait for
 the same event twice. Pending readiness also forces the next coordinated wait
 to be nonblocking until the corresponding stream has consumed it. Scripted and
 synthetic stream implementations retain the existing sequential wait path.
+The current processing order still drains bounded capture packets and fills the
+graph/render FIFO before calling `render_once`; it does not yet guarantee that a
+simultaneously ready render endpoint is serviced first.
 
 `WindowsWasapiLoopbackLoop` owns a capture-only loopback stream, graph runner,
 and realtime worker. It exposes the underlying WASAPI clock snapshot and keeps
@@ -268,8 +280,16 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 - Full-duplex adaptive capture resampling is wired and bounded, but controller
   tuning and discontinuity recovery still need long-duration real-device
   evidence. Hardware capture discontinuities can still trigger render underflow
-  while the bridge resets and re-primes.
-- Multi-hour real-device stability has not been demonstrated yet.
+  while the bridge resets and re-primes. Recovery-silence totals exist, but a
+  per-discontinuity maximum is not yet reported, so the alpha recovery bound
+  cannot yet be enforced from a run summary.
+- WASAPI device invalidation is currently returned as a generic stream I/O
+  failure. There is no endpoint notification, control-thread reopen policy, or
+  measured recovery deadline yet.
+- Coordinated duplex waits avoid duplicate blocking, but simultaneous readiness
+  does not yet have an explicit render-first service rule or call-order test.
+- Multi-hour real-device stability has not been demonstrated. The eight-hour
+  pairwise and 24-hour backend alpha soaks in the roadmap remain outstanding.
 - Loopback capture is not yet connected to a selectable render destination or
   virtual endpoint.
 - No virtual ASIO driver implementation exists yet.
