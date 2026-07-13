@@ -16,6 +16,8 @@ class FifoWaterlineController {
  public:
   explicit FifoWaterlineController(FifoWaterlineControllerConfig config) noexcept;
 
+  // Positive correction means the consumer must run faster because fill is
+  // above target. An output/input SRC ratio therefore divides by 1 + ppm.
   [[nodiscard]] double update(double fill_frames,
                               double elapsed_seconds) noexcept;
   void reset() noexcept;

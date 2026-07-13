@@ -3,7 +3,9 @@
 #include "core/diagnostics/engine_diagnostics.h"
 #include "core/graph/graph.h"
 #include "core/platform/windows_wasapi_stream.h"
+#include "core/realtime/adaptive_resampler.h"
 #include "core/realtime/audio_buffer.h"
+#include "core/realtime/fifo_waterline_controller.h"
 #include "core/realtime/planar_audio_fifo.h"
 
 #include <cstddef>
@@ -20,6 +22,11 @@ struct WasapiGraphRunnerStats {
   std::uint32_t capture_partial_frames = 0;
   std::uint32_t render_partial_frames = 0;
   std::uint32_t capture_silent_frames = 0;
+  std::uint32_t capture_resampler_input_frames = 0;
+  std::uint32_t capture_resampler_output_frames = 0;
+  double capture_rate_correction_ppm = 0.0;
+  double capture_resampler_ratio = 1.0;
+  bool capture_rate_adapter_active = false;
   bool graph_processed = false;
   bool capture_stream_idle = false;
   bool render_stream_idle = false;
@@ -70,7 +77,8 @@ class WindowsWasapiGraphRunner {
                            std::size_t capture_packet_capacity_frames,
                            std::size_t render_packet_capacity_frames,
                            std::size_t fifo_capacity_frames,
-                           bool prime_render_silence = false);
+                           bool prime_render_silence = false,
+                           bool adapt_capture_rate = false);
 
   [[nodiscard]] realtime::AudioBuffer& input_buffer() noexcept;
   [[nodiscard]] const realtime::AudioBuffer& input_buffer() const noexcept;
@@ -95,6 +103,24 @@ class WindowsWasapiGraphRunner {
     realtime::PlanarAudioFifo fifo;
   };
 
+  struct CaptureRateAdapter {
+    CaptureRateAdapter(std::size_t channels,
+                       std::size_t graph_frames,
+                       std::size_t capture_packet_frames,
+                       std::size_t fifo_frames);
+
+    realtime::AdaptiveResampler resampler;
+    realtime::FifoWaterlineController controller;
+    realtime::AudioBuffer source_planar;
+    std::vector<float> source_interleaved;
+    std::vector<float> output_interleaved;
+    std::size_t target_fill_frames = 0;
+    std::size_t output_frames_ready = 0;
+    double ratio = 1.0;
+    bool ratio_set_for_block = false;
+    bool primed = false;
+  };
+
   [[nodiscard]] WasapiGraphRunnerResult process_buffered_once(
       graph::Graph& graph,
       diagnostics::EngineDiagnostics& diagnostics,
@@ -108,6 +134,7 @@ class WindowsWasapiGraphRunner {
   bool render_master_ = false;
   std::optional<BufferedPath> capture_path_;
   std::optional<BufferedPath> render_path_;
+  std::optional<CaptureRateAdapter> capture_rate_adapter_;
 };
 
 }  // namespace sar::platform
