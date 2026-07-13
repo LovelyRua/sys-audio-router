@@ -105,6 +105,7 @@ class WindowsWasapiGraphRunner {
   realtime::AudioBuffer input_;
   realtime::AudioBuffer output_;
   std::size_t graph_block_frames_ = 0;
+  bool render_master_ = false;
   std::optional<BufferedPath> capture_path_;
   std::optional<BufferedPath> render_path_;
 };

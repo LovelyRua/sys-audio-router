@@ -126,7 +126,8 @@ WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(
       render_stream_(render_stream),
       input_(input_channels, graph_block_frames),
       output_(output_channels, graph_block_frames),
-      graph_block_frames_(graph_block_frames) {
+      graph_block_frames_(graph_block_frames),
+      render_master_(prime_render_silence) {
   if (fifo_capacity_frames < graph_block_frames ||
       (capture_stream != nullptr && capture_packet_capacity_frames == 0) ||
       (render_stream != nullptr && render_packet_capacity_frames == 0)) {
@@ -314,35 +315,49 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
   }
 
   if (capture_stream_ != nullptr) {
-    capture_path_->packet.clear();
-    auto capture_result =
-        capture_stream_->capture_once(capture_path_->packet, timeout_ms);
-    if (!capture_result.ok()) {
-      return WasapiGraphRunnerResult::failure(capture_result.errors());
-    }
-    if (capture_result.cancelled()) {
-      stats.cancelled = true;
-      return WasapiGraphRunnerResult::success(stats);
-    }
-    stats.captured_frames = capture_result.frames();
-    stats.capture_silent = capture_result.silent();
-    stats.capture_data_discontinuity = capture_result.data_discontinuity();
-    stats.capture_timestamp_error = capture_result.timestamp_error();
-    stats.capture_wait_timed_out = capture_result.timed_out();
-    stats.capture_stream_idle = stats.captured_frames == 0;
-    stats.capture_silent_frames =
-        stats.capture_silent ? stats.captured_frames : 0;
-    if (stats.capture_data_discontinuity) {
-      ++diagnostics.xrun_count;
-    }
+    constexpr std::size_t kMaximumCapturePacketsPerCycle = 8;
+    const auto packet_limit = render_master_ ? kMaximumCapturePacketsPerCycle : 1;
+    for (std::size_t packet_index = 0; packet_index < packet_limit; ++packet_index) {
+      capture_path_->packet.clear();
+      const auto capture_timeout_ms = render_master_ ? 0 : timeout_ms;
+      auto capture_result = capture_stream_->capture_once(
+          capture_path_->packet, capture_timeout_ms);
+      if (!capture_result.ok()) {
+        return WasapiGraphRunnerResult::failure(capture_result.errors());
+      }
+      if (capture_result.cancelled()) {
+        stats.cancelled = true;
+        return WasapiGraphRunnerResult::success(stats);
+      }
+      if (capture_result.frames() == 0) {
+        stats.capture_wait_timed_out =
+            !render_master_ && capture_result.timed_out();
+        break;
+      }
 
-    const auto queued = capture_path_->fifo.push(capture_path_->packet,
-                                                 stats.captured_frames);
-    if (queued < stats.captured_frames) {
-      ++diagnostics.capture_fifo_overflow_cycles;
-      diagnostics.capture_fifo_overflow_frames += stats.captured_frames - queued;
-      ++diagnostics.xrun_count;
+      stats.captured_frames += capture_result.frames();
+      stats.capture_silent = stats.capture_silent || capture_result.silent();
+      stats.capture_data_discontinuity =
+          stats.capture_data_discontinuity || capture_result.data_discontinuity();
+      stats.capture_timestamp_error =
+          stats.capture_timestamp_error || capture_result.timestamp_error();
+      if (capture_result.silent()) {
+        stats.capture_silent_frames += capture_result.frames();
+      }
+      if (capture_result.data_discontinuity()) {
+        ++diagnostics.xrun_count;
+      }
+
+      const auto queued = capture_path_->fifo.push(
+          capture_path_->packet, capture_result.frames());
+      if (queued < capture_result.frames()) {
+        ++diagnostics.capture_fifo_overflow_cycles;
+        diagnostics.capture_fifo_overflow_frames +=
+            capture_result.frames() - queued;
+        ++diagnostics.xrun_count;
+      }
     }
+    stats.capture_stream_idle = stats.captured_frames == 0;
   }
 
   diagnostics.capture_fifo_fill_frames =
@@ -406,9 +421,34 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
         stats.render_partial ? static_cast<std::uint32_t>(staged - stats.rendered_frames)
                              : 0;
   } else if (render_stream_ != nullptr) {
-    stats.render_stream_idle = true;
-    ++diagnostics.render_fifo_underflow_cycles;
-    diagnostics.render_fifo_underflow_frames += graph_block_frames_;
+    if (!render_master_) {
+      stats.render_stream_idle = true;
+      ++diagnostics.render_fifo_underflow_cycles;
+      diagnostics.render_fifo_underflow_frames += graph_block_frames_;
+      diagnostics.capture_fifo_fill_frames =
+          capture_path_ ? capture_path_->fifo.available_frames() : 0;
+      diagnostics.render_fifo_fill_frames = 0;
+      return WasapiGraphRunnerResult::success(stats);
+    }
+    render_path_->packet.clear();
+    auto render_result = render_stream_->render_once(
+        render_path_->packet,
+        static_cast<std::uint32_t>(render_path_->packet.frames()),
+        timeout_ms);
+    if (!render_result.ok()) {
+      return WasapiGraphRunnerResult::failure(render_result.errors());
+    }
+    if (render_result.cancelled()) {
+      stats.cancelled = true;
+      return WasapiGraphRunnerResult::success(stats);
+    }
+    stats.rendered_frames = render_result.frames();
+    stats.render_stream_idle = stats.rendered_frames == 0;
+    stats.render_wait_timed_out = render_result.timed_out();
+    if (stats.rendered_frames > 0) {
+      ++diagnostics.render_fifo_underflow_cycles;
+      diagnostics.render_fifo_underflow_frames += stats.rendered_frames;
+    }
   }
 
   diagnostics.capture_fifo_fill_frames =

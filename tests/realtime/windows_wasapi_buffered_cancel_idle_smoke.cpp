@@ -121,11 +121,34 @@ void duplex_prime_supplies_render_before_capture() {
   assert(diagnostics.render_fifo_underflow_cycles == 0);
   assert((rendered(render) == std::vector<float>{0, 0, 0, 0}));
 }
+
+void duplex_starvation_waits_and_submits_silence() {
+  sar::tests::ScriptedWasapiStream capture(
+      probe(sar::platform::WasapiStreamDirection::Capture, 4));
+  sar::tests::ScriptedWasapiStream render(
+      probe(sar::platform::WasapiStreamDirection::Render, 4));
+  capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::TimedOut});
+  capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::TimedOut});
+  render.enqueue_render({.writable_frames = 4});
+  render.enqueue_render({.writable_frames = 3});
+  sar::platform::WindowsWasapiGraphRunner runner(
+      &capture, &render, 1, 1, 4, 4, 4, 8, true);
+  auto route = graph();
+  sar::diagnostics::EngineDiagnostics diagnostics;
+  assert(runner.process_once(route, diagnostics, 25).stats().rendered_frames == 4);
+  const auto starved = runner.process_once(route, diagnostics, 25);
+  assert(starved.ok() && starved.stats().capture_stream_idle);
+  assert(!starved.stats().graph_processed && starved.stats().rendered_frames == 3);
+  assert(diagnostics.render_fifo_underflow_cycles == 1);
+  assert(diagnostics.render_fifo_underflow_frames == 3);
+  assert((rendered(render) == std::vector<float>{0, 0, 0, 0, 0, 0, 0}));
+}
 }  // namespace
 
 int main() {
   idle_drains_backlog();
   cancellation_preserves_queues();
   duplex_prime_supplies_render_before_capture();
+  duplex_starvation_waits_and_submits_silence();
   return 0;
 }
