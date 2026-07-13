@@ -132,6 +132,8 @@ class WindowsWasapiGraphRunner {
 
   WasapiStreamIo* capture_stream_ = nullptr;
   WasapiStreamIo* render_stream_ = nullptr;
+  WindowsWasapiStream* native_capture_stream_ = nullptr;
+  WindowsWasapiStream* native_render_stream_ = nullptr;
   realtime::AudioBuffer input_;
   realtime::AudioBuffer output_;
   std::size_t graph_block_frames_ = 0;

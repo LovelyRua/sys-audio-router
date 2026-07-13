@@ -180,6 +180,12 @@ FIFO reserves two native-buffer spans beyond the graph block so a delayed
 capture service cycle can drain queued packets without immediately exhausting
 bridge capacity. The adaptive controller still targets one graph block of fill;
 the additional capacity is catch-up reserve, not added steady-state latency.
+Native duplex streams use one coordinated wait over both samples-ready events
+and both stop events. The selected auto-reset samples-ready event is latched in
+its stream, so the subsequent zero-time capture or render pump does not wait for
+the same event twice. Pending readiness also forces the next coordinated wait
+to be nonblocking until the corresponding stream has consumed it. Scripted and
+synthetic stream implementations retain the existing sequential wait path.
 
 `WindowsWasapiLoopbackLoop` owns a capture-only loopback stream, graph runner,
 and realtime worker. It exposes the underlying WASAPI clock snapshot and keeps
@@ -217,6 +223,13 @@ render FIFO underflow cycles, with zero FIFO overflow. Three additional
 five-second runs totalled four discontinuities and eight underflow cycles, also
 without overflow. This is repeatable short-run improvement, while long-duration
 evidence is still required before treating the tuning as production-stable.
+
+Coordinating capture and render event waits reduced two subsequent 10-second
+runs to two/one capture discontinuities, three/one render FIFO underflow cycles,
+and six/eight wait timeouts respectively. Both runs transferred about 482,400
+render frames with zero FIFO overflow. Their approximately 1,900 worker cycles
+per run match the combined cadence of two roughly 100 Hz device events rather
+than an unbounded polling loop.
 
 ## Current Testing Model
 

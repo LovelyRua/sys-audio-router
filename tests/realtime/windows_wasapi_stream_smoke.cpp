@@ -702,6 +702,35 @@ int main() {
   }
 
   {
+    sar::platform::WindowsWasapiStream capture_stream;
+    sar::platform::WindowsWasapiStream render_stream;
+    auto capture_probe = make_probe();
+    capture_probe.direction = sar::platform::WasapiStreamDirection::Capture;
+    if (const auto failure = expect(capture_stream.open(capture_probe).ok() &&
+                                        render_stream.open(make_probe()).ok(),
+                                    "Expected synthetic duplex streams to open")) {
+      return failure;
+    }
+    if (const auto failure = expect(capture_stream.start().ok() &&
+                                        render_stream.start().ok(),
+                                    "Expected synthetic duplex streams to start")) {
+      return failure;
+    }
+    const auto wait_status = sar::platform::wait_for_wasapi_duplex_events(
+        capture_stream, render_stream, 0);
+    if (const auto failure = expect(
+            wait_status == sar::platform::WasapiDuplexEventWaitStatus::Unavailable,
+            "Expected synthetic duplex event wait to be unavailable")) {
+      return failure;
+    }
+    if (const auto failure = expect(capture_stream.stop().ok() &&
+                                        render_stream.stop().ok(),
+                                    "Expected synthetic duplex streams to stop")) {
+      return failure;
+    }
+  }
+
+  {
     sar::platform::WindowsWasapiStream stream;
     auto stop_result = stream.stop();
     if (const auto failure = expect(!stop_result.ok(), "Expected stop-before-open failure")) {

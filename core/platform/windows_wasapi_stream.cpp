@@ -298,6 +298,7 @@ struct WindowsWasapiStream::Impl {
   UniqueHandle samples_ready_event;
   UniqueHandle stop_requested_event;
   WAVEFORMATEX* wave_format = nullptr;
+  bool samples_ready_latched = false;
 
   ~Impl() {
     if (wave_format != nullptr) {
@@ -490,6 +491,7 @@ WasapiStreamResult WindowsWasapiStream::start() noexcept {
   }
 
   if (impl_ && impl_->audio_client) {
+    impl_->samples_ready_latched = false;
     if (impl_->stop_requested_event.valid()) {
       ResetEvent(impl_->stop_requested_event.get());
     }
@@ -555,19 +557,21 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
     });
   }
 
-  const auto wait_result = wait_for_stream_event(impl_->samples_ready_event.get(),
-                                                impl_->stop_requested_event.get(),
-                                                timeout_ms);
-  if (wait_result == WasapiEventWaitStatus::StopRequested) {
-    return WasapiStreamIoResult::cancellation();
-  }
-  if (wait_result == WasapiEventWaitStatus::TimedOut) {
-    return WasapiStreamIoResult::timeout();
-  }
-  if (wait_result != WasapiEventWaitStatus::SamplesReady) {
-    return WasapiStreamIoResult::failure({
-        {"wasapi_event_wait_failed", "WASAPI render event wait failed."},
-    });
+  if (!std::exchange(impl_->samples_ready_latched, false)) {
+    const auto wait_result = wait_for_stream_event(impl_->samples_ready_event.get(),
+                                                  impl_->stop_requested_event.get(),
+                                                  timeout_ms);
+    if (wait_result == WasapiEventWaitStatus::StopRequested) {
+      return WasapiStreamIoResult::cancellation();
+    }
+    if (wait_result == WasapiEventWaitStatus::TimedOut) {
+      return WasapiStreamIoResult::timeout();
+    }
+    if (wait_result != WasapiEventWaitStatus::SamplesReady) {
+      return WasapiStreamIoResult::failure({
+          {"wasapi_event_wait_failed", "WASAPI render event wait failed."},
+      });
+    }
   }
 
   UINT32 padding_frames = 0;
@@ -649,6 +653,8 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
     });
   }
 
+  const auto samples_ready_latched =
+      std::exchange(impl_->samples_ready_latched, false);
   UINT32 packet_frames = 0;
   auto packet_result = impl_->capture_client->GetNextPacketSize(&packet_frames);
   if (FAILED(packet_result)) {
@@ -660,7 +666,7 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
     });
   }
 
-  if (packet_frames == 0) {
+  if (packet_frames == 0 && !samples_ready_latched) {
     const auto wait_result = wait_for_stream_event(impl_->samples_ready_event.get(),
                                                   impl_->stop_requested_event.get(),
                                                   timeout_ms);
@@ -753,6 +759,51 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
   }
   return WasapiStreamIoResult::success(
       packet_frames, data_discontinuity, timestamp_error);
+}
+
+WasapiDuplexEventWaitStatus wait_for_wasapi_duplex_events(
+    WindowsWasapiStream& capture_stream,
+    WindowsWasapiStream& render_stream,
+    std::uint32_t timeout_ms) noexcept {
+  if (capture_stream.state_ != WasapiStreamState::Started ||
+      render_stream.state_ != WasapiStreamState::Started ||
+      capture_stream.probe_.direction != WasapiStreamDirection::Capture ||
+      render_stream.probe_.direction != WasapiStreamDirection::Render ||
+      !capture_stream.impl_ || !render_stream.impl_ ||
+      !capture_stream.impl_->samples_ready_event.valid() ||
+      !capture_stream.impl_->stop_requested_event.valid() ||
+      !render_stream.impl_->samples_ready_event.valid() ||
+      !render_stream.impl_->stop_requested_event.valid()) {
+    return WasapiDuplexEventWaitStatus::Unavailable;
+  }
+
+  HANDLE events[] = {
+      capture_stream.impl_->stop_requested_event.get(),
+      render_stream.impl_->stop_requested_event.get(),
+      capture_stream.impl_->samples_ready_event.get(),
+      render_stream.impl_->samples_ready_event.get(),
+  };
+  const auto readiness_pending =
+      capture_stream.impl_->samples_ready_latched ||
+      render_stream.impl_->samples_ready_latched;
+  const auto wait_result = WaitForMultipleObjects(
+      4, events, FALSE, readiness_pending ? 0U : timeout_ms);
+  if (wait_result == WAIT_OBJECT_0 || wait_result == WAIT_OBJECT_0 + 1) {
+    return WasapiDuplexEventWaitStatus::Cancelled;
+  }
+  if (wait_result == WAIT_OBJECT_0 + 2) {
+    capture_stream.impl_->samples_ready_latched = true;
+    return WasapiDuplexEventWaitStatus::Ready;
+  }
+  if (wait_result == WAIT_OBJECT_0 + 3) {
+    render_stream.impl_->samples_ready_latched = true;
+    return WasapiDuplexEventWaitStatus::Ready;
+  }
+  if (wait_result == WAIT_TIMEOUT) {
+    return readiness_pending ? WasapiDuplexEventWaitStatus::Ready
+                             : WasapiDuplexEventWaitStatus::TimedOut;
+  }
+  return WasapiDuplexEventWaitStatus::Failed;
 }
 
 bool WindowsWasapiStream::read_clock(WasapiClockSnapshot& snapshot) const noexcept {

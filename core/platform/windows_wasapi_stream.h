@@ -64,6 +64,14 @@ enum class WasapiStreamIoStatus {
   Failed,
 };
 
+enum class WasapiDuplexEventWaitStatus {
+  Ready,
+  TimedOut,
+  Cancelled,
+  Failed,
+  Unavailable,
+};
+
 [[nodiscard]] const char* wasapi_stream_io_status_name(
     WasapiStreamIoStatus status) noexcept;
 
@@ -151,6 +159,10 @@ class WindowsWasapiStream final : public WasapiStreamIo {
   [[nodiscard]] WasapiStreamDiagnostics diagnostics() const noexcept;
 
  private:
+  friend WasapiDuplexEventWaitStatus wait_for_wasapi_duplex_events(
+      WindowsWasapiStream& capture_stream,
+      WindowsWasapiStream& render_stream,
+      std::uint32_t timeout_ms) noexcept;
   friend WasapiStreamOpenResult open_wasapi_stream_shell(
       WasapiStreamProbe probe,
       std::uint32_t requested_sample_rate);
@@ -165,6 +177,11 @@ class WindowsWasapiStream final : public WasapiStreamIo {
   WasapiStreamProbe probe_;
   std::unique_ptr<Impl> impl_;
 };
+
+[[nodiscard]] WasapiDuplexEventWaitStatus wait_for_wasapi_duplex_events(
+    WindowsWasapiStream& capture_stream,
+    WindowsWasapiStream& render_stream,
+    std::uint32_t timeout_ms) noexcept;
 
 class WasapiStreamOpenResult {
  public:

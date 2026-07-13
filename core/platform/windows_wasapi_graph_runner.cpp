@@ -125,6 +125,8 @@ WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(WasapiStreamIo* capture_strea
                                                    std::size_t render_frames)
     : capture_stream_(capture_stream),
       render_stream_(render_stream),
+      native_capture_stream_(dynamic_cast<WindowsWasapiStream*>(capture_stream)),
+      native_render_stream_(dynamic_cast<WindowsWasapiStream*>(render_stream)),
       input_(capture_channels, capture_frames),
       output_(render_channels, render_frames) {}
 
@@ -164,6 +166,8 @@ WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(
     bool adapt_capture_rate)
     : capture_stream_(capture_stream),
       render_stream_(render_stream),
+      native_capture_stream_(dynamic_cast<WindowsWasapiStream*>(capture_stream)),
+      native_render_stream_(dynamic_cast<WindowsWasapiStream*>(render_stream)),
       input_(input_channels, graph_block_frames),
       output_(output_channels, graph_block_frames),
       graph_block_frames_(graph_block_frames),
@@ -394,6 +398,28 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     return WasapiGraphRunnerResult::failure(std::move(sample_rate_errors));
   }
 
+  bool coordinated_duplex_wait = false;
+  if (render_master_ && native_capture_stream_ != nullptr &&
+      native_render_stream_ != nullptr) {
+    const auto wait_status = wait_for_wasapi_duplex_events(
+        *native_capture_stream_, *native_render_stream_, timeout_ms);
+    if (wait_status == WasapiDuplexEventWaitStatus::Cancelled) {
+      stats.cancelled = true;
+      return WasapiGraphRunnerResult::success(stats);
+    }
+    if (wait_status == WasapiDuplexEventWaitStatus::Failed) {
+      return WasapiGraphRunnerResult::failure({{
+          "wasapi_duplex_event_wait_failed",
+          "WASAPI duplex event wait failed.",
+      }});
+    }
+    coordinated_duplex_wait =
+        wait_status != WasapiDuplexEventWaitStatus::Unavailable;
+    stats.render_wait_timed_out =
+        wait_status == WasapiDuplexEventWaitStatus::TimedOut;
+  }
+  const auto render_timeout_ms = coordinated_duplex_wait ? 0U : timeout_ms;
+
   if (capture_stream_ != nullptr) {
     constexpr std::size_t kMaximumCapturePacketsPerCycle = 8;
     const auto packet_limit = render_master_ ? kMaximumCapturePacketsPerCycle : 1;
@@ -590,7 +616,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     const auto staged = render_path_->fifo.peek(
         render_path_->packet, render_path_->packet.frames());
     auto render_result = render_stream_->render_once(
-        render_path_->packet, static_cast<std::uint32_t>(staged), timeout_ms);
+        render_path_->packet, static_cast<std::uint32_t>(staged), render_timeout_ms);
     if (!render_result.ok()) {
       return WasapiGraphRunnerResult::failure(render_result.errors());
     }
@@ -610,8 +636,11 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     stats.rendered_frames = static_cast<std::uint32_t>(
         render_path_->fifo.consume(render_result.frames()));
     stats.render_stream_idle = stats.rendered_frames == 0;
-    stats.render_wait_timed_out = render_result.timed_out();
-    stats.render_partial = stats.rendered_frames < staged;
+    stats.render_wait_timed_out =
+        stats.render_wait_timed_out ||
+        (!coordinated_duplex_wait && render_result.timed_out());
+    stats.render_partial =
+        stats.rendered_frames > 0 && stats.rendered_frames < staged;
     stats.render_partial_frames =
         stats.render_partial ? static_cast<std::uint32_t>(staged - stats.rendered_frames)
                              : 0;
@@ -629,7 +658,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     auto render_result = render_stream_->render_once(
         render_path_->packet,
         static_cast<std::uint32_t>(render_path_->packet.frames()),
-        timeout_ms);
+        render_timeout_ms);
     if (!render_result.ok()) {
       return WasapiGraphRunnerResult::failure(render_result.errors());
     }
@@ -639,7 +668,9 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     }
     stats.rendered_frames = render_result.frames();
     stats.render_stream_idle = stats.rendered_frames == 0;
-    stats.render_wait_timed_out = render_result.timed_out();
+    stats.render_wait_timed_out =
+        stats.render_wait_timed_out ||
+        (!coordinated_duplex_wait && render_result.timed_out());
     if (stats.rendered_frames > 0) {
       ++diagnostics.render_fifo_underflow_cycles;
       diagnostics.render_fifo_underflow_frames += stats.rendered_frames;
