@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <chrono>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <thread>
 
@@ -64,6 +65,54 @@ std::uint32_t mismatched_sample_rate(std::uint32_t sample_rate) noexcept {
 }  // namespace
 
 int main() {
+  std::uint64_t converted_frames = 1;
+  if (const auto failure = expect(
+          sar::platform::wasapi_clock_position_to_audio_frames(
+              384000, 384000, 48000, converted_frames) &&
+              converted_frames == 48000,
+          "Expected IAudioClock units converted to audio frames")) {
+    return failure;
+  }
+  if (const auto failure = expect(
+          sar::platform::wasapi_clock_position_to_audio_frames(
+              384004, 384000, 48000, converted_frames) &&
+              converted_frames == 48000,
+          "Expected fractional IAudioClock units rounded down")) {
+    return failure;
+  }
+  std::uint64_t baseline_frames = 0;
+  const sar::realtime::ClockDomain clock_domain{1, 48000};
+  const auto converted_drift =
+      sar::platform::wasapi_clock_position_to_audio_frames(
+          0, 384000, 48000, baseline_frames) &&
+      sar::platform::wasapi_clock_position_to_audio_frames(
+          384000, 384000, 48000, converted_frames)
+          ? sar::realtime::ClockDriftEstimator::estimate(
+                {clock_domain, baseline_frames, 0},
+                {clock_domain, converted_frames, 10000000})
+          : sar::realtime::ClockDriftEstimate{};
+  if (const auto failure = expect(
+          converted_drift.valid &&
+              converted_drift.observed_sample_rate == 48000.0,
+          "Expected converted IAudioClock drift rate in audio frames per second")) {
+    return failure;
+  }
+  if (const auto failure = expect(
+          !sar::platform::wasapi_clock_position_to_audio_frames(
+              1, 0, 48000, converted_frames) &&
+              converted_frames == 0,
+          "Expected zero IAudioClock frequency rejected")) {
+    return failure;
+  }
+  if (const auto failure = expect(
+          !sar::platform::wasapi_clock_position_to_audio_frames(
+              std::numeric_limits<std::uint64_t>::max(), 1, 48000,
+              converted_frames) &&
+              converted_frames == 0,
+          "Expected overflowing IAudioClock conversion rejected")) {
+    return failure;
+  }
+
   const auto availability = default_endpoint_availability();
   if (!availability.capture || !availability.render) {
     std::cout << "Windows WASAPI duplex loop skipped: missing default endpoint\n";

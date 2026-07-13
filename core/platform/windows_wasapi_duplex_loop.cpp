@@ -10,6 +10,30 @@ namespace sar::platform {
 
 namespace {
 
+std::uint64_t fractional_audio_frames(std::uint64_t clock_remainder,
+                                      std::uint64_t clock_frequency,
+                                      std::uint32_t sample_rate) noexcept {
+  std::uint64_t quotient = 0;
+  std::uint64_t remainder = 0;
+  for (std::uint32_t bit = 1U << 31U; bit != 0; bit >>= 1U) {
+    const bool doubled_overflow = remainder >= clock_frequency - remainder;
+    remainder = doubled_overflow ? remainder - (clock_frequency - remainder)
+                                 : remainder + remainder;
+    quotient = quotient * 2 + static_cast<std::uint64_t>(doubled_overflow);
+
+    if ((sample_rate & bit) == 0) {
+      continue;
+    }
+    if (remainder >= clock_frequency - clock_remainder) {
+      remainder -= clock_frequency - clock_remainder;
+      ++quotient;
+    } else {
+      remainder += clock_remainder;
+    }
+  }
+  return quotient;
+}
+
 std::vector<WasapiRealtimeWorkerError> convert_errors(
     const std::vector<WasapiStreamError>& errors) {
   std::vector<WasapiRealtimeWorkerError> converted;
@@ -36,6 +60,31 @@ std::int64_t signed_frame_balance(std::uint64_t captured,
 }
 
 }  // namespace
+
+bool wasapi_clock_position_to_audio_frames(std::uint64_t position,
+                                           std::uint64_t frequency,
+                                           std::uint32_t sample_rate,
+                                           std::uint64_t& audio_frames) noexcept {
+  audio_frames = 0;
+  if (frequency == 0 || sample_rate == 0) {
+    return false;
+  }
+
+  const auto whole_seconds = position / frequency;
+  if (whole_seconds >
+      std::numeric_limits<std::uint64_t>::max() / sample_rate) {
+    return false;
+  }
+  const auto whole_frames = whole_seconds * sample_rate;
+  const auto partial_frames = fractional_audio_frames(
+      position % frequency, frequency, sample_rate);
+  if (whole_frames >
+      std::numeric_limits<std::uint64_t>::max() - partial_frames) {
+    return false;
+  }
+  audio_frames = whole_frames + partial_frames;
+  return true;
+}
 
 WindowsWasapiDuplexLoop::~WindowsWasapiDuplexLoop() {
   stop();
@@ -97,17 +146,37 @@ WasapiDuplexLoopSummary WindowsWasapiDuplexLoop::summary() const {
   result.render_clock_available = render_stream_.read_clock(result.render_clock);
   if (capture_clock_baseline_available_ && result.capture_clock_available) {
     const realtime::ClockDomain domain{1, capture_probe().mix_format.sample_rate};
-    result.capture_drift = realtime::ClockDriftEstimator::estimate(
-        {domain, capture_clock_baseline_.position,
-         capture_clock_baseline_.qpc_position_100ns},
-        {domain, result.capture_clock.position, result.capture_clock.qpc_position_100ns});
+    std::uint64_t baseline_frames = 0;
+    std::uint64_t current_frames = 0;
+    if (wasapi_clock_position_to_audio_frames(capture_clock_baseline_.position,
+                                              capture_clock_baseline_.frequency,
+                                              domain.sample_rate,
+                                              baseline_frames) &&
+        wasapi_clock_position_to_audio_frames(result.capture_clock.position,
+                                              result.capture_clock.frequency,
+                                              domain.sample_rate,
+                                              current_frames)) {
+      result.capture_drift = realtime::ClockDriftEstimator::estimate(
+          {domain, baseline_frames, capture_clock_baseline_.qpc_position_100ns},
+          {domain, current_frames, result.capture_clock.qpc_position_100ns});
+    }
   }
   if (render_clock_baseline_available_ && result.render_clock_available) {
     const realtime::ClockDomain domain{2, render_probe().mix_format.sample_rate};
-    result.render_drift = realtime::ClockDriftEstimator::estimate(
-        {domain, render_clock_baseline_.position,
-         render_clock_baseline_.qpc_position_100ns},
-        {domain, result.render_clock.position, result.render_clock.qpc_position_100ns});
+    std::uint64_t baseline_frames = 0;
+    std::uint64_t current_frames = 0;
+    if (wasapi_clock_position_to_audio_frames(render_clock_baseline_.position,
+                                              render_clock_baseline_.frequency,
+                                              domain.sample_rate,
+                                              baseline_frames) &&
+        wasapi_clock_position_to_audio_frames(result.render_clock.position,
+                                              result.render_clock.frequency,
+                                              domain.sample_rate,
+                                              current_frames)) {
+      result.render_drift = realtime::ClockDriftEstimator::estimate(
+          {domain, baseline_frames, render_clock_baseline_.qpc_position_100ns},
+          {domain, current_frames, result.render_clock.qpc_position_100ns});
+    }
   }
   result.frame_balance =
       signed_frame_balance(result.worker.captured_frames, result.worker.rendered_frames);

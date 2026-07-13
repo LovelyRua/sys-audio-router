@@ -16,6 +16,12 @@ namespace sar::platform {
 
 class WasapiDuplexLoopOpenResult;
 
+[[nodiscard]] bool wasapi_clock_position_to_audio_frames(
+    std::uint64_t position,
+    std::uint64_t frequency,
+    std::uint32_t sample_rate,
+    std::uint64_t& audio_frames) noexcept;
+
 struct WasapiDuplexLoopSummary {
   bool running = false;
   std::size_t error_count = 0;
