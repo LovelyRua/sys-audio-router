@@ -175,7 +175,11 @@ diagnostics, worker counters, and runtime health.
 `WindowsWasapiDuplexLoop` owns default capture and render streams, a graph
 runner, and a realtime worker. It is the current high-level entry point for the
 first measured full-duplex real-device loop. Its summary includes capture/render
-stream diagnostics, worker counters, and runtime health.
+stream diagnostics, worker counters, and runtime health. The duplex capture
+FIFO reserves two native-buffer spans beyond the graph block so a delayed
+capture service cycle can drain queued packets without immediately exhausting
+bridge capacity. The adaptive controller still targets one graph block of fill;
+the additional capacity is catch-up reserve, not added steady-state latency.
 
 `WindowsWasapiLoopbackLoop` owns a capture-only loopback stream, graph runner,
 and realtime worker. It exposes the underlying WASAPI clock snapshot and keeps
@@ -206,6 +210,13 @@ FIFO overflow and kept capture correction between 0 and about -508 ppm, ending
 near -454 ppm. It observed six capture discontinuities and fourteen render FIFO
 underflow cycles; the recovery-silence counters were added so subsequent runs
 can separate SRC re-priming gaps from unrelated render starvation.
+
+On the same test machine, adding the bounded capture drain reserve reduced a
+10-second run from four to three capture discontinuities and from nine to five
+render FIFO underflow cycles, with zero FIFO overflow. Three additional
+five-second runs totalled four discontinuities and eight underflow cycles, also
+without overflow. This is repeatable short-run improvement, while long-duration
+evidence is still required before treating the tuning as production-stable.
 
 ## Current Testing Model
 

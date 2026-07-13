@@ -235,8 +235,10 @@ WindowsWasapiDuplexLoop::WindowsWasapiDuplexLoop(
               graph.frames(),
               capture_stream_.probe().buffer_frames,
               render_stream_.probe().buffer_frames,
-              graph.frames() + std::max(capture_stream_.probe().buffer_frames,
-                                        render_stream_.probe().buffer_frames),
+              graph.frames() +
+                  2 * static_cast<std::size_t>(
+                          std::max(capture_stream_.probe().buffer_frames,
+                                   render_stream_.probe().buffer_frames)),
               true,
               true),
       worker_(runner_, graph, diagnostics) {}

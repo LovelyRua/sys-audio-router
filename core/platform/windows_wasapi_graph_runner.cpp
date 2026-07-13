@@ -137,11 +137,8 @@ WindowsWasapiGraphRunner::BufferedPath::BufferedPath(
 WindowsWasapiGraphRunner::CaptureRateAdapter::CaptureRateAdapter(
     std::size_t channels,
     std::size_t graph_frames,
-    std::size_t capture_packet_frames,
     std::size_t fifo_frames)
-    : controller({.target_fill_frames =
-                      std::min(std::max(graph_frames, fifo_frames / 2),
-                               fifo_frames - capture_packet_frames),
+    : controller({.target_fill_frames = graph_frames,
                   .maximum_correction_ppm = 2500.0,
                   .maximum_slew_ppm_per_second = 250.0}),
       source_planar(channels, fifo_frames),
@@ -189,7 +186,6 @@ WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(
                           fifo_capacity_frames);
     if (adapt_capture_rate) {
       capture_rate_adapter_.emplace(input_channels, graph_block_frames,
-                                    capture_packet_capacity_frames,
                                     fifo_capacity_frames);
     }
   }
