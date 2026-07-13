@@ -202,6 +202,13 @@ if(WIN32)
 
   target_link_libraries(sar_windows_wasapi_adaptive_capture_smoke PRIVATE sar_core)
 
+  add_executable(sar_windows_wasapi_adaptive_capture_discontinuity_smoke
+    tests/realtime/windows_wasapi_adaptive_capture_discontinuity_smoke.cpp
+  )
+
+  target_link_libraries(sar_windows_wasapi_adaptive_capture_discontinuity_smoke
+    PRIVATE sar_core)
+
   add_executable(sar_windows_wasapi_buffered_cancel_idle_smoke
     tests/realtime/windows_wasapi_buffered_cancel_idle_smoke.cpp
   )
@@ -389,6 +396,8 @@ if(WIN32)
     COMMAND sar_windows_wasapi_fifo_runner_smoke)
   add_test(NAME windows_wasapi_adaptive_capture_smoke
     COMMAND sar_windows_wasapi_adaptive_capture_smoke)
+  add_test(NAME windows_wasapi_adaptive_capture_discontinuity_smoke
+    COMMAND sar_windows_wasapi_adaptive_capture_discontinuity_smoke)
   add_test(NAME windows_wasapi_buffered_cancel_idle_smoke
            COMMAND sar_windows_wasapi_buffered_cancel_idle_smoke)
   add_test(NAME windows_wasapi_loop_preflight_smoke
