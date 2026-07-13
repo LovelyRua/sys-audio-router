@@ -10,7 +10,7 @@ prototype, control session shell, Windows WASAPI stream shell, graph runner,
 realtime worker, render, duplex, and loopback loop wrappers, sample conversion
 helpers, and smoke-test harness are in place.
 
-The next major milestone is the first measured real-device loop:
+The first measured real-device loops now execute this path:
 
 ```text
 WASAPI capture/render stream
@@ -18,6 +18,10 @@ WASAPI capture/render stream
   -> Graph::process
   -> WindowsWasapiRealtimeWorker on an MMCSS thread
 ```
+
+Render-only measurements are strict-healthy, while full-duplex measurements
+still expose independent-device clocking behavior. The next backend milestone
+is render-master scheduling with FIFO waterline control for clock drift.
 
 ## Portable Core
 
@@ -124,6 +128,8 @@ produce an invalid estimate instead of a partial result.
   selection.
 - Default render-endpoint loopback probing and capture stream opening.
 - Shared-mode WASAPI initialization.
+- Windows Audio Engine sample-rate conversion in shared mode, allowing the
+  default 44.1 kHz capture endpoint to run with a 48 kHz render endpoint.
 - Event-driven stream handles.
 - `IAudioRenderClient` and `IAudioCaptureClient` ownership.
 - `IAudioClock` ownership with allocation-free raw position, frequency, and QPC
@@ -150,8 +156,10 @@ capture waits wake promptly without being counted as wait timeouts.
 
 `WindowsWasapiRenderLoop` owns a default render stream, graph runner, and
 realtime worker. It is the current high-level entry point for the first measured
-render-only real-device loop. Its summary includes render stream diagnostics,
-worker counters, and runtime health.
+render-only real-device loop. The single-ended render and loopback paths use
+fixed-capacity realtime FIFOs so device transfer sizes can differ from graph
+block sizes without losing frames. Its summary includes render stream
+diagnostics, worker counters, and runtime health.
 
 `WindowsWasapiDuplexLoop` owns default capture and render streams, a graph
 runner, and a realtime worker. It is the current high-level entry point for the
@@ -171,9 +179,17 @@ transferred-frame summaries, stop wait duration, partial/silent transfer
 counters, capture discontinuity/timestamp counters, last-cycle flags, worker
 counters, and engine diagnostics for lab captures.
 
+Current real-device evidence includes a strict-healthy 48 kHz render run that
+submitted 96,000 frames over two seconds with zero xruns, wait timeouts, or FIFO
+faults. A five-second shared-mode duplex run connected the default 44.1 kHz
+capture endpoint to the 48 kHz render endpoint and processed approximately
+240,000 render-domain frames. That duplex run still reported capture data
+discontinuity and render underflow, so it is validation of the SRC-enabled path,
+not yet evidence of production stability.
+
 ## Current Testing Model
 
-The Windows CTest suite currently has 55 smoke targets. Several tests are
+The Windows CTest suite currently has 56 smoke targets. Several tests are
 synthetic because WinRM sessions may not expose interactive audio endpoints even
 when the VM has a desktop audio stack.
 
@@ -188,7 +204,10 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 
 ## Known Gaps
 
-- No always-on real-device render/capture loop has been measured yet.
+- Full-duplex scheduling is still capture-paced; independent hardware clocks
+  can produce capture discontinuity and render underflow. Render-master
+  scheduling and FIFO waterline drift control are not implemented yet.
+- Multi-hour real-device stability has not been demonstrated yet.
 - Loopback capture is not yet connected to a selectable render destination or
   virtual endpoint.
 - No virtual ASIO driver implementation exists yet.
