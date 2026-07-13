@@ -318,6 +318,10 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     constexpr std::size_t kMaximumCapturePacketsPerCycle = 8;
     const auto packet_limit = render_master_ ? kMaximumCapturePacketsPerCycle : 1;
     for (std::size_t packet_index = 0; packet_index < packet_limit; ++packet_index) {
+      if (render_master_ &&
+          capture_path_->fifo.free_frames() < capture_path_->packet.frames()) {
+        break;
+      }
       capture_path_->packet.clear();
       const auto capture_timeout_ms = render_master_ ? 0 : timeout_ms;
       auto capture_result = capture_stream_->capture_once(
