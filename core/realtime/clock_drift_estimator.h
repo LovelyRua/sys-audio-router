@@ -19,6 +19,11 @@ struct ClockDriftEstimate {
   double nominal_error_ppm = 0.0;
 };
 
+struct ClockRateFeedForward {
+  bool valid = false;
+  double correction_ppm = 0.0;
+};
+
 class ClockDriftEstimator {
  public:
   [[nodiscard]] static ClockDriftEstimate estimate(
@@ -46,6 +51,25 @@ class ClockDriftEstimator {
     }
 
     return {true, observed_rate, error_ppm};
+  }
+
+  [[nodiscard]] static ClockRateFeedForward relative_rate_correction(
+      const ClockDriftEstimate& capture,
+      const ClockDriftEstimate& render) noexcept {
+    if (!capture.valid || !render.valid ||
+        !std::isfinite(capture.observed_sample_rate) ||
+        !std::isfinite(render.observed_sample_rate) ||
+        capture.observed_sample_rate <= 0.0 ||
+        render.observed_sample_rate <= 0.0) {
+      return {};
+    }
+
+    const auto correction_ppm =
+        (capture.observed_sample_rate / render.observed_sample_rate - 1.0) *
+        1'000'000.0;
+    return std::isfinite(correction_ppm)
+               ? ClockRateFeedForward{true, correction_ppm}
+               : ClockRateFeedForward{};
   }
 };
 

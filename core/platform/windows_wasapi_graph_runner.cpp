@@ -7,6 +7,9 @@
 
 namespace sar::platform {
 
+static_assert(std::atomic<double>::is_always_lock_free,
+              "Duplex clock feed-forward must remain lock-free");
+
 namespace {
 
 std::vector<WasapiStreamError> validate_graph_shape(
@@ -297,6 +300,21 @@ void WindowsWasapiGraphRunner::request_stop() noexcept {
   }
 }
 
+void WindowsWasapiGraphRunner::set_capture_clock_feed_forward_ppm(
+    double correction_ppm) noexcept {
+  constexpr double kMaximumCorrectionPpm = 2500.0;
+  const auto bounded = std::isfinite(correction_ppm)
+                           ? std::clamp(correction_ppm,
+                                        -kMaximumCorrectionPpm,
+                                        kMaximumCorrectionPpm)
+                           : 0.0;
+  capture_clock_feed_forward_ppm_.store(bounded, std::memory_order_relaxed);
+}
+
+double WindowsWasapiGraphRunner::capture_clock_feed_forward_ppm() const noexcept {
+  return capture_clock_feed_forward_ppm_.load(std::memory_order_relaxed);
+}
+
 WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics,
@@ -386,8 +404,15 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
   WasapiGraphRunnerStats stats;
   stats.capture_rate_adapter_active = capture_rate_adapter_.has_value();
   if (capture_rate_adapter_) {
-    stats.capture_rate_correction_ppm =
+    stats.capture_clock_feed_forward_ppm =
+        capture_clock_feed_forward_ppm();
+    stats.capture_fifo_correction_ppm =
         capture_rate_adapter_->controller.correction_ppm();
+    stats.capture_rate_correction_ppm = std::clamp(
+        stats.capture_clock_feed_forward_ppm +
+            stats.capture_fifo_correction_ppm,
+        -2500.0,
+        2500.0);
     stats.capture_resampler_ratio = capture_rate_adapter_->ratio;
     stats.capture_rate_adapter_recovering =
         capture_rate_adapter_->recovery_active;
@@ -515,12 +540,20 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
           if (!adapter.ratio_set_for_block) {
             const auto elapsed_seconds =
                 static_cast<double>(graph_block_frames_) / graph.sample_rate();
-            const auto correction_ppm = adapter.controller.update(
+            const auto fifo_correction_ppm = adapter.controller.update(
                 static_cast<double>(capture_path_->fifo.available_frames()),
                 elapsed_seconds);
+            const auto clock_feed_forward_ppm =
+                capture_clock_feed_forward_ppm();
+            const auto correction_ppm = std::clamp(
+                clock_feed_forward_ppm + fifo_correction_ppm,
+                -2500.0,
+                2500.0);
             adapter.ratio = 1.0 / (1.0 + correction_ppm * 0.000001);
             adapter.ratio_set_for_block = true;
             stats.capture_rate_correction_ppm = correction_ppm;
+            stats.capture_clock_feed_forward_ppm = clock_feed_forward_ppm;
+            stats.capture_fifo_correction_ppm = fifo_correction_ppm;
             stats.capture_resampler_ratio = adapter.ratio;
           }
 

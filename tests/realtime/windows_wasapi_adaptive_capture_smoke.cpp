@@ -6,6 +6,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -64,6 +65,13 @@ int main() {
 
   sar::platform::WindowsWasapiGraphRunner runner(
       &capture, &render, 1, 1, 64, 64, 64, 256, true, true);
+  runner.set_capture_clock_feed_forward_ppm(
+      std::numeric_limits<double>::infinity());
+  assert(runner.capture_clock_feed_forward_ppm() == 0.0);
+  runner.set_capture_clock_feed_forward_ppm(3000.0);
+  assert(runner.capture_clock_feed_forward_ppm() == 2500.0);
+  runner.set_capture_clock_feed_forward_ppm(500.0);
+  assert(runner.capture_clock_feed_forward_ppm() == 500.0);
   sar::graph::Graph graph(1, 1, 64, 48000);
   graph.add_node(std::make_unique<sar::graph::PassthroughNode>());
   sar::diagnostics::EngineDiagnostics diagnostics;
@@ -78,6 +86,11 @@ int main() {
   assert(result.stats().capture_resampler_input_frames <= 256);
   assert(result.stats().capture_resampler_output_frames == 64);
   assert(result.stats().capture_rate_correction_ppm > 0.0);
+  assert(result.stats().capture_clock_feed_forward_ppm == 500.0);
+  assert(result.stats().capture_fifo_correction_ppm > 0.0);
+  assert(std::abs(result.stats().capture_rate_correction_ppm -
+                  (result.stats().capture_clock_feed_forward_ppm +
+                   result.stats().capture_fifo_correction_ppm)) < 1.0e-9);
   assert(result.stats().capture_resampler_ratio < 1.0);
   assert(std::isfinite(result.stats().capture_resampler_ratio));
   assert(result.stats().rendered_frames == 64);

@@ -108,6 +108,15 @@ Its wider duplex correction range covers unusually large independent-clock
 error observed in virtualized and commodity Windows audio stacks while the
 portable controller keeps conservative defaults.
 
+The duplex loop also samples native capture and render `IAudioClock` positions
+on a non-realtime control thread every 500 ms. Relative observed-rate error
+becomes a smoothed, slew-limited feed-forward term; the FIFO controller
+continues to correct residual fill error. The graph runner combines both terms
+and clamps final ASRC correction to +/-2500 ppm. Its realtime path performs only
+a lock-free atomic load, while COM calls, sleeping, and filtering remain on the
+observer thread. Three consecutive invalid samples disable feed-forward and
+restore the previous FIFO-only behavior.
+
 ## Platform Layer
 
 `core/platform` contains the platform-facing pieces:
@@ -230,6 +239,14 @@ and six/eight wait timeouts respectively. Both runs transferred about 482,400
 render frames with zero FIFO overflow. Their approximately 1,900 worker cycles
 per run match the combined cadence of two roughly 100 Hz device events rather
 than an unbounded polling loop.
+
+Hardware-clock feed-forward remained valid during a later 30-second duplex run.
+Its final feed-forward was about +125 ppm, while total ASRC correction stayed
+between about -589 and +68 ppm. The run transferred roughly 1.44 million frames
+with zero FIFO overflow, five capture discontinuities, and three render FIFO
+underflow cycles. A preceding 10-second run after feed-forward slew limiting
+reported one discontinuity, three underflow cycles, and a total correction
+range of about -835 to 0 ppm.
 
 ## Current Testing Model
 

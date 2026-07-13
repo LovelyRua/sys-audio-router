@@ -9,6 +9,7 @@
 #include "core/realtime/planar_audio_fifo.h"
 
 #include <cstddef>
+#include <atomic>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -26,6 +27,8 @@ struct WasapiGraphRunnerStats {
   std::uint32_t capture_resampler_output_frames = 0;
   std::uint32_t render_recovery_silence_frames = 0;
   double capture_rate_correction_ppm = 0.0;
+  double capture_clock_feed_forward_ppm = 0.0;
+  double capture_fifo_correction_ppm = 0.0;
   double capture_resampler_ratio = 1.0;
   bool capture_rate_adapter_active = false;
   bool capture_rate_adapter_reset = false;
@@ -92,6 +95,8 @@ class WindowsWasapiGraphRunner {
   [[nodiscard]] WasapiGraphRunnerResult start_streams() noexcept;
   [[nodiscard]] WasapiGraphRunnerResult stop_streams() noexcept;
   void request_stop() noexcept;
+  void set_capture_clock_feed_forward_ppm(double correction_ppm) noexcept;
+  [[nodiscard]] double capture_clock_feed_forward_ppm() const noexcept;
   [[nodiscard]] WasapiGraphRunnerResult process_once(
       graph::Graph& graph,
       diagnostics::EngineDiagnostics& diagnostics,
@@ -141,6 +146,7 @@ class WindowsWasapiGraphRunner {
   std::optional<BufferedPath> capture_path_;
   std::optional<BufferedPath> render_path_;
   std::optional<CaptureRateAdapter> capture_rate_adapter_;
+  std::atomic<double> capture_clock_feed_forward_ppm_ = 0.0;
 };
 
 }  // namespace sar::platform

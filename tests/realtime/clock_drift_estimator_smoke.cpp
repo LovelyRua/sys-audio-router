@@ -19,11 +19,14 @@ int main() {
   using sar::realtime::ClockDomain;
   using sar::realtime::ClockDriftEstimate;
   using sar::realtime::ClockDriftEstimator;
+  using sar::realtime::ClockRateFeedForward;
   using sar::realtime::ClockTimelineSample;
 
   static_assert(std::is_trivially_copyable_v<ClockTimelineSample>);
   static_assert(std::is_trivially_copyable_v<ClockDriftEstimate>);
+  static_assert(std::is_trivially_copyable_v<ClockRateFeedForward>);
   static_assert(noexcept(ClockDriftEstimator::estimate({}, {})));
+  static_assert(noexcept(ClockDriftEstimator::relative_rate_correction({}, {})));
 
   constexpr ClockDomain clock{1, 48000};
   const ClockTimelineSample first{clock, 1'000, 20'000'000};
@@ -65,6 +68,22 @@ int main() {
               .valid);
   assert(!ClockDriftEstimator::estimate(first, {{1, 0}, 49'000, 30'000'000})
               .valid);
+
+  const auto relative_nominal = ClockDriftEstimator::relative_rate_correction(
+      nominal, nominal);
+  assert(relative_nominal.valid);
+  assert(near(relative_nominal.correction_ppm, 0.0, 1.0e-9));
+
+  const auto capture_slow = ClockDriftEstimator::relative_rate_correction(
+      slow, nominal);
+  assert(capture_slow.valid);
+  assert(near(capture_slow.correction_ppm, -1000.0, 1.0e-6));
+
+  const auto shared_offset = ClockDriftEstimator::relative_rate_correction(
+      fast, fast);
+  assert(shared_offset.valid);
+  assert(near(shared_offset.correction_ppm, 0.0, 1.0e-9));
+  assert(!ClockDriftEstimator::relative_rate_correction({}, nominal).valid);
 
   std::cout << "Clock drift estimator smoke test passed\n";
   return 0;

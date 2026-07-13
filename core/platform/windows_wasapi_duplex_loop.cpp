@@ -2,9 +2,15 @@
 
 #include "core/platform/windows_wasapi_loop_preflight.h"
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Objbase.h>
+
 #include <algorithm>
 #include <chrono>
 #include <limits>
+#include <system_error>
 #include <thread>
 #include <utility>
 
@@ -100,6 +106,9 @@ WindowsWasapiDuplexLoop::~WindowsWasapiDuplexLoop() {
 }
 
 WasapiRealtimeWorkerResult WindowsWasapiDuplexLoop::start(std::uint32_t timeout_ms) {
+  stop_clock_observer();
+  runner_.set_capture_clock_feed_forward_ppm(0.0);
+  capture_clock_feed_forward_valid_.store(false, std::memory_order_relaxed);
   capture_clock_baseline_available_ = false;
   render_clock_baseline_available_ = false;
   const auto result = worker_.start(timeout_ms);
@@ -107,6 +116,23 @@ WasapiRealtimeWorkerResult WindowsWasapiDuplexLoop::start(std::uint32_t timeout_
     render_clock_baseline_available_ =
         render_stream_.read_clock(render_clock_baseline_);
     establish_capture_clock_baseline(timeout_ms);
+    if (capture_clock_baseline_available_ && render_clock_baseline_available_) {
+      try {
+        {
+          std::lock_guard lock(clock_observer_mutex_);
+          clock_observer_stop_requested_ = false;
+        }
+        clock_observer_thread_ =
+            std::thread(&WindowsWasapiDuplexLoop::run_clock_observer, this);
+      } catch (const std::system_error& error) {
+        worker_.stop();
+        return WasapiRealtimeWorkerResult::failure({{
+            "clock_observer_thread_start_failed",
+            "WASAPI clock observer thread creation failed: " +
+                std::string(error.what()),
+        }});
+      }
+    }
   }
   return result;
 }
@@ -137,7 +163,121 @@ void WindowsWasapiDuplexLoop::establish_capture_clock_baseline(
 }
 
 void WindowsWasapiDuplexLoop::stop() noexcept {
+  stop_clock_observer();
   worker_.stop();
+}
+
+void WindowsWasapiDuplexLoop::stop_clock_observer() noexcept {
+  {
+    std::lock_guard lock(clock_observer_mutex_);
+    clock_observer_stop_requested_ = true;
+  }
+  clock_observer_condition_.notify_one();
+  if (clock_observer_thread_.joinable()) {
+    clock_observer_thread_.join();
+  }
+}
+
+void WindowsWasapiDuplexLoop::run_clock_observer() noexcept {
+  const auto com_result = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  const auto com_initialized = com_result == S_OK || com_result == S_FALSE;
+  if (!com_initialized && com_result != RPC_E_CHANGED_MODE) {
+    runner_.set_capture_clock_feed_forward_ppm(0.0);
+    capture_clock_feed_forward_valid_.store(false, std::memory_order_relaxed);
+    return;
+  }
+
+  auto previous_capture = capture_clock_baseline_;
+  auto previous_render = render_clock_baseline_;
+  double smoothed_correction_ppm = 0.0;
+  std::uint32_t consecutive_invalid_samples = 0;
+
+  std::unique_lock lock(clock_observer_mutex_);
+  while (!clock_observer_condition_.wait_for(
+      lock,
+      std::chrono::milliseconds(500),
+      [this] { return clock_observer_stop_requested_ || !running(); })) {
+    lock.unlock();
+
+    WasapiClockSnapshot capture;
+    WasapiClockSnapshot render;
+    const auto capture_available = capture_stream_.read_clock(capture);
+    const auto render_available = render_stream_.read_clock(render);
+    auto feed_forward = realtime::ClockRateFeedForward{};
+    if (capture_available && render_available) {
+      const realtime::ClockDomain capture_domain{
+          1, capture_probe().mix_format.sample_rate};
+      const realtime::ClockDomain render_domain{
+          2, render_probe().mix_format.sample_rate};
+      std::uint64_t previous_capture_frames = 0;
+      std::uint64_t capture_frames = 0;
+      std::uint64_t previous_render_frames = 0;
+      std::uint64_t render_frames = 0;
+      if (wasapi_clock_position_to_audio_frames(
+              previous_capture.position,
+              previous_capture.frequency,
+              capture_domain.nominal_sample_rate,
+              previous_capture_frames) &&
+          wasapi_clock_position_to_audio_frames(
+              capture.position,
+              capture.frequency,
+              capture_domain.nominal_sample_rate,
+              capture_frames) &&
+          wasapi_clock_position_to_audio_frames(
+              previous_render.position,
+              previous_render.frequency,
+              render_domain.nominal_sample_rate,
+              previous_render_frames) &&
+          wasapi_clock_position_to_audio_frames(
+              render.position,
+              render.frequency,
+              render_domain.nominal_sample_rate,
+              render_frames)) {
+        const auto capture_drift = realtime::ClockDriftEstimator::estimate(
+            {capture_domain,
+             previous_capture_frames,
+             previous_capture.qpc_position_100ns},
+            {capture_domain, capture_frames, capture.qpc_position_100ns});
+        const auto render_drift = realtime::ClockDriftEstimator::estimate(
+            {render_domain,
+             previous_render_frames,
+             previous_render.qpc_position_100ns},
+            {render_domain, render_frames, render.qpc_position_100ns});
+        feed_forward = realtime::ClockDriftEstimator::relative_rate_correction(
+            capture_drift, render_drift);
+      }
+      previous_capture = capture;
+      previous_render = render;
+    }
+
+    if (feed_forward.valid &&
+        std::abs(feed_forward.correction_ppm) <= 2500.0) {
+      constexpr double kSmoothingFactor = 0.2;
+      constexpr double kMaximumSlewPerObservationPpm = 125.0;
+      const auto filtered_correction_ppm =
+          smoothed_correction_ppm +
+          kSmoothingFactor *
+              (feed_forward.correction_ppm - smoothed_correction_ppm);
+      const auto correction_step = std::clamp(
+          filtered_correction_ppm - smoothed_correction_ppm,
+          -kMaximumSlewPerObservationPpm,
+          kMaximumSlewPerObservationPpm);
+      smoothed_correction_ppm += correction_step;
+      consecutive_invalid_samples = 0;
+      runner_.set_capture_clock_feed_forward_ppm(smoothed_correction_ppm);
+      capture_clock_feed_forward_valid_.store(true, std::memory_order_relaxed);
+    } else if (++consecutive_invalid_samples >= 3) {
+      runner_.set_capture_clock_feed_forward_ppm(0.0);
+      capture_clock_feed_forward_valid_.store(false, std::memory_order_relaxed);
+      smoothed_correction_ppm = 0.0;
+    }
+
+    lock.lock();
+  }
+
+  if (com_initialized) {
+    CoUninitialize();
+  }
 }
 
 bool WindowsWasapiDuplexLoop::running() const noexcept {
@@ -177,6 +317,10 @@ WasapiDuplexLoopSummary WindowsWasapiDuplexLoop::summary() const {
       &diagnostics_);
   result.capture_clock_available = capture_stream_.read_clock(result.capture_clock);
   result.render_clock_available = render_stream_.read_clock(result.render_clock);
+  result.capture_clock_feed_forward_ppm =
+      runner_.capture_clock_feed_forward_ppm();
+  result.capture_clock_feed_forward_valid =
+      capture_clock_feed_forward_valid_.load(std::memory_order_relaxed);
   if (capture_clock_baseline_available_ && result.capture_clock_available) {
     const realtime::ClockDomain domain{1, capture_probe().mix_format.sample_rate};
     std::uint64_t baseline_frames = 0;

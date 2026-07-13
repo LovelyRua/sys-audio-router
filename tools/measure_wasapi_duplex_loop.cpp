@@ -115,6 +115,10 @@ int main(int argc, char** argv) {
             << " render_drift_valid=" << (loop_summary.render_drift.valid ? 1 : 0)
             << " render_observed_rate=" << loop_summary.render_drift.observed_sample_rate
             << " render_error_ppm=" << loop_summary.render_drift.nominal_error_ppm
+            << " capture_feed_forward_valid="
+            << (loop_summary.capture_clock_feed_forward_valid ? 1 : 0)
+            << " capture_feed_forward_ppm="
+            << loop_summary.capture_clock_feed_forward_ppm
             << " frame_balance=" << loop_summary.frame_balance << '\n';
   std::cout << "Duplex clocks\n";
   std::cout << "  Capture available: "
@@ -141,6 +145,11 @@ int main(int argc, char** argv) {
             << loop_summary.render_drift.observed_sample_rate << '\n';
   std::cout << "  Render nominal error ppm: "
             << loop_summary.render_drift.nominal_error_ppm << '\n';
+  std::cout << "  Capture clock feed-forward valid: "
+            << (loop_summary.capture_clock_feed_forward_valid ? "yes" : "no")
+            << '\n';
+  std::cout << "  Capture clock feed-forward ppm: "
+            << loop_summary.capture_clock_feed_forward_ppm << '\n';
   std::cout << "  Captured-rendered frame balance: " << loop_summary.frame_balance
             << '\n';
   sar::tools::print_wasapi_runtime_summary(std::cout, loop_summary.runtime);

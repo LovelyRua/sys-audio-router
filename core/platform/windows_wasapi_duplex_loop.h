@@ -8,8 +8,12 @@
 #include "core/platform/windows_wasapi_stream.h"
 
 #include <cstddef>
+#include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <memory>
+#include <mutex>
+#include <thread>
 #include <vector>
 
 namespace sar::platform {
@@ -38,8 +42,10 @@ struct WasapiDuplexLoopSummary {
   realtime::ClockDriftEstimate capture_drift;
   realtime::ClockDriftEstimate render_drift;
   std::int64_t frame_balance = 0;
+  double capture_clock_feed_forward_ppm = 0.0;
   bool capture_clock_available = false;
   bool render_clock_available = false;
+  bool capture_clock_feed_forward_valid = false;
 };
 
 class WindowsWasapiDuplexLoop {
@@ -71,6 +77,8 @@ class WindowsWasapiDuplexLoop {
                           graph::Graph& graph,
                           diagnostics::EngineDiagnostics& diagnostics);
   void establish_capture_clock_baseline(std::uint32_t timeout_ms) noexcept;
+  void run_clock_observer() noexcept;
+  void stop_clock_observer() noexcept;
 
   WindowsWasapiStream capture_stream_;
   WindowsWasapiStream render_stream_;
@@ -81,6 +89,11 @@ class WindowsWasapiDuplexLoop {
   WasapiClockSnapshot render_clock_baseline_;
   bool capture_clock_baseline_available_ = false;
   bool render_clock_baseline_available_ = false;
+  std::atomic_bool capture_clock_feed_forward_valid_ = false;
+  std::mutex clock_observer_mutex_;
+  std::condition_variable clock_observer_condition_;
+  bool clock_observer_stop_requested_ = false;
+  std::thread clock_observer_thread_;
 };
 
 class WasapiDuplexLoopOpenResult {
