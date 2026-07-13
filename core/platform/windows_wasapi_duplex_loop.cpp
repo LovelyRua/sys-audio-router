@@ -176,14 +176,17 @@ WasapiDuplexLoopOpenResult::WasapiDuplexLoopOpenResult(
 WasapiDuplexLoopOpenResult open_default_wasapi_duplex_loop(
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics) {
-  auto capture_result = open_default_wasapi_stream_shell(WasapiStreamDirection::Capture);
-  if (!capture_result.ok()) {
-    return WasapiDuplexLoopOpenResult::failure(convert_errors(capture_result.errors()));
-  }
-
   auto render_result = open_default_wasapi_stream_shell(WasapiStreamDirection::Render);
   if (!render_result.ok()) {
     return WasapiDuplexLoopOpenResult::failure(convert_errors(render_result.errors()));
+  }
+
+  auto capture_result = open_default_wasapi_stream_shell(
+      WasapiStreamDirection::Capture,
+      WasapiStreamMode::Endpoint,
+      render_result.stream().probe().mix_format.sample_rate);
+  if (!capture_result.ok()) {
+    return WasapiDuplexLoopOpenResult::failure(convert_errors(capture_result.errors()));
   }
 
   if (!compatible_wasapi_duplex_sample_rates(capture_result.stream().probe(),

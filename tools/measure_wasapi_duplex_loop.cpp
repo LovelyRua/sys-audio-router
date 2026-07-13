@@ -58,16 +58,10 @@ int main(int argc, char** argv) {
   std::cout << "  Duration ms: " << options.duration_ms << '\n';
   std::cout << "  Timeout ms: " << options.timeout_ms << '\n';
 
-  if (capture_probe.mix_format.sample_rate != render_probe.mix_format.sample_rate) {
-    std::cerr << "duplex_sample_rate_mismatch: Default WASAPI capture and render "
-                 "streams need a sample-rate adapter before duplex use.\n";
-    return 1;
-  }
-
   const auto channels =
       std::max(capture_probe.mix_format.channels, render_probe.mix_format.channels);
   const auto frames = std::max(capture_probe.buffer_frames, render_probe.buffer_frames);
-  sar::graph::Graph graph(1, channels, frames, capture_probe.mix_format.sample_rate);
+  sar::graph::Graph graph(1, channels, frames, render_probe.mix_format.sample_rate);
   graph.add_node(std::make_unique<sar::graph::GainNode>(0.0F));
   sar::diagnostics::EngineDiagnostics diagnostics;
 

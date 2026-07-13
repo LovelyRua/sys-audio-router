@@ -152,10 +152,12 @@ class WindowsWasapiStream final : public WasapiStreamIo {
 
  private:
   friend WasapiStreamOpenResult open_wasapi_stream_shell(
-      WasapiStreamProbe probe);
+      WasapiStreamProbe probe,
+      std::uint32_t requested_sample_rate);
   friend WasapiStreamOpenResult open_default_wasapi_stream_shell(
       WasapiStreamDirection direction,
-      WasapiStreamMode mode);
+      WasapiStreamMode mode,
+      std::uint32_t requested_sample_rate);
 
   struct Impl;
 
@@ -185,9 +187,11 @@ class WasapiStreamOpenResult {
 
 [[nodiscard]] WasapiStreamOpenResult open_default_wasapi_stream_shell(
     WasapiStreamDirection direction,
-    WasapiStreamMode mode = WasapiStreamMode::Endpoint);
+    WasapiStreamMode mode = WasapiStreamMode::Endpoint,
+    std::uint32_t requested_sample_rate = 0);
 
 [[nodiscard]] WasapiStreamOpenResult open_wasapi_stream_shell(
-    WasapiStreamProbe probe);
+    WasapiStreamProbe probe,
+    std::uint32_t requested_sample_rate = 0);
 
 }  // namespace sar::platform

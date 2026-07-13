@@ -827,7 +827,9 @@ WasapiStreamOpenResult::WasapiStreamOpenResult(WindowsWasapiStream stream,
                                                std::vector<WasapiStreamError> errors)
     : stream_(std::move(stream)), errors_(std::move(errors)) {}
 
-WasapiStreamOpenResult open_wasapi_stream_shell(WasapiStreamProbe probe) {
+WasapiStreamOpenResult open_wasapi_stream_shell(
+    WasapiStreamProbe probe,
+    std::uint32_t requested_sample_rate) {
   WindowsWasapiStream stream;
   auto open_result = stream.open(std::move(probe));
   if (!open_result.ok()) {
@@ -915,7 +917,26 @@ WasapiStreamOpenResult open_wasapi_stream_shell(WasapiStreamProbe probe) {
     });
   }
 
+  const bool use_audio_engine_resampler =
+      requested_sample_rate != 0 &&
+      requested_sample_rate != impl->wave_format->nSamplesPerSec;
+  if (use_audio_engine_resampler) {
+    if (mode != WasapiStreamMode::Endpoint) {
+      return WasapiStreamOpenResult::failure({{
+          "wasapi_resample_mode_unsupported",
+          "WASAPI sample-rate conversion is only supported for endpoint streams.",
+      }});
+    }
+    impl->wave_format->nSamplesPerSec = requested_sample_rate;
+    impl->wave_format->nAvgBytesPerSec =
+        requested_sample_rate * impl->wave_format->nBlockAlign;
+  }
+
   const auto stream_flags = AUDCLNT_STREAMFLAGS_EVENTCALLBACK |
+                            (use_audio_engine_resampler
+                                 ? AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM |
+                                       AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY
+                                 : 0) |
                             (mode == WasapiStreamMode::Loopback
                                  ? AUDCLNT_STREAMFLAGS_LOOPBACK
                                  : 0);
@@ -946,13 +967,19 @@ WasapiStreamOpenResult open_wasapi_stream_shell(WasapiStreamProbe probe) {
         },
     });
   }
-  if (native_buffer_frames != stream.probe().buffer_frames) {
+  if (!use_audio_engine_resampler &&
+      native_buffer_frames != stream.probe().buffer_frames) {
     return WasapiStreamOpenResult::failure({
         {
             "wasapi_probe_buffer_changed",
             "WASAPI device buffer size changed after it was probed.",
         },
     });
+  }
+  if (use_audio_engine_resampler) {
+    stream.probe_.mix_format.sample_rate = requested_sample_rate;
+    stream.probe_.mix_format.frames_per_block = native_buffer_frames;
+    stream.probe_.buffer_frames = native_buffer_frames;
   }
 
   const auto clock_result = impl->audio_client->GetService(
@@ -1067,12 +1094,13 @@ WasapiStreamOpenResult open_wasapi_stream_shell(WasapiStreamProbe probe) {
 }
 
 WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection direction,
-                                                        WasapiStreamMode mode) {
+                                                        WasapiStreamMode mode,
+                                                        std::uint32_t requested_sample_rate) {
   auto probe_result = probe_default_wasapi_stream(direction, mode);
   if (!probe_result.ok()) {
     return WasapiStreamOpenResult::failure(convert_probe_errors(probe_result.errors()));
   }
-  return open_wasapi_stream_shell(probe_result.probe());
+  return open_wasapi_stream_shell(probe_result.probe(), requested_sample_rate);
 }
 
 }  // namespace sar::platform
