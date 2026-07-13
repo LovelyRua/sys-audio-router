@@ -112,6 +112,7 @@ class WindowsWasapiRealtimeWorker {
   void run(std::uint32_t timeout_ms) noexcept;
   void publish_startup_result(bool succeeded) noexcept;
   void set_errors(std::vector<WasapiRealtimeWorkerError> errors);
+  void append_errors(std::vector<WasapiRealtimeWorkerError> errors);
 
   WindowsWasapiGraphRunner& runner_;
   graph::Graph& graph_;

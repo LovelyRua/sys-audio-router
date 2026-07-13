@@ -500,9 +500,7 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
   const auto stop_result = runner_.stop_streams();
   if (!stop_result.ok()) {
     stream_stop_error_cycles_.fetch_add(1);
-    if (last_errors().empty()) {
-      set_errors(convert_errors(stop_result.errors()));
-    }
+    append_errors(convert_errors(stop_result.errors()));
   }
 
   running_.store(false);
@@ -521,6 +519,14 @@ void WindowsWasapiRealtimeWorker::set_errors(
     std::vector<WasapiRealtimeWorkerError> errors) {
   std::lock_guard lock(errors_mutex_);
   last_errors_ = std::move(errors);
+}
+
+void WindowsWasapiRealtimeWorker::append_errors(
+    std::vector<WasapiRealtimeWorkerError> errors) {
+  std::lock_guard lock(errors_mutex_);
+  last_errors_.insert(last_errors_.end(),
+                      std::make_move_iterator(errors.begin()),
+                      std::make_move_iterator(errors.end()));
 }
 
 }  // namespace sar::platform

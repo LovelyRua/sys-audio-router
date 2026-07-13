@@ -524,6 +524,48 @@ int main() {
   }
 
   {
+    sar::tests::ScriptedWasapiStream capture(
+        make_adaptive_probe(sar::platform::WasapiStreamDirection::Capture));
+    capture.enqueue_capture({
+        .status = sar::platform::WasapiStreamIoStatus::Failed,
+        .errors = {{"synthetic_capture_failed", "Synthetic capture failure."}},
+    });
+    capture.set_stop_result(sar::platform::WasapiStreamResult::failure({
+        {"synthetic_stop_after_process_failed",
+         "Synthetic stop failure after process failure."},
+    }));
+
+    sar::platform::WindowsWasapiGraphRunner runner(&capture, nullptr, 1, 64);
+    sar::graph::Graph graph(17, 1, 64, 48000);
+    graph.add_node(std::make_unique<sar::graph::PassthroughNode>());
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    sar::platform::WindowsWasapiRealtimeWorker worker(runner, graph, diagnostics);
+
+    const auto start_result = worker.start(1);
+    if (const auto failure =
+            expect(start_result.ok(), "Expected combined-failure worker start")) {
+      return failure;
+    }
+    for (int attempt = 0; attempt < 100 && worker.running(); ++attempt) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    worker.stop();
+
+    const auto errors = worker.last_errors();
+    if (const auto failure = expect(
+            has_error_code(errors, "synthetic_capture_failed") &&
+                has_error_code(errors, "synthetic_stop_after_process_failed"),
+            "Expected process and cleanup errors to remain observable")) {
+      return failure;
+    }
+    if (const auto failure = expect(worker.stats().process_error_cycles == 1 &&
+                                        worker.stats().stream_stop_error_cycles == 1,
+                                    "Expected one process and one stop error")) {
+      return failure;
+    }
+  }
+
+  {
     sar::platform::WindowsWasapiStream render_stream;
     sar::platform::WindowsWasapiGraphRunner runner(nullptr, &render_stream, 2, 16);
     sar::graph::Graph graph(13, 2, 16);
