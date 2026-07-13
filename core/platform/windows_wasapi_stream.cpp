@@ -520,19 +520,25 @@ WasapiStreamResult WindowsWasapiStream::stop() noexcept {
     });
   }
 
-  if (impl_ && impl_->audio_client) {
-    const auto stop_result = impl_->audio_client->Stop();
-    if (FAILED(stop_result)) {
-      return WasapiStreamResult::failure({
-          {
-              "wasapi_stop_failed",
-              "WASAPI audio client stop failed with " + hresult_hex(stop_result) + ".",
-          },
-      });
-    }
-  }
+  const auto stop_result = impl_ && impl_->audio_client
+                               ? impl_->audio_client->Stop()
+                               : S_OK;
+  return complete_stop(static_cast<std::int32_t>(stop_result));
+}
 
+WasapiStreamResult WindowsWasapiStream::complete_stop(
+    std::int32_t stop_result) noexcept {
   state_ = WasapiStreamState::Open;
+  const auto native_result = static_cast<HRESULT>(stop_result);
+  if (FAILED(native_result)) {
+    return WasapiStreamResult::failure({
+        {
+            "wasapi_stop_failed",
+            "WASAPI audio client stop failed with " +
+                hresult_hex(native_result) + ".",
+        },
+    });
+  }
   return WasapiStreamResult::success();
 }
 

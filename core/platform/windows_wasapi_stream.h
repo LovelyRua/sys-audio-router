@@ -159,6 +159,7 @@ class WindowsWasapiStream final : public WasapiStreamIo {
   [[nodiscard]] WasapiStreamDiagnostics diagnostics() const noexcept;
 
  private:
+  friend struct WindowsWasapiStreamTestAccess;
   friend WasapiDuplexEventWaitStatus wait_for_wasapi_duplex_events(
       WindowsWasapiStream& capture_stream,
       WindowsWasapiStream& render_stream,
@@ -172,6 +173,9 @@ class WindowsWasapiStream final : public WasapiStreamIo {
       std::uint32_t requested_sample_rate);
 
   struct Impl;
+
+  [[nodiscard]] WasapiStreamResult complete_stop(
+      std::int32_t stop_result) noexcept;
 
   WasapiStreamState state_ = WasapiStreamState::Closed;
   WasapiStreamProbe probe_;

@@ -5,6 +5,17 @@
 #include <string>
 #include <utility>
 
+namespace sar::platform {
+
+struct WindowsWasapiStreamTestAccess {
+  static WasapiStreamResult complete_stop(WindowsWasapiStream& stream,
+                                          std::int32_t stop_result) noexcept {
+    return stream.complete_stop(stop_result);
+  }
+};
+
+}  // namespace sar::platform
+
 namespace {
 
 bool has_error_code(const sar::platform::WasapiStreamResult& result,
@@ -751,6 +762,42 @@ int main() {
     }
     if (const auto failure = expect(stream.state() == sar::platform::WasapiStreamState::Open,
                                     "Expected stop-open stream to stay open")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::platform::WindowsWasapiStream stream;
+    if (const auto failure = expect(stream.open(make_probe()).ok() &&
+                                        stream.start().ok(),
+                                    "Expected stream start before failed stop")) {
+      return failure;
+    }
+
+    constexpr auto failed_hresult = static_cast<std::int32_t>(0x80004005u);
+    const auto stop_result =
+        sar::platform::WindowsWasapiStreamTestAccess::complete_stop(
+            stream, failed_hresult);
+    if (const auto failure = expect(!stop_result.ok(),
+                                    "Expected synthetic native stop failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(stop_result, "wasapi_stop_failed"),
+                                    "Expected wasapi_stop_failed error")) {
+      return failure;
+    }
+    if (const auto failure = expect(stream.state() ==
+                                        sar::platform::WasapiStreamState::Open,
+                                    "Expected failed stop to clear started state")) {
+      return failure;
+    }
+    if (const auto failure = expect(stream.start().ok(),
+                                    "Expected restart attempt after failed stop")) {
+      return failure;
+    }
+    if (const auto failure = expect(stream.state() ==
+                                        sar::platform::WasapiStreamState::Started,
+                                    "Expected restart after failed stop")) {
       return failure;
     }
   }
