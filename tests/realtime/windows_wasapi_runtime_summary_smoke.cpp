@@ -860,8 +860,8 @@ int main() {
         sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
     if (const auto failure =
             expect_summary(summary,
-                           sar::platform::WasapiRuntimeHealth::Degraded,
-                           "capture_partial_buffer",
+                           sar::platform::WasapiRuntimeHealth::Healthy,
+                           "running",
                            "Expected capture partial summary")) {
       return failure;
     }
@@ -871,8 +871,8 @@ int main() {
     summary = sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
     if (const auto failure =
             expect_summary(summary,
-                           sar::platform::WasapiRuntimeHealth::Degraded,
-                           "render_partial_buffer",
+                           sar::platform::WasapiRuntimeHealth::Healthy,
+                           "running",
                            "Expected render partial summary")) {
       return failure;
     }
@@ -881,8 +881,8 @@ int main() {
     summary = sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
     if (const auto failure =
             expect_summary(summary,
-                           sar::platform::WasapiRuntimeHealth::Degraded,
-                           "partial_buffer",
+                           sar::platform::WasapiRuntimeHealth::Healthy,
+                           "running",
                            "Expected combined partial summary")) {
       return failure;
     }
@@ -905,9 +905,48 @@ int main() {
     summary = sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);
     if (const auto failure =
             expect_summary(summary,
-                           sar::platform::WasapiRuntimeHealth::Degraded,
-                           "idle_cycle",
+                           sar::platform::WasapiRuntimeHealth::Healthy,
+                           "running",
                            "Expected idle summary")) {
+      return failure;
+    }
+  }
+
+  {
+    const auto stats = make_active_stats();
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    diagnostics.capture_fifo_overflow_cycles = 1;
+    auto summary = sar::platform::summarize_wasapi_runtime(
+        stats, {}, nullptr, nullptr, &diagnostics);
+    if (const auto failure =
+            expect_summary(summary,
+                           sar::platform::WasapiRuntimeHealth::Degraded,
+                           "capture_fifo_overflow",
+                           "Expected capture FIFO overflow summary")) {
+      return failure;
+    }
+
+    diagnostics.capture_fifo_overflow_cycles = 0;
+    diagnostics.render_fifo_overflow_cycles = 1;
+    summary = sar::platform::summarize_wasapi_runtime(
+        stats, {}, nullptr, nullptr, &diagnostics);
+    if (const auto failure =
+            expect_summary(summary,
+                           sar::platform::WasapiRuntimeHealth::Degraded,
+                           "render_fifo_overflow",
+                           "Expected render FIFO overflow summary")) {
+      return failure;
+    }
+
+    diagnostics.render_fifo_overflow_cycles = 0;
+    diagnostics.render_fifo_underflow_cycles = 1;
+    summary = sar::platform::summarize_wasapi_runtime(
+        stats, {}, nullptr, nullptr, &diagnostics);
+    if (const auto failure =
+            expect_summary(summary,
+                           sar::platform::WasapiRuntimeHealth::Degraded,
+                           "render_fifo_underflow",
+                           "Expected render FIFO underflow summary")) {
       return failure;
     }
   }

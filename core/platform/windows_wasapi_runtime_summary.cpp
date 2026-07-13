@@ -268,6 +268,27 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
     return summary;
   }
 
+  if (summary.capture_fifo_overflow_cycles > 0) {
+    summary.health = WasapiRuntimeHealth::Degraded;
+    summary.reason_code = "capture_fifo_overflow";
+    summary.reason = "Captured audio was dropped because the capture FIFO was full.";
+    return summary;
+  }
+
+  if (summary.render_fifo_overflow_cycles > 0) {
+    summary.health = WasapiRuntimeHealth::Degraded;
+    summary.reason_code = "render_fifo_overflow";
+    summary.reason = "Rendered audio was dropped because the render FIFO was full.";
+    return summary;
+  }
+
+  if (summary.render_fifo_underflow_cycles > 0) {
+    summary.health = WasapiRuntimeHealth::Degraded;
+    summary.reason_code = "render_fifo_underflow";
+    summary.reason = "The render FIFO did not contain audio when the device requested it.";
+    return summary;
+  }
+
   if (stats.xrun_count > 0) {
     summary.health = WasapiRuntimeHealth::Degraded;
     summary.reason_code = "engine_xrun";
@@ -297,32 +318,6 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
       summary.reason_code = "wait_timeout";
       summary.reason = "One or more WASAPI event waits timed out.";
     }
-    return summary;
-  }
-
-  if (stats.capture_partial_cycles > 0 || stats.render_partial_cycles > 0) {
-    summary.health = WasapiRuntimeHealth::Degraded;
-    if (stats.capture_partial_cycles > 0 && stats.render_partial_cycles == 0) {
-      summary.reason_code = "capture_partial_buffer";
-      summary.reason =
-          "One or more WASAPI capture cycles transferred fewer frames than requested.";
-    } else if (stats.render_partial_cycles > 0 &&
-               stats.capture_partial_cycles == 0) {
-      summary.reason_code = "render_partial_buffer";
-      summary.reason =
-          "One or more WASAPI render cycles transferred fewer frames than requested.";
-    } else {
-      summary.reason_code = "partial_buffer";
-      summary.reason =
-          "One or more WASAPI cycles transferred fewer frames than requested.";
-    }
-    return summary;
-  }
-
-  if (stats.idle_cycles > 0) {
-    summary.health = WasapiRuntimeHealth::Degraded;
-    summary.reason_code = "idle_cycle";
-    summary.reason = "One or more worker cycles completed without full graph processing.";
     return summary;
   }
 
