@@ -80,7 +80,11 @@ WindowsWasapiLoopbackLoop::WindowsWasapiLoopbackLoop(
       runner_(&capture_stream_,
               nullptr,
               capture_stream_.probe().mix_format.channels,
-              capture_stream_.probe().buffer_frames),
+              capture_stream_.probe().mix_format.channels,
+              graph.frames(),
+              capture_stream_.probe().buffer_frames,
+              0,
+              graph.frames() + capture_stream_.probe().buffer_frames),
       worker_(runner_, graph, diagnostics) {}
 
 WasapiLoopbackLoopOpenResult WasapiLoopbackLoopOpenResult::success(

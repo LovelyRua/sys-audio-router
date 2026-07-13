@@ -80,7 +80,11 @@ WindowsWasapiRenderLoop::WindowsWasapiRenderLoop(
       runner_(nullptr,
               &render_stream_,
               render_stream_.probe().mix_format.channels,
-              render_stream_.probe().buffer_frames),
+              render_stream_.probe().mix_format.channels,
+              graph.frames(),
+              0,
+              render_stream_.probe().buffer_frames,
+              graph.frames() + render_stream_.probe().buffer_frames),
       worker_(runner_, graph, diagnostics) {}
 
 WasapiRenderLoopOpenResult WasapiRenderLoopOpenResult::success(
