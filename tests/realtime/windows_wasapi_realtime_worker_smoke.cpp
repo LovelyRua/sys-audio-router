@@ -463,6 +463,53 @@ int main() {
   }
 
   {
+    sar::tests::ScriptedWasapiStream capture(
+        make_adaptive_probe(sar::platform::WasapiStreamDirection::Capture));
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Cancelled});
+    capture.set_stop_result(sar::platform::WasapiStreamResult::failure({
+        {"synthetic_stop_failed", "Synthetic capture stream stop failure."},
+    }));
+
+    sar::platform::WindowsWasapiGraphRunner runner(&capture, nullptr, 1, 64);
+    sar::graph::Graph graph(16, 1, 64, 48000);
+    graph.add_node(std::make_unique<sar::graph::PassthroughNode>());
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    sar::platform::WindowsWasapiRealtimeWorker worker(runner, graph, diagnostics);
+
+    const auto start_result = worker.start(1);
+    if (const auto failure =
+            expect(start_result.ok(), "Expected stop-failure worker start success")) {
+      return failure;
+    }
+    for (int attempt = 0; attempt < 100 && worker.running(); ++attempt) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    worker.stop();
+
+    if (const auto failure = expect(!worker.running(),
+                                    "Expected stop-failure worker to finish")) {
+      return failure;
+    }
+    if (const auto failure = expect(capture.stop_calls() == 1,
+                                    "Expected one capture stream stop attempt")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            has_error_code(worker.last_errors(), "synthetic_stop_failed"),
+            "Expected worker to preserve the stream stop failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(worker.stats().stream_stop_error_cycles == 1,
+                                    "Expected one stream stop error cycle")) {
+      return failure;
+    }
+    if (const auto failure = expect(worker.stats().stream_wait_cancellation_cycles == 1,
+                                    "Expected bounded cancellation before stop failure")) {
+      return failure;
+    }
+  }
+
+  {
     sar::platform::WindowsWasapiStream render_stream;
     sar::platform::WindowsWasapiGraphRunner runner(nullptr, &render_stream, 2, 16);
     sar::graph::Graph graph(13, 2, 16);
