@@ -343,6 +343,12 @@ add_executable(sar_fifo_waterline_controller_smoke
 
 target_link_libraries(sar_fifo_waterline_controller_smoke PRIVATE sar_core)
 
+add_executable(sar_fifo_waterline_gap_simulation_smoke
+  tests/realtime/fifo_waterline_discontinuity_simulation_smoke.cpp
+)
+
+target_link_libraries(sar_fifo_waterline_gap_simulation_smoke PRIVATE sar_core)
+
 add_executable(sar_adaptive_resampler_smoke
   tests/realtime/adaptive_resampler_smoke.cpp
 )
@@ -484,6 +490,8 @@ add_test(NAME audio_block_timeline_smoke COMMAND sar_audio_block_timeline_smoke)
 add_test(NAME clock_drift_estimator_smoke COMMAND sar_clock_drift_estimator_smoke)
 add_test(NAME planar_audio_fifo_smoke COMMAND sar_planar_audio_fifo_smoke)
 add_test(NAME fifo_waterline_controller_smoke COMMAND sar_fifo_waterline_controller_smoke)
+add_test(NAME fifo_waterline_gap_simulation_smoke
+  COMMAND sar_fifo_waterline_gap_simulation_smoke)
 add_test(NAME adaptive_resampler_smoke COMMAND sar_adaptive_resampler_smoke)
 add_test(NAME adaptive_resampler_streaming_smoke
   COMMAND sar_adaptive_resampler_streaming_smoke)

@@ -217,6 +217,25 @@ const realtime::AudioBuffer& WindowsWasapiGraphRunner::output_buffer() const noe
 }
 
 WasapiGraphRunnerResult WindowsWasapiGraphRunner::start_streams() noexcept {
+  if (capture_path_) {
+    capture_path_->fifo.clear();
+  }
+  if (render_path_) {
+    render_path_->fifo.clear();
+    if (render_master_) {
+      output_.clear();
+      static_cast<void>(render_path_->fifo.push(output_, graph_block_frames_));
+    }
+  }
+  if (capture_rate_adapter_) {
+    capture_rate_adapter_->resampler.reset();
+    capture_rate_adapter_->controller.reset();
+    capture_rate_adapter_->output_frames_ready = 0;
+    capture_rate_adapter_->ratio = 1.0;
+    capture_rate_adapter_->ratio_set_for_block = false;
+    capture_rate_adapter_->primed = false;
+  }
+
   if (capture_stream_ != nullptr) {
     auto result = capture_stream_->start();
     if (!result.ok()) {
@@ -413,9 +432,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
         if (capture_rate_adapter_) {
           capture_path_->fifo.clear();
           capture_rate_adapter_->resampler.reset();
-          capture_rate_adapter_->controller.reset();
           capture_rate_adapter_->output_frames_ready = 0;
-          capture_rate_adapter_->ratio = 1.0;
           capture_rate_adapter_->ratio_set_for_block = false;
           capture_rate_adapter_->primed = false;
           stats.capture_rate_adapter_reset = true;
@@ -461,7 +478,6 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
           if (capture_path_->fifo.available_frames() < adapter.target_fill_frames) {
             break;
           }
-          adapter.controller.reset();
           adapter.primed = true;
         }
 
