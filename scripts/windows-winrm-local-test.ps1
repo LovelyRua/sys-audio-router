@@ -35,8 +35,12 @@ if ($LASTEXITCODE -ne 0) {
   throw "git archive failed with exit code $LASTEXITCODE."
 }
 
+$credentialUserName = $UserName
+if ($credentialUserName -notmatch '[\\@]') {
+  $credentialUserName = ".\$credentialUserName"
+}
 $securePassword = ConvertTo-SecureString $Password -AsPlainText -Force
-$credential = [pscredential]::new($UserName, $securePassword)
+$credential = [pscredential]::new($credentialUserName, $securePassword)
 $session = $null
 
 try {

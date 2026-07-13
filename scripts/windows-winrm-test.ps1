@@ -8,8 +8,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$credentialUserName = $UserName
+if ($credentialUserName -notmatch '[\\@]') {
+  $credentialUserName = ".\$credentialUserName"
+}
 $securePassword = ConvertTo-SecureString $Password -AsPlainText -Force
-$credential = [pscredential]::new($UserName, $securePassword)
+$credential = [pscredential]::new($credentialUserName, $securePassword)
 $safeSlot = ""
 if (-not [string]::IsNullOrWhiteSpace($Slot)) {
   $safeSlot = ($Slot -replace '[^A-Za-z0-9_.-]', '-').Trim('.-_')
