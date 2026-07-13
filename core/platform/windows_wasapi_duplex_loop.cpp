@@ -150,11 +150,11 @@ WasapiDuplexLoopSummary WindowsWasapiDuplexLoop::summary() const {
     std::uint64_t current_frames = 0;
     if (wasapi_clock_position_to_audio_frames(capture_clock_baseline_.position,
                                               capture_clock_baseline_.frequency,
-                                              domain.sample_rate,
+                                              domain.nominal_sample_rate,
                                               baseline_frames) &&
         wasapi_clock_position_to_audio_frames(result.capture_clock.position,
                                               result.capture_clock.frequency,
-                                              domain.sample_rate,
+                                              domain.nominal_sample_rate,
                                               current_frames)) {
       result.capture_drift = realtime::ClockDriftEstimator::estimate(
           {domain, baseline_frames, capture_clock_baseline_.qpc_position_100ns},
@@ -167,11 +167,11 @@ WasapiDuplexLoopSummary WindowsWasapiDuplexLoop::summary() const {
     std::uint64_t current_frames = 0;
     if (wasapi_clock_position_to_audio_frames(render_clock_baseline_.position,
                                               render_clock_baseline_.frequency,
-                                              domain.sample_rate,
+                                              domain.nominal_sample_rate,
                                               baseline_frames) &&
         wasapi_clock_position_to_audio_frames(result.render_clock.position,
                                               result.render_clock.frequency,
-                                              domain.sample_rate,
+                                              domain.nominal_sample_rate,
                                               current_frames)) {
       result.render_drift = realtime::ClockDriftEstimator::estimate(
           {domain, baseline_frames, render_clock_baseline_.qpc_position_100ns},
