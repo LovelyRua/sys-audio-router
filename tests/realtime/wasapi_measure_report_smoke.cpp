@@ -115,6 +115,8 @@ sar::platform::WasapiRealtimeWorkerStats make_stats() {
   stats.capture_resampler_input_frames = 950;
   stats.capture_resampler_output_frames = 940;
   stats.capture_rate_correction_ppm = 12.5;
+  stats.capture_clock_feed_forward_ppm = 4.25;
+  stats.capture_fifo_correction_ppm = 8.25;
   stats.capture_resampler_ratio = 0.9999875;
   stats.capture_rate_adapter_active = true;
   stats.capture_rate_adapter_recovering = true;
@@ -375,6 +377,8 @@ int main() {
             expect(contains(text, "capture_resampler_input_frames=950") &&
                        contains(text, "capture_resampler_output_frames=940") &&
                        contains(text, "capture_rate_correction_ppm=12.5") &&
+                       contains(text, "capture_clock_feed_forward_ppm=4.25") &&
+                       contains(text, "capture_fifo_correction_ppm=8.25") &&
                        contains(text, "capture_resampler_ratio=0.999988") &&
                        contains(text, "capture_rate_adapter_active=1") &&
                        contains(text, "capture_rate_adapter_recovering=1") &&
@@ -453,6 +457,8 @@ int main() {
             expect(contains(text, "Capture resampler input frames: 950") &&
                        contains(text, "Capture resampler output frames: 940") &&
                        contains(text, "Capture rate correction ppm: 12.5") &&
+                       contains(text, "Capture clock feed-forward ppm: 4.25") &&
+                       contains(text, "Capture FIFO correction ppm: 8.25") &&
                        contains(text, "Capture rate adapter active: yes") &&
                        contains(text, "Capture rate adapter reset cycles: 4") &&
                        contains(text, "Minimum capture rate correction ppm: -22") &&

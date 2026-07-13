@@ -188,6 +188,8 @@ int main() {
     }
     if (const auto failure = expect(!stats.capture_rate_adapter_active &&
                                         stats.capture_rate_correction_ppm == 0.0 &&
+                                        stats.capture_clock_feed_forward_ppm == 0.0 &&
+                                        stats.capture_fifo_correction_ppm == 0.0 &&
                                         stats.capture_resampler_ratio == 1.0 &&
                                         stats.capture_rate_adapter_reset_cycles == 0 &&
                                         stats.minimum_capture_rate_correction_ppm == 0.0 &&
@@ -311,6 +313,8 @@ int main() {
                        worker.stats().capture_resampler_output_frames == 0 &&
                        !worker.stats().capture_rate_adapter_active &&
                        worker.stats().capture_rate_correction_ppm == 0.0 &&
+                       worker.stats().capture_clock_feed_forward_ppm == 0.0 &&
+                       worker.stats().capture_fifo_correction_ppm == 0.0 &&
                        worker.stats().capture_resampler_ratio == 1.0 &&
                        worker.stats().capture_rate_adapter_reset_cycles == 0 &&
                        worker.stats().minimum_capture_rate_correction_ppm == 0.0 &&
@@ -341,6 +345,7 @@ int main() {
 
     sar::platform::WindowsWasapiGraphRunner runner(
         &capture, &render, 1, 1, 64, 64, 64, 256, true, true);
+    runner.set_capture_clock_feed_forward_ppm(500.0);
     sar::graph::Graph graph(15, 1, 64, 48000);
     graph.add_node(std::make_unique<sar::graph::PassthroughNode>());
     sar::diagnostics::EngineDiagnostics diagnostics;
@@ -371,6 +376,15 @@ int main() {
     }
     if (const auto failure = expect(stats.capture_rate_correction_ppm > 0.0,
                                     "Expected last capture rate correction")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(stats.capture_clock_feed_forward_ppm == 500.0 &&
+                       stats.capture_fifo_correction_ppm > 0.0 &&
+                       std::abs(stats.capture_rate_correction_ppm -
+                                (stats.capture_clock_feed_forward_ppm +
+                                 stats.capture_fifo_correction_ppm)) < 1.0e-9,
+                   "Expected worker capture correction components")) {
       return failure;
     }
     if (const auto failure = expect(stats.capture_resampler_ratio < 1.0 &&

@@ -186,6 +186,10 @@ void print_wasapi_worker_stats(
       << stats.capture_resampler_output_frames
       << " capture_rate_correction_ppm="
       << stats.capture_rate_correction_ppm
+      << " capture_clock_feed_forward_ppm="
+      << stats.capture_clock_feed_forward_ppm
+      << " capture_fifo_correction_ppm="
+      << stats.capture_fifo_correction_ppm
       << " capture_resampler_ratio=" << stats.capture_resampler_ratio
       << " capture_rate_adapter_active="
       << bool_token(stats.capture_rate_adapter_active)
@@ -254,6 +258,10 @@ void print_wasapi_worker_stats(
       << stats.capture_resampler_output_frames << '\n';
   out << "  Capture rate correction ppm: "
       << stats.capture_rate_correction_ppm << '\n';
+  out << "  Capture clock feed-forward ppm: "
+      << stats.capture_clock_feed_forward_ppm << '\n';
+  out << "  Capture FIFO correction ppm: "
+      << stats.capture_fifo_correction_ppm << '\n';
   out << "  Capture resampler ratio: " << stats.capture_resampler_ratio << '\n';
   out << "  Capture rate adapter active: "
       << (stats.capture_rate_adapter_active ? "yes" : "no") << '\n';

@@ -19,6 +19,9 @@
 
 namespace sar::platform {
 
+static_assert(std::atomic_uint64_t::is_always_lock_free,
+              "WASAPI worker scalar snapshots must remain lock-free");
+
 namespace {
 
 class ComApartmentScope {
@@ -167,6 +170,8 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   capture_resampler_input_frames_.store(0);
   capture_resampler_output_frames_.store(0);
   capture_rate_correction_bits_.store(double_bits(0.0));
+  capture_clock_feed_forward_bits_.store(double_bits(0.0));
+  capture_fifo_correction_bits_.store(double_bits(0.0));
   capture_resampler_ratio_bits_.store(double_bits(1.0));
   capture_rate_adapter_active_.store(false);
   capture_rate_adapter_recovering_.store(false);
@@ -284,6 +289,10 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.capture_resampler_output_frames = capture_resampler_output_frames_.load();
   result.capture_rate_correction_ppm =
       bits_double(capture_rate_correction_bits_.load());
+  result.capture_clock_feed_forward_ppm =
+      bits_double(capture_clock_feed_forward_bits_.load());
+  result.capture_fifo_correction_ppm =
+      bits_double(capture_fifo_correction_bits_.load());
   result.capture_resampler_ratio =
       bits_double(capture_resampler_ratio_bits_.load());
   result.capture_rate_adapter_active = capture_rate_adapter_active_.load();
@@ -388,6 +397,10 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
         result.stats().capture_resampler_output_frames);
     capture_rate_correction_bits_.store(
         double_bits(result.stats().capture_rate_correction_ppm));
+    capture_clock_feed_forward_bits_.store(
+        double_bits(result.stats().capture_clock_feed_forward_ppm));
+    capture_fifo_correction_bits_.store(
+        double_bits(result.stats().capture_fifo_correction_ppm));
     capture_resampler_ratio_bits_.store(
         double_bits(result.stats().capture_resampler_ratio));
     capture_rate_adapter_active_.store(result.stats().capture_rate_adapter_active);
