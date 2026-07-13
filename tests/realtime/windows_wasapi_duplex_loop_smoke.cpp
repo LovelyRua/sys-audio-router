@@ -65,6 +65,33 @@ std::uint32_t mismatched_sample_rate(std::uint32_t sample_rate) noexcept {
 }  // namespace
 
 int main() {
+  const sar::platform::WasapiClockSnapshot plausible_capture_clock{
+      3840, 10000000, 384000};
+  if (const auto failure = expect(
+          !sar::platform::wasapi_capture_clock_baseline_is_trustworthy(
+              0, plausible_capture_clock),
+          "Expected capture clock baseline to wait for the first packet")) {
+    return failure;
+  }
+  if (const auto failure = expect(
+          sar::platform::wasapi_capture_clock_baseline_is_trustworthy(
+              480, plausible_capture_clock),
+          "Expected capture clock baseline after the first packet")) {
+    return failure;
+  }
+  if (const auto failure = expect(
+          !sar::platform::wasapi_capture_clock_baseline_is_trustworthy(
+              480, {3840, 10000000, 0}),
+          "Expected capture clock baseline to reject zero frequency")) {
+    return failure;
+  }
+  if (const auto failure = expect(
+          !sar::platform::wasapi_capture_clock_baseline_is_trustworthy(
+              480, {3840, 0, 384000}),
+          "Expected capture clock baseline to reject missing QPC timestamp")) {
+    return failure;
+  }
+
   std::uint64_t converted_frames = 1;
   if (const auto failure = expect(
           sar::platform::wasapi_clock_position_to_audio_frames(

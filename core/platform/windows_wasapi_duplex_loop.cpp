@@ -3,7 +3,9 @@
 #include "core/platform/windows_wasapi_loop_preflight.h"
 
 #include <algorithm>
+#include <chrono>
 #include <limits>
+#include <thread>
 #include <utility>
 
 namespace sar::platform {
@@ -86,6 +88,13 @@ bool wasapi_clock_position_to_audio_frames(std::uint64_t position,
   return true;
 }
 
+bool wasapi_capture_clock_baseline_is_trustworthy(
+    std::uint64_t captured_frames,
+    const WasapiClockSnapshot& snapshot) noexcept {
+  return captured_frames > 0 && snapshot.frequency > 0 &&
+         snapshot.qpc_position_100ns > 0;
+}
+
 WindowsWasapiDuplexLoop::~WindowsWasapiDuplexLoop() {
   stop();
 }
@@ -95,12 +104,36 @@ WasapiRealtimeWorkerResult WindowsWasapiDuplexLoop::start(std::uint32_t timeout_
   render_clock_baseline_available_ = false;
   const auto result = worker_.start(timeout_ms);
   if (result.ok()) {
-    capture_clock_baseline_available_ =
-        capture_stream_.read_clock(capture_clock_baseline_);
     render_clock_baseline_available_ =
         render_stream_.read_clock(render_clock_baseline_);
+    establish_capture_clock_baseline(timeout_ms);
   }
   return result;
+}
+
+void WindowsWasapiDuplexLoop::establish_capture_clock_baseline(
+    std::uint32_t timeout_ms) noexcept {
+  constexpr auto minimum_wait = std::chrono::milliseconds(100);
+  constexpr auto maximum_wait = std::chrono::milliseconds(500);
+  const auto requested_wait = std::chrono::milliseconds(
+      static_cast<std::uint64_t>(timeout_ms) * 2U);
+  const auto wait = std::clamp(requested_wait, minimum_wait, maximum_wait);
+  const auto deadline = std::chrono::steady_clock::now() + wait;
+
+  do {
+    const auto captured_frames = worker_.stats().captured_frames;
+    if (captured_frames > 0) {
+      WasapiClockSnapshot candidate;
+      if (capture_stream_.read_clock(candidate) &&
+          wasapi_capture_clock_baseline_is_trustworthy(captured_frames,
+                                                       candidate)) {
+        capture_clock_baseline_ = candidate;
+        capture_clock_baseline_available_ = true;
+        return;
+      }
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  } while (running() && std::chrono::steady_clock::now() < deadline);
 }
 
 void WindowsWasapiDuplexLoop::stop() noexcept {

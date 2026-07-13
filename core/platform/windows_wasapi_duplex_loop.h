@@ -22,6 +22,10 @@ class WasapiDuplexLoopOpenResult;
     std::uint32_t sample_rate,
     std::uint64_t& audio_frames) noexcept;
 
+[[nodiscard]] bool wasapi_capture_clock_baseline_is_trustworthy(
+    std::uint64_t captured_frames,
+    const WasapiClockSnapshot& snapshot) noexcept;
+
 struct WasapiDuplexLoopSummary {
   bool running = false;
   std::size_t error_count = 0;
@@ -66,6 +70,7 @@ class WindowsWasapiDuplexLoop {
                           WindowsWasapiStream render_stream,
                           graph::Graph& graph,
                           diagnostics::EngineDiagnostics& diagnostics);
+  void establish_capture_clock_baseline(std::uint32_t timeout_ms) noexcept;
 
   WindowsWasapiStream capture_stream_;
   WindowsWasapiStream render_stream_;
