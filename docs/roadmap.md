@@ -59,8 +59,19 @@ Purpose: connect the engine to real Windows audio devices.
 Status: underway. WASAPI endpoint enumeration, default and device-ID endpoint
 probing, render loopback probing, shared-mode event-driven stream handles,
 single-cycle render/capture pumping, graph runner orchestration, MMCSS scope,
-realtime worker shell, and a capture-only loopback wrapper and measurement tool
-exist. The next milestone is a measured real-device loop.
+realtime worker, and render, duplex, and capture-only loopback wrappers and
+measurement tools exist. Fixed-capacity FIFOs preserve frame counts in the
+single-ended paths when device periods and graph blocks differ. Windows Audio
+Engine sample-rate conversion has also enabled a real shared-mode duplex path
+from the default 44.1 kHz capture endpoint to the 48 kHz render endpoint.
+
+The Windows suite currently contains 56 smoke tests. A strict-healthy two-second
+render measurement submitted 96,000 frames with zero xruns, wait timeouts, or
+FIFO faults. A five-second duplex measurement processed approximately 240,000
+render-domain frames, but still exposed capture discontinuity and render
+underflow. Phase 2 is therefore not complete: the next priority is render-master
+scheduling with FIFO waterline drift control, followed by long-duration device
+soak testing.
 
 Deliverables:
 
@@ -68,6 +79,7 @@ Deliverables:
 - Hardware device enumeration.
 - Loopback capture prototype.
 - Drift and xrun diagnostics.
+- Render-master duplex scheduling and FIFO waterline drift control.
 - Headless engine service.
 
 Exit criteria:
