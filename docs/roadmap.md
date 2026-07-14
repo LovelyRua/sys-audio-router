@@ -115,12 +115,16 @@ the soak gates.
   blocked wait or join, and reopen on the control side. A disable/enable or
   default-device-change test must resume the selected route within five seconds
   and three open attempts, or terminate with a stable fault reason; it must not
-  spin or continue using the invalid stream.
+  spin or continue using the invalid stream. The recovery policy, conservative
+  error-code classifier, and whole-duplex-runtime supervisor are implemented;
+  native HRESULT propagation, endpoint notification, and hardware recovery
+  evidence remain.
 - **Render deadline ordering:** when capture and render are both ready, service
   render before draining additional capture packets or producing optional graph
   backlog. A deterministic call-order smoke test must prove the ordering. A
   hardware run must report zero render wait timeouts and zero render underflow
-  outside explicitly labeled discontinuity-recovery silence.
+  outside explicitly labeled discontinuity-recovery silence. Deterministic
+  render-first ordering is implemented; the hardware acceptance run remains.
 - **Long soaks:** first pass an eight-hour duplex run on two distinct physical
   capture/render pairings, including one pairing with different endpoint mix
   rates, then pass one 24-hour duplex run. Each run must complete startup and

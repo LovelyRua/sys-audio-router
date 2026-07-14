@@ -4,6 +4,7 @@
 #include "core/graph/graph.h"
 #include "core/realtime/clock_drift_estimator.h"
 #include "core/platform/windows_wasapi_realtime_worker.h"
+#include "core/platform/windows_wasapi_duplex_supervisor.h"
 #include "core/platform/windows_wasapi_runtime_summary.h"
 #include "core/platform/windows_wasapi_stream.h"
 
@@ -48,23 +49,23 @@ struct WasapiDuplexLoopSummary {
   bool capture_clock_feed_forward_valid = false;
 };
 
-class WindowsWasapiDuplexLoop {
+class WindowsWasapiDuplexLoop : public WasapiDuplexRuntime {
  public:
   WindowsWasapiDuplexLoop(const WindowsWasapiDuplexLoop&) = delete;
   WindowsWasapiDuplexLoop& operator=(const WindowsWasapiDuplexLoop&) = delete;
   ~WindowsWasapiDuplexLoop();
 
-  [[nodiscard]] WasapiRealtimeWorkerResult start(std::uint32_t timeout_ms);
-  void stop() noexcept;
+  [[nodiscard]] WasapiRealtimeWorkerResult start(std::uint32_t timeout_ms) override;
+  void stop() noexcept override;
 
-  [[nodiscard]] bool running() const noexcept;
+  [[nodiscard]] bool running() const noexcept override;
   [[nodiscard]] const WasapiStreamProbe& capture_probe() const noexcept;
   [[nodiscard]] const WasapiStreamProbe& render_probe() const noexcept;
   [[nodiscard]] WasapiStreamDiagnostics capture_diagnostics() const noexcept;
   [[nodiscard]] WasapiStreamDiagnostics render_diagnostics() const noexcept;
   [[nodiscard]] WasapiRealtimeWorkerStats stats() const noexcept;
   [[nodiscard]] WasapiDuplexLoopSummary summary() const;
-  [[nodiscard]] std::vector<WasapiRealtimeWorkerError> last_errors() const;
+  [[nodiscard]] std::vector<WasapiRealtimeWorkerError> last_errors() const override;
 
  private:
   friend class WasapiDuplexLoopOpenResult;

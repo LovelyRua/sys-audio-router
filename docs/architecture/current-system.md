@@ -144,6 +144,8 @@ are required to apply the roadmap's long-soak thresholds.
 - Windows realtime worker shell.
 - Windows render-only loop wrapper for the first default-output device path.
 - Windows duplex loop wrapper for the first default capture/render path.
+- Windows duplex supervisor that rebuilds the complete stream, runner, worker,
+  and clock-observer runtime after classified recoverable failures.
 - Windows loopback capture wrapper for routing default system output into the
   graph without feeding it back to the same render endpoint.
 - Windows MMCSS realtime thread scope.
@@ -204,9 +206,14 @@ its stream, so the subsequent zero-time capture or render pump does not wait for
 the same event twice. Pending readiness also forces the next coordinated wait
 to be nonblocking until the corresponding stream has consumed it. Scripted and
 synthetic stream implementations retain the existing sequential wait path.
-The current processing order still drains bounded capture packets and fills the
-graph/render FIFO before calling `render_once`; it does not yet guarantee that a
-simultaneously ready render endpoint is serviced first.
+Queued render audio is submitted before a capture burst when both directions
+are ready. The refill that follows remains bounded by the configured FIFO target.
+
+`WindowsWasapiDuplexSupervisor` is a control-plane owner above the complete
+duplex loop. It classifies failures, synchronously quiesces and destroys the old
+runtime, then rebuilds it with 0/250/1250 ms retry delays and a five-second hard
+recovery deadline. It is currently driven by explicit control-plane `tick()`
+calls; Windows default-endpoint notifications are not connected yet.
 
 `WindowsWasapiLoopbackLoop` owns a capture-only loopback stream, graph runner,
 and realtime worker. It exposes the underlying WASAPI clock snapshot and keeps
@@ -283,11 +290,10 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   while the bridge resets and re-primes. Recovery-silence totals exist, but a
   per-discontinuity maximum is not yet reported, so the alpha recovery bound
   cannot yet be enforced from a run summary.
-- WASAPI device invalidation is currently returned as a generic stream I/O
-  failure. There is no endpoint notification, control-thread reopen policy, or
-  measured recovery deadline yet.
-- Coordinated duplex waits avoid duplicate blocking, but simultaneous readiness
-  does not yet have an explicit render-first service rule or call-order test.
+- WASAPI failure codes now feed a conservative recovery classification and the
+  duplex supervisor has a bounded control-thread reopen policy. Native HRESULT
+  preservation, endpoint notifications, and a measured unplug/replug recovery
+  deadline are still missing.
 - Multi-hour real-device stability has not been demonstrated. The eight-hour
   pairwise and 24-hour backend alpha soaks in the roadmap remain outstanding.
 - Loopback capture is not yet connected to a selectable render destination or
