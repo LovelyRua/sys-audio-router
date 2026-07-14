@@ -94,8 +94,9 @@ Export-ModuleMember -Function Get-AudioDevice, Set-AudioDevice
   Set-Content -LiteralPath $fakeToolPath -Encoding ASCII -Value @(
     "@echo off",
     "%SystemRoot%\System32\ping.exe 127.0.0.1 -n 2 >nul",
-    'echo wasapi_recovery_supervisor state=running running=1 successful_recovery_count=2 notification_reset_failure_count=0 maximum_recovery_duration_ms=250 active_capture_device_id="recording-a" active_render_device_id="playback-a"',
-    'echo wasapi_recovery_supervisor state=stopped running=0 successful_recovery_count=2 notification_reset_failure_count=0 maximum_recovery_duration_ms=250 active_capture_device_id="recording-a" active_render_device_id="playback-a"',
+    'echo wasapi_recovery_supervisor state=running running=1 attempt_count=2 recovery_episode_count=2 successful_recovery_count=2 failed_recovery_count=0 error_count=0 notification_reset_failure_count=0 maximum_recovery_duration_ms=250 active_capture_device_id="recording-a" active_render_device_id="playback-a"',
+    'echo wasapi_recovery_supervisor state=stopped running=0 attempt_count=0 recovery_episode_count=2 successful_recovery_count=2 failed_recovery_count=0 error_count=0 notification_reset_failure_count=0 maximum_recovery_duration_ms=250 active_capture_device_id="" active_render_device_id=""',
+    'echo wasapi_recovery_last_errors count=0',
     "exit /b 0"
   )
   $configPath = Join-Path $temporaryDirectory "config.json"
