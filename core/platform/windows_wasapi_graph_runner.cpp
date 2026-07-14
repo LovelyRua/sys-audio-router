@@ -446,6 +446,51 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
   }
   const auto render_timeout_ms = coordinated_duplex_wait ? 0U : timeout_ms;
 
+  const bool render_queued_at_cycle_entry =
+      render_master_ && render_stream_ != nullptr &&
+      render_path_->fifo.available_frames() > 0;
+  auto submit_queued_render = [&]() -> std::optional<WasapiGraphRunnerResult> {
+    render_path_->packet.clear();
+    const auto staged = render_path_->fifo.peek(
+        render_path_->packet, render_path_->packet.frames());
+    auto render_result = render_stream_->render_once(
+        render_path_->packet, static_cast<std::uint32_t>(staged), render_timeout_ms);
+    if (!render_result.ok()) {
+      return WasapiGraphRunnerResult::failure(render_result.errors());
+    }
+    if (render_result.cancelled()) {
+      diagnostics.capture_fifo_fill_frames =
+          capture_path_ ? capture_path_->fifo.available_frames() : 0;
+      diagnostics.render_fifo_fill_frames = render_path_->fifo.available_frames();
+      stats.cancelled = true;
+      return WasapiGraphRunnerResult::success(stats);
+    }
+    if (render_result.frames() > staged) {
+      return WasapiGraphRunnerResult::failure({{
+          "render_committed_too_many_frames",
+          "WASAPI render stream committed more frames than were staged.",
+      }});
+    }
+    stats.rendered_frames = static_cast<std::uint32_t>(
+        render_path_->fifo.consume(render_result.frames()));
+    stats.render_stream_idle = stats.rendered_frames == 0;
+    stats.render_wait_timed_out =
+        stats.render_wait_timed_out ||
+        (!coordinated_duplex_wait && render_result.timed_out());
+    stats.render_partial =
+        stats.rendered_frames > 0 && stats.rendered_frames < staged;
+    stats.render_partial_frames =
+        stats.render_partial ? static_cast<std::uint32_t>(staged - stats.rendered_frames)
+                             : 0;
+    return std::nullopt;
+  };
+
+  if (render_queued_at_cycle_entry) {
+    if (auto terminal_result = submit_queued_render()) {
+      return std::move(*terminal_result);
+    }
+  }
+
   if (capture_stream_ != nullptr) {
     constexpr std::size_t kMaximumCapturePacketsPerCycle = 8;
     const auto packet_limit = render_master_ ? kMaximumCapturePacketsPerCycle : 1;
@@ -702,40 +747,12 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     }
   }
 
-  if (render_stream_ != nullptr && render_path_->fifo.available_frames() > 0) {
-    render_path_->packet.clear();
-    const auto staged = render_path_->fifo.peek(
-        render_path_->packet, render_path_->packet.frames());
-    auto render_result = render_stream_->render_once(
-        render_path_->packet, static_cast<std::uint32_t>(staged), render_timeout_ms);
-    if (!render_result.ok()) {
-      return WasapiGraphRunnerResult::failure(render_result.errors());
+  if (!render_queued_at_cycle_entry && render_stream_ != nullptr &&
+      render_path_->fifo.available_frames() > 0) {
+    if (auto terminal_result = submit_queued_render()) {
+      return std::move(*terminal_result);
     }
-    if (render_result.cancelled()) {
-      diagnostics.capture_fifo_fill_frames =
-          capture_path_ ? capture_path_->fifo.available_frames() : 0;
-      diagnostics.render_fifo_fill_frames = render_path_->fifo.available_frames();
-      stats.cancelled = true;
-      return WasapiGraphRunnerResult::success(stats);
-    }
-    if (render_result.frames() > staged) {
-      return WasapiGraphRunnerResult::failure({{
-          "render_committed_too_many_frames",
-          "WASAPI render stream committed more frames than were staged.",
-      }});
-    }
-    stats.rendered_frames = static_cast<std::uint32_t>(
-        render_path_->fifo.consume(render_result.frames()));
-    stats.render_stream_idle = stats.rendered_frames == 0;
-    stats.render_wait_timed_out =
-        stats.render_wait_timed_out ||
-        (!coordinated_duplex_wait && render_result.timed_out());
-    stats.render_partial =
-        stats.rendered_frames > 0 && stats.rendered_frames < staged;
-    stats.render_partial_frames =
-        stats.render_partial ? static_cast<std::uint32_t>(staged - stats.rendered_frames)
-                             : 0;
-  } else if (render_stream_ != nullptr) {
+  } else if (!render_queued_at_cycle_entry && render_stream_ != nullptr) {
     if (!render_master_) {
       stats.render_stream_idle = true;
       ++diagnostics.render_fifo_underflow_cycles;

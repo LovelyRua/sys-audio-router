@@ -105,10 +105,14 @@ void cancellation_preserves_queues() {
 }
 
 void duplex_prime_supplies_render_before_capture() {
+  std::vector<sar::platform::WasapiStreamDirection> io_call_log;
+  io_call_log.reserve(2);
   sar::tests::ScriptedWasapiStream capture(
       probe(sar::platform::WasapiStreamDirection::Capture, 4));
   sar::tests::ScriptedWasapiStream render(
       probe(sar::platform::WasapiStreamDirection::Render, 4));
+  capture.set_io_call_log(&io_call_log);
+  render.set_io_call_log(&io_call_log);
   capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::TimedOut});
   render.enqueue_render({.writable_frames = 4});
   sar::platform::WindowsWasapiGraphRunner runner(
@@ -119,6 +123,9 @@ void duplex_prime_supplies_render_before_capture() {
   assert(primed.ok() && primed.stats().capture_stream_idle);
   assert(!primed.stats().graph_processed && primed.stats().rendered_frames == 4);
   assert(diagnostics.render_fifo_underflow_cycles == 0);
+  assert((io_call_log == std::vector<sar::platform::WasapiStreamDirection>{
+                             sar::platform::WasapiStreamDirection::Render,
+                             sar::platform::WasapiStreamDirection::Capture}));
   assert((rendered(render) == std::vector<float>{0, 0, 0, 0}));
 }
 

@@ -40,6 +40,10 @@ class ScriptedWasapiStream final : public platform::WasapiStreamIo {
   void enqueue_capture(CaptureStep step) { capture_steps_.push_back(std::move(step)); }
   void enqueue_render(RenderStep step) { render_steps_.push_back(std::move(step)); }
 
+  void set_io_call_log(std::vector<platform::WasapiStreamDirection>* call_log) {
+    io_call_log_ = call_log;
+  }
+
   void set_start_result(platform::WasapiStreamResult result) {
     start_result_ = std::move(result);
   }
@@ -62,6 +66,9 @@ class ScriptedWasapiStream final : public platform::WasapiStreamIo {
       const realtime::AudioBuffer& source,
       std::uint32_t frames,
       std::uint32_t) noexcept override {
+    if (io_call_log_ != nullptr) {
+      io_call_log_->push_back(platform::WasapiStreamDirection::Render);
+    }
     if (render_steps_.empty()) {
       return platform::WasapiStreamIoResult::failure({
           {"render_script_exhausted", "No scripted render step remains."},
@@ -91,6 +98,9 @@ class ScriptedWasapiStream final : public platform::WasapiStreamIo {
   [[nodiscard]] platform::WasapiStreamIoResult capture_once(
       realtime::AudioBuffer& destination,
       std::uint32_t) noexcept override {
+    if (io_call_log_ != nullptr) {
+      io_call_log_->push_back(platform::WasapiStreamDirection::Capture);
+    }
     if (capture_steps_.empty()) {
       return platform::WasapiStreamIoResult::failure({
           {"capture_script_exhausted", "No scripted capture step remains."},
@@ -167,6 +177,7 @@ class ScriptedWasapiStream final : public platform::WasapiStreamIo {
   std::deque<CaptureStep> capture_steps_;
   std::deque<RenderStep> render_steps_;
   std::vector<RenderSubmission> render_submissions_;
+  std::vector<platform::WasapiStreamDirection>* io_call_log_ = nullptr;
   std::size_t start_calls_ = 0;
   std::size_t stop_calls_ = 0;
   std::size_t request_stop_calls_ = 0;
