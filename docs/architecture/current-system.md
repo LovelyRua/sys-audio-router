@@ -214,8 +214,10 @@ duplex loop. It classifies failures, synchronously quiesces and destroys the old
 runtime, then rebuilds it with 0/250/1250 ms retry delays and a five-second hard
 recovery deadline. It is currently driven by explicit control-plane `tick()`
 calls. A lock-free `IMMNotificationClient` generation/event source and an
-independent capture/render endpoint-selection policy now exist, but those
-notifications are not connected to the supervisor yet.
+independent capture/render endpoint-selection policy feed the supervisor on the
+control thread. Follow-default generation changes trigger bounded reopen while
+pinned directions ignore unrelated default-device changes. Snapshot consumption
+uses a read-reset-read protocol so event-reset races cannot lose a generation.
 
 `WindowsWasapiLoopbackLoop` owns a capture-only loopback stream, graph runner,
 and realtime worker. It exposes the underlying WASAPI clock snapshot and keeps
@@ -295,8 +297,9 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 - WASAPI failures preserve native HRESULT/Win32 values through the stream and
   realtime-worker layers, and device invalidation feeds a bounded control-thread
   reopen policy. A lock-free endpoint-notification source and endpoint-selection
-  policy exist; wiring their generation changes into the supervisor and measuring
-  the unplug/replug recovery deadline on hardware remain.
+  policy now drive supervisor reopen decisions, with generation, reset-failure,
+  and notification-reopen counters. Measuring the unplug/replug recovery deadline
+  on hardware remains.
 - Multi-hour real-device stability has not been demonstrated. The eight-hour
   pairwise and 24-hour backend alpha soaks in the roadmap remain outstanding.
 - Loopback capture is not yet connected to a selectable render destination or
