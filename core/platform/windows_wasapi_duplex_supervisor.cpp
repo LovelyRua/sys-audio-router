@@ -2,6 +2,7 @@
 
 #include "core/diagnostics/engine_diagnostics.h"
 #include "core/graph/graph.h"
+#include "core/platform/windows_wasapi_device_provider.h"
 #include "core/platform/windows_wasapi_duplex_loop.h"
 #include "core/platform/windows_wasapi_endpoint_notification.h"
 
@@ -15,6 +16,48 @@ namespace {
 
 constexpr auto kAudioClientDeviceInvalidated =
     static_cast<std::int32_t>(0x88890004U);
+
+std::vector<WasapiRealtimeWorkerError> convert_selection_errors(
+    const std::vector<WasapiEndpointSelectionError>& errors) {
+  std::vector<WasapiRealtimeWorkerError> converted;
+  converted.reserve(errors.size());
+  for (const auto& error : errors) {
+    converted.push_back({error.code, error.message});
+  }
+  return converted;
+}
+
+WasapiDuplexRuntimeFactory make_selected_duplex_factory(
+    graph::Graph& graph,
+    diagnostics::EngineDiagnostics& diagnostics,
+    WasapiEndpointSelectionPolicy endpoint_selection_policy) {
+  return [&graph,
+          &diagnostics,
+          endpoint_selection_policy = std::move(endpoint_selection_policy)] {
+    WindowsWasapiDeviceProvider provider;
+    auto resolution =
+        provider.resolve_endpoint_pair(endpoint_selection_policy);
+    if (!resolution.ok()) {
+      return WasapiDuplexRuntimeOpenResult::failure(
+          convert_selection_errors(resolution.errors()));
+    }
+
+    const auto& selected = resolution.endpoints();
+    auto result = open_wasapi_duplex_loop(selected.capture_device_id,
+                                          selected.render_device_id,
+                                          graph,
+                                          diagnostics);
+    if (!result.ok()) {
+      return WasapiDuplexRuntimeOpenResult::failure(result.errors());
+    }
+    WasapiDuplexRuntimeEndpoints endpoints{
+        .capture_device_id = result.loop().capture_probe().device_id,
+        .render_device_id = result.loop().render_probe().device_id,
+    };
+    return WasapiDuplexRuntimeOpenResult::success(result.take_loop(),
+                                                  std::move(endpoints));
+  };
+}
 
 }  // namespace
 
@@ -102,20 +145,22 @@ WindowsWasapiDuplexSupervisor::WindowsWasapiDuplexSupervisor(
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics,
     std::uint32_t timeout_ms)
+    : WindowsWasapiDuplexSupervisor(graph,
+                                    diagnostics,
+                                    timeout_ms,
+                                    WasapiEndpointSelectionPolicy{}) {}
+
+WindowsWasapiDuplexSupervisor::WindowsWasapiDuplexSupervisor(
+    graph::Graph& graph,
+    diagnostics::EngineDiagnostics& diagnostics,
+    std::uint32_t timeout_ms,
+    WasapiEndpointSelectionPolicy endpoint_selection_policy)
     : WindowsWasapiDuplexSupervisor(
-          [&graph, &diagnostics] {
-            auto result = open_default_wasapi_duplex_loop(graph, diagnostics);
-            if (!result.ok()) {
-              return WasapiDuplexRuntimeOpenResult::failure(result.errors());
-            }
-            WasapiDuplexRuntimeEndpoints endpoints{
-                .capture_device_id = result.loop().capture_probe().device_id,
-                .render_device_id = result.loop().render_probe().device_id,
-            };
-            return WasapiDuplexRuntimeOpenResult::success(
-                result.take_loop(), std::move(endpoints));
-          },
-          timeout_ms) {}
+          make_selected_duplex_factory(graph,
+                                       diagnostics,
+                                       endpoint_selection_policy),
+          timeout_ms,
+          std::move(endpoint_selection_policy)) {}
 
 WindowsWasapiDuplexSupervisor::~WindowsWasapiDuplexSupervisor() { stop(0); }
 

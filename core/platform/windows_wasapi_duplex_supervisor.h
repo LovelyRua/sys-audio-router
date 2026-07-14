@@ -89,6 +89,11 @@ class WindowsWasapiDuplexSupervisor {
   WindowsWasapiDuplexSupervisor(graph::Graph& graph,
                                 diagnostics::EngineDiagnostics& diagnostics,
                                 std::uint32_t timeout_ms);
+  WindowsWasapiDuplexSupervisor(
+      graph::Graph& graph,
+      diagnostics::EngineDiagnostics& diagnostics,
+      std::uint32_t timeout_ms,
+      WasapiEndpointSelectionPolicy endpoint_selection_policy);
   WindowsWasapiDuplexSupervisor(const WindowsWasapiDuplexSupervisor&) = delete;
   WindowsWasapiDuplexSupervisor& operator=(const WindowsWasapiDuplexSupervisor&) = delete;
   ~WindowsWasapiDuplexSupervisor();

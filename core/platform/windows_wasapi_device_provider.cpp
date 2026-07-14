@@ -329,6 +329,12 @@ AudioDeviceListResult WindowsWasapiDeviceProvider::list_devices() const {
   return AudioDeviceListResult::success(std::move(devices));
 }
 
+WasapiEndpointResolutionResult WindowsWasapiDeviceProvider::resolve_endpoint(
+    const WasapiEndpointSelectionPolicy& policy,
+    WasapiEndpointDirection direction) const {
+  return policy.resolve(direction, list_devices());
+}
+
 WasapiEndpointPairResolutionResult
 WindowsWasapiDeviceProvider::resolve_endpoint_pair(
     const WasapiEndpointSelectionPolicy& policy) const {
