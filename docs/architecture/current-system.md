@@ -242,14 +242,15 @@ These tools print
 runtime health, reason codes, stream diagnostics lines, stream shape,
 transferred-frame summaries, stop wait duration, partial/silent transfer
 counters, capture discontinuity/timestamp counters, adaptive-capture recovery
-state, recovery-silence totals, the maximum silence frames for one recovery
-episode, last-cycle flags, worker counters, and engine diagnostics for lab
-captures. Recovery silence remains part of total render FIFO underflow and is
-also reported as a labeled subset, so a lab run preserves the full dropout count
-while identifying the portion caused by SRC re-priming. The supervisor retains
-the episode maximum across child-runtime replacement. The recovery acceptance
-script can enforce an explicit maximum while leaving the gate disabled for
-legacy logs that do not contain the field.
+state, startup-, capture-starvation-, and recovery-silence totals, the maximum
+silence frames for one recovery episode, last-cycle flags, worker counters, and
+engine diagnostics for lab captures. These silence counters remain part of total
+render FIFO underflow and are also reported as mutually exclusive labeled
+subsets. The duplex acceptance gate fails if any underflow frame is left
+unattributed. The supervisor retains the recovery episode maximum across child
+runtime replacement. The recovery acceptance script can enforce an explicit
+maximum while leaving the gate disabled for legacy logs that do not contain the
+field.
 
 Current real-device evidence includes a strict-healthy 48 kHz render run that
 submitted 96,000 frames over two seconds with zero xruns, wait timeouts, or FIFO
@@ -304,6 +305,18 @@ with zero FIFO overflow, five capture discontinuities, and three render FIFO
 underflow cycles. A preceding 10-second run after feed-forward slew limiting
 reported one discontinuity, three underflow cycles, and a total correction
 range of about -835 to 0 ppm.
+
+Three consecutive 10-second duplex acceptance runs on the 48 kHz render path
+used a 20 ms event-wait timeout and each rendered more than 99% of the
+duration-derived target with zero render wait timeout, FIFO overflow, process
+error, or unattributed underflow frame. The runs rendered 481,920, 483,360, and
+482,400 frames. Their maximum per-discontinuity recovery silence was 2,304
+frames. The hardware threshold is 2,594 frames: one 1,058-frame capture target
+fill, one 1,056-frame render buffer, and one 480-frame render period so the
+completed recovery can be observed at the next discrete callback boundary.
+Startup, discontinuity recovery, and normal-state capture starvation remain
+visible as separate counters rather than being treated as render deadline
+misses.
 
 ## Current Testing Model
 

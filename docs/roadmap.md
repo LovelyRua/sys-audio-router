@@ -139,8 +139,12 @@ the soak gates.
   render before draining additional capture packets or producing optional graph
   backlog. A deterministic call-order smoke test must prove the ordering. A
   hardware run must report zero render wait timeouts and zero render underflow
-  outside explicitly labeled discontinuity-recovery silence. Deterministic
-  render-first ordering is implemented; the hardware acceptance run remains.
+  outside explicitly labeled startup, discontinuity-recovery, or capture-source
+  starvation silence. Deterministic render-first ordering is implemented. Three
+  consecutive 10-second hardware runs passed the duplex acceptance gate with
+  zero unattributed underflow and a 2,304-frame maximum recovery episode against
+  the 2,594-frame callback-quantized bound. Longer hardware evidence remains
+  part of the soak gate below.
 - **Long soaks:** first pass an eight-hour duplex run on two distinct physical
   capture/render pairings, including one pairing with different endpoint mix
   rates, then pass one 24-hour duplex run. Each run must complete startup and
