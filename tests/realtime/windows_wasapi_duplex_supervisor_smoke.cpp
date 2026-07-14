@@ -25,6 +25,7 @@ struct WindowsWasapiEndpointNotificationTestAccess {
 namespace {
 
 using sar::platform::WasapiDuplexRuntime;
+using sar::platform::WasapiDuplexRuntimeEndpoints;
 using sar::platform::WasapiDuplexRuntimeOpenResult;
 using sar::platform::WasapiFailureClass;
 using sar::platform::WasapiEndpointSelection;
@@ -213,6 +214,36 @@ int main() {
   assert(notification_open_count == 2);
   assert(notification_second->start_count == 1);
   assert(notification_supervisor.summary().successful_recovery_count == 1);
+
+  auto identity_first = std::make_shared<RuntimeState>();
+  auto identity_second = std::make_shared<RuntimeState>();
+  std::uint32_t identity_open_count = 0;
+  WindowsWasapiDuplexSupervisor identity_supervisor(
+      [&] {
+        ++identity_open_count;
+        const bool first = identity_open_count == 1;
+        return WasapiDuplexRuntimeOpenResult::success(
+            std::make_unique<ScriptedRuntime>(first ? identity_first
+                                                    : identity_second),
+            WasapiDuplexRuntimeEndpoints{
+                .capture_device_id = first ? "capture-a" : "capture-b",
+                .render_device_id = first ? "render-a" : "render-b",
+            });
+      },
+      10);
+  identity_supervisor.start(1500);
+  assert(identity_supervisor.summary().active_capture_device_id == "capture-a");
+  assert(identity_supervisor.summary().active_render_device_id == "render-a");
+  identity_supervisor.request_reopen(1600);
+  assert(identity_supervisor.summary().active_capture_device_id.empty());
+  assert(identity_supervisor.summary().active_render_device_id.empty());
+  identity_supervisor.tick(1600);
+  assert(identity_supervisor.running());
+  assert(identity_supervisor.summary().active_capture_device_id == "capture-b");
+  assert(identity_supervisor.summary().active_render_device_id == "render-b");
+  assert(identity_supervisor.summary().runtime_open_count == 2);
+  assert(identity_supervisor.summary().successful_recovery_count == 1);
+  identity_supervisor.stop(1700);
 
   const auto com_result = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
   assert(SUCCEEDED(com_result) || com_result == RPC_E_CHANGED_MODE);

@@ -19,13 +19,14 @@ constexpr auto kAudioClientDeviceInvalidated =
 }  // namespace
 
 WasapiDuplexRuntimeOpenResult WasapiDuplexRuntimeOpenResult::success(
-    std::unique_ptr<WasapiDuplexRuntime> runtime) {
-  return {std::move(runtime), {}};
+    std::unique_ptr<WasapiDuplexRuntime> runtime,
+    WasapiDuplexRuntimeEndpoints endpoints) {
+  return {std::move(runtime), {}, std::move(endpoints)};
 }
 
 WasapiDuplexRuntimeOpenResult WasapiDuplexRuntimeOpenResult::failure(
     std::vector<WasapiRealtimeWorkerError> errors) {
-  return {nullptr, std::move(errors)};
+  return {nullptr, std::move(errors), {}};
 }
 
 bool WasapiDuplexRuntimeOpenResult::ok() const noexcept {
@@ -37,6 +38,11 @@ WasapiDuplexRuntimeOpenResult::take_runtime() noexcept {
   return std::move(runtime_);
 }
 
+const WasapiDuplexRuntimeEndpoints&
+WasapiDuplexRuntimeOpenResult::endpoints() const noexcept {
+  return endpoints_;
+}
+
 const std::vector<WasapiRealtimeWorkerError>&
 WasapiDuplexRuntimeOpenResult::errors() const noexcept {
   return errors_;
@@ -44,8 +50,11 @@ WasapiDuplexRuntimeOpenResult::errors() const noexcept {
 
 WasapiDuplexRuntimeOpenResult::WasapiDuplexRuntimeOpenResult(
     std::unique_ptr<WasapiDuplexRuntime> runtime,
-    std::vector<WasapiRealtimeWorkerError> errors)
-    : runtime_(std::move(runtime)), errors_(std::move(errors)) {}
+    std::vector<WasapiRealtimeWorkerError> errors,
+    WasapiDuplexRuntimeEndpoints endpoints)
+    : runtime_(std::move(runtime)),
+      errors_(std::move(errors)),
+      endpoints_(std::move(endpoints)) {}
 
 WasapiFailureClass classify_wasapi_failures(
     const std::vector<WasapiRealtimeWorkerError>& errors) noexcept {
@@ -99,7 +108,12 @@ WindowsWasapiDuplexSupervisor::WindowsWasapiDuplexSupervisor(
             if (!result.ok()) {
               return WasapiDuplexRuntimeOpenResult::failure(result.errors());
             }
-            return WasapiDuplexRuntimeOpenResult::success(result.take_loop());
+            WasapiDuplexRuntimeEndpoints endpoints{
+                .capture_device_id = result.loop().capture_probe().device_id,
+                .render_device_id = result.loop().render_probe().device_id,
+            };
+            return WasapiDuplexRuntimeOpenResult::success(
+                result.take_loop(), std::move(endpoints));
           },
           timeout_ms) {}
 
@@ -123,6 +137,8 @@ void WindowsWasapiDuplexSupervisor::tick(std::uint64_t now_ms) {
     } else if (runtime_) {
       runtime_->stop();
       runtime_.reset();
+      active_endpoints_.capture_device_id.clear();
+      active_endpoints_.render_device_id.clear();
     }
   }
   policy_.tick(now_ms);
@@ -195,6 +211,8 @@ void WindowsWasapiDuplexSupervisor::stop(std::uint64_t now_ms) noexcept {
   } else if (runtime_) {
     runtime_->stop();
     runtime_.reset();
+    active_endpoints_.capture_device_id.clear();
+    active_endpoints_.render_device_id.clear();
   }
 }
 
@@ -207,7 +225,7 @@ bool WindowsWasapiDuplexSupervisor::running() const noexcept {
          runtime_->running();
 }
 
-WasapiDuplexSupervisorSummary WindowsWasapiDuplexSupervisor::summary() const noexcept {
+WasapiDuplexSupervisorSummary WindowsWasapiDuplexSupervisor::summary() const {
   return {.state = policy_.state(),
           .attempt_count = policy_.attempt_count(),
           .next_attempt_at_ms = policy_.next_attempt_at_ms(),
@@ -227,6 +245,8 @@ WasapiDuplexSupervisorSummary WindowsWasapiDuplexSupervisor::summary() const noe
               endpoint_notification_reset_failure_count_,
           .endpoint_generations_initialized =
               endpoint_generations_initialized_,
+          .active_capture_device_id = active_endpoints_.capture_device_id,
+          .active_render_device_id = active_endpoints_.render_device_id,
           .running = running()};
 }
 
@@ -242,6 +262,7 @@ void WindowsWasapiDuplexSupervisor::attempt_open(std::uint64_t now_ms) {
     handle_failure(open_result.errors(), now_ms);
     return;
   }
+  auto endpoints = open_result.endpoints();
   auto runtime = open_result.take_runtime();
   auto start_result = runtime->start(timeout_ms_);
   if (!start_result.ok()) {
@@ -250,6 +271,7 @@ void WindowsWasapiDuplexSupervisor::attempt_open(std::uint64_t now_ms) {
     return;
   }
   runtime_ = std::move(runtime);
+  active_endpoints_ = std::move(endpoints);
   last_errors_.clear();
   policy_.on_open_succeeded(now_ms);
   if (endpoint_generations_initialized_) {
@@ -289,6 +311,8 @@ void WindowsWasapiDuplexSupervisor::quiesce(std::uint64_t now_ms) noexcept {
     runtime_->stop();
     runtime_.reset();
   }
+  active_endpoints_.capture_device_id.clear();
+  active_endpoints_.render_device_id.clear();
   policy_.on_quiesced(now_ms);
 }
 

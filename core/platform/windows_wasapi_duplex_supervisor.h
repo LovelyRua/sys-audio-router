@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace sar::diagnostics { struct EngineDiagnostics; }
@@ -25,19 +26,29 @@ class WasapiDuplexRuntime {
   [[nodiscard]] virtual std::vector<WasapiRealtimeWorkerError> last_errors() const = 0;
 };
 
+struct WasapiDuplexRuntimeEndpoints {
+  std::string capture_device_id;
+  std::string render_device_id;
+};
+
 class WasapiDuplexRuntimeOpenResult {
  public:
-  static WasapiDuplexRuntimeOpenResult success(std::unique_ptr<WasapiDuplexRuntime> runtime);
+  static WasapiDuplexRuntimeOpenResult success(
+      std::unique_ptr<WasapiDuplexRuntime> runtime,
+      WasapiDuplexRuntimeEndpoints endpoints = {});
   static WasapiDuplexRuntimeOpenResult failure(std::vector<WasapiRealtimeWorkerError> errors);
   [[nodiscard]] bool ok() const noexcept;
   [[nodiscard]] std::unique_ptr<WasapiDuplexRuntime> take_runtime() noexcept;
+  [[nodiscard]] const WasapiDuplexRuntimeEndpoints& endpoints() const noexcept;
   [[nodiscard]] const std::vector<WasapiRealtimeWorkerError>& errors() const noexcept;
 
  private:
   WasapiDuplexRuntimeOpenResult(std::unique_ptr<WasapiDuplexRuntime> runtime,
-                               std::vector<WasapiRealtimeWorkerError> errors);
+                               std::vector<WasapiRealtimeWorkerError> errors,
+                               WasapiDuplexRuntimeEndpoints endpoints);
   std::unique_ptr<WasapiDuplexRuntime> runtime_;
   std::vector<WasapiRealtimeWorkerError> errors_;
+  WasapiDuplexRuntimeEndpoints endpoints_;
 };
 
 using WasapiDuplexRuntimeFactory = std::function<WasapiDuplexRuntimeOpenResult()>;
@@ -62,6 +73,8 @@ struct WasapiDuplexSupervisorSummary {
   std::uint64_t endpoint_notification_reopen_count = 0;
   std::uint64_t endpoint_notification_reset_failure_count = 0;
   bool endpoint_generations_initialized = false;
+  std::string active_capture_device_id;
+  std::string active_render_device_id;
   bool running = false;
 };
 
@@ -89,7 +102,7 @@ class WindowsWasapiDuplexSupervisor {
   void stop(std::uint64_t now_ms) noexcept;
   [[nodiscard]] WasapiRecoveryState state() const noexcept;
   [[nodiscard]] bool running() const noexcept;
-  [[nodiscard]] WasapiDuplexSupervisorSummary summary() const noexcept;
+  [[nodiscard]] WasapiDuplexSupervisorSummary summary() const;
   [[nodiscard]] const std::vector<WasapiRealtimeWorkerError>& last_errors() const noexcept;
 
  private:
@@ -115,6 +128,7 @@ class WindowsWasapiDuplexSupervisor {
   std::uint64_t endpoint_notification_reopen_count_ = 0;
   std::uint64_t endpoint_notification_reset_failure_count_ = 0;
   bool endpoint_generations_initialized_ = false;
+  WasapiDuplexRuntimeEndpoints active_endpoints_;
   bool recovery_episode_active_ = false;
 };
 

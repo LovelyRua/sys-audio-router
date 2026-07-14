@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -154,6 +155,10 @@ void print_supervisor_summary(
             << " capture_generation="
             << summary.capture_endpoint_generation
             << " render_generation=" << summary.render_endpoint_generation
+            << " active_capture_device_id="
+            << std::quoted(summary.active_capture_device_id)
+            << " active_render_device_id="
+            << std::quoted(summary.active_render_device_id)
             << '\n';
 }
 
@@ -275,6 +280,8 @@ int main(int argc, char** argv) {
         print_supervisor_summary(stop_ms, final_summary);
         print_last_errors(supervisor.last_errors());
         if (!measurement_summary.running ||
+            measurement_summary.active_capture_device_id.empty() ||
+            measurement_summary.active_render_device_id.empty() ||
             final_summary.failed_recovery_count != 0 ||
             final_summary.endpoint_notification_reset_failure_count != 0 ||
             !supervisor.last_errors().empty()) {
