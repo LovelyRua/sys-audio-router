@@ -194,11 +194,11 @@ int main(int argc, char** argv) {
   }
 
   const auto com_result = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-  if (FAILED(com_result) && com_result != RPC_E_CHANGED_MODE) {
+  if (FAILED(com_result)) {
     std::cerr << "COM initialization failed: " << com_result << '\n';
     return 1;
   }
-  const bool uninitialize_com = SUCCEEDED(com_result);
+  const bool uninitialize_com = true;
 
   int exit_code = 0;
   {
@@ -247,6 +247,7 @@ int main(int argc, char** argv) {
         const auto start = std::chrono::steady_clock::now();
         auto next_poll = start;
         sar::platform::WasapiDuplexSupervisorSummary measurement_summary;
+        (void)supervisor.poll_endpoint_notifications(notifications, 0);
         supervisor.start(0);
         while (true) {
           const auto elapsed_ms = elapsed_milliseconds(start);

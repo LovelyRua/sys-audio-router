@@ -16,7 +16,7 @@ struct WindowsWasapiEndpointNotificationTestAccess {
       WindowsWasapiEndpointNotification& notification,
       EDataFlow flow) noexcept {
     return notification.notify_default_device_for_test(
-        static_cast<std::int32_t>(flow));
+        static_cast<std::int32_t>(flow), static_cast<std::int32_t>(eConsole));
   }
 };
 
