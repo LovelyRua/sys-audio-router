@@ -24,8 +24,9 @@ still expose independent-device clocking behavior. Render-master scheduling now
 drives a bounded FIFO waterline controller and adaptive capture resampler, with
 native-clock feed-forward supplying the measured clock-rate difference and the
 FIFO controller correcting residual fill error. The feed-forward path has short
-real-device evidence only; default-endpoint reopen now has a short hardware
-pass, while bounded discontinuity recovery, pinned-device removal,
+real-device evidence only; default-endpoint reopen and pinned-route recovery
+through a Windows Audio service outage now have short hardware passes, while
+bounded discontinuity recovery, physical pinned-device removal,
 render-deadline ordering, and long soaks remain alpha gates.
 
 ## Portable Core
@@ -267,15 +268,23 @@ five-second runs totalled four discontinuities and eight underflow cycles, also
 without overflow. This is repeatable short-run improvement, while long-duration
 evidence is still required before treating the tuning as production-stable.
 
-A 12-second recovery measurement switched the default capture and render
+A repeatable recovery measurement switched the default capture and render
 endpoints from the High Definition Audio device to VoiceMeeter and then back.
-The supervisor consumed two paired generation changes, rebuilt the duplex
-runtime twice, and finished with two successful recoveries, no failed recovery,
-no notification-reset failure, and no retained worker error. The maximum
-reported recovery duration was 290 ms against the five-second gate. The final
-active endpoint IDs matched the restored High Definition Audio endpoints. This
-is evidence for follow-default switching, not yet for physical unplug/replug or
-a disappearing pinned endpoint.
+The 300 ms notification-settle window coalesced each direction pair into one
+duplex reopen. The supervisor rebuilt twice and finished with two successful
+recoveries, no failed recovery, no notification-reset failure, and no retained
+worker error. The maximum reported recovery duration was 590 ms against the
+five-second gate, and the final endpoint IDs matched the restored High
+Definition Audio endpoints.
+
+A separate pinned-endpoint measurement stopped Windows Audio for two seconds
+while the High Definition Audio endpoint IDs remained selected. The original
+0/250/1250 ms retry schedule exhausted all attempts before the service returned.
+Spreading the same three attempts across 0/500/3000 ms recovered the unchanged
+pinned IDs in 3548 ms with one successful recovery, no failed recovery, no
+notification reopen, and no retained error. This validates the runtime-failure
+path and retry window, but neither experiment proves physical unplug/replug or a
+disappearing pinned endpoint.
 
 Coordinating capture and render event waits reduced two subsequent 10-second
 runs to two/one capture discontinuities, three/one render FIFO underflow cycles,
@@ -319,9 +328,11 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   realtime-worker layers, and device invalidation feeds a bounded control-thread
   reopen policy. A lock-free endpoint-notification source and endpoint-selection
   policy now drive supervisor reopen decisions, with generation, reset-failure,
-  and notification-reopen counters. A default-endpoint A-to-B-to-A hardware run
-  passed the five-second deadline with a 290 ms maximum. Physical unplug/replug
-  and pinned-endpoint disappearance remain unmeasured.
+  and notification-reopen counters. The repeatable default-endpoint A-to-B-to-A
+  gate passed with two coalesced one-attempt recoveries and a 590 ms maximum. A
+  two-second Windows Audio outage also recovered unchanged pinned endpoint IDs
+  in 3548 ms within the three-attempt, five-second policy. Physical
+  unplug/replug and pinned-endpoint disappearance remain unmeasured.
   `sar_measure_wasapi_recovery` supplies the MTA control loop and machine-readable
   recovery summaries; `--capture-id` and `--render-id` select pinned endpoints
   independently. `windows-wasapi-recovery-acceptance.ps1` enforces final health,

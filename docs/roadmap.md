@@ -122,12 +122,16 @@ the soak gates.
   are implemented. Notifications are filtered to the `eConsole` role used by the
   current probe path. The production factory resolves both directions from one
   enumeration, opens explicit IDs, re-resolves on every retry, and reports the
-  IDs that actually started. A Windows hardware run switched both default
-  directions from the High Definition Audio endpoints to VoiceMeeter and back.
-  Both changes reopened successfully, the maximum measured recovery was 290 ms,
-  and the run ended with zero failed recoveries, notification-reset failures,
-  or retained worker errors. Physical unplug/replug and pinned-endpoint removal
-  evidence still remains.
+  IDs that actually started. The repeatable Windows A-to-B-to-A gate switched
+  both default directions from the High Definition Audio endpoints to
+  VoiceMeeter and back. A 300 ms settle window coalesced the paired direction
+  notifications into two one-attempt recoveries; the maximum was 590 ms and the
+  run ended with zero failed recoveries, notification-reset failures, or
+  retained worker errors. A separate two-second Windows Audio service outage
+  exercised the runtime-failure path with pinned High Definition Audio IDs. The
+  0/500/3000 ms retry schedule restored those unchanged IDs in 3548 ms with no
+  notification reopen or retained error. Physical unplug/replug and
+  pinned-endpoint removal evidence still remains.
 - **Render deadline ordering:** when capture and render are both ready, service
   render before draining additional capture packets or producing optional graph
   backlog. A deterministic call-order smoke test must prove the ordering. A
