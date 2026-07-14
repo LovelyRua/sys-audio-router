@@ -11,6 +11,12 @@ set "TIMEOUT_MS=%SAR_MEASURE_TIMEOUT_MS%"
 set "REQUIRE_HEALTHY=%SAR_MEASURE_REQUIRE_HEALTHY%"
 set "ALLOW_UNAVAILABLE=%SAR_MEASURE_ALLOW_UNAVAILABLE%"
 set "ITERATIONS=%SAR_MEASURE_ITERATIONS%"
+set "CLEANUP=%SAR_SLOT_CLEANUP%"
+set "CLEANUP_DRY_RUN=%SAR_SLOT_CLEANUP_DRY_RUN%"
+set "RETENTION_DAYS=%SAR_SLOT_RETENTION_DAYS%"
+set "RETENTION_COUNT=%SAR_SLOT_RETENTION_COUNT%"
+set "CLEANUP_LIMIT=%SAR_SLOT_CLEANUP_LIMIT%"
+set "STALE_ACTIVE_HOURS=%SAR_SLOT_STALE_ACTIVE_HOURS%"
 
 if not "%~1"=="" set "HOST=%~1"
 if not "%~2"=="" set "USER=%~2"
@@ -40,6 +46,12 @@ if "%TIMEOUT_MS%"=="" set "TIMEOUT_MS=10"
 if "%REQUIRE_HEALTHY%"=="" set "REQUIRE_HEALTHY=false"
 if "%ALLOW_UNAVAILABLE%"=="" set "ALLOW_UNAVAILABLE=false"
 if "%ITERATIONS%"=="" set "ITERATIONS=1"
+if "%CLEANUP%"=="" set "CLEANUP=false"
+if "%CLEANUP_DRY_RUN%"=="" set "CLEANUP_DRY_RUN=false"
+if "%RETENTION_DAYS%"=="" set "RETENTION_DAYS=14"
+if "%RETENTION_COUNT%"=="" set "RETENTION_COUNT=8"
+if "%CLEANUP_LIMIT%"=="" set "CLEANUP_LIMIT=2"
+if "%STALE_ACTIVE_HOURS%"=="" set "STALE_ACTIVE_HOURS=24"
 
 echo System Audio Route local WASAPI measurement
 echo Host: %HOST%
@@ -51,7 +63,9 @@ echo Timeout ms: %TIMEOUT_MS%
 echo Require healthy: %REQUIRE_HEALTHY%
 echo Allow unavailable endpoint: %ALLOW_UNAVAILABLE%
 echo Iterations: %ITERATIONS%
+echo Slot cleanup: %CLEANUP%
+echo Slot cleanup dry run: %CLEANUP_DRY_RUN%
 echo.
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0windows-winrm-local-measure.ps1" -HostName "%HOST%" -UserName "%USER%" -Password "%PASSWORD%" -Slot "%SLOT%" -RepoRoot "%~dp0.." -Mode "%MODE%" -DurationMs "%DURATION_MS%" -TimeoutMs "%TIMEOUT_MS%" -Iterations "%ITERATIONS%" -RequireHealthyText "%REQUIRE_HEALTHY%" -AllowUnavailableText "%ALLOW_UNAVAILABLE%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0windows-winrm-local-measure.ps1" -HostName "%HOST%" -UserName "%USER%" -Password "%PASSWORD%" -Slot "%SLOT%" -RepoRoot "%~dp0.." -Mode "%MODE%" -DurationMs "%DURATION_MS%" -TimeoutMs "%TIMEOUT_MS%" -Iterations "%ITERATIONS%" -RequireHealthyText "%REQUIRE_HEALTHY%" -AllowUnavailableText "%ALLOW_UNAVAILABLE%" -CleanupCompletedSlotsText "%CLEANUP%" -CleanupDryRunText "%CLEANUP_DRY_RUN%" -RetentionDays "%RETENTION_DAYS%" -RetentionCount "%RETENTION_COUNT%" -CleanupLimit "%CLEANUP_LIMIT%" -StaleActiveHours "%STALE_ACTIVE_HOURS%"
 exit /b %errorlevel%
