@@ -38,6 +38,10 @@ int main() {
         expect(classify_wasapi_failure_code("wasapi_probe_format_changed") ==
                    WasapiFailureClass::DeviceInvalidated,
                "Probe drift must trigger endpoint recovery") ||
+        expect(classify_wasapi_failure_code(
+                   "wasapi_pinned_endpoint_unavailable") ==
+                   WasapiFailureClass::DeviceInvalidated,
+               "Unavailable pinned endpoint must trigger endpoint recovery") ||
         expect(classify_wasapi_failure_code("wasapi_render_buffer_failed") ==
                    WasapiFailureClass::Transient,
                "Runtime buffer failure must be retryable") ||
@@ -53,6 +57,56 @@ int main() {
         expect(classify_wasapi_failure_code("future_unclassified_error") ==
                    WasapiFailureClass::Unknown,
                "Unknown failures must remain fail-closed")) {
+      return 1;
+    }
+  }
+
+  {
+    const auto pinned_unavailable = classify_wasapi_failure_code(
+        "wasapi_pinned_endpoint_unavailable");
+    if (expect(sar::platform::wasapi_failure_is_recoverable(
+                   pinned_unavailable),
+               "Unavailable pinned endpoint must be recoverable")) {
+      return 1;
+    }
+
+    WasapiRecoveryPolicy policy;
+    policy.request_start(100);
+    policy.on_failure(pinned_unavailable, 100);
+    if (expect_state(policy, WasapiRecoveryState::Backoff,
+                     "Pinned recovery must enter backoff") ||
+        expect(policy.next_attempt_at_ms() == 100,
+               "First pinned recovery attempt must have zero delay") ||
+        expect(policy.recovery_deadline_at_ms() == 5100,
+               "Pinned recovery deadline must be five seconds")) {
+      return 1;
+    }
+
+    policy.tick(100);
+    policy.on_failure(pinned_unavailable, 200);
+    if (expect(policy.next_attempt_at_ms() == 450,
+               "Second pinned recovery attempt must wait 250 ms")) {
+      return 1;
+    }
+
+    policy.tick(450);
+    policy.on_failure(pinned_unavailable, 500);
+    if (expect(policy.next_attempt_at_ms() == 1750,
+               "Third pinned recovery attempt must wait 1250 ms") ||
+        expect(policy.recovery_deadline_at_ms() == 5100,
+               "Pinned retries must preserve the original deadline")) {
+      return 1;
+    }
+
+    policy.tick(1750);
+    policy.tick(5099);
+    if (expect_state(policy, WasapiRecoveryState::Opening,
+                     "Pinned recovery must remain active before deadline")) {
+      return 1;
+    }
+    policy.tick(5100);
+    if (expect_state(policy, WasapiRecoveryState::Faulted,
+                     "Pinned recovery must fault at the five-second deadline")) {
       return 1;
     }
   }

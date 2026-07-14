@@ -46,6 +46,7 @@ WasapiFailureClass classify_wasapi_failure_code(
     std::string_view code) noexcept {
   if (is_one_of(code, {
                           "wasapi_device_lookup_failed",
+                          "wasapi_pinned_endpoint_unavailable",
                           "wasapi_probe_format_changed",
                           "wasapi_probe_buffer_changed",
                       })) {
