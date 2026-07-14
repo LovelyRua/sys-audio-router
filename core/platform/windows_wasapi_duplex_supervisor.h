@@ -48,6 +48,12 @@ struct WasapiDuplexSupervisorSummary {
   std::uint64_t next_attempt_at_ms = 0;
   std::uint64_t recovery_deadline_at_ms = 0;
   std::size_t error_count = 0;
+  std::uint64_t runtime_open_count = 0;
+  std::uint64_t recovery_episode_count = 0;
+  std::uint64_t successful_recovery_count = 0;
+  std::uint64_t failed_recovery_count = 0;
+  std::uint64_t last_recovery_duration_ms = 0;
+  std::uint64_t maximum_recovery_duration_ms = 0;
   bool running = false;
 };
 
@@ -81,6 +87,14 @@ class WindowsWasapiDuplexSupervisor {
   WasapiRecoveryPolicy policy_;
   std::unique_ptr<WasapiDuplexRuntime> runtime_;
   std::vector<WasapiRealtimeWorkerError> last_errors_;
+  std::uint64_t runtime_open_count_ = 0;
+  std::uint64_t recovery_episode_count_ = 0;
+  std::uint64_t successful_recovery_count_ = 0;
+  std::uint64_t failed_recovery_count_ = 0;
+  std::uint64_t recovery_started_at_ms_ = 0;
+  std::uint64_t last_recovery_duration_ms_ = 0;
+  std::uint64_t maximum_recovery_duration_ms_ = 0;
+  bool recovery_episode_active_ = false;
 };
 
 }  // namespace sar::platform

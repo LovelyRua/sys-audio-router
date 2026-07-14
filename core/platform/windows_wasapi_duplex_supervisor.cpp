@@ -4,6 +4,7 @@
 #include "core/graph/graph.h"
 #include "core/platform/windows_wasapi_duplex_loop.h"
 
+#include <algorithm>
 #include <stdexcept>
 #include <utility>
 
@@ -104,6 +105,11 @@ void WindowsWasapiDuplexSupervisor::tick(std::uint64_t now_ms) {
     }
   }
   policy_.tick(now_ms);
+  if (policy_.state() == WasapiRecoveryState::Faulted &&
+      recovery_episode_active_) {
+    ++failed_recovery_count_;
+    recovery_episode_active_ = false;
+  }
   if (policy_.state() == WasapiRecoveryState::Opening) {
     attempt_open(now_ms);
   }
@@ -111,6 +117,7 @@ void WindowsWasapiDuplexSupervisor::tick(std::uint64_t now_ms) {
 
 void WindowsWasapiDuplexSupervisor::stop(std::uint64_t now_ms) noexcept {
   policy_.request_stop();
+  recovery_episode_active_ = false;
   if (policy_.state() == WasapiRecoveryState::Quiescing) {
     quiesce(now_ms);
   } else if (runtime_) {
@@ -134,6 +141,12 @@ WasapiDuplexSupervisorSummary WindowsWasapiDuplexSupervisor::summary() const noe
           .next_attempt_at_ms = policy_.next_attempt_at_ms(),
           .recovery_deadline_at_ms = policy_.recovery_deadline_at_ms(),
           .error_count = last_errors_.size(),
+          .runtime_open_count = runtime_open_count_,
+          .recovery_episode_count = recovery_episode_count_,
+          .successful_recovery_count = successful_recovery_count_,
+          .failed_recovery_count = failed_recovery_count_,
+          .last_recovery_duration_ms = last_recovery_duration_ms_,
+          .maximum_recovery_duration_ms = maximum_recovery_duration_ms_,
           .running = running()};
 }
 
@@ -143,6 +156,7 @@ WindowsWasapiDuplexSupervisor::last_errors() const noexcept {
 }
 
 void WindowsWasapiDuplexSupervisor::attempt_open(std::uint64_t now_ms) {
+  ++runtime_open_count_;
   auto open_result = factory_();
   if (!open_result.ok()) {
     handle_failure(open_result.errors(), now_ms);
@@ -158,13 +172,33 @@ void WindowsWasapiDuplexSupervisor::attempt_open(std::uint64_t now_ms) {
   runtime_ = std::move(runtime);
   last_errors_.clear();
   policy_.on_open_succeeded(now_ms);
+  if (recovery_episode_active_) {
+    last_recovery_duration_ms_ = now_ms >= recovery_started_at_ms_
+                                     ? now_ms - recovery_started_at_ms_
+                                     : 0;
+    maximum_recovery_duration_ms_ =
+        std::max(maximum_recovery_duration_ms_, last_recovery_duration_ms_);
+    ++successful_recovery_count_;
+    recovery_episode_active_ = false;
+  }
 }
 
 void WindowsWasapiDuplexSupervisor::handle_failure(
     std::vector<WasapiRealtimeWorkerError> errors, std::uint64_t now_ms) {
   const auto failure_class = classify_wasapi_failures(errors);
   last_errors_ = std::move(errors);
+  if (wasapi_failure_is_recoverable(failure_class) &&
+      !recovery_episode_active_) {
+    recovery_episode_active_ = true;
+    recovery_started_at_ms_ = now_ms;
+    ++recovery_episode_count_;
+  }
   policy_.on_failure(failure_class, now_ms);
+  if (policy_.state() == WasapiRecoveryState::Faulted &&
+      recovery_episode_active_) {
+    ++failed_recovery_count_;
+    recovery_episode_active_ = false;
+  }
 }
 
 void WindowsWasapiDuplexSupervisor::quiesce(std::uint64_t now_ms) noexcept {

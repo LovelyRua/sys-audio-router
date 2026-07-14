@@ -95,6 +95,8 @@ int main() {
   assert(supervisor.state() == WasapiRecoveryState::Backoff);
   assert(supervisor.summary().attempt_count == 1);
   assert(supervisor.summary().next_attempt_at_ms == 100);
+  assert(supervisor.summary().runtime_open_count == 1);
+  assert(supervisor.summary().recovery_episode_count == 1);
   assert(supervisor.last_errors().size() == 1);
 
   supervisor.tick(100);
@@ -102,6 +104,9 @@ int main() {
   assert(open_count == 2);
   assert(first_runtime->start_count == 1);
   assert(supervisor.last_errors().empty());
+  assert(supervisor.summary().runtime_open_count == 2);
+  assert(supervisor.summary().successful_recovery_count == 1);
+  assert(supervisor.summary().last_recovery_duration_ms == 0);
 
   first_runtime->runtime_errors = transient;
   first_runtime->running = false;
@@ -111,6 +116,7 @@ int main() {
   assert(supervisor.summary().next_attempt_at_ms == 450);
   assert(first_runtime->stop_count == 1);
   assert(open_count == 2);
+  assert(supervisor.summary().recovery_episode_count == 2);
 
   supervisor.tick(449);
   assert(supervisor.state() == WasapiRecoveryState::Backoff);
@@ -118,6 +124,9 @@ int main() {
   assert(supervisor.running());
   assert(open_count == 3);
   assert(second_runtime->start_count == 1);
+  assert(supervisor.summary().successful_recovery_count == 2);
+  assert(supervisor.summary().last_recovery_duration_ms == 250);
+  assert(supervisor.summary().maximum_recovery_duration_ms == 250);
 
   supervisor.stop(500);
   assert(supervisor.state() == WasapiRecoveryState::Stopped);
@@ -135,4 +144,22 @@ int main() {
   assert(fatal_supervisor.state() == WasapiRecoveryState::Faulted);
   assert(fatal_runtime->start_count == 1);
   assert(fatal_runtime->stop_count == 1);
+
+  std::uint32_t failed_open_count = 0;
+  WindowsWasapiDuplexSupervisor exhausted_supervisor(
+      [&] {
+        ++failed_open_count;
+        return WasapiDuplexRuntimeOpenResult::failure(transient);
+      },
+      10);
+  exhausted_supervisor.start(0);
+  exhausted_supervisor.tick(0);
+  exhausted_supervisor.tick(250);
+  exhausted_supervisor.tick(1500);
+  assert(exhausted_supervisor.state() == WasapiRecoveryState::Faulted);
+  assert(failed_open_count == 4);
+  assert(exhausted_supervisor.summary().runtime_open_count == 4);
+  assert(exhausted_supervisor.summary().recovery_episode_count == 1);
+  assert(exhausted_supervisor.summary().successful_recovery_count == 0);
+  assert(exhausted_supervisor.summary().failed_recovery_count == 1);
 }
