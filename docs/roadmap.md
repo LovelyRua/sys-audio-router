@@ -116,9 +116,10 @@ the soak gates.
   default-device-change test must resume the selected route within five seconds
   and three open attempts, or terminate with a stable fault reason; it must not
   spin or continue using the invalid stream. The recovery policy, conservative
-  error-code classifier, and whole-duplex-runtime supervisor are implemented;
-  native HRESULT propagation, endpoint notification, and hardware recovery
-  evidence remain.
+  exact native HRESULT propagation, lock-free endpoint-notification foundation,
+  endpoint-selection policy, error-code classifier, and whole-duplex-runtime
+  supervisor are implemented. Notification-to-supervisor wiring and hardware
+  recovery evidence remain.
 - **Render deadline ordering:** when capture and render are both ready, service
   render before draining additional capture packets or producing optional graph
   backlog. A deterministic call-order smoke test must prove the ordering. A

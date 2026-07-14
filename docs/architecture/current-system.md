@@ -213,7 +213,9 @@ are ready. The refill that follows remains bounded by the configured FIFO target
 duplex loop. It classifies failures, synchronously quiesces and destroys the old
 runtime, then rebuilds it with 0/250/1250 ms retry delays and a five-second hard
 recovery deadline. It is currently driven by explicit control-plane `tick()`
-calls; Windows default-endpoint notifications are not connected yet.
+calls. A lock-free `IMMNotificationClient` generation/event source and an
+independent capture/render endpoint-selection policy now exist, but those
+notifications are not connected to the supervisor yet.
 
 `WindowsWasapiLoopbackLoop` owns a capture-only loopback stream, graph runner,
 and realtime worker. It exposes the underlying WASAPI clock snapshot and keeps
@@ -269,7 +271,7 @@ range of about -835 to 0 ppm.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 62 smoke targets. Several tests are
+The Windows CTest suite currently has 67 smoke targets. Several tests are
 synthetic because WinRM sessions may not expose interactive audio endpoints even
 when the VM has a desktop audio stack.
 
@@ -290,10 +292,11 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   while the bridge resets and re-primes. Recovery-silence totals exist, but a
   per-discontinuity maximum is not yet reported, so the alpha recovery bound
   cannot yet be enforced from a run summary.
-- WASAPI failure codes now feed a conservative recovery classification and the
-  duplex supervisor has a bounded control-thread reopen policy. Native HRESULT
-  preservation, endpoint notifications, and a measured unplug/replug recovery
-  deadline are still missing.
+- WASAPI failures preserve native HRESULT/Win32 values through the stream and
+  realtime-worker layers, and device invalidation feeds a bounded control-thread
+  reopen policy. A lock-free endpoint-notification source and endpoint-selection
+  policy exist; wiring their generation changes into the supervisor and measuring
+  the unplug/replug recovery deadline on hardware remain.
 - Multi-hour real-device stability has not been demonstrated. The eight-hour
   pairwise and 24-hour backend alpha soaks in the roadmap remain outstanding.
 - Loopback capture is not yet connected to a selectable render destination or
