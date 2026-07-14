@@ -106,6 +106,10 @@ void print_wasapi_runtime_summary(
       << summary.render_startup_silence_cycles << '\n';
   out << "  Render startup silence frames: "
       << summary.render_startup_silence_frames << '\n';
+  out << "  Render capture starvation silence cycles: "
+      << summary.render_capture_starvation_silence_cycles << '\n';
+  out << "  Render capture starvation silence frames: "
+      << summary.render_capture_starvation_silence_frames << '\n';
   out << "  Render recovery silence cycles: "
       << summary.render_recovery_silence_cycles << '\n';
   out << "  Render recovery silence frames: "
@@ -219,6 +223,10 @@ void print_wasapi_worker_stats(
       << stats.render_startup_silence_cycles
       << " render_startup_silence_frames="
       << stats.render_startup_silence_frames
+      << " render_capture_starvation_silence_cycles="
+      << stats.render_capture_starvation_silence_cycles
+      << " render_capture_starvation_silence_frames="
+      << stats.render_capture_starvation_silence_frames
       << " render_recovery_silence_cycles="
       << stats.render_recovery_silence_cycles
       << " render_recovery_silence_frames="
@@ -248,6 +256,8 @@ void print_wasapi_worker_stats(
       << bool_token(stats.last_capture_timestamp_error)
       << " last_render_startup_silence="
       << bool_token(stats.last_render_startup_silence)
+      << " last_render_capture_starvation_silence="
+      << bool_token(stats.last_render_capture_starvation_silence)
       << " last_render_recovery_silence="
       << bool_token(stats.last_render_recovery_silence)
       << '\n';
@@ -299,6 +309,10 @@ void print_wasapi_worker_stats(
       << stats.render_startup_silence_cycles << '\n';
   out << "  Render startup silence frames: "
       << stats.render_startup_silence_frames << '\n';
+  out << "  Render capture starvation silence cycles: "
+      << stats.render_capture_starvation_silence_cycles << '\n';
+  out << "  Render capture starvation silence frames: "
+      << stats.render_capture_starvation_silence_frames << '\n';
   out << "  Render recovery silence cycles: "
       << stats.render_recovery_silence_cycles << '\n';
   out << "  Render recovery silence frames: "

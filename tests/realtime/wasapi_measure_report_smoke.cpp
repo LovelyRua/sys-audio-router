@@ -126,6 +126,8 @@ sar::platform::WasapiRealtimeWorkerStats make_stats() {
   stats.capture_rate_adapter_reset_cycles = 4;
   stats.render_startup_silence_cycles = 2;
   stats.render_startup_silence_frames = 256;
+  stats.render_capture_starvation_silence_cycles = 3;
+  stats.render_capture_starvation_silence_frames = 384;
   stats.render_recovery_silence_cycles = 5;
   stats.render_recovery_silence_frames = 640;
   stats.maximum_render_recovery_silence_frames = 192;
@@ -153,6 +155,7 @@ sar::platform::WasapiRealtimeWorkerStats make_stats() {
   stats.last_capture_discontinuity = true;
   stats.last_capture_timestamp_error = false;
   stats.last_render_startup_silence = true;
+  stats.last_render_capture_starvation_silence = true;
   stats.last_render_recovery_silence = true;
   return stats;
 }
@@ -420,12 +423,15 @@ int main() {
                        contains(text, "capture_rate_adapter_reset_cycles=4") &&
                        contains(text, "render_startup_silence_cycles=2") &&
                        contains(text, "render_startup_silence_frames=256") &&
+                       contains(text, "render_capture_starvation_silence_cycles=3") &&
+                       contains(text, "render_capture_starvation_silence_frames=384") &&
                        contains(text, "render_recovery_silence_cycles=5") &&
                        contains(text, "render_recovery_silence_frames=640") &&
                        contains(
                            text,
                            "maximum_render_recovery_silence_frames=192") &&
                        contains(text, "last_render_startup_silence=1") &&
+                       contains(text, "last_render_capture_starvation_silence=1") &&
                        contains(text, "last_render_recovery_silence=1") &&
                        contains(text, "minimum_capture_rate_correction_ppm=-22") &&
                        contains(text, "maximum_capture_rate_correction_ppm=17"),

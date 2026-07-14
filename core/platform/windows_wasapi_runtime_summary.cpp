@@ -87,6 +87,10 @@ std::string format_wasapi_runtime_summary_line(
          << summary.render_startup_silence_cycles
          << " render_startup_silence_frames="
          << summary.render_startup_silence_frames
+         << " render_capture_starvation_silence_cycles="
+         << summary.render_capture_starvation_silence_cycles
+         << " render_capture_starvation_silence_frames="
+         << summary.render_capture_starvation_silence_frames
          << " render_recovery_silence_cycles="
          << summary.render_recovery_silence_cycles
          << " render_recovery_silence_frames="
@@ -161,6 +165,8 @@ std::string format_wasapi_runtime_summary_line(
          << bool_token(summary.capture_rate_adapter_recovering)
          << " last_render_startup_silence="
          << bool_token(summary.last_render_startup_silence)
+         << " last_render_capture_starvation_silence="
+         << bool_token(summary.last_render_capture_starvation_silence)
          << " last_render_recovery_silence="
          << bool_token(summary.last_render_recovery_silence)
          << " error_count=" << summary.error_count
@@ -199,6 +205,10 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
   summary.capture_timestamp_error_frames = stats.capture_timestamp_error_frames;
   summary.render_startup_silence_cycles = stats.render_startup_silence_cycles;
   summary.render_startup_silence_frames = stats.render_startup_silence_frames;
+  summary.render_capture_starvation_silence_cycles =
+      stats.render_capture_starvation_silence_cycles;
+  summary.render_capture_starvation_silence_frames =
+      stats.render_capture_starvation_silence_frames;
   summary.render_recovery_silence_cycles =
       stats.render_recovery_silence_cycles;
   summary.render_recovery_silence_frames =
@@ -235,6 +245,8 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
   summary.capture_rate_adapter_recovering =
       stats.capture_rate_adapter_recovering;
   summary.last_render_startup_silence = stats.last_render_startup_silence;
+  summary.last_render_capture_starvation_silence =
+      stats.last_render_capture_starvation_silence;
   summary.last_render_recovery_silence =
       stats.last_render_recovery_silence;
   summary.error_count = errors.size();

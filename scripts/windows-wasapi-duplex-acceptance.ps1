@@ -139,6 +139,7 @@ $renderWaitTimeoutCycles = $null
 $renderedFrames = $null
 $renderRecoverySilenceFrames = $null
 $renderStartupSilenceFrames = $null
+$renderCaptureStarvationSilenceFrames = $null
 $observedMaximumRenderRecoverySilenceFrames = $null
 $captureFifoOverflowCycles = $null
 $captureFifoOverflowFrames = $null
@@ -163,6 +164,8 @@ if ($null -ne $worker) {
   $renderedFrames = ConvertTo-DuplexUnsignedInteger $worker "rendered_frames" $failures
   $renderRecoverySilenceFrames = ConvertTo-DuplexUnsignedInteger $worker "render_recovery_silence_frames" $failures
   $renderStartupSilenceFrames = ConvertTo-DuplexUnsignedInteger $worker "render_startup_silence_frames" $failures
+  $renderCaptureStarvationSilenceFrames = ConvertTo-DuplexUnsignedInteger `
+      $worker "render_capture_starvation_silence_frames" $failures
   if ($worker.ContainsKey("maximum_render_recovery_silence_frames")) {
     $observedMaximumRenderRecoverySilenceFrames = ConvertTo-DuplexUnsignedInteger `
         $worker "maximum_render_recovery_silence_frames" $failures
@@ -234,14 +237,19 @@ if ($null -ne $renderSampleRate) {
 $unlabeledRenderUnderflowFrames = $null
 if ($null -ne $renderFifoUnderflowFrames -and
     $null -ne $renderRecoverySilenceFrames -and
-    $null -ne $renderStartupSilenceFrames) {
+    $null -ne $renderStartupSilenceFrames -and
+    $null -ne $renderCaptureStarvationSilenceFrames) {
   if ($renderRecoverySilenceFrames -gt $renderFifoUnderflowFrames -or
       $renderStartupSilenceFrames -gt
-          ($renderFifoUnderflowFrames - $renderRecoverySilenceFrames)) {
+          ($renderFifoUnderflowFrames - $renderRecoverySilenceFrames) -or
+      $renderCaptureStarvationSilenceFrames -gt
+          ($renderFifoUnderflowFrames - $renderRecoverySilenceFrames -
+              $renderStartupSilenceFrames)) {
     $failures.Add("render_underflow_label_frames_exceed_total")
   } else {
     $unlabeledRenderUnderflowFrames = $renderFifoUnderflowFrames -
-        $renderRecoverySilenceFrames - $renderStartupSilenceFrames
+        $renderRecoverySilenceFrames - $renderStartupSilenceFrames -
+        $renderCaptureStarvationSilenceFrames
     if ($unlabeledRenderUnderflowFrames -ne 0) {
       $failures.Add("unlabeled_render_underflow_frames_nonzero")
     }
@@ -273,6 +281,7 @@ Write-Output (
     " render_fifo_underflow_frames=$(ConvertTo-DuplexSummaryNumber $renderFifoUnderflowFrames)" +
     " render_recovery_silence_frames=$(ConvertTo-DuplexSummaryNumber $renderRecoverySilenceFrames)" +
     " render_startup_silence_frames=$(ConvertTo-DuplexSummaryNumber $renderStartupSilenceFrames)" +
+    " render_capture_starvation_silence_frames=$(ConvertTo-DuplexSummaryNumber $renderCaptureStarvationSilenceFrames)" +
     " unlabeled_render_underflow_frames=$(ConvertTo-DuplexSummaryNumber $unlabeledRenderUnderflowFrames)" +
     " maximum_render_recovery_silence_frames=$(ConvertTo-DuplexSummaryNumber $observedMaximumRenderRecoverySilenceFrames)" +
     " maximum_render_recovery_silence_frames_threshold=$(ConvertTo-DuplexSummaryNumber $MaximumRenderRecoverySilenceFrames)" +

@@ -83,13 +83,13 @@ $temporaryDirectory = Join-Path ([System.IO.Path]::GetTempPath()) `
 [void](New-Item -ItemType Directory -Path $temporaryDirectory)
 
 $runtime = 'wasapi_runtime_summary health=healthy loop_cycles=100 graph_processed_cycles=90 captured_frames=48000 has_capture_stream=1 has_render_stream=1 render_sample_rate=48000 error_count=0'
-$worker = 'wasapi_worker_stats render_wait_timeout_cycles=0 process_error_cycles=0 stream_start_error_cycles=0 stream_stop_error_cycles=0 rendered_frames=47520 render_recovery_silence_frames=48 render_startup_silence_frames=96 maximum_render_recovery_silence_frames=48'
+$worker = 'wasapi_worker_stats render_wait_timeout_cycles=0 process_error_cycles=0 stream_start_error_cycles=0 stream_stop_error_cycles=0 rendered_frames=47520 render_recovery_silence_frames=48 render_startup_silence_frames=64 render_capture_starvation_silence_frames=32 maximum_render_recovery_silence_frames=48'
 $engine = 'engine_diagnostics capture_fifo_overflow_cycles=0 capture_fifo_overflow_frames=0 render_fifo_overflow_cycles=0 render_fifo_overflow_frames=0 render_fifo_underflow_frames=144'
 $goodLines = @($runtime, $worker, $engine)
 
 try {
   Assert-DuplexAcceptanceCase -Name "pass" -Lines $goodLines -ExpectedExitCode 0 `
-      -ExpectedText 'target_rendered_frames=48000 minimum_rendered_frames=47520'
+      -ExpectedText 'render_capture_starvation_silence_frames=32 unlabeled_render_underflow_frames=0'
   Assert-DuplexAcceptanceCase -Name "coverage-custom" -Lines @(
       $runtime,
       ($worker -replace 'rendered_frames=47520', 'rendered_frames=43200'),
@@ -138,8 +138,8 @@ try {
     @("no-render-frames", @($runtime, ($worker -replace 'rendered_frames=47520', 'rendered_frames=0'), $engine), 0, @(), "rendered_frames_zero"),
     @("capture-stream-missing", @(($runtime -replace 'has_capture_stream=1', 'has_capture_stream=0'), $worker, $engine), 0, @(), "capture_stream_required"),
     @("render-stream-missing", @(($runtime -replace 'has_render_stream=1', 'has_render_stream=0'), $worker, $engine), 0, @(), "render_stream_required"),
-    @("unlabeled-underflow", @($runtime, $worker, ($engine -replace 'render_fifo_underflow_frames=144', 'render_fifo_underflow_frames=145')), 0, @(), "unlabeled_render_underflow_frames_nonzero"),
-    @("label-over-total", @($runtime, $worker, ($engine -replace 'render_fifo_underflow_frames=144', 'render_fifo_underflow_frames=143')), 0, @(), "render_underflow_label_frames_exceed_total"),
+    @("starvation-unlabeled-underflow", @($runtime, ($worker -replace 'render_capture_starvation_silence_frames=32', 'render_capture_starvation_silence_frames=31'), $engine), 0, @(), "unlabeled_render_underflow_frames_nonzero"),
+    @("starvation-label-over-total", @($runtime, ($worker -replace 'render_capture_starvation_silence_frames=32', 'render_capture_starvation_silence_frames=33'), $engine), 0, @(), "render_underflow_label_frames_exceed_total"),
     @("coverage", @($runtime, ($worker -replace 'rendered_frames=47520', 'rendered_frames=47519'), $engine), 0, @(), "rendered_frame_coverage_below_minimum"),
     @("recovery-maximum", $goodLines, 0, @("-MaximumRenderRecoverySilenceFrames", "47"), "maximum_render_recovery_silence_frames_exceeded")
   )
@@ -152,8 +152,12 @@ try {
   Assert-DuplexAcceptanceCase -Name "missing-summaries" -Lines @("unrelated") `
       -ExpectedExitCode 1 -ExpectedText 'missing_wasapi_runtime_summary,missing_wasapi_worker_stats,missing_engine_diagnostics'
   Assert-DuplexAcceptanceCase -Name "missing-startup-field" `
-      -Lines @($runtime, ($worker -replace ' render_startup_silence_frames=96', ''), $engine) `
+      -Lines @($runtime, ($worker -replace ' render_startup_silence_frames=64', ''), $engine) `
       -ExpectedExitCode 1 -ExpectedText 'missing_render_startup_silence_frames'
+  Assert-DuplexAcceptanceCase -Name "missing-capture-starvation-field" `
+      -Lines @($runtime, ($worker -replace ' render_capture_starvation_silence_frames=32', ''), $engine) `
+      -ExpectedExitCode 1 `
+      -ExpectedText 'missing_render_capture_starvation_silence_frames'
   Assert-DuplexAcceptanceCase -Name "invalid-field" `
       -Lines @($runtime, ($worker -replace 'rendered_frames=47520', 'rendered_frames=-1'), $engine) `
       -ExpectedExitCode 1 -ExpectedText 'invalid_rendered_frames'

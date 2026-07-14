@@ -49,8 +49,11 @@ sar::platform::WasapiRealtimeWorkerStats make_active_stats() {
   stats.maximum_render_recovery_silence_frames = 64;
   stats.render_startup_silence_cycles = 1;
   stats.render_startup_silence_frames = 64;
+  stats.render_capture_starvation_silence_cycles = 3;
+  stats.render_capture_starvation_silence_frames = 96;
   stats.capture_rate_adapter_recovering = true;
   stats.last_render_startup_silence = true;
+  stats.last_render_capture_starvation_silence = true;
   stats.last_render_recovery_silence = true;
   return stats;
 }
@@ -143,6 +146,8 @@ int main() {
                        "capture_timestamp_error_frames=0 "
                        "render_startup_silence_cycles=0 "
                        "render_startup_silence_frames=0 "
+                       "render_capture_starvation_silence_cycles=0 "
+                       "render_capture_starvation_silence_frames=0 "
                        "render_recovery_silence_cycles=0 "
                        "render_recovery_silence_frames=0 "
                        "maximum_render_recovery_silence_frames=0 "
@@ -177,6 +182,7 @@ int main() {
                        "last_capture_timestamp_error=0 "
                        "capture_rate_adapter_recovering=0 "
                        "last_render_startup_silence=0 "
+                       "last_render_capture_starvation_silence=0 "
                        "last_render_recovery_silence=0 "
                        "error_count=0 first_error_code= "
                        "first_error_native_hresult=none "
@@ -210,11 +216,14 @@ int main() {
                        summary.render_fifo_underflow_frames == 24 &&
                        summary.render_startup_silence_cycles == 1 &&
                        summary.render_startup_silence_frames == 64 &&
+                       summary.render_capture_starvation_silence_cycles == 3 &&
+                       summary.render_capture_starvation_silence_frames == 96 &&
                        summary.render_recovery_silence_cycles == 2 &&
                        summary.render_recovery_silence_frames == 128 &&
                        summary.maximum_render_recovery_silence_frames == 64 &&
                        summary.capture_rate_adapter_recovering &&
                        summary.last_render_startup_silence &&
+                       summary.last_render_capture_starvation_silence &&
                        summary.last_render_recovery_silence,
                    "Expected copied FIFO diagnostics")) {
       return failure;
@@ -239,6 +248,9 @@ int main() {
                        summary_line.find("render_fifo_underflow_frames=24") !=
                            std::string::npos &&
                        summary_line.find("render_startup_silence_frames=64") !=
+                           std::string::npos &&
+                       summary_line.find(
+                           "render_capture_starvation_silence_frames=96") !=
                            std::string::npos &&
                        summary_line.find(
                            "maximum_render_recovery_silence_frames=64") !=

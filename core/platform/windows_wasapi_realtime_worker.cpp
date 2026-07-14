@@ -179,6 +179,8 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   capture_rate_adapter_reset_cycles_.store(0);
   render_startup_silence_cycles_.store(0);
   render_startup_silence_frames_.store(0);
+  render_capture_starvation_silence_cycles_.store(0);
+  render_capture_starvation_silence_frames_.store(0);
   render_recovery_silence_cycles_.store(0);
   render_recovery_silence_frames_.store(0);
   maximum_render_recovery_silence_frames_.store(0);
@@ -197,6 +199,7 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   last_capture_discontinuity_.store(false);
   last_capture_timestamp_error_.store(false);
   last_render_startup_silence_.store(false);
+  last_render_capture_starvation_silence_.store(false);
   last_render_recovery_silence_.store(false);
   last_stop_wait_microseconds_.store(0);
   xrun_baseline_ = diagnostics_.xrun_count;
@@ -313,6 +316,10 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
       render_startup_silence_cycles_.load();
   result.render_startup_silence_frames =
       render_startup_silence_frames_.load();
+  result.render_capture_starvation_silence_cycles =
+      render_capture_starvation_silence_cycles_.load();
+  result.render_capture_starvation_silence_frames =
+      render_capture_starvation_silence_frames_.load();
   result.render_recovery_silence_cycles =
       render_recovery_silence_cycles_.load();
   result.render_recovery_silence_frames =
@@ -337,6 +344,8 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.last_capture_timestamp_error = last_capture_timestamp_error_.load();
   result.last_render_startup_silence =
       last_render_startup_silence_.load();
+  result.last_render_capture_starvation_silence =
+      last_render_capture_starvation_silence_.load();
   result.last_render_recovery_silence =
       last_render_recovery_silence_.load();
   result.last_stop_wait_microseconds = last_stop_wait_microseconds_.load();
@@ -469,6 +478,11 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
       render_startup_silence_frames_.fetch_add(
           result.stats().render_startup_silence_frames);
     }
+    if (result.stats().render_capture_starvation_silence) {
+      render_capture_starvation_silence_cycles_.fetch_add(1);
+      render_capture_starvation_silence_frames_.fetch_add(
+          result.stats().render_capture_starvation_silence_frames);
+    }
     if (result.stats().render_recovery_silence) {
       render_recovery_silence_cycles_.fetch_add(1);
       render_recovery_silence_frames_.fetch_add(
@@ -513,6 +527,8 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     last_capture_timestamp_error_.store(result.stats().capture_timestamp_error);
     last_render_startup_silence_.store(
         result.stats().render_startup_silence);
+    last_render_capture_starvation_silence_.store(
+        result.stats().render_capture_starvation_silence);
     last_render_recovery_silence_.store(
         result.stats().render_recovery_silence);
     if (result.stats().graph_processed) {

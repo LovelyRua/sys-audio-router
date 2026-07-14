@@ -217,6 +217,8 @@ int main() {
                                         stats.capture_rate_adapter_reset_cycles == 0 &&
                                         stats.render_startup_silence_cycles == 0 &&
                                         stats.render_startup_silence_frames == 0 &&
+                                        stats.render_capture_starvation_silence_cycles == 0 &&
+                                        stats.render_capture_starvation_silence_frames == 0 &&
                                         stats.maximum_render_recovery_silence_frames == 0 &&
                                         stats.minimum_capture_rate_correction_ppm == 0.0 &&
                                         stats.maximum_capture_rate_correction_ppm == 0.0,
@@ -345,6 +347,8 @@ int main() {
                        worker.stats().capture_rate_adapter_reset_cycles == 0 &&
                        worker.stats().render_startup_silence_cycles == 0 &&
                        worker.stats().render_startup_silence_frames == 0 &&
+                       worker.stats().render_capture_starvation_silence_cycles == 0 &&
+                       worker.stats().render_capture_starvation_silence_frames == 0 &&
                        worker.stats().maximum_render_recovery_silence_frames == 0 &&
                        worker.stats().minimum_capture_rate_correction_ppm == 0.0 &&
                        worker.stats().maximum_capture_rate_correction_ppm == 0.0,
@@ -452,7 +456,9 @@ int main() {
     capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Idle});
     capture.enqueue_capture({.frames = 32, .samples = {adaptive_samples(256)}});
     capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Idle});
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Idle});
     capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Cancelled});
+    render.enqueue_render({.writable_frames = 64});
     render.enqueue_render({.writable_frames = 64});
     render.enqueue_render({.writable_frames = 64});
     render.enqueue_render({.writable_frames = 64});
@@ -500,7 +506,13 @@ int main() {
                 stats.render_startup_silence_frames == 64 &&
                 stats.render_recovery_silence_cycles == 3 &&
                 stats.render_recovery_silence_frames == 192 &&
-                stats.maximum_render_recovery_silence_frames == 128,
+                stats.maximum_render_recovery_silence_frames == 128 &&
+                stats.render_capture_starvation_silence_cycles == 1 &&
+                stats.render_capture_starvation_silence_frames == 64 &&
+                diagnostics.render_fifo_underflow_frames ==
+                    stats.render_startup_silence_frames +
+                        stats.render_recovery_silence_frames +
+                        stats.render_capture_starvation_silence_frames,
             "Expected bounded per-discontinuity recovery silence maximum")) {
       return failure;
     }

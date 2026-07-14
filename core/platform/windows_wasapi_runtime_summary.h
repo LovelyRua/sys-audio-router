@@ -40,6 +40,8 @@ struct WasapiRuntimeSummary {
   std::uint64_t capture_timestamp_error_frames = 0;
   std::uint64_t render_startup_silence_cycles = 0;
   std::uint64_t render_startup_silence_frames = 0;
+  std::uint64_t render_capture_starvation_silence_cycles = 0;
+  std::uint64_t render_capture_starvation_silence_frames = 0;
   std::uint64_t render_recovery_silence_cycles = 0;
   std::uint64_t render_recovery_silence_frames = 0;
   std::uint64_t maximum_render_recovery_silence_frames = 0;
@@ -91,6 +93,7 @@ struct WasapiRuntimeSummary {
   bool last_capture_timestamp_error = false;
   bool capture_rate_adapter_recovering = false;
   bool last_render_startup_silence = false;
+  bool last_render_capture_starvation_silence = false;
   bool last_render_recovery_silence = false;
   std::size_t error_count = 0;
   std::string first_error_code;

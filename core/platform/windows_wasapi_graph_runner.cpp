@@ -791,6 +791,9 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
                  !capture_rate_adapter_->ever_produced_graph_block) {
         stats.render_startup_silence = true;
         stats.render_startup_silence_frames = stats.rendered_frames;
+      } else if (capture_rate_adapter_) {
+        stats.render_capture_starvation_silence = true;
+        stats.render_capture_starvation_silence_frames = stats.rendered_frames;
       }
     }
   }
