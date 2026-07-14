@@ -14,12 +14,18 @@ static_assert(std::atomic<ULONG>::is_always_lock_free);
 
 class EndpointNotificationClient final : public IMMNotificationClient {
  public:
-  EndpointNotificationClient(std::atomic<std::uint64_t>& capture_generation,
-                             std::atomic<std::uint64_t>& render_generation,
+  EndpointNotificationClient(std::uint64_t capture_generation,
+                             std::uint64_t render_generation,
                              HANDLE change_event) noexcept
       : capture_generation_(capture_generation),
         render_generation_(render_generation),
         change_event_(change_event) {}
+
+  ~EndpointNotificationClient() {
+    if (change_event_ != nullptr) {
+      CloseHandle(change_event_);
+    }
+  }
 
   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID interface_id,
                                            void** object) noexcept override {
@@ -83,10 +89,18 @@ class EndpointNotificationClient final : public IMMNotificationClient {
     return S_OK;
   }
 
+  [[nodiscard]] std::uint64_t capture_generation() const noexcept {
+    return capture_generation_.load(std::memory_order_acquire);
+  }
+
+  [[nodiscard]] std::uint64_t render_generation() const noexcept {
+    return render_generation_.load(std::memory_order_acquire);
+  }
+
  private:
   std::atomic<ULONG> reference_count_{1};
-  std::atomic<std::uint64_t>& capture_generation_;
-  std::atomic<std::uint64_t>& render_generation_;
+  std::atomic<std::uint64_t> capture_generation_;
+  std::atomic<std::uint64_t> render_generation_;
   HANDLE change_event_ = nullptr;
 };
 
@@ -115,7 +129,8 @@ std::int32_t WindowsWasapiEndpointNotification::register_notifications() noexcep
   }
 
   auto* client = new (std::nothrow) EndpointNotificationClient(
-      capture_generation_, render_generation_, change_event);
+      capture_generation_.load(std::memory_order_acquire),
+      render_generation_.load(std::memory_order_acquire), change_event);
   if (client == nullptr) {
     CloseHandle(change_event);
     return E_OUTOFMEMORY;
@@ -129,7 +144,6 @@ std::int32_t WindowsWasapiEndpointNotification::register_notifications() noexcep
                                               reinterpret_cast<void**>(&enumerator));
   if (FAILED(create_result)) {
     client->Release();
-    CloseHandle(change_event);
     return create_result;
   }
 
@@ -138,7 +152,6 @@ std::int32_t WindowsWasapiEndpointNotification::register_notifications() noexcep
   if (FAILED(register_result)) {
     enumerator->Release();
     client->Release();
-    CloseHandle(change_event);
     return register_result;
   }
 
@@ -158,9 +171,25 @@ std::int32_t WindowsWasapiEndpointNotification::unregister_notifications() noexc
   const auto unregister_result =
       enumerator->UnregisterEndpointNotificationCallback(client);
 
+  return finish_unregistration(unregister_result);
+}
+
+std::int32_t WindowsWasapiEndpointNotification::finish_unregistration(
+    std::int32_t unregister_result) noexcept {
+  if (FAILED(unregister_result)) {
+    // The callback may still be registered. Keep its owner reference, event, and
+    // enumerator alive so a later callback cannot target released storage.
+    return unregister_result;
+  }
+
+  auto* enumerator = as_enumerator(enumerator_);
+  auto* client = as_client(client_);
+  capture_generation_.store(client->capture_generation(),
+                            std::memory_order_release);
+  render_generation_.store(client->render_generation(),
+                           std::memory_order_release);
   enumerator->Release();
   client->Release();
-  CloseHandle(static_cast<HANDLE>(change_event_));
   enumerator_ = nullptr;
   client_ = nullptr;
   change_event_ = nullptr;
@@ -181,11 +210,13 @@ bool WindowsWasapiEndpointNotification::reset_change_event() noexcept {
 }
 
 std::uint64_t WindowsWasapiEndpointNotification::capture_generation() const noexcept {
-  return capture_generation_.load(std::memory_order_acquire);
+  return client_ != nullptr ? as_client(client_)->capture_generation()
+                            : capture_generation_.load(std::memory_order_acquire);
 }
 
 std::uint64_t WindowsWasapiEndpointNotification::render_generation() const noexcept {
-  return render_generation_.load(std::memory_order_acquire);
+  return client_ != nullptr ? as_client(client_)->render_generation()
+                            : render_generation_.load(std::memory_order_acquire);
 }
 
 std::int32_t WindowsWasapiEndpointNotification::notify_default_device_for_test(
@@ -195,6 +226,18 @@ std::int32_t WindowsWasapiEndpointNotification::notify_default_device_for_test(
   }
   return as_client(client_)->OnDefaultDeviceChanged(
       static_cast<EDataFlow>(data_flow), eConsole, nullptr);
+}
+
+std::int32_t
+WindowsWasapiEndpointNotification::retain_failed_unregistration_for_test(
+    std::int32_t unregister_result) noexcept {
+  if (!registered()) {
+    return E_UNEXPECTED;
+  }
+  if (SUCCEEDED(unregister_result)) {
+    return E_INVALIDARG;
+  }
+  return finish_unregistration(unregister_result);
 }
 
 }  // namespace sar::platform

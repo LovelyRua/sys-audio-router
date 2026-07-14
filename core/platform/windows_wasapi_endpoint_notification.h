@@ -30,6 +30,10 @@ class WindowsWasapiEndpointNotification {
 
   [[nodiscard]] std::int32_t notify_default_device_for_test(
       std::int32_t data_flow) noexcept;
+  [[nodiscard]] std::int32_t retain_failed_unregistration_for_test(
+      std::int32_t unregister_result) noexcept;
+  [[nodiscard]] std::int32_t finish_unregistration(
+      std::int32_t unregister_result) noexcept;
 
   std::atomic<std::uint64_t> capture_generation_{0};
   std::atomic<std::uint64_t> render_generation_{0};

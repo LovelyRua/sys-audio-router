@@ -14,6 +14,13 @@ struct WindowsWasapiEndpointNotificationTestAccess {
     return notification.notify_default_device_for_test(
         static_cast<std::int32_t>(flow));
   }
+
+  static std::int32_t retain_failed_unregistration(
+      WindowsWasapiEndpointNotification& notification,
+      std::int32_t unregister_result) noexcept {
+    return notification.retain_failed_unregistration_for_test(
+        unregister_result);
+  }
 };
 
 }  // namespace sar::platform
@@ -101,6 +108,38 @@ int main() {
     return failure;
   }
 
+  auto* const event_before_failed_unregister = notification.change_event();
+  const auto injected_unregister_result =
+      WindowsWasapiEndpointNotificationTestAccess::retain_failed_unregistration(
+          notification, E_FAIL);
+  if (const auto failure = expect(injected_unregister_result == E_FAIL,
+                                  "Expected injected unregister failure")) {
+    return failure;
+  }
+  if (const auto failure = expect(notification.registered(),
+                                  "Failed unregister discarded registration")) {
+    return failure;
+  }
+  if (const auto failure = expect(
+          notification.change_event() == event_before_failed_unregister,
+          "Failed unregister discarded notification event")) {
+    return failure;
+  }
+
+  WindowsWasapiEndpointNotificationTestAccess::notify_default_device(notification,
+                                                                     eCapture);
+  if (const auto failure = expect(notification.capture_generation() == 3 &&
+                                      notification.render_generation() == 2,
+                                  "Callback state invalid after unregister failure")) {
+    return failure;
+  }
+  if (const auto failure = expect(
+          WaitForSingleObject(static_cast<HANDLE>(notification.change_event()), 0) ==
+              WAIT_OBJECT_0,
+          "Callback event invalid after unregister failure")) {
+    return failure;
+  }
+
   const auto unregister_result = notification.unregister_notifications();
   if (FAILED(unregister_result)) {
     std::cerr << "Failed to unregister endpoint notifications: " << std::hex
@@ -113,6 +152,11 @@ int main() {
   }
   if (const auto failure = expect(notification.change_event() == nullptr,
                                   "Expected notification event cleanup")) {
+    return failure;
+  }
+  if (const auto failure = expect(notification.capture_generation() == 3 &&
+                                      notification.render_generation() == 2,
+                                  "Expected generations to survive cleanup")) {
     return failure;
   }
 
