@@ -1,3 +1,7 @@
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 #include "core/diagnostics/engine_diagnostics.h"
 #include "core/graph/graph.h"
 #include "core/graph/node.h"
