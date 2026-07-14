@@ -73,6 +73,29 @@ std::vector<float> adaptive_samples(std::uint32_t first_frame) {
   return result;
 }
 
+class WorkerStopNode final : public sar::graph::Node {
+ public:
+  void set_worker(sar::platform::WindowsWasapiRealtimeWorker* worker) noexcept {
+    worker_ = worker;
+  }
+
+  void process(const sar::realtime::ProcessContext&,
+               const sar::realtime::AudioBuffer& input,
+               sar::realtime::AudioBuffer& output) noexcept override {
+    output.copy_from(input);
+    ++process_calls_;
+    worker_->stop();
+  }
+
+  [[nodiscard]] std::uint32_t process_calls() const noexcept {
+    return process_calls_;
+  }
+
+ private:
+  sar::platform::WindowsWasapiRealtimeWorker* worker_ = nullptr;
+  std::uint32_t process_calls_ = 0;
+};
+
 }  // namespace
 
 int main() {
@@ -561,6 +584,37 @@ int main() {
     if (const auto failure = expect(worker.stats().process_error_cycles == 1 &&
                                         worker.stats().stream_stop_error_cycles == 1,
                                     "Expected one process and one stop error")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::tests::ScriptedWasapiStream capture(
+        make_adaptive_probe(sar::platform::WasapiStreamDirection::Capture));
+    capture.enqueue_capture({.frames = 64, .samples = {adaptive_samples(0)}});
+
+    sar::platform::WindowsWasapiGraphRunner runner(&capture, nullptr, 1, 64);
+    sar::graph::Graph graph(18, 1, 64, 48000);
+    auto stop_node = std::make_unique<WorkerStopNode>();
+    auto* stop_node_ptr = stop_node.get();
+    graph.add_node(std::move(stop_node));
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    sar::platform::WindowsWasapiRealtimeWorker worker(runner, graph, diagnostics);
+    stop_node_ptr->set_worker(&worker);
+
+    const auto start_result = worker.start(1);
+    if (const auto failure =
+            expect(start_result.ok(), "Expected self-stop worker start")) {
+      return failure;
+    }
+    for (int attempt = 0; attempt < 100 && worker.running(); ++attempt) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    worker.stop();
+
+    if (const auto failure = expect(!worker.running() &&
+                                        stop_node_ptr->process_calls() == 1,
+                                    "Expected worker-thread stop without self-join")) {
       return failure;
     }
   }

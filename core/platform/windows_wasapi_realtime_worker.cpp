@@ -237,6 +237,9 @@ void WindowsWasapiRealtimeWorker::stop() noexcept {
   std::lock_guard lifecycle_lock(lifecycle_mutex_);
   stop_requested_.store(true);
   runner_.request_stop();
+  if (worker_.joinable() && worker_.get_id() == std::this_thread::get_id()) {
+    return;
+  }
   if (worker_.joinable()) {
     const auto started = std::chrono::steady_clock::now();
     worker_.join();
