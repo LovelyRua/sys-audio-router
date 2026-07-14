@@ -115,6 +115,22 @@ void WindowsWasapiDuplexSupervisor::tick(std::uint64_t now_ms) {
   }
 }
 
+void WindowsWasapiDuplexSupervisor::request_reopen(std::uint64_t now_ms) {
+  if (policy_.state() != WasapiRecoveryState::Running) {
+    return;
+  }
+  if (!recovery_episode_active_) {
+    recovery_episode_active_ = true;
+    recovery_started_at_ms_ = now_ms;
+    ++recovery_episode_count_;
+  }
+  last_errors_.clear();
+  policy_.on_failure(WasapiFailureClass::DeviceInvalidated, now_ms);
+  if (policy_.state() == WasapiRecoveryState::Quiescing) {
+    quiesce(now_ms);
+  }
+}
+
 void WindowsWasapiDuplexSupervisor::stop(std::uint64_t now_ms) noexcept {
   policy_.request_stop();
   recovery_episode_active_ = false;

@@ -70,6 +70,7 @@ class WindowsWasapiDuplexSupervisor {
 
   void start(std::uint64_t now_ms);
   void tick(std::uint64_t now_ms);
+  void request_reopen(std::uint64_t now_ms);
   void stop(std::uint64_t now_ms) noexcept;
   [[nodiscard]] WasapiRecoveryState state() const noexcept;
   [[nodiscard]] bool running() const noexcept;

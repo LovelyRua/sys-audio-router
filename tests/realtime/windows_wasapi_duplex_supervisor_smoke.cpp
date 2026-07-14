@@ -162,4 +162,30 @@ int main() {
   assert(exhausted_supervisor.summary().recovery_episode_count == 1);
   assert(exhausted_supervisor.summary().successful_recovery_count == 0);
   assert(exhausted_supervisor.summary().failed_recovery_count == 1);
+
+  auto notification_first = std::make_shared<RuntimeState>();
+  auto notification_second = std::make_shared<RuntimeState>();
+  std::uint32_t notification_open_count = 0;
+  WindowsWasapiDuplexSupervisor notification_supervisor(
+      [&] {
+        ++notification_open_count;
+        auto state = notification_open_count == 1 ? notification_first
+                                                   : notification_second;
+        return WasapiDuplexRuntimeOpenResult::success(
+            std::make_unique<ScriptedRuntime>(std::move(state)));
+      },
+      10);
+  notification_supervisor.start(1000);
+  assert(notification_supervisor.running());
+  notification_supervisor.request_reopen(1100);
+  assert(notification_supervisor.state() == WasapiRecoveryState::Backoff);
+  assert(notification_first->stop_count == 1);
+  assert(notification_supervisor.summary().recovery_episode_count == 1);
+  notification_supervisor.request_reopen(1100);
+  assert(notification_open_count == 1);
+  notification_supervisor.tick(1100);
+  assert(notification_supervisor.running());
+  assert(notification_open_count == 2);
+  assert(notification_second->start_count == 1);
+  assert(notification_supervisor.summary().successful_recovery_count == 1);
 }
