@@ -40,3 +40,16 @@ The profile, initiating WinRM identity, sanitized slot, and run GUID isolate
 concurrent users and runs. Output is retained for inspection; the Scheduled Task
 is always removed. Passwords are accepted only as a command argument or through
 `SAR_TEST_PASSWORD` and must not be stored in repository files.
+
+Validate a retained `stdout.log` with the machine-readable acceptance script:
+
+```powershell
+scripts\windows-wasapi-recovery-acceptance.ps1 `
+  -InputPath C:\path\to\stdout.log -ProcessExitCode 0
+```
+
+The default gate requires a healthy final running snapshot, non-empty active
+capture and render IDs, at least one successful recovery, no notification reset
+failure, a zero process exit code, and a maximum recovery duration no greater
+than 5000 ms. Use `-AllowNoSuccessfulRecovery` only for a baseline run that does
+not inject an endpoint change.

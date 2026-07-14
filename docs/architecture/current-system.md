@@ -24,7 +24,8 @@ still expose independent-device clocking behavior. Render-master scheduling now
 drives a bounded FIFO waterline controller and adaptive capture resampler, with
 native-clock feed-forward supplying the measured clock-rate difference and the
 FIFO controller correcting residual fill error. The feed-forward path has short
-real-device evidence only; bounded discontinuity recovery, device reopen,
+real-device evidence only; default-endpoint reopen now has a short hardware
+pass, while bounded discontinuity recovery, pinned-device removal,
 render-deadline ordering, and long soaks remain alpha gates.
 
 ## Portable Core
@@ -265,6 +266,16 @@ five-second runs totalled four discontinuities and eight underflow cycles, also
 without overflow. This is repeatable short-run improvement, while long-duration
 evidence is still required before treating the tuning as production-stable.
 
+A 12-second recovery measurement switched the default capture and render
+endpoints from the High Definition Audio device to VoiceMeeter and then back.
+The supervisor consumed two paired generation changes, rebuilt the duplex
+runtime twice, and finished with two successful recoveries, no failed recovery,
+no notification-reset failure, and no retained worker error. The maximum
+reported recovery duration was 290 ms against the five-second gate. The final
+active endpoint IDs matched the restored High Definition Audio endpoints. This
+is evidence for follow-default switching, not yet for physical unplug/replug or
+a disappearing pinned endpoint.
+
 Coordinating capture and render event waits reduced two subsequent 10-second
 runs to two/one capture discontinuities, three/one render FIFO underflow cycles,
 and six/eight wait timeouts respectively. Both runs transferred about 482,400
@@ -307,10 +318,14 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   realtime-worker layers, and device invalidation feeds a bounded control-thread
   reopen policy. A lock-free endpoint-notification source and endpoint-selection
   policy now drive supervisor reopen decisions, with generation, reset-failure,
-  and notification-reopen counters. Measuring the unplug/replug recovery deadline
-  on hardware remains. `sar_measure_wasapi_recovery` now supplies the MTA control
-  loop and machine-readable recovery summaries for that interactive experiment;
-  `--capture-id` and `--render-id` select pinned endpoints independently.
+  and notification-reopen counters. A default-endpoint A-to-B-to-A hardware run
+  passed the five-second deadline with a 290 ms maximum. Physical unplug/replug
+  and pinned-endpoint disappearance remain unmeasured.
+  `sar_measure_wasapi_recovery` supplies the MTA control loop and machine-readable
+  recovery summaries; `--capture-id` and `--render-id` select pinned endpoints
+  independently. `windows-wasapi-recovery-acceptance.ps1` enforces final health,
+  endpoint identity, successful recovery, reset failure, process exit, and
+  recovery-duration gates for retained logs.
 - Multi-hour real-device stability has not been demonstrated. The eight-hour
   pairwise and 24-hour backend alpha soaks in the roadmap remain outstanding.
 - Loopback capture is not yet connected to a selectable render destination or
