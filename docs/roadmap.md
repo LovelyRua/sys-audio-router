@@ -118,8 +118,9 @@ the soak gates.
   spin or continue using the invalid stream. The recovery policy, conservative
   exact native HRESULT propagation, lock-free endpoint notifications, endpoint
   selection, notification-to-supervisor reopen decisions, error-code classifier,
-  and whole-duplex-runtime supervisor are implemented. Hardware recovery evidence
-  remains.
+  whole-duplex-runtime supervisor, and an interactive recovery measurement CLI
+  are implemented. Notifications are filtered to the `eConsole` role used by the
+  current probe path. Hardware recovery evidence remains.
 - **Render deadline ordering:** when capture and render are both ready, service
   render before draining additional capture packets or producing optional graph
   backlog. A deterministic call-order smoke test must prove the ordering. A
