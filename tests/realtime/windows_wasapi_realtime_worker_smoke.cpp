@@ -215,6 +215,8 @@ int main() {
                                         stats.capture_fifo_correction_ppm == 0.0 &&
                                         stats.capture_resampler_ratio == 1.0 &&
                                         stats.capture_rate_adapter_reset_cycles == 0 &&
+                                        stats.render_startup_silence_cycles == 0 &&
+                                        stats.render_startup_silence_frames == 0 &&
                                         stats.maximum_render_recovery_silence_frames == 0 &&
                                         stats.minimum_capture_rate_correction_ppm == 0.0 &&
                                         stats.maximum_capture_rate_correction_ppm == 0.0,
@@ -341,6 +343,8 @@ int main() {
                        worker.stats().capture_fifo_correction_ppm == 0.0 &&
                        worker.stats().capture_resampler_ratio == 1.0 &&
                        worker.stats().capture_rate_adapter_reset_cycles == 0 &&
+                       worker.stats().render_startup_silence_cycles == 0 &&
+                       worker.stats().render_startup_silence_frames == 0 &&
                        worker.stats().maximum_render_recovery_silence_frames == 0 &&
                        worker.stats().minimum_capture_rate_correction_ppm == 0.0 &&
                        worker.stats().maximum_capture_rate_correction_ppm == 0.0,
@@ -432,6 +436,7 @@ int main() {
         make_adaptive_probe(sar::platform::WasapiStreamDirection::Capture));
     sar::tests::ScriptedWasapiStream render(
         make_adaptive_probe(sar::platform::WasapiStreamDirection::Render));
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Idle});
     capture.enqueue_capture({.frames = 32, .samples = {adaptive_samples(0)}});
     capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Idle});
     capture.enqueue_capture({.frames = 32,
@@ -448,6 +453,7 @@ int main() {
     capture.enqueue_capture({.frames = 32, .samples = {adaptive_samples(256)}});
     capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Idle});
     capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Cancelled});
+    render.enqueue_render({.writable_frames = 64});
     render.enqueue_render({.writable_frames = 64});
     render.enqueue_render({.writable_frames = 64});
     render.enqueue_render({.writable_frames = 64});
@@ -474,11 +480,15 @@ int main() {
 
     const auto stats = worker.stats();
     if (stats.capture_rate_adapter_reset_cycles != 2 ||
+        stats.render_startup_silence_cycles != 1 ||
+        stats.render_startup_silence_frames != 64 ||
         stats.render_recovery_silence_cycles != 3 ||
         stats.render_recovery_silence_frames != 192 ||
         stats.maximum_render_recovery_silence_frames != 128) {
       std::cerr << "Recovery silence stats: resets="
                 << stats.capture_rate_adapter_reset_cycles
+                << " startup_cycles=" << stats.render_startup_silence_cycles
+                << " startup_frames=" << stats.render_startup_silence_frames
                 << " cycles=" << stats.render_recovery_silence_cycles
                 << " total_frames=" << stats.render_recovery_silence_frames
                 << " maximum_frames="
@@ -486,6 +496,8 @@ int main() {
     }
     if (const auto failure = expect(
             stats.capture_rate_adapter_reset_cycles == 2 &&
+                stats.render_startup_silence_cycles == 1 &&
+                stats.render_startup_silence_frames == 64 &&
                 stats.render_recovery_silence_cycles == 3 &&
                 stats.render_recovery_silence_frames == 192 &&
                 stats.maximum_render_recovery_silence_frames == 128,

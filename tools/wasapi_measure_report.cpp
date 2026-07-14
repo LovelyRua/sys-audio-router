@@ -102,6 +102,10 @@ void print_wasapi_runtime_summary(
       << summary.render_fifo_underflow_cycles << '\n';
   out << "  Render FIFO underflow frames: "
       << summary.render_fifo_underflow_frames << '\n';
+  out << "  Render startup silence cycles: "
+      << summary.render_startup_silence_cycles << '\n';
+  out << "  Render startup silence frames: "
+      << summary.render_startup_silence_frames << '\n';
   out << "  Render recovery silence cycles: "
       << summary.render_recovery_silence_cycles << '\n';
   out << "  Render recovery silence frames: "
@@ -211,6 +215,10 @@ void print_wasapi_worker_stats(
       << bool_token(stats.capture_rate_adapter_recovering)
       << " capture_rate_adapter_reset_cycles="
       << stats.capture_rate_adapter_reset_cycles
+      << " render_startup_silence_cycles="
+      << stats.render_startup_silence_cycles
+      << " render_startup_silence_frames="
+      << stats.render_startup_silence_frames
       << " render_recovery_silence_cycles="
       << stats.render_recovery_silence_cycles
       << " render_recovery_silence_frames="
@@ -238,6 +246,8 @@ void print_wasapi_worker_stats(
       << bool_token(stats.last_capture_discontinuity)
       << " last_capture_timestamp_error="
       << bool_token(stats.last_capture_timestamp_error)
+      << " last_render_startup_silence="
+      << bool_token(stats.last_render_startup_silence)
       << " last_render_recovery_silence="
       << bool_token(stats.last_render_recovery_silence)
       << '\n';
@@ -285,6 +295,10 @@ void print_wasapi_worker_stats(
       << (stats.capture_rate_adapter_recovering ? "yes" : "no") << '\n';
   out << "  Capture rate adapter reset cycles: "
       << stats.capture_rate_adapter_reset_cycles << '\n';
+  out << "  Render startup silence cycles: "
+      << stats.render_startup_silence_cycles << '\n';
+  out << "  Render startup silence frames: "
+      << stats.render_startup_silence_frames << '\n';
   out << "  Render recovery silence cycles: "
       << stats.render_recovery_silence_cycles << '\n';
   out << "  Render recovery silence frames: "

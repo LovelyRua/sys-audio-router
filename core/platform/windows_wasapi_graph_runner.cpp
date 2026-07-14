@@ -241,6 +241,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::start_streams() noexcept {
     capture_rate_adapter_->primed = false;
     capture_rate_adapter_->recovery_active = false;
     capture_rate_adapter_->recovery_preroll_pending = false;
+    capture_rate_adapter_->ever_produced_graph_block = false;
   }
 
   if (capture_stream_ != nullptr) {
@@ -732,6 +733,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     graph.process(input_, output_, diagnostics);
     stats.graph_processed = true;
     if (capture_rate_adapter_) {
+      capture_rate_adapter_->ever_produced_graph_block = true;
       capture_rate_adapter_->output_frames_ready = 0;
       capture_rate_adapter_->ratio_set_for_block = false;
       capture_rate_adapter_->recovery_active = false;
@@ -785,6 +787,10 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
       if (capture_rate_adapter_ && capture_rate_adapter_->recovery_active) {
         stats.render_recovery_silence = true;
         stats.render_recovery_silence_frames = stats.rendered_frames;
+      } else if (capture_rate_adapter_ &&
+                 !capture_rate_adapter_->ever_produced_graph_block) {
+        stats.render_startup_silence = true;
+        stats.render_startup_silence_frames = stats.rendered_frames;
       }
     }
   }

@@ -61,6 +61,8 @@ struct WasapiRealtimeWorkerStats {
   bool capture_rate_adapter_active = false;
   bool capture_rate_adapter_recovering = false;
   std::uint64_t capture_rate_adapter_reset_cycles = 0;
+  std::uint64_t render_startup_silence_cycles = 0;
+  std::uint64_t render_startup_silence_frames = 0;
   std::uint64_t render_recovery_silence_cycles = 0;
   std::uint64_t render_recovery_silence_frames = 0;
   std::uint64_t maximum_render_recovery_silence_frames = 0;
@@ -78,6 +80,7 @@ struct WasapiRealtimeWorkerStats {
   bool last_capture_silent = false;
   bool last_capture_discontinuity = false;
   bool last_capture_timestamp_error = false;
+  bool last_render_startup_silence = false;
   bool last_render_recovery_silence = false;
   std::uint64_t last_stop_wait_microseconds = 0;
 };
@@ -161,6 +164,8 @@ class WindowsWasapiRealtimeWorker {
   std::atomic_bool capture_rate_adapter_active_ = false;
   std::atomic_bool capture_rate_adapter_recovering_ = false;
   std::atomic_uint64_t capture_rate_adapter_reset_cycles_ = 0;
+  std::atomic_uint64_t render_startup_silence_cycles_ = 0;
+  std::atomic_uint64_t render_startup_silence_frames_ = 0;
   std::atomic_uint64_t render_recovery_silence_cycles_ = 0;
   std::atomic_uint64_t render_recovery_silence_frames_ = 0;
   std::atomic_uint64_t maximum_render_recovery_silence_frames_ = 0;
@@ -178,6 +183,7 @@ class WindowsWasapiRealtimeWorker {
   std::atomic_bool last_capture_silent_ = false;
   std::atomic_bool last_capture_discontinuity_ = false;
   std::atomic_bool last_capture_timestamp_error_ = false;
+  std::atomic_bool last_render_startup_silence_ = false;
   std::atomic_bool last_render_recovery_silence_ = false;
   std::atomic_uint64_t last_stop_wait_microseconds_ = 0;
   std::uint64_t xrun_baseline_ = 0;

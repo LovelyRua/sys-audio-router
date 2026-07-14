@@ -25,6 +25,7 @@ struct WasapiGraphRunnerStats {
   std::uint32_t capture_silent_frames = 0;
   std::uint32_t capture_resampler_input_frames = 0;
   std::uint32_t capture_resampler_output_frames = 0;
+  std::uint32_t render_startup_silence_frames = 0;
   std::uint32_t render_recovery_silence_frames = 0;
   double capture_rate_correction_ppm = 0.0;
   double capture_clock_feed_forward_ppm = 0.0;
@@ -33,6 +34,7 @@ struct WasapiGraphRunnerStats {
   bool capture_rate_adapter_active = false;
   bool capture_rate_adapter_reset = false;
   bool capture_rate_adapter_recovering = false;
+  bool render_startup_silence = false;
   bool render_recovery_silence = false;
   bool graph_processed = false;
   bool capture_stream_idle = false;
@@ -129,6 +131,7 @@ class WindowsWasapiGraphRunner {
     bool primed = false;
     bool recovery_active = false;
     bool recovery_preroll_pending = false;
+    bool ever_produced_graph_block = false;
   };
 
   [[nodiscard]] WasapiGraphRunnerResult process_buffered_once(
