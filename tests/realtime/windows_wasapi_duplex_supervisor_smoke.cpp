@@ -1,16 +1,34 @@
 #include "core/platform/windows_wasapi_duplex_supervisor.h"
+#include "core/platform/windows_wasapi_endpoint_notification.h"
 
 #include <cassert>
 #include <cstdint>
+#include <mmdeviceapi.h>
 #include <memory>
 #include <utility>
 #include <vector>
+#include <windows.h>
+
+namespace sar::platform {
+
+struct WindowsWasapiEndpointNotificationTestAccess {
+  static std::int32_t notify_default_device(
+      WindowsWasapiEndpointNotification& notification,
+      EDataFlow flow) noexcept {
+    return notification.notify_default_device_for_test(
+        static_cast<std::int32_t>(flow));
+  }
+};
+
+}  // namespace sar::platform
 
 namespace {
 
 using sar::platform::WasapiDuplexRuntime;
 using sar::platform::WasapiDuplexRuntimeOpenResult;
 using sar::platform::WasapiFailureClass;
+using sar::platform::WasapiEndpointSelection;
+using sar::platform::WasapiEndpointSelectionPolicy;
 using sar::platform::WasapiRealtimeWorkerError;
 using sar::platform::WasapiRealtimeWorkerResult;
 using sar::platform::WasapiRecoveryState;
@@ -195,4 +213,78 @@ int main() {
   assert(notification_open_count == 2);
   assert(notification_second->start_count == 1);
   assert(notification_supervisor.summary().successful_recovery_count == 1);
+
+  const auto com_result = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  assert(SUCCEEDED(com_result) || com_result == RPC_E_CHANGED_MODE);
+  const bool uninitialize_com = SUCCEEDED(com_result);
+
+  sar::platform::WindowsWasapiEndpointNotification endpoint_notifications;
+  assert(SUCCEEDED(endpoint_notifications.register_notifications()));
+
+  auto default_first = std::make_shared<RuntimeState>();
+  auto default_second = std::make_shared<RuntimeState>();
+  std::uint32_t default_open_count = 0;
+  WindowsWasapiDuplexSupervisor default_supervisor(
+      [&] {
+        ++default_open_count;
+        auto state = default_open_count == 1 ? default_first : default_second;
+        return WasapiDuplexRuntimeOpenResult::success(
+            std::make_unique<ScriptedRuntime>(std::move(state)));
+      },
+      10);
+  default_supervisor.start(2000);
+  auto requirements =
+      default_supervisor.poll_endpoint_notifications(endpoint_notifications,
+                                                     2000);
+  assert(!requirements.capture && !requirements.render);
+  assert(default_supervisor.summary().endpoint_generations_initialized);
+  assert(default_supervisor.summary()
+             .endpoint_notification_reset_failure_count == 0);
+
+  using sar::platform::WindowsWasapiEndpointNotificationTestAccess;
+  assert(SUCCEEDED(
+      WindowsWasapiEndpointNotificationTestAccess::notify_default_device(
+          endpoint_notifications, eCapture)));
+  requirements = default_supervisor.poll_endpoint_notifications(
+      endpoint_notifications, 2100);
+  assert(requirements.capture && !requirements.render);
+  assert(default_supervisor.state() == WasapiRecoveryState::Backoff);
+  assert(default_first->stop_count == 1);
+  assert(default_supervisor.summary().capture_endpoint_generation == 1);
+  assert(default_supervisor.summary().endpoint_notification_reopen_count == 1);
+  default_supervisor.tick(2100);
+  assert(default_supervisor.running());
+  assert(default_open_count == 2);
+
+  const WasapiEndpointSelectionPolicy pinned_capture_policy(
+      WasapiEndpointSelection::pinned_device_id("capture-pinned"),
+      WasapiEndpointSelection::follow_default());
+  auto pinned_runtime = std::make_shared<RuntimeState>();
+  WindowsWasapiDuplexSupervisor pinned_supervisor(
+      [pinned_runtime] {
+        return WasapiDuplexRuntimeOpenResult::success(
+            std::make_unique<ScriptedRuntime>(pinned_runtime));
+      },
+      10,
+      pinned_capture_policy);
+  pinned_supervisor.start(3000);
+  requirements = pinned_supervisor.poll_endpoint_notifications(
+      endpoint_notifications, 3000);
+  assert(!requirements.capture && !requirements.render);
+  assert(SUCCEEDED(
+      WindowsWasapiEndpointNotificationTestAccess::notify_default_device(
+          endpoint_notifications, eCapture)));
+  requirements = pinned_supervisor.poll_endpoint_notifications(
+      endpoint_notifications, 3100);
+  assert(!requirements.capture && !requirements.render);
+  assert(pinned_supervisor.running());
+  assert(pinned_runtime->stop_count == 0);
+  assert(pinned_supervisor.summary().endpoint_notification_reopen_count == 0);
+
+  pinned_supervisor.stop(3200);
+  default_supervisor.stop(3200);
+  assert(SUCCEEDED(endpoint_notifications.unregister_notifications()));
+  if (uninitialize_com) {
+    CoUninitialize();
+  }
 }

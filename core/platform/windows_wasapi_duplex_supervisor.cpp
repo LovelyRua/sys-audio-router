@@ -3,6 +3,7 @@
 #include "core/diagnostics/engine_diagnostics.h"
 #include "core/graph/graph.h"
 #include "core/platform/windows_wasapi_duplex_loop.h"
+#include "core/platform/windows_wasapi_endpoint_notification.h"
 
 #include <algorithm>
 #include <stdexcept>
@@ -72,7 +73,17 @@ WasapiFailureClass classify_wasapi_failures(
 
 WindowsWasapiDuplexSupervisor::WindowsWasapiDuplexSupervisor(
     WasapiDuplexRuntimeFactory factory, std::uint32_t timeout_ms)
-    : factory_(std::move(factory)), timeout_ms_(timeout_ms) {
+    : WindowsWasapiDuplexSupervisor(std::move(factory),
+                                    timeout_ms,
+                                    WasapiEndpointSelectionPolicy{}) {}
+
+WindowsWasapiDuplexSupervisor::WindowsWasapiDuplexSupervisor(
+    WasapiDuplexRuntimeFactory factory,
+    std::uint32_t timeout_ms,
+    WasapiEndpointSelectionPolicy endpoint_selection_policy)
+    : factory_(std::move(factory)),
+      timeout_ms_(timeout_ms),
+      endpoint_selection_policy_(std::move(endpoint_selection_policy)) {
   if (!factory_) {
     throw std::invalid_argument("WASAPI duplex supervisor requires a factory");
   }
@@ -125,6 +136,41 @@ void WindowsWasapiDuplexSupervisor::tick(std::uint64_t now_ms) {
   }
 }
 
+WasapiEndpointReopenRequirements
+WindowsWasapiDuplexSupervisor::poll_endpoint_notifications(
+    WindowsWasapiEndpointNotification& notifications,
+    std::uint64_t now_ms) {
+  const auto snapshot = notifications.consume_snapshot();
+  if (!snapshot.event_reset_succeeded) {
+    ++endpoint_notification_reset_failure_count_;
+  }
+  const WasapiDefaultEndpointGenerations current{
+      .capture = snapshot.capture_generation,
+      .render = snapshot.render_generation,
+  };
+
+  if (!endpoint_generations_initialized_) {
+    endpoint_generations_ = current;
+    endpoint_generations_initialized_ = true;
+    if (policy_.state() != WasapiRecoveryState::Running) {
+      endpoint_selection_policy_.mark_opened(current);
+      return {};
+    }
+  }
+
+  endpoint_generations_ = current;
+  const auto requirements =
+      endpoint_selection_policy_.reopen_requirements(current);
+  if ((requirements.capture || requirements.render) &&
+      policy_.state() == WasapiRecoveryState::Running) {
+    ++endpoint_notification_reopen_count_;
+    request_reopen(now_ms);
+  } else if (!requirements.capture && !requirements.render) {
+    endpoint_selection_policy_.mark_opened(current);
+  }
+  return requirements;
+}
+
 void WindowsWasapiDuplexSupervisor::request_reopen(std::uint64_t now_ms) {
   if (policy_.state() != WasapiRecoveryState::Running) {
     return;
@@ -173,6 +219,14 @@ WasapiDuplexSupervisorSummary WindowsWasapiDuplexSupervisor::summary() const noe
           .failed_recovery_count = failed_recovery_count_,
           .last_recovery_duration_ms = last_recovery_duration_ms_,
           .maximum_recovery_duration_ms = maximum_recovery_duration_ms_,
+          .capture_endpoint_generation = endpoint_generations_.capture,
+          .render_endpoint_generation = endpoint_generations_.render,
+          .endpoint_notification_reopen_count =
+              endpoint_notification_reopen_count_,
+          .endpoint_notification_reset_failure_count =
+              endpoint_notification_reset_failure_count_,
+          .endpoint_generations_initialized =
+              endpoint_generations_initialized_,
           .running = running()};
 }
 
@@ -198,6 +252,9 @@ void WindowsWasapiDuplexSupervisor::attempt_open(std::uint64_t now_ms) {
   runtime_ = std::move(runtime);
   last_errors_.clear();
   policy_.on_open_succeeded(now_ms);
+  if (endpoint_generations_initialized_) {
+    endpoint_selection_policy_.mark_opened(endpoint_generations_);
+  }
   if (recovery_episode_active_) {
     last_recovery_duration_ms_ = now_ms >= recovery_started_at_ms_
                                      ? now_ms - recovery_started_at_ms_

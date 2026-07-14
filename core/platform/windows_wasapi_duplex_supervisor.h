@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/platform/wasapi_endpoint_selection_policy.h"
 #include "core/platform/wasapi_recovery_policy.h"
 #include "core/platform/windows_wasapi_realtime_worker.h"
 
@@ -12,6 +13,8 @@ namespace sar::diagnostics { struct EngineDiagnostics; }
 namespace sar::graph { class Graph; }
 
 namespace sar::platform {
+
+class WindowsWasapiEndpointNotification;
 
 class WasapiDuplexRuntime {
  public:
@@ -54,6 +57,11 @@ struct WasapiDuplexSupervisorSummary {
   std::uint64_t failed_recovery_count = 0;
   std::uint64_t last_recovery_duration_ms = 0;
   std::uint64_t maximum_recovery_duration_ms = 0;
+  std::uint64_t capture_endpoint_generation = 0;
+  std::uint64_t render_endpoint_generation = 0;
+  std::uint64_t endpoint_notification_reopen_count = 0;
+  std::uint64_t endpoint_notification_reset_failure_count = 0;
+  bool endpoint_generations_initialized = false;
   bool running = false;
 };
 
@@ -61,6 +69,10 @@ class WindowsWasapiDuplexSupervisor {
  public:
   WindowsWasapiDuplexSupervisor(WasapiDuplexRuntimeFactory factory,
                                 std::uint32_t timeout_ms);
+  WindowsWasapiDuplexSupervisor(
+      WasapiDuplexRuntimeFactory factory,
+      std::uint32_t timeout_ms,
+      WasapiEndpointSelectionPolicy endpoint_selection_policy);
   WindowsWasapiDuplexSupervisor(graph::Graph& graph,
                                 diagnostics::EngineDiagnostics& diagnostics,
                                 std::uint32_t timeout_ms);
@@ -70,6 +82,9 @@ class WindowsWasapiDuplexSupervisor {
 
   void start(std::uint64_t now_ms);
   void tick(std::uint64_t now_ms);
+  [[nodiscard]] WasapiEndpointReopenRequirements poll_endpoint_notifications(
+      WindowsWasapiEndpointNotification& notifications,
+      std::uint64_t now_ms);
   void request_reopen(std::uint64_t now_ms);
   void stop(std::uint64_t now_ms) noexcept;
   [[nodiscard]] WasapiRecoveryState state() const noexcept;
@@ -85,6 +100,8 @@ class WindowsWasapiDuplexSupervisor {
 
   WasapiDuplexRuntimeFactory factory_;
   std::uint32_t timeout_ms_ = 0;
+  WasapiEndpointSelectionPolicy endpoint_selection_policy_;
+  WasapiDefaultEndpointGenerations endpoint_generations_;
   WasapiRecoveryPolicy policy_;
   std::unique_ptr<WasapiDuplexRuntime> runtime_;
   std::vector<WasapiRealtimeWorkerError> last_errors_;
@@ -95,6 +112,9 @@ class WindowsWasapiDuplexSupervisor {
   std::uint64_t recovery_started_at_ms_ = 0;
   std::uint64_t last_recovery_duration_ms_ = 0;
   std::uint64_t maximum_recovery_duration_ms_ = 0;
+  std::uint64_t endpoint_notification_reopen_count_ = 0;
+  std::uint64_t endpoint_notification_reset_failure_count_ = 0;
+  bool endpoint_generations_initialized_ = false;
   bool recovery_episode_active_ = false;
 };
 
