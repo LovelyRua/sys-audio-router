@@ -168,6 +168,10 @@ void print_supervisor_summary(
             << summary.endpoint_notification_reopen_count
             << " notification_reset_failure_count="
             << summary.endpoint_notification_reset_failure_count
+            << " notification_reopen_pending="
+            << (summary.endpoint_notification_reopen_pending ? 1 : 0)
+            << " notification_reopen_at_ms="
+            << summary.endpoint_notification_reopen_at_ms
             << " last_recovery_duration_ms="
             << summary.last_recovery_duration_ms
             << " maximum_recovery_duration_ms="

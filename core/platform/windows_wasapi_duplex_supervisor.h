@@ -72,7 +72,9 @@ struct WasapiDuplexSupervisorSummary {
   std::uint64_t render_endpoint_generation = 0;
   std::uint64_t endpoint_notification_reopen_count = 0;
   std::uint64_t endpoint_notification_reset_failure_count = 0;
+  std::uint64_t endpoint_notification_reopen_at_ms = 0;
   bool endpoint_generations_initialized = false;
+  bool endpoint_notification_reopen_pending = false;
   std::string active_capture_device_id;
   std::string active_render_device_id;
   bool running = false;
@@ -80,6 +82,8 @@ struct WasapiDuplexSupervisorSummary {
 
 class WindowsWasapiDuplexSupervisor {
  public:
+  static constexpr std::uint64_t kEndpointNotificationSettleMs = 100;
+
   WindowsWasapiDuplexSupervisor(WasapiDuplexRuntimeFactory factory,
                                 std::uint32_t timeout_ms);
   WindowsWasapiDuplexSupervisor(
@@ -132,7 +136,9 @@ class WindowsWasapiDuplexSupervisor {
   std::uint64_t maximum_recovery_duration_ms_ = 0;
   std::uint64_t endpoint_notification_reopen_count_ = 0;
   std::uint64_t endpoint_notification_reset_failure_count_ = 0;
+  std::uint64_t endpoint_notification_reopen_at_ms_ = 0;
   bool endpoint_generations_initialized_ = false;
+  bool endpoint_notification_reopen_pending_ = false;
   WasapiDuplexRuntimeEndpoints active_endpoints_;
   bool recovery_episode_active_ = false;
 };

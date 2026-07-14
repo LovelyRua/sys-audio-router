@@ -7,6 +7,7 @@
 #include "core/platform/windows_wasapi_endpoint_notification.h"
 
 #include <algorithm>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
@@ -174,6 +175,14 @@ void WindowsWasapiDuplexSupervisor::start(std::uint64_t now_ms) {
 }
 
 void WindowsWasapiDuplexSupervisor::tick(std::uint64_t now_ms) {
+  if (endpoint_notification_reopen_pending_ &&
+      policy_.state() == WasapiRecoveryState::Running &&
+      now_ms >= endpoint_notification_reopen_at_ms_) {
+    endpoint_notification_reopen_pending_ = false;
+    endpoint_notification_reopen_at_ms_ = 0;
+    ++endpoint_notification_reopen_count_;
+    request_reopen(now_ms);
+  }
   if (policy_.state() == WasapiRecoveryState::Running &&
       (!runtime_ || !runtime_->running())) {
     auto errors = runtime_ ? runtime_->last_errors()
@@ -211,6 +220,9 @@ WindowsWasapiDuplexSupervisor::poll_endpoint_notifications(
       .capture = snapshot.capture_generation,
       .render = snapshot.render_generation,
   };
+  const bool generations_changed = endpoint_generations_initialized_ &&
+                                   (current.capture != endpoint_generations_.capture ||
+                                    current.render != endpoint_generations_.render);
 
   if (!endpoint_generations_initialized_) {
     endpoint_generations_ = current;
@@ -225,10 +237,16 @@ WindowsWasapiDuplexSupervisor::poll_endpoint_notifications(
   const auto requirements =
       endpoint_selection_policy_.reopen_requirements(current);
   if ((requirements.capture || requirements.render) &&
-      policy_.state() == WasapiRecoveryState::Running) {
-    ++endpoint_notification_reopen_count_;
-    request_reopen(now_ms);
+      policy_.state() == WasapiRecoveryState::Running && generations_changed) {
+    endpoint_notification_reopen_pending_ = true;
+    const auto maximum = std::numeric_limits<std::uint64_t>::max();
+    endpoint_notification_reopen_at_ms_ =
+        now_ms > maximum - kEndpointNotificationSettleMs
+            ? maximum
+            : now_ms + kEndpointNotificationSettleMs;
   } else if (!requirements.capture && !requirements.render) {
+    endpoint_notification_reopen_pending_ = false;
+    endpoint_notification_reopen_at_ms_ = 0;
     endpoint_selection_policy_.mark_opened(current);
   }
   return requirements;
@@ -238,6 +256,8 @@ void WindowsWasapiDuplexSupervisor::request_reopen(std::uint64_t now_ms) {
   if (policy_.state() != WasapiRecoveryState::Running) {
     return;
   }
+  endpoint_notification_reopen_pending_ = false;
+  endpoint_notification_reopen_at_ms_ = 0;
   if (!recovery_episode_active_) {
     recovery_episode_active_ = true;
     recovery_started_at_ms_ = now_ms;
@@ -252,6 +272,8 @@ void WindowsWasapiDuplexSupervisor::request_reopen(std::uint64_t now_ms) {
 
 void WindowsWasapiDuplexSupervisor::stop(std::uint64_t now_ms) noexcept {
   policy_.request_stop();
+  endpoint_notification_reopen_pending_ = false;
+  endpoint_notification_reopen_at_ms_ = 0;
   recovery_episode_active_ = false;
   if (policy_.state() == WasapiRecoveryState::Quiescing) {
     quiesce(now_ms);
@@ -290,8 +312,12 @@ WasapiDuplexSupervisorSummary WindowsWasapiDuplexSupervisor::summary() const {
               endpoint_notification_reopen_count_,
           .endpoint_notification_reset_failure_count =
               endpoint_notification_reset_failure_count_,
+          .endpoint_notification_reopen_at_ms =
+              endpoint_notification_reopen_at_ms_,
           .endpoint_generations_initialized =
               endpoint_generations_initialized_,
+          .endpoint_notification_reopen_pending =
+              endpoint_notification_reopen_pending_,
           .active_capture_device_id = active_endpoints_.capture_device_id,
           .active_render_device_id = active_endpoints_.render_device_id,
           .running = running()};
@@ -337,6 +363,8 @@ void WindowsWasapiDuplexSupervisor::attempt_open(std::uint64_t now_ms) {
 
 void WindowsWasapiDuplexSupervisor::handle_failure(
     std::vector<WasapiRealtimeWorkerError> errors, std::uint64_t now_ms) {
+  endpoint_notification_reopen_pending_ = false;
+  endpoint_notification_reopen_at_ms_ = 0;
   const auto failure_class = classify_wasapi_failures(errors);
   last_errors_ = std::move(errors);
   if (wasapi_failure_is_recoverable(failure_class) &&
@@ -354,6 +382,8 @@ void WindowsWasapiDuplexSupervisor::handle_failure(
 }
 
 void WindowsWasapiDuplexSupervisor::quiesce(std::uint64_t now_ms) noexcept {
+  endpoint_notification_reopen_pending_ = false;
+  endpoint_notification_reopen_at_ms_ = 0;
   if (runtime_) {
     runtime_->stop();
     runtime_.reset();

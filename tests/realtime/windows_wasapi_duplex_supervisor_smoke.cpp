@@ -303,13 +303,27 @@ int main() {
   requirements = default_supervisor.poll_endpoint_notifications(
       endpoint_notifications, 2100);
   assert(requirements.capture && !requirements.render);
-  assert(default_supervisor.state() == WasapiRecoveryState::Backoff);
-  assert(default_first->stop_count == 1);
-  assert(default_supervisor.summary().capture_endpoint_generation == 1);
-  assert(default_supervisor.summary().endpoint_notification_reopen_count == 1);
-  default_supervisor.tick(2100);
   assert(default_supervisor.running());
+  assert(default_supervisor.summary().endpoint_notification_reopen_pending);
+  assert(default_supervisor.summary().endpoint_notification_reopen_at_ms == 2200);
+  assert(default_supervisor.summary().capture_endpoint_generation == 1);
+  assert(default_supervisor.summary().endpoint_notification_reopen_count == 0);
+  assert(SUCCEEDED(
+      WindowsWasapiEndpointNotificationTestAccess::notify_default_device(
+          endpoint_notifications, eRender)));
+  requirements = default_supervisor.poll_endpoint_notifications(
+      endpoint_notifications, 2150);
+  assert(requirements.capture && requirements.render);
+  assert(default_supervisor.summary().endpoint_notification_reopen_at_ms == 2250);
+  default_supervisor.tick(2249);
+  assert(default_supervisor.running());
+  assert(default_open_count == 1);
+  default_supervisor.tick(2250);
+  assert(default_supervisor.running());
+  assert(default_first->stop_count == 1);
   assert(default_open_count == 2);
+  assert(default_supervisor.summary().endpoint_notification_reopen_count == 1);
+  assert(!default_supervisor.summary().endpoint_notification_reopen_pending);
 
   const WasapiEndpointSelectionPolicy pinned_capture_policy(
       WasapiEndpointSelection::pinned_device_id("capture-pinned"),
