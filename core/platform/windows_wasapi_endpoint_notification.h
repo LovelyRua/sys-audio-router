@@ -36,7 +36,7 @@ class WindowsWasapiEndpointNotification {
   friend struct WindowsWasapiEndpointNotificationTestAccess;
 
   [[nodiscard]] std::int32_t notify_default_device_for_test(
-      std::int32_t data_flow) noexcept;
+      std::int32_t data_flow, std::int32_t role) noexcept;
   [[nodiscard]] std::int32_t retain_failed_unregistration_for_test(
       std::int32_t unregister_result) noexcept;
   [[nodiscard]] std::int32_t finish_unregistration(

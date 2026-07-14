@@ -10,9 +10,9 @@ namespace sar::platform {
 struct WindowsWasapiEndpointNotificationTestAccess {
   static std::int32_t notify_default_device(
       WindowsWasapiEndpointNotification& notification,
-      EDataFlow flow) noexcept {
+      EDataFlow flow, ERole role) noexcept {
     return notification.notify_default_device_for_test(
-        static_cast<std::int32_t>(flow));
+        static_cast<std::int32_t>(flow), static_cast<std::int32_t>(role));
   }
 
   static std::int32_t retain_failed_unregistration(
@@ -77,8 +77,12 @@ int main() {
   }
 
   using sar::platform::WindowsWasapiEndpointNotificationTestAccess;
-  WindowsWasapiEndpointNotificationTestAccess::notify_default_device(notification,
-                                                                     eCapture);
+  if (const auto failure = expect(
+          WindowsWasapiEndpointNotificationTestAccess::notify_default_device(
+              notification, eCapture, eConsole) == S_OK,
+          "Console capture callback failed")) {
+    return failure;
+  }
   if (const auto failure = expect(notification.capture_generation() == 1,
                                   "Expected capture generation increment")) {
     return failure;
@@ -109,8 +113,12 @@ int main() {
     return failure;
   }
 
-  WindowsWasapiEndpointNotificationTestAccess::notify_default_device(notification,
-                                                                     eRender);
+  if (const auto failure = expect(
+          WindowsWasapiEndpointNotificationTestAccess::notify_default_device(
+              notification, eRender, eConsole) == S_OK,
+          "Console render callback failed")) {
+    return failure;
+  }
   if (const auto failure = expect(notification.capture_generation() == 1,
                                   "Capture generation changed for render event")) {
     return failure;
@@ -120,8 +128,12 @@ int main() {
     return failure;
   }
 
-  WindowsWasapiEndpointNotificationTestAccess::notify_default_device(notification,
-                                                                     eAll);
+  if (const auto failure = expect(
+          WindowsWasapiEndpointNotificationTestAccess::notify_default_device(
+              notification, eAll, eConsole) == S_OK,
+          "Console all-flow callback failed")) {
+    return failure;
+  }
   if (const auto failure = expect(notification.capture_generation() == 2 &&
                                       notification.render_generation() == 2,
                                   "Expected eAll to increment both generations")) {
@@ -138,6 +150,38 @@ int main() {
               retained_generation_snapshot.render_generation == 2 &&
               retained_generation_snapshot.event_reset_succeeded,
           "Snapshot lost generations after event reset")) {
+    return failure;
+  }
+
+  if (const auto failure = expect(
+          WindowsWasapiEndpointNotificationTestAccess::notify_default_device(
+              notification, eAll, eMultimedia) == S_OK,
+          "Multimedia callback failed")) {
+    return failure;
+  }
+  if (const auto failure = expect(
+          notification.capture_generation() == 2 &&
+              notification.render_generation() == 2 &&
+              WaitForSingleObject(
+                  static_cast<HANDLE>(notification.change_event()), 0) ==
+                  WAIT_TIMEOUT,
+          "Multimedia callback was not ignored")) {
+    return failure;
+  }
+
+  if (const auto failure = expect(
+          WindowsWasapiEndpointNotificationTestAccess::notify_default_device(
+              notification, eAll, eCommunications) == S_OK,
+          "Communications callback failed")) {
+    return failure;
+  }
+  if (const auto failure = expect(
+          notification.capture_generation() == 2 &&
+              notification.render_generation() == 2 &&
+              WaitForSingleObject(
+                  static_cast<HANDLE>(notification.change_event()), 0) ==
+                  WAIT_TIMEOUT,
+          "Communications callback was not ignored")) {
     return failure;
   }
 
@@ -159,8 +203,8 @@ int main() {
     return failure;
   }
 
-  WindowsWasapiEndpointNotificationTestAccess::notify_default_device(notification,
-                                                                     eCapture);
+  WindowsWasapiEndpointNotificationTestAccess::notify_default_device(
+      notification, eCapture, eConsole);
   if (const auto failure = expect(notification.capture_generation() == 3 &&
                                       notification.render_generation() == 2,
                                   "Callback state invalid after unregister failure")) {

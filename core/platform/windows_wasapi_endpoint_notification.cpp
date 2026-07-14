@@ -69,8 +69,11 @@ class EndpointNotificationClient final : public IMMNotificationClient {
   }
 
   HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow flow,
-                                                   ERole,
+                                                   ERole role,
                                                    LPCWSTR) noexcept override {
+    if (role != eConsole) {
+      return S_OK;
+    }
     if (flow == eCapture || flow == eAll) {
       capture_generation_.fetch_add(1, std::memory_order_release);
     }
@@ -238,12 +241,12 @@ std::uint64_t WindowsWasapiEndpointNotification::render_generation() const noexc
 }
 
 std::int32_t WindowsWasapiEndpointNotification::notify_default_device_for_test(
-    std::int32_t data_flow) noexcept {
+    std::int32_t data_flow, std::int32_t role) noexcept {
   if (client_ == nullptr) {
     return E_UNEXPECTED;
   }
   return as_client(client_)->OnDefaultDeviceChanged(
-      static_cast<EDataFlow>(data_flow), eConsole, nullptr);
+      static_cast<EDataFlow>(data_flow), static_cast<ERole>(role), nullptr);
 }
 
 std::int32_t
