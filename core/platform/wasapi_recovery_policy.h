@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string_view>
 
 namespace sar::platform {
 
@@ -22,6 +23,8 @@ enum class WasapiFailureClass {
 
 [[nodiscard]] bool wasapi_failure_is_recoverable(
     WasapiFailureClass failure_class) noexcept;
+[[nodiscard]] WasapiFailureClass classify_wasapi_failure_code(
+    std::string_view code) noexcept;
 
 class WasapiRecoveryPolicy {
  public:

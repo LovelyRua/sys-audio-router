@@ -1,6 +1,7 @@
 #include "core/platform/wasapi_recovery_policy.h"
 
 #include <array>
+#include <initializer_list>
 #include <limits>
 
 namespace sar::platform {
@@ -16,6 +17,16 @@ std::uint64_t saturating_add(std::uint64_t value,
   return increment > maximum - value ? maximum : value + increment;
 }
 
+bool is_one_of(std::string_view value,
+               std::initializer_list<std::string_view> candidates) noexcept {
+  for (const auto candidate : candidates) {
+    if (value == candidate) {
+      return true;
+    }
+  }
+  return false;
+}
+
 }  // namespace
 
 bool wasapi_failure_is_recoverable(
@@ -29,6 +40,32 @@ bool wasapi_failure_is_recoverable(
       return false;
   }
   return false;
+}
+
+WasapiFailureClass classify_wasapi_failure_code(
+    std::string_view code) noexcept {
+  if (is_one_of(code, {
+                          "wasapi_device_lookup_failed",
+                          "wasapi_probe_format_changed",
+                          "wasapi_probe_buffer_changed",
+                      })) {
+    return WasapiFailureClass::DeviceInvalidated;
+  }
+
+  if (code.starts_with("wasapi_") &&
+      (code.ends_with("_failed") || code == "wasapi_event_wait_failed")) {
+    return WasapiFailureClass::Transient;
+  }
+
+  if (code.starts_with("graph_") || code.starts_with("invalid_") ||
+      code.starts_with("sample_conversion_") ||
+      code.starts_with("capture_resampler_") ||
+      code == "stream_not_open" || code == "stream_already_open" ||
+      code == "wasapi_resample_mode_unsupported") {
+    return WasapiFailureClass::Fatal;
+  }
+
+  return WasapiFailureClass::Unknown;
 }
 
 WasapiRecoveryState WasapiRecoveryPolicy::state() const noexcept {

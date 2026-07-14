@@ -9,6 +9,7 @@ namespace {
 using sar::platform::WasapiFailureClass;
 using sar::platform::WasapiRecoveryPolicy;
 using sar::platform::WasapiRecoveryState;
+using sar::platform::classify_wasapi_failure_code;
 
 int expect(bool condition, const char* message) {
   if (condition) {
@@ -29,6 +30,32 @@ int expect_state(const WasapiRecoveryPolicy& policy,
 int main() {
   static_assert(std::is_trivially_copyable_v<WasapiRecoveryPolicy>);
   static_assert(noexcept(WasapiRecoveryPolicy{}.tick(0)));
+
+  {
+    if (expect(classify_wasapi_failure_code("wasapi_device_lookup_failed") ==
+                   WasapiFailureClass::DeviceInvalidated,
+               "Device lookup failure must trigger endpoint recovery") ||
+        expect(classify_wasapi_failure_code("wasapi_probe_format_changed") ==
+                   WasapiFailureClass::DeviceInvalidated,
+               "Probe drift must trigger endpoint recovery") ||
+        expect(classify_wasapi_failure_code("wasapi_render_buffer_failed") ==
+                   WasapiFailureClass::Transient,
+               "Runtime buffer failure must be retryable") ||
+        expect(classify_wasapi_failure_code("wasapi_duplex_event_wait_failed") ==
+                   WasapiFailureClass::Transient,
+               "Runtime event failure must be retryable") ||
+        expect(classify_wasapi_failure_code("graph_sample_rate_mismatch") ==
+                   WasapiFailureClass::Fatal,
+               "Graph configuration failure must not retry") ||
+        expect(classify_wasapi_failure_code("sample_conversion_failed") ==
+                   WasapiFailureClass::Fatal,
+               "Sample conversion failure must not retry") ||
+        expect(classify_wasapi_failure_code("future_unclassified_error") ==
+                   WasapiFailureClass::Unknown,
+               "Unknown failures must remain fail-closed")) {
+      return 1;
+    }
+  }
 
   {
     WasapiRecoveryPolicy policy;
