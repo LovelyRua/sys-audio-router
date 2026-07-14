@@ -40,6 +40,7 @@ add_library(sar_core
   core/platform/mock_audio_device_provider.cpp
   core/platform/sample_converter.cpp
   core/platform/virtual_endpoint.cpp
+  core/platform/wasapi_recovery_policy.cpp
   core/realtime/adaptive_resampler.cpp
   core/realtime/audio_buffer.cpp
   core/realtime/fifo_waterline_controller.cpp
@@ -158,6 +159,12 @@ add_executable(sar_sample_converter_smoke
 )
 
 target_link_libraries(sar_sample_converter_smoke PRIVATE sar_core)
+
+add_executable(sar_wasapi_recovery_policy_smoke
+  tests/realtime/wasapi_recovery_policy_smoke.cpp
+)
+
+target_link_libraries(sar_wasapi_recovery_policy_smoke PRIVATE sar_core)
 
 if(WIN32)
   add_executable(sar_windows_wasapi_device_smoke
@@ -388,6 +395,7 @@ add_test(NAME audio_device_smoke COMMAND sar_audio_device_smoke)
 add_test(NAME audio_device_registry_smoke COMMAND sar_audio_device_registry_smoke)
 add_test(NAME virtual_endpoint_smoke COMMAND sar_virtual_endpoint_smoke)
 add_test(NAME sample_converter_smoke COMMAND sar_sample_converter_smoke)
+add_test(NAME wasapi_recovery_policy_smoke COMMAND sar_wasapi_recovery_policy_smoke)
 if(WIN32)
   add_test(NAME windows_wasapi_device_smoke COMMAND sar_windows_wasapi_device_smoke)
   add_test(NAME windows_wasapi_stream_probe_smoke
