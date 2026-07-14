@@ -551,7 +551,9 @@ int main() {
         make_adaptive_probe(sar::platform::WasapiStreamDirection::Capture));
     capture.enqueue_capture({
         .status = sar::platform::WasapiStreamIoStatus::Failed,
-        .errors = {{"synthetic_capture_failed", "Synthetic capture failure."}},
+        .errors = {{"wasapi_capture_buffer_failed",
+                    "WASAPI capture buffer acquisition failed with 0x80004005.",
+                    static_cast<std::int32_t>(0x80004005U)}},
     });
     capture.set_stop_result(sar::platform::WasapiStreamResult::failure({
         {"synthetic_stop_after_process_failed",
@@ -576,7 +578,7 @@ int main() {
 
     const auto errors = worker.last_errors();
     if (const auto failure = expect(
-            has_error_code(errors, "synthetic_capture_failed") &&
+            has_error_code(errors, "wasapi_capture_buffer_failed") &&
                 has_error_code(errors, "synthetic_stop_after_process_failed"),
             "Expected process and cleanup errors to remain observable")) {
       return failure;

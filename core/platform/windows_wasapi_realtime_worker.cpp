@@ -201,6 +201,7 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
     startup_succeeded_ = false;
   }
   set_errors({});
+  realtime_errors_.clear();
   running_.store(true);
   try {
     worker_ = std::thread([this, timeout_ms] {
@@ -330,8 +331,22 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
 }
 
 std::vector<WasapiRealtimeWorkerError> WindowsWasapiRealtimeWorker::last_errors() const {
-  std::lock_guard lock(errors_mutex_);
-  return last_errors_;
+  std::vector<WasapiRealtimeWorkerError> result;
+  const auto realtime = realtime_errors_.snapshot();
+  {
+    std::lock_guard lock(errors_mutex_);
+    result.reserve(realtime.size() + last_errors_.size());
+  }
+  for (std::size_t index = 0; index < realtime.size(); ++index) {
+    const auto& error = realtime.records[index];
+    result.push_back({wasapi_realtime_error_code(error),
+                      wasapi_realtime_error_message(error)});
+  }
+  {
+    std::lock_guard lock(errors_mutex_);
+    result.insert(result.end(), last_errors_.begin(), last_errors_.end());
+  }
+  return result;
 }
 
 void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
@@ -383,7 +398,14 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     auto result = runner_.process_once(graph_, diagnostics_, timeout_ms);
     if (!result.ok()) {
       process_error_cycles_.fetch_add(1);
-      set_errors(convert_errors(result.errors()));
+      WasapiRealtimeErrorBatch errors;
+      for (const auto& error : result.errors()) {
+        static_cast<void>(errors.push(map_wasapi_realtime_error(
+            error.code, error.message, error.native_hresult.has_value(),
+            error.native_hresult.value_or(0), error.native_win32_code.has_value(),
+            error.native_win32_code.value_or(0))));
+      }
+      realtime_errors_.publish(errors);
       stop_requested_.store(true);
       break;
     }

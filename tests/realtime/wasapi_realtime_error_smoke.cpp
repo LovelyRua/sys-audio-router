@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cstdint>
 #include <iostream>
+#include <string_view>
 #include <thread>
 #include <type_traits>
 
@@ -33,6 +34,17 @@ int main() {
   static_assert(std::is_trivially_copyable_v<WasapiRealtimeErrorRecord>);
   static_assert(std::is_trivially_copyable_v<WasapiRealtimeErrorBatch>);
   static_assert(std::atomic<std::uint64_t>::is_always_lock_free);
+
+  const auto mapped = sar::platform::map_wasapi_realtime_error(
+      "wasapi_capture_buffer_failed", "WASAPI capture buffer acquisition failed.",
+      true, static_cast<std::int32_t>(0x80004005U));
+  if (const auto failure = expect(
+          std::string_view(sar::platform::wasapi_realtime_error_code(mapped)) ==
+                  "wasapi_capture_buffer_failed" &&
+              mapped.value == 0x80004005U,
+          "Expected allocation-free error mapping to preserve code and HRESULT")) {
+    return failure;
+  }
 
   constexpr WasapiRealtimeErrorRecord original{0x1234U, 0xABCDU, 0x89ABCDEFU};
   const auto unpacked = sar::platform::unpack_wasapi_realtime_error(

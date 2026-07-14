@@ -2,6 +2,7 @@
 
 #include "core/diagnostics/engine_diagnostics.h"
 #include "core/graph/graph.h"
+#include "core/platform/wasapi_realtime_error.h"
 #include "core/platform/windows_wasapi_graph_runner.h"
 
 #include <atomic>
@@ -182,6 +183,7 @@ class WindowsWasapiRealtimeWorker {
   bool startup_succeeded_ = false;
   mutable std::mutex errors_mutex_;
   std::vector<WasapiRealtimeWorkerError> last_errors_;
+  WasapiRealtimeErrorChannel realtime_errors_;
   std::thread worker_;
 };
 
