@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,8 @@ enum class WasapiStreamState {
 struct WasapiStreamError {
   std::string code;
   std::string message;
+  std::optional<std::int32_t> native_hresult = std::nullopt;
+  std::optional<std::uint32_t> native_win32_code = std::nullopt;
 };
 
 struct WasapiStreamDiagnostics {

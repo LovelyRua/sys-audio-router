@@ -317,7 +317,12 @@ enum class WasapiEventWaitStatus {
   Failed,
 };
 
-WasapiEventWaitStatus wait_for_stream_event(HANDLE samples_ready_event,
+struct WasapiEventWaitResult {
+  WasapiEventWaitStatus status = WasapiEventWaitStatus::Failed;
+  std::uint32_t native_win32_code = ERROR_SUCCESS;
+};
+
+WasapiEventWaitResult wait_for_stream_event(HANDLE samples_ready_event,
                                             HANDLE stop_requested_event,
                                             std::uint32_t timeout_ms) noexcept {
   HANDLE events[] = {
@@ -326,15 +331,15 @@ WasapiEventWaitStatus wait_for_stream_event(HANDLE samples_ready_event,
   };
   const auto wait_result = WaitForMultipleObjects(2, events, FALSE, timeout_ms);
   if (wait_result == WAIT_OBJECT_0) {
-    return WasapiEventWaitStatus::StopRequested;
+    return {WasapiEventWaitStatus::StopRequested};
   }
   if (wait_result == WAIT_OBJECT_0 + 1) {
-    return WasapiEventWaitStatus::SamplesReady;
+    return {WasapiEventWaitStatus::SamplesReady};
   }
   if (wait_result == WAIT_TIMEOUT) {
-    return WasapiEventWaitStatus::TimedOut;
+    return {WasapiEventWaitStatus::TimedOut};
   }
-  return WasapiEventWaitStatus::Failed;
+  return {WasapiEventWaitStatus::Failed, GetLastError()};
 }
 
 }  // namespace
@@ -501,6 +506,7 @@ WasapiStreamResult WindowsWasapiStream::start() noexcept {
           {
               "wasapi_start_failed",
               "WASAPI audio client start failed with " + hresult_hex(start_result) + ".",
+              static_cast<std::int32_t>(start_result),
           },
       });
     }
@@ -536,6 +542,7 @@ WasapiStreamResult WindowsWasapiStream::complete_stop(
             "wasapi_stop_failed",
             "WASAPI audio client stop failed with " +
                 hresult_hex(native_result) + ".",
+            static_cast<std::int32_t>(native_result),
         },
     });
   }
@@ -567,15 +574,21 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
     const auto wait_result = wait_for_stream_event(impl_->samples_ready_event.get(),
                                                   impl_->stop_requested_event.get(),
                                                   timeout_ms);
-    if (wait_result == WasapiEventWaitStatus::StopRequested) {
+    if (wait_result.status == WasapiEventWaitStatus::StopRequested) {
       return WasapiStreamIoResult::cancellation();
     }
-    if (wait_result == WasapiEventWaitStatus::TimedOut) {
+    if (wait_result.status == WasapiEventWaitStatus::TimedOut) {
       return WasapiStreamIoResult::timeout();
     }
-    if (wait_result != WasapiEventWaitStatus::SamplesReady) {
+    if (wait_result.status != WasapiEventWaitStatus::SamplesReady) {
       return WasapiStreamIoResult::failure({
-          {"wasapi_event_wait_failed", "WASAPI render event wait failed."},
+          {
+              "wasapi_event_wait_failed",
+              "WASAPI render event wait failed.",
+              static_cast<std::int32_t>(
+                  HRESULT_FROM_WIN32(wait_result.native_win32_code)),
+              wait_result.native_win32_code,
+          },
       });
     }
   }
@@ -587,6 +600,7 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
         {
             "wasapi_padding_failed",
             "WASAPI render padding query failed with " + hresult_hex(padding_result) + ".",
+            static_cast<std::int32_t>(padding_result),
         },
     });
   }
@@ -610,6 +624,7 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
         {
             "wasapi_render_buffer_failed",
             "WASAPI render buffer acquisition failed with " + hresult_hex(get_buffer_result) + ".",
+            static_cast<std::int32_t>(get_buffer_result),
         },
     });
   }
@@ -632,6 +647,7 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
         {
             "wasapi_render_buffer_release_failed",
             "WASAPI render buffer release failed with " + hresult_hex(release_result) + ".",
+            static_cast<std::int32_t>(release_result),
         },
     });
   }
@@ -668,6 +684,7 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
         {
             "wasapi_capture_packet_failed",
             "WASAPI capture packet query failed with " + hresult_hex(packet_result) + ".",
+            static_cast<std::int32_t>(packet_result),
         },
     });
   }
@@ -676,15 +693,21 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
     const auto wait_result = wait_for_stream_event(impl_->samples_ready_event.get(),
                                                   impl_->stop_requested_event.get(),
                                                   timeout_ms);
-    if (wait_result == WasapiEventWaitStatus::StopRequested) {
+    if (wait_result.status == WasapiEventWaitStatus::StopRequested) {
       return WasapiStreamIoResult::cancellation();
     }
-    if (wait_result == WasapiEventWaitStatus::TimedOut) {
+    if (wait_result.status == WasapiEventWaitStatus::TimedOut) {
       return WasapiStreamIoResult::timeout();
     }
-    if (wait_result != WasapiEventWaitStatus::SamplesReady) {
+    if (wait_result.status != WasapiEventWaitStatus::SamplesReady) {
       return WasapiStreamIoResult::failure({
-          {"wasapi_event_wait_failed", "WASAPI capture event wait failed."},
+          {
+              "wasapi_event_wait_failed",
+              "WASAPI capture event wait failed.",
+              static_cast<std::int32_t>(
+                  HRESULT_FROM_WIN32(wait_result.native_win32_code)),
+              wait_result.native_win32_code,
+          },
       });
     }
 
@@ -695,6 +718,7 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
               "wasapi_capture_packet_failed",
               "WASAPI capture packet query failed with " +
                   hresult_hex(packet_result) + ".",
+              static_cast<std::int32_t>(packet_result),
           },
       });
     }
@@ -723,6 +747,7 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
         {
             "wasapi_capture_buffer_failed",
             "WASAPI capture buffer acquisition failed with " + hresult_hex(get_buffer_result) + ".",
+            static_cast<std::int32_t>(get_buffer_result),
         },
     });
   }
@@ -751,6 +776,7 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
         {
             "wasapi_capture_buffer_release_failed",
             "WASAPI capture buffer release failed with " + hresult_hex(release_result) + ".",
+            static_cast<std::int32_t>(release_result),
         },
     });
   }
@@ -914,6 +940,7 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
         {
             "com_initialize_failed",
             "COM initialization failed with " + hresult_hex(impl->apartment.result()) + ".",
+            static_cast<std::int32_t>(impl->apartment.result()),
         },
     });
   }
@@ -928,6 +955,7 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
         {
             "wasapi_enumerator_failed",
             "WASAPI enumerator creation failed with " + hresult_hex(create_result) + ".",
+            static_cast<std::int32_t>(create_result),
         },
     });
   }
@@ -948,6 +976,7 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
         {
             "wasapi_device_lookup_failed",
             "WASAPI device lookup failed with " + hresult_hex(endpoint_result) + ".",
+            static_cast<std::int32_t>(endpoint_result),
         },
     });
   }
@@ -962,6 +991,7 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
         {
             "wasapi_audio_client_failed",
             "WASAPI audio client activation failed with " + hresult_hex(activate_result) + ".",
+            static_cast<std::int32_t>(activate_result),
         },
     });
   }
@@ -972,6 +1002,7 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
         {
             "wasapi_mix_format_failed",
             "WASAPI mix format query failed with " + hresult_hex(format_result) + ".",
+            static_cast<std::int32_t>(format_result),
         },
     });
   }
@@ -1021,6 +1052,7 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
         {
             "wasapi_initialize_failed",
             "WASAPI shared stream initialization failed with " + hresult_hex(init_result) + ".",
+            static_cast<std::int32_t>(init_result),
         },
     });
   }
@@ -1034,6 +1066,7 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
             "wasapi_buffer_size_failed",
             "WASAPI buffer size query failed with " +
                 hresult_hex(buffer_size_result) + ".",
+            static_cast<std::int32_t>(buffer_size_result),
         },
     });
   }
@@ -1060,6 +1093,7 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
         {
             "wasapi_clock_client_failed",
             "WASAPI audio clock query failed with " + hresult_hex(clock_result) + ".",
+            static_cast<std::int32_t>(clock_result),
         },
     });
   }
@@ -1071,28 +1105,35 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
             "wasapi_clock_frequency_failed",
             "WASAPI audio clock frequency query failed with " +
                 hresult_hex(frequency_result) + ".",
+            static_cast<std::int32_t>(frequency_result),
         },
     });
   }
 
   impl->samples_ready_event.reset(CreateEventW(nullptr, FALSE, FALSE, nullptr));
   if (!impl->samples_ready_event.valid()) {
-    const auto error = HRESULT_FROM_WIN32(GetLastError());
+    const auto win32_code = GetLastError();
+    const auto error = HRESULT_FROM_WIN32(win32_code);
     return WasapiStreamOpenResult::failure({
         {
             "wasapi_event_create_failed",
             "WASAPI samples-ready event creation failed with " + hresult_hex(error) + ".",
+            static_cast<std::int32_t>(error),
+            win32_code,
         },
     });
   }
 
   impl->stop_requested_event.reset(CreateEventW(nullptr, TRUE, FALSE, nullptr));
   if (!impl->stop_requested_event.valid()) {
-    const auto error = HRESULT_FROM_WIN32(GetLastError());
+    const auto win32_code = GetLastError();
+    const auto error = HRESULT_FROM_WIN32(win32_code);
     return WasapiStreamOpenResult::failure({
         {
             "wasapi_stop_event_create_failed",
             "WASAPI stop event creation failed with " + hresult_hex(error) + ".",
+            static_cast<std::int32_t>(error),
+            win32_code,
         },
     });
   }
@@ -1104,6 +1145,7 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
         {
             "wasapi_event_handle_failed",
             "WASAPI event handle registration failed with " + hresult_hex(event_result) + ".",
+            static_cast<std::int32_t>(event_result),
         },
     });
   }
@@ -1117,6 +1159,7 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
           {
               "wasapi_render_client_failed",
               "WASAPI render client query failed with " + hresult_hex(render_client_result) + ".",
+              static_cast<std::int32_t>(render_client_result),
           },
       });
     }
@@ -1129,6 +1172,7 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
           {
               "wasapi_render_buffer_failed",
               "WASAPI render buffer acquisition failed with " + hresult_hex(get_buffer_result) + ".",
+              static_cast<std::int32_t>(get_buffer_result),
           },
       });
     }
@@ -1141,6 +1185,7 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
           {
               "wasapi_render_buffer_release_failed",
               "WASAPI silent render buffer release failed with " + hresult_hex(release_result) + ".",
+              static_cast<std::int32_t>(release_result),
           },
       });
     }
@@ -1153,6 +1198,7 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
           {
               "wasapi_capture_client_failed",
               "WASAPI capture client query failed with " + hresult_hex(capture_client_result) + ".",
+              static_cast<std::int32_t>(capture_client_result),
           },
       });
     }

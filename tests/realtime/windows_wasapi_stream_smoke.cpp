@@ -80,6 +80,16 @@ bool has_default_output_device() {
 
 int main() {
   {
+    const sar::platform::WasapiStreamError error{
+        "synthetic_error", "Synthetic stream error."};
+    if (const auto failure = expect(!error.native_hresult.has_value() &&
+                                        !error.native_win32_code.has_value(),
+                                    "Expected two-field stream error initialization")) {
+      return failure;
+    }
+  }
+
+  {
     if (const auto failure =
             expect(std::string(sar::platform::wasapi_stream_state_name(
                        sar::platform::WasapiStreamState::Closed)) == "closed",
@@ -774,16 +784,28 @@ int main() {
       return failure;
     }
 
-    constexpr auto failed_hresult = static_cast<std::int32_t>(0x80004005u);
+    constexpr auto device_invalidated_hresult =
+        static_cast<std::int32_t>(0x88890004u);  // AUDCLNT_E_DEVICE_INVALIDATED
     const auto stop_result =
         sar::platform::WindowsWasapiStreamTestAccess::complete_stop(
-            stream, failed_hresult);
+            stream, device_invalidated_hresult);
     if (const auto failure = expect(!stop_result.ok(),
                                     "Expected synthetic native stop failure")) {
       return failure;
     }
     if (const auto failure = expect(has_error_code(stop_result, "wasapi_stop_failed"),
                                     "Expected wasapi_stop_failed error")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            stop_result.errors().front().native_hresult ==
+                device_invalidated_hresult,
+            "Expected device-invalidated HRESULT preservation")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            !stop_result.errors().front().native_win32_code.has_value(),
+            "Expected no Win32 code for a native HRESULT failure")) {
       return failure;
     }
     if (const auto failure = expect(stream.state() ==
