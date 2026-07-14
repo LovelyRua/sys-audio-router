@@ -82,7 +82,7 @@ struct WasapiDuplexSupervisorSummary {
 
 class WindowsWasapiDuplexSupervisor {
  public:
-  static constexpr std::uint64_t kEndpointNotificationSettleMs = 100;
+  static constexpr std::uint64_t kEndpointNotificationSettleMs = 300;
 
   WindowsWasapiDuplexSupervisor(WasapiDuplexRuntimeFactory factory,
                                 std::uint32_t timeout_ms);

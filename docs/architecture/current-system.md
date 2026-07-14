@@ -216,7 +216,7 @@ runtime, then rebuilds it with 0/500/3000 ms retry delays and a five-second hard
 recovery deadline. It is currently driven by explicit control-plane `tick()`
 calls. A lock-free `IMMNotificationClient` generation/event source and an
 independent capture/render endpoint-selection policy feed the supervisor on the
-control thread. Follow-default generation changes settle for 100 ms so paired
+control thread. Follow-default generation changes settle for 300 ms so paired
 capture/render notifications coalesce into one bounded duplex reopen, while
 pinned directions ignore unrelated default-device changes. Snapshot consumption
 uses a read-reset-read protocol so event-reset races cannot lose a generation.
