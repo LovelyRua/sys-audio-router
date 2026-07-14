@@ -209,6 +209,24 @@ bool WindowsWasapiEndpointNotification::reset_change_event() noexcept {
          ResetEvent(static_cast<HANDLE>(change_event_)) != FALSE;
 }
 
+WasapiEndpointNotificationSnapshot
+WindowsWasapiEndpointNotification::consume_snapshot() noexcept {
+  WasapiEndpointNotificationSnapshot snapshot{
+      .capture_generation = capture_generation(),
+      .render_generation = render_generation(),
+      .event_reset_succeeded = false,
+  };
+
+  snapshot.event_reset_succeeded = reset_change_event();
+
+  // Re-read after resetting so a callback that raced with the first reads is
+  // included here. A callback after ResetEvent leaves the event signaled for
+  // the control thread's next poll.
+  snapshot.capture_generation = capture_generation();
+  snapshot.render_generation = render_generation();
+  return snapshot;
+}
+
 std::uint64_t WindowsWasapiEndpointNotification::capture_generation() const noexcept {
   return client_ != nullptr ? as_client(client_)->capture_generation()
                             : capture_generation_.load(std::memory_order_acquire);

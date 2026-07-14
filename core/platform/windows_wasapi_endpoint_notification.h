@@ -7,6 +7,12 @@ namespace sar::platform {
 
 struct WindowsWasapiEndpointNotificationTestAccess;
 
+struct WasapiEndpointNotificationSnapshot {
+  std::uint64_t capture_generation = 0;
+  std::uint64_t render_generation = 0;
+  bool event_reset_succeeded = false;
+};
+
 class WindowsWasapiEndpointNotification {
  public:
   WindowsWasapiEndpointNotification() = default;
@@ -22,6 +28,7 @@ class WindowsWasapiEndpointNotification {
   [[nodiscard]] bool registered() const noexcept;
   [[nodiscard]] void* change_event() const noexcept;
   [[nodiscard]] bool reset_change_event() noexcept;
+  [[nodiscard]] WasapiEndpointNotificationSnapshot consume_snapshot() noexcept;
   [[nodiscard]] std::uint64_t capture_generation() const noexcept;
   [[nodiscard]] std::uint64_t render_generation() const noexcept;
 

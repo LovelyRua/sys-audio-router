@@ -46,6 +46,15 @@ int main() {
   const bool uninitialize_com = SUCCEEDED(com_result);
 
   sar::platform::WindowsWasapiEndpointNotification notification;
+  const auto unregistered_snapshot = notification.consume_snapshot();
+  if (const auto failure = expect(
+          unregistered_snapshot.capture_generation == 0 &&
+              unregistered_snapshot.render_generation == 0 &&
+              !unregistered_snapshot.event_reset_succeeded,
+          "Unexpected snapshot for unregistered notification")) {
+    return failure;
+  }
+
   const auto register_result = notification.register_notifications();
   if (FAILED(register_result)) {
     std::cerr << "Failed to register endpoint notifications: " << std::hex
@@ -85,10 +94,21 @@ int main() {
     return failure;
   }
 
-  if (const auto failure = expect(notification.reset_change_event(),
-                                  "Failed to reset notification event")) {
+  const auto capture_snapshot = notification.consume_snapshot();
+  if (const auto failure = expect(
+          capture_snapshot.capture_generation == 1 &&
+              capture_snapshot.render_generation == 0 &&
+              capture_snapshot.event_reset_succeeded,
+          "Unexpected capture notification snapshot")) {
     return failure;
   }
+  if (const auto failure = expect(
+          WaitForSingleObject(static_cast<HANDLE>(notification.change_event()), 0) ==
+              WAIT_TIMEOUT,
+          "Snapshot did not clear notification event")) {
+    return failure;
+  }
+
   WindowsWasapiEndpointNotificationTestAccess::notify_default_device(notification,
                                                                      eRender);
   if (const auto failure = expect(notification.capture_generation() == 1,
@@ -105,6 +125,19 @@ int main() {
   if (const auto failure = expect(notification.capture_generation() == 2 &&
                                       notification.render_generation() == 2,
                                   "Expected eAll to increment both generations")) {
+    return failure;
+  }
+
+  if (const auto failure = expect(notification.reset_change_event(),
+                                  "Failed to reset notification event")) {
+    return failure;
+  }
+  const auto retained_generation_snapshot = notification.consume_snapshot();
+  if (const auto failure = expect(
+          retained_generation_snapshot.capture_generation == 2 &&
+              retained_generation_snapshot.render_generation == 2 &&
+              retained_generation_snapshot.event_reset_succeeded,
+          "Snapshot lost generations after event reset")) {
     return failure;
   }
 
@@ -157,6 +190,14 @@ int main() {
   if (const auto failure = expect(notification.capture_generation() == 3 &&
                                       notification.render_generation() == 2,
                                   "Expected generations to survive cleanup")) {
+    return failure;
+  }
+  const auto cleaned_up_snapshot = notification.consume_snapshot();
+  if (const auto failure = expect(
+          cleaned_up_snapshot.capture_generation == 3 &&
+              cleaned_up_snapshot.render_generation == 2 &&
+              !cleaned_up_snapshot.event_reset_succeeded,
+          "Unexpected snapshot after notification cleanup")) {
     return failure;
   }
 
