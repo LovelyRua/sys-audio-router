@@ -528,6 +528,10 @@ if(WIN32)
     COMMAND sar_measure_wasapi_recovery --timeout-ms 0)
   add_test(NAME windows_wasapi_recovery_measure_unknown_arg
     COMMAND sar_measure_wasapi_recovery --definitely-not-a-real-option)
+  add_test(NAME windows_wasapi_recovery_measure_missing_capture_id
+    COMMAND sar_measure_wasapi_recovery --capture-id)
+  add_test(NAME windows_wasapi_recovery_measure_missing_render_id
+    COMMAND sar_measure_wasapi_recovery --render-id)
   add_test(NAME wasapi_measure_options_smoke
     COMMAND sar_wasapi_measure_options_smoke)
   add_test(NAME wasapi_measure_report_smoke
@@ -555,6 +559,8 @@ if(WIN32)
     windows_wasapi_recovery_measure_bad_timeout
     windows_wasapi_recovery_measure_zero_timeout
     windows_wasapi_recovery_measure_unknown_arg
+    windows_wasapi_recovery_measure_missing_capture_id
+    windows_wasapi_recovery_measure_missing_render_id
     PROPERTIES WILL_FAIL TRUE)
   set_tests_properties(
     windows_wasapi_render_loop_measure_help

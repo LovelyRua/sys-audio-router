@@ -5,6 +5,7 @@
 #include "core/diagnostics/engine_diagnostics.h"
 #include "core/graph/graph.h"
 #include "core/graph/node.h"
+#include "core/platform/windows_wasapi_device_provider.h"
 #include "core/platform/windows_wasapi_duplex_supervisor.h"
 #include "core/platform/windows_wasapi_endpoint_notification.h"
 #include "core/platform/windows_wasapi_stream_probe.h"
@@ -17,6 +18,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <thread>
 #include <vector>
@@ -28,6 +30,8 @@ struct RecoveryMeasureOptions {
   std::uint32_t duration_ms = 10000;
   std::uint32_t poll_ms = 100;
   std::uint32_t timeout_ms = 10;
+  std::string capture_device_id;
+  std::string render_device_id;
   bool show_help = false;
 };
 
@@ -72,6 +76,15 @@ bool parse_options(int argc, char** argv, RecoveryMeasureOptions& options) {
       return true;
     };
 
+    auto parse_device_id = [&](std::string& target) {
+      if (index + 1 >= argc || argv[index + 1][0] == '\0') {
+        std::cerr << "Missing value for " << arg << '\n';
+        return false;
+      }
+      target = argv[++index];
+      return true;
+    };
+
     if (arg == "--duration-ms") {
       if (!parse_next(options.duration_ms) || options.duration_ms == 0) {
         if (options.duration_ms == 0) {
@@ -91,6 +104,14 @@ bool parse_options(int argc, char** argv, RecoveryMeasureOptions& options) {
         if (options.timeout_ms == 0) {
           std::cerr << "Value for --timeout-ms must be greater than zero\n";
         }
+        return false;
+      }
+    } else if (arg == "--capture-id") {
+      if (!parse_device_id(options.capture_device_id)) {
+        return false;
+      }
+    } else if (arg == "--render-id") {
+      if (!parse_device_id(options.render_device_id)) {
         return false;
       }
     } else {
@@ -198,7 +219,8 @@ int main(int argc, char** argv) {
   }
   if (options.show_help) {
     std::cout << "Usage: sar_measure_wasapi_recovery "
-                 "[--duration-ms N] [--poll-ms N] [--timeout-ms N]\n";
+                 "[--duration-ms N] [--poll-ms N] [--timeout-ms N] "
+                 "[--capture-id ID] [--render-id ID]\n";
     return 0;
   }
 
@@ -218,25 +240,45 @@ int main(int argc, char** argv) {
                 << register_result << '\n';
       exit_code = 1;
     } else {
-      const auto capture_probe_result = sar::platform::probe_default_wasapi_stream(
+      const auto capture_selection = options.capture_device_id.empty()
+                                         ? sar::platform::WasapiEndpointSelection::follow_default()
+                                         : sar::platform::WasapiEndpointSelection::pinned_device_id(
+                                               options.capture_device_id);
+      const auto render_selection = options.render_device_id.empty()
+                                        ? sar::platform::WasapiEndpointSelection::follow_default()
+                                        : sar::platform::WasapiEndpointSelection::pinned_device_id(
+                                              options.render_device_id);
+      const sar::platform::WasapiEndpointSelectionPolicy endpoint_policy(
+          capture_selection, render_selection);
+      sar::platform::WindowsWasapiDeviceProvider provider;
+      const auto selected = provider.resolve_endpoint_pair(endpoint_policy);
+      if (!selected.ok()) {
+        for (const auto& error : selected.errors()) {
+          std::cerr << error.code << ": " << error.message << '\n';
+        }
+        exit_code = 1;
+      } else {
+        const auto capture_probe_result = sar::platform::probe_wasapi_stream(
+          selected.endpoints().capture_device_id,
           sar::platform::WasapiStreamDirection::Capture);
-      const auto render_probe_result = sar::platform::probe_default_wasapi_stream(
+        const auto render_probe_result = sar::platform::probe_wasapi_stream(
+          selected.endpoints().render_device_id,
           sar::platform::WasapiStreamDirection::Render);
       if (!capture_probe_result.ok() || !render_probe_result.ok()) {
         if (!capture_probe_result.ok()) {
-          print_probe_errors("Default capture stream", capture_probe_result);
+          print_probe_errors("Selected capture stream", capture_probe_result);
         }
         if (!render_probe_result.ok()) {
-          print_probe_errors("Default render stream", render_probe_result);
+          print_probe_errors("Selected render stream", render_probe_result);
         }
         exit_code = 1;
       } else {
         const auto& capture_probe = capture_probe_result.probe();
         const auto& render_probe = render_probe_result.probe();
         sar::tools::print_wasapi_probe(
-            std::cout, "Default capture stream", capture_probe);
+            std::cout, "Selected capture stream", capture_probe);
         sar::tools::print_wasapi_probe(
-            std::cout, "Default render stream", render_probe);
+            std::cout, "Selected render stream", render_probe);
         std::cout << "Recovery measurement\n"
                   << "  Duration ms: " << options.duration_ms << '\n'
                   << "  Poll interval ms: " << options.poll_ms << '\n'
@@ -251,7 +293,7 @@ int main(int argc, char** argv) {
         graph.add_node(std::make_unique<sar::graph::GainNode>(0.0F));
         sar::diagnostics::EngineDiagnostics diagnostics;
         sar::platform::WindowsWasapiDuplexSupervisor supervisor(
-            graph, diagnostics, options.timeout_ms);
+            graph, diagnostics, options.timeout_ms, endpoint_policy);
 
         const auto start = std::chrono::steady_clock::now();
         auto next_poll = start;
@@ -286,6 +328,7 @@ int main(int argc, char** argv) {
             final_summary.endpoint_notification_reset_failure_count != 0 ||
             !supervisor.last_errors().empty()) {
           exit_code = 1;
+        }
         }
       }
 
