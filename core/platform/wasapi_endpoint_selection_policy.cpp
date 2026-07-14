@@ -46,6 +46,20 @@ WasapiEndpointSelectionError make_unavailable_error(
   };
 }
 
+WasapiEndpointSelectionError make_discovery_error(
+    WasapiEndpointDirection direction,
+    const WasapiEndpointSelection& selection) {
+  return {
+      "wasapi_endpoint_discovery_failed",
+      "WASAPI " + std::string(direction_name(direction)) +
+          " endpoint discovery failed.",
+      direction,
+      selection.mode == WasapiEndpointSelectionMode::PinnedDeviceId
+          ? selection.device_id
+          : std::string{},
+  };
+}
+
 }  // namespace
 
 WasapiEndpointSelection WasapiEndpointSelection::follow_default() {
@@ -161,6 +175,16 @@ WasapiEndpointResolutionResult WasapiEndpointSelectionPolicy::resolve(
         make_unavailable_error(direction, endpoint_selection));
   }
   return WasapiEndpointResolutionResult::success(endpoint->id);
+}
+
+WasapiEndpointResolutionResult WasapiEndpointSelectionPolicy::resolve(
+    WasapiEndpointDirection direction,
+    const AudioDeviceListResult& discovery) const {
+  if (!discovery.ok()) {
+    return WasapiEndpointResolutionResult::failure(
+        make_discovery_error(direction, selection(direction)));
+  }
+  return resolve(direction, discovery.devices());
 }
 
 }  // namespace sar::platform

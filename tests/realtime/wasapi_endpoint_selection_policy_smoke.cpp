@@ -10,6 +10,7 @@ namespace {
 using sar::platform::AudioBackendKind;
 using sar::platform::AudioDeviceDescriptor;
 using sar::platform::AudioDeviceDirection;
+using sar::platform::AudioDeviceListResult;
 using sar::platform::WasapiDefaultEndpointGenerations;
 using sar::platform::WasapiEndpointDirection;
 using sar::platform::WasapiEndpointSelection;
@@ -105,6 +106,18 @@ int main() {
   };
 
   {
+    WasapiEndpointSelectionPolicy policy;
+    const auto discovery = AudioDeviceListResult::success(devices);
+    const auto capture =
+        policy.resolve(WasapiEndpointDirection::Capture, discovery);
+    if (expect(capture.ok(), "Successful discovery must resolve") ||
+        expect(capture.device_id() == "capture-default",
+               "Successful discovery must return the stable endpoint ID")) {
+      return 1;
+    }
+  }
+
+  {
     WasapiEndpointSelectionPolicy policy(
         WasapiEndpointSelection::follow_default(),
         WasapiEndpointSelection::pinned_device_id("render-pinned"));
@@ -139,6 +152,57 @@ int main() {
         expect(second.errors()[0].code == first.errors()[0].code &&
                    second.errors()[0].message == first.errors()[0].message,
                "Repeated pinned endpoint failures must be stable")) {
+      return 1;
+    }
+  }
+
+  {
+    WasapiEndpointSelectionPolicy policy;
+    const std::vector<AudioDeviceDescriptor> no_capture_default = {
+        device("capture-not-default", AudioDeviceDirection::Input),
+    };
+    const auto first = policy.resolve(WasapiEndpointDirection::Capture,
+                                      no_capture_default);
+    const auto second = policy.resolve(WasapiEndpointDirection::Capture,
+                                       no_capture_default);
+    if (expect(!first.ok(), "Unavailable default endpoint must fail") ||
+        expect(first.errors().size() == 1,
+               "Unavailable default endpoint must report one stable error") ||
+        expect(first.errors()[0].code ==
+                   "wasapi_default_endpoint_unavailable",
+               "Unavailable default endpoint must use the stable error code") ||
+        expect(second.errors()[0].code == first.errors()[0].code &&
+                   second.errors()[0].message == first.errors()[0].message,
+               "Repeated default endpoint failures must be stable")) {
+      return 1;
+    }
+  }
+
+  {
+    WasapiEndpointSelectionPolicy policy(
+        WasapiEndpointSelection::pinned_device_id("capture-pinned"),
+        WasapiEndpointSelection::follow_default());
+    const auto discovery = AudioDeviceListResult::failure({
+        {"wasapi_enum_failed", "Machine-specific discovery detail."},
+    });
+    const auto first =
+        policy.resolve(WasapiEndpointDirection::Capture, discovery);
+    const auto second =
+        policy.resolve(WasapiEndpointDirection::Capture, discovery);
+    if (expect(!first.ok(), "Failed discovery must not resolve an endpoint") ||
+        expect(first.errors().size() == 1,
+               "Failed discovery must report one stable selection error") ||
+        expect(first.errors()[0].code ==
+                   "wasapi_endpoint_discovery_failed",
+               "Failed discovery must use the stable integration error code") ||
+        expect(first.errors()[0].direction ==
+                   WasapiEndpointDirection::Capture,
+               "Failed discovery must preserve endpoint direction") ||
+        expect(first.errors()[0].device_id == "capture-pinned",
+               "Failed pinned discovery must preserve the requested ID") ||
+        expect(second.errors()[0].code == first.errors()[0].code &&
+                   second.errors()[0].message == first.errors()[0].message,
+               "Repeated discovery failures must be stable")) {
       return 1;
     }
   }

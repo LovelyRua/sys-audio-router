@@ -87,6 +87,9 @@ class WasapiEndpointSelectionPolicy {
   [[nodiscard]] WasapiEndpointResolutionResult resolve(
       WasapiEndpointDirection direction,
       const std::vector<AudioDeviceDescriptor>& devices) const;
+  [[nodiscard]] WasapiEndpointResolutionResult resolve(
+      WasapiEndpointDirection direction,
+      const AudioDeviceListResult& discovery) const;
 
  private:
   WasapiEndpointSelection capture_;
