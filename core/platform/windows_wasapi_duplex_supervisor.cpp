@@ -155,12 +155,14 @@ WindowsWasapiDuplexSupervisor::WindowsWasapiDuplexSupervisor(
     diagnostics::EngineDiagnostics& diagnostics,
     std::uint32_t timeout_ms,
     WasapiEndpointSelectionPolicy endpoint_selection_policy)
+    // Both consumers must copy the intact policy. Moving it in this delegating
+    // call makes the factory argument depend on unspecified argument order.
     : WindowsWasapiDuplexSupervisor(
           make_selected_duplex_factory(graph,
                                        diagnostics,
                                        endpoint_selection_policy),
           timeout_ms,
-          std::move(endpoint_selection_policy)) {}
+          endpoint_selection_policy) {}
 
 WindowsWasapiDuplexSupervisor::~WindowsWasapiDuplexSupervisor() { stop(0); }
 
