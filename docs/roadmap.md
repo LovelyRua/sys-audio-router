@@ -120,7 +120,9 @@ the soak gates.
   selection, notification-to-supervisor reopen decisions, error-code classifier,
   whole-duplex-runtime supervisor, and an interactive recovery measurement CLI
   are implemented. Notifications are filtered to the `eConsole` role used by the
-  current probe path. Hardware recovery evidence remains.
+  current probe path. The production factory resolves both directions from one
+  enumeration, opens explicit IDs, re-resolves on every retry, and reports the
+  IDs that actually started. Hardware recovery evidence remains.
 - **Render deadline ordering:** when capture and render are both ready, service
   render before draining additional capture packets or producing optional graph
   backlog. A deterministic call-order smoke test must prove the ordering. A

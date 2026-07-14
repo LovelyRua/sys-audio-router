@@ -222,6 +222,12 @@ Only `eConsole` default-role changes are observed because the current stream
 probe path resolves that role; multimedia and communications role changes do not
 cause unrelated reopen episodes.
 
+The production supervisor factory enumerates devices once per open attempt,
+resolves capture and render as one pair, and opens the duplex runtime by those
+explicit IDs. Follow-default and pinned selections can be mixed independently.
+Each retry repeats resolution; a successful start publishes the actual capture
+and render probe IDs, while quiesce and stop clear them.
+
 `WindowsWasapiLoopbackLoop` owns a capture-only loopback stream, graph runner,
 and realtime worker. It exposes the underlying WASAPI clock snapshot and keeps
 the graph output unconnected until a deliberate render or virtual-endpoint
@@ -276,7 +282,7 @@ range of about -835 to 0 ppm.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 79 smoke targets. Several tests are
+The Windows CTest suite currently has 81 smoke targets. Several tests are
 synthetic because WinRM sessions may not expose interactive audio endpoints even
 when the VM has a desktop audio stack.
 
@@ -303,7 +309,8 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   policy now drive supervisor reopen decisions, with generation, reset-failure,
   and notification-reopen counters. Measuring the unplug/replug recovery deadline
   on hardware remains. `sar_measure_wasapi_recovery` now supplies the MTA control
-  loop and machine-readable recovery summaries for that interactive experiment.
+  loop and machine-readable recovery summaries for that interactive experiment;
+  `--capture-id` and `--render-id` select pinned endpoints independently.
 - Multi-hour real-device stability has not been demonstrated. The eight-hour
   pairwise and 24-hour backend alpha soaks in the roadmap remain outstanding.
 - Loopback capture is not yet connected to a selectable render destination or
