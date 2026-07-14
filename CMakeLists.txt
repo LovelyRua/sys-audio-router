@@ -65,6 +65,7 @@ if(WIN32)
     core/platform/windows_wasapi_device_provider.cpp
     core/platform/windows_wasapi_duplex_loop.cpp
     core/platform/windows_wasapi_duplex_supervisor.cpp
+    core/platform/windows_wasapi_endpoint_notification.cpp
     core/platform/windows_wasapi_graph_runner.cpp
     core/platform/windows_wasapi_loopback_loop.cpp
     core/platform/windows_wasapi_loop_preflight.cpp
@@ -180,6 +181,12 @@ if(WIN32)
   )
 
   target_link_libraries(sar_windows_wasapi_device_smoke PRIVATE sar_core)
+
+  add_executable(sar_windows_wasapi_endpoint_notification_smoke
+    tests/realtime/windows_wasapi_endpoint_notification_smoke.cpp
+  )
+
+  target_link_libraries(sar_windows_wasapi_endpoint_notification_smoke PRIVATE sar_core)
 
   add_executable(sar_windows_wasapi_stream_probe_smoke
     tests/realtime/windows_wasapi_stream_probe_smoke.cpp
@@ -413,6 +420,8 @@ add_test(NAME wasapi_recovery_policy_smoke COMMAND sar_wasapi_recovery_policy_sm
 add_test(NAME wasapi_realtime_error_smoke COMMAND sar_wasapi_realtime_error_smoke)
 if(WIN32)
   add_test(NAME windows_wasapi_device_smoke COMMAND sar_windows_wasapi_device_smoke)
+  add_test(NAME windows_wasapi_endpoint_notification_smoke
+           COMMAND sar_windows_wasapi_endpoint_notification_smoke)
   add_test(NAME windows_wasapi_stream_probe_smoke
            COMMAND sar_windows_wasapi_stream_probe_smoke)
   add_test(NAME windows_wasapi_stream_smoke COMMAND sar_windows_wasapi_stream_smoke)
