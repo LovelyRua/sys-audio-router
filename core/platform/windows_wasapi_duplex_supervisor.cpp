@@ -227,10 +227,8 @@ WindowsWasapiDuplexSupervisor::poll_endpoint_notifications(
   if (!endpoint_generations_initialized_) {
     endpoint_generations_ = current;
     endpoint_generations_initialized_ = true;
-    if (policy_.state() != WasapiRecoveryState::Running) {
-      endpoint_selection_policy_.mark_opened(current);
-      return {};
-    }
+    endpoint_selection_policy_.mark_opened(current);
+    return {};
   }
 
   endpoint_generations_ = current;
