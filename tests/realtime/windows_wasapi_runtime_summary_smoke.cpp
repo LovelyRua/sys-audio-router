@@ -170,7 +170,9 @@ int main() {
                        "last_capture_timestamp_error=0 "
                        "capture_rate_adapter_recovering=0 "
                        "last_render_recovery_silence=0 "
-                       "error_count=0 first_error_code=",
+                       "error_count=0 first_error_code= "
+                       "first_error_native_hresult=none "
+                       "first_error_native_win32_code=none",
                    "Expected no-cycle machine-readable summary line")) {
       return failure;
     }
@@ -967,7 +969,10 @@ int main() {
     auto stats = make_active_stats();
     stats.stream_start_error_cycles = 1;
     const std::vector<sar::platform::WasapiRealtimeWorkerError> errors = {
-        {"native_stream_unavailable", "Synthetic stream has no native WASAPI client."},
+        {"native_stream_unavailable",
+         "Synthetic stream has no native WASAPI client.",
+         static_cast<std::int32_t>(0x88890004u),
+         5u},
         {"ignored_later_error", "Only the first error is surfaced as the reason."},
     };
     const auto summary =
@@ -994,6 +999,13 @@ int main() {
                    "Expected first explicit error message")) {
       return failure;
     }
+    if (const auto failure = expect(
+            summary.first_error_native_hresult ==
+                    static_cast<std::int32_t>(0x88890004u) &&
+                summary.first_error_native_win32_code == 5u,
+            "Expected first explicit native error codes")) {
+      return failure;
+    }
     const auto summary_line =
         sar::platform::format_wasapi_runtime_summary_line(summary);
     if (const auto failure =
@@ -1006,6 +1018,15 @@ int main() {
                        "first_error_code=native_stream_unavailable") !=
                        std::string::npos,
                    "Expected summary line first error code")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            summary_line.find("first_error_native_hresult=0x88890004") !=
+                    std::string::npos &&
+                summary_line.find(
+                    "first_error_native_win32_code=0x00000005") !=
+                    std::string::npos,
+            "Expected fixed-width native error codes")) {
       return failure;
     }
   }

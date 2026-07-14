@@ -1,5 +1,6 @@
 #include "core/platform/windows_wasapi_runtime_summary.h"
 
+#include <iomanip>
 #include <sstream>
 
 namespace sar::platform {
@@ -10,7 +11,28 @@ const char* bool_token(bool value) noexcept {
   return value ? "1" : "0";
 }
 
+std::string format_native_code(std::uint32_t value) {
+  std::ostringstream stream;
+  stream << "0x" << std::uppercase << std::hex << std::setfill('0')
+         << std::setw(8) << value;
+  return stream.str();
+}
+
+template <typename T, typename Formatter>
+std::string format_optional_native_code(const std::optional<T>& value,
+                                        Formatter formatter) {
+  return value.has_value() ? formatter(*value) : "none";
+}
+
 }  // namespace
+
+std::string format_wasapi_native_hresult(std::int32_t value) {
+  return format_native_code(static_cast<std::uint32_t>(value));
+}
+
+std::string format_wasapi_native_win32_code(std::uint32_t value) {
+  return format_native_code(value);
+}
 
 const char* wasapi_runtime_health_name(WasapiRuntimeHealth health) noexcept {
   switch (health) {
@@ -134,7 +156,13 @@ std::string format_wasapi_runtime_summary_line(
          << " last_render_recovery_silence="
          << bool_token(summary.last_render_recovery_silence)
          << " error_count=" << summary.error_count
-         << " first_error_code=" << summary.first_error_code;
+         << " first_error_code=" << summary.first_error_code
+         << " first_error_native_hresult="
+         << format_optional_native_code(summary.first_error_native_hresult,
+                                        format_wasapi_native_hresult)
+         << " first_error_native_win32_code="
+         << format_optional_native_code(summary.first_error_native_win32_code,
+                                        format_wasapi_native_win32_code);
   return stream.str();
 }
 
@@ -244,6 +272,8 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
     summary.reason = errors.front().message;
     summary.first_error_code = errors.front().code;
     summary.first_error_message = errors.front().message;
+    summary.first_error_native_hresult = errors.front().native_hresult;
+    summary.first_error_native_win32_code = errors.front().native_win32_code;
     return summary;
   }
 

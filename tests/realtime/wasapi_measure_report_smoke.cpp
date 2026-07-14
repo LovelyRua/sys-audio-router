@@ -43,6 +43,9 @@ sar::platform::WasapiRuntimeSummary make_summary() {
   summary.error_count = 2;
   summary.first_error_code = "first_error";
   summary.first_error_message = "First synthetic error.";
+  summary.first_error_native_hresult =
+      static_cast<std::int32_t>(0x80004005u);
+  summary.first_error_native_win32_code = 5u;
   summary.has_capture_stream = true;
   summary.has_render_stream = true;
   summary.capture_sample_rate = 48000;
@@ -217,6 +220,17 @@ int main() {
                    "Expected first error code")) {
       return failure;
     }
+    if (const auto failure = expect(
+            contains(text, "first_error_native_hresult=0x80004005") &&
+                contains(text,
+                         "first_error_native_win32_code=0x00000005") &&
+                contains(text,
+                         "First error native HRESULT: 0x80004005") &&
+                contains(text,
+                         "First error native Win32 code: 0x00000005"),
+            "Expected fixed-width native error reporting")) {
+      return failure;
+    }
     if (const auto failure =
             expect(contains(text, "Has capture stream: yes"),
                    "Expected capture stream presence")) {
@@ -254,6 +268,23 @@ int main() {
                        contains(text, "Render FIFO fill frames: 96") &&
                        contains(text, "Render FIFO underflow frames: 24"),
                    "Expected readable runtime FIFO diagnostics")) {
+      return failure;
+    }
+  }
+
+  {
+    auto summary = make_summary();
+    summary.first_error_native_hresult.reset();
+    summary.first_error_native_win32_code.reset();
+    std::ostringstream out;
+    sar::tools::print_wasapi_runtime_summary(out, summary);
+    const auto text = out.str();
+    if (const auto failure = expect(
+            contains(text, "first_error_native_hresult=none") &&
+                contains(text, "first_error_native_win32_code=none") &&
+                contains(text, "First error native HRESULT: none") &&
+                contains(text, "First error native Win32 code: none"),
+            "Expected explicit missing native error reporting")) {
       return failure;
     }
   }

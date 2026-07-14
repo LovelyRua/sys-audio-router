@@ -5,6 +5,7 @@
 #include "core/platform/windows_wasapi_stream.h"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -90,6 +91,8 @@ struct WasapiRuntimeSummary {
   std::size_t error_count = 0;
   std::string first_error_code;
   std::string first_error_message;
+  std::optional<std::int32_t> first_error_native_hresult = std::nullopt;
+  std::optional<std::uint32_t> first_error_native_win32_code = std::nullopt;
 };
 
 [[nodiscard]] const char* wasapi_runtime_health_name(
@@ -101,6 +104,12 @@ struct WasapiRuntimeSummary {
 
 [[nodiscard]] std::string format_wasapi_runtime_summary_line(
     const WasapiRuntimeSummary& summary);
+
+[[nodiscard]] std::string format_wasapi_native_hresult(
+    std::int32_t value);
+
+[[nodiscard]] std::string format_wasapi_native_win32_code(
+    std::uint32_t value);
 
 [[nodiscard]] WasapiRuntimeSummary summarize_wasapi_runtime(
     const WasapiRealtimeWorkerStats& stats,

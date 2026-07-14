@@ -51,6 +51,18 @@ void print_wasapi_runtime_summary(
   if (!summary.first_error_code.empty()) {
     out << "  First error code: " << summary.first_error_code << '\n';
     out << "  First error message: " << summary.first_error_message << '\n';
+    out << "  First error native HRESULT: "
+        << (summary.first_error_native_hresult.has_value()
+                ? platform::format_wasapi_native_hresult(
+                      *summary.first_error_native_hresult)
+                : "none")
+        << '\n';
+    out << "  First error native Win32 code: "
+        << (summary.first_error_native_win32_code.has_value()
+                ? platform::format_wasapi_native_win32_code(
+                      *summary.first_error_native_win32_code)
+                : "none")
+        << '\n';
   }
   out << "  Has capture stream: " << (summary.has_capture_stream ? "yes" : "no") << '\n';
   out << "  Has render stream: " << (summary.has_render_stream ? "yes" : "no") << '\n';
