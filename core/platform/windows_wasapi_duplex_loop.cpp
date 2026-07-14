@@ -53,6 +53,30 @@ std::vector<WasapiRealtimeWorkerError> convert_errors(
   return converted;
 }
 
+std::vector<WasapiRealtimeWorkerError> convert_errors(
+    const std::vector<WasapiStreamProbeError>& errors) {
+  std::vector<WasapiRealtimeWorkerError> converted;
+  converted.reserve(errors.size());
+  for (const auto& error : errors) {
+    converted.push_back({error.code, error.message});
+  }
+  return converted;
+}
+
+WasapiStreamProbeResult probe_endpoint(const std::string* device_id,
+                                       WasapiStreamDirection direction,
+                                       void*) {
+  return device_id == nullptr
+             ? probe_default_wasapi_stream(direction)
+             : probe_wasapi_stream(*device_id, direction);
+}
+
+WasapiStreamOpenResult open_endpoint(WasapiStreamProbe probe,
+                                     std::uint32_t requested_sample_rate,
+                                     void*) {
+  return open_wasapi_stream_shell(std::move(probe), requested_sample_rate);
+}
+
 std::int64_t signed_frame_balance(std::uint64_t captured,
                                   std::uint64_t rendered) noexcept {
   constexpr auto maximum =
@@ -388,6 +412,68 @@ WindowsWasapiDuplexLoop::WindowsWasapiDuplexLoop(
               true),
       worker_(runner_, graph, diagnostics) {}
 
+WasapiDuplexLoopOpenResult WindowsWasapiDuplexLoop::open(
+    const std::string* capture_device_id,
+    const std::string* render_device_id,
+    graph::Graph& graph,
+    diagnostics::EngineDiagnostics& diagnostics,
+    ProbeStreamFunction probe_stream,
+    OpenStreamFunction open_stream,
+    void* context) {
+  auto render_probe_result =
+      probe_stream(render_device_id, WasapiStreamDirection::Render, context);
+  if (!render_probe_result.ok()) {
+    return WasapiDuplexLoopOpenResult::failure(
+        convert_errors(render_probe_result.errors()));
+  }
+
+  auto render_result =
+      open_stream(render_probe_result.probe(), 0, context);
+  if (!render_result.ok()) {
+    return WasapiDuplexLoopOpenResult::failure(convert_errors(render_result.errors()));
+  }
+
+  auto capture_probe_result =
+      probe_stream(capture_device_id, WasapiStreamDirection::Capture, context);
+  if (!capture_probe_result.ok()) {
+    return WasapiDuplexLoopOpenResult::failure(
+        convert_errors(capture_probe_result.errors()));
+  }
+
+  auto capture_result = open_stream(
+      capture_probe_result.probe(),
+      render_result.stream().probe().mix_format.sample_rate,
+      context);
+  if (!capture_result.ok()) {
+    return WasapiDuplexLoopOpenResult::failure(convert_errors(capture_result.errors()));
+  }
+
+  if (!compatible_wasapi_duplex_sample_rates(capture_result.stream().probe(),
+                                             render_result.stream().probe())) {
+    return WasapiDuplexLoopOpenResult::failure({
+        {
+            "duplex_sample_rate_mismatch",
+            "WASAPI capture and render streams need a sample-rate adapter before duplex use.",
+        },
+    });
+  }
+
+  auto graph_errors =
+      validate_wasapi_duplex_graph_preflight(graph,
+                                            capture_result.stream().probe(),
+                                            render_result.stream().probe());
+  if (!graph_errors.empty()) {
+    return WasapiDuplexLoopOpenResult::failure(std::move(graph_errors));
+  }
+
+  auto loop = std::unique_ptr<WindowsWasapiDuplexLoop>(
+      new WindowsWasapiDuplexLoop(capture_result.take_stream(),
+                                  render_result.take_stream(),
+                                  graph,
+                                  diagnostics));
+  return WasapiDuplexLoopOpenResult::success(std::move(loop));
+}
+
 WasapiDuplexLoopOpenResult WasapiDuplexLoopOpenResult::success(
     std::unique_ptr<WindowsWasapiDuplexLoop> loop) {
   return {std::move(loop), {}};
@@ -427,43 +513,22 @@ WasapiDuplexLoopOpenResult::WasapiDuplexLoopOpenResult(
 WasapiDuplexLoopOpenResult open_default_wasapi_duplex_loop(
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics) {
-  auto render_result = open_default_wasapi_stream_shell(WasapiStreamDirection::Render);
-  if (!render_result.ok()) {
-    return WasapiDuplexLoopOpenResult::failure(convert_errors(render_result.errors()));
-  }
+  return WindowsWasapiDuplexLoop::open(
+      nullptr, nullptr, graph, diagnostics, probe_endpoint, open_endpoint, nullptr);
+}
 
-  auto capture_result = open_default_wasapi_stream_shell(
-      WasapiStreamDirection::Capture,
-      WasapiStreamMode::Endpoint,
-      render_result.stream().probe().mix_format.sample_rate);
-  if (!capture_result.ok()) {
-    return WasapiDuplexLoopOpenResult::failure(convert_errors(capture_result.errors()));
-  }
-
-  if (!compatible_wasapi_duplex_sample_rates(capture_result.stream().probe(),
-                                             render_result.stream().probe())) {
-    return WasapiDuplexLoopOpenResult::failure({
-        {
-            "duplex_sample_rate_mismatch",
-            "Default WASAPI capture and render streams need a sample-rate adapter before duplex use.",
-        },
-    });
-  }
-
-  auto graph_errors =
-      validate_wasapi_duplex_graph_preflight(graph,
-                                            capture_result.stream().probe(),
-                                            render_result.stream().probe());
-  if (!graph_errors.empty()) {
-    return WasapiDuplexLoopOpenResult::failure(std::move(graph_errors));
-  }
-
-  auto loop = std::unique_ptr<WindowsWasapiDuplexLoop>(
-      new WindowsWasapiDuplexLoop(capture_result.take_stream(),
-                                  render_result.take_stream(),
-                                  graph,
-                                  diagnostics));
-  return WasapiDuplexLoopOpenResult::success(std::move(loop));
+WasapiDuplexLoopOpenResult open_wasapi_duplex_loop(
+    const std::string& capture_device_id,
+    const std::string& render_device_id,
+    graph::Graph& graph,
+    diagnostics::EngineDiagnostics& diagnostics) {
+  return WindowsWasapiDuplexLoop::open(&capture_device_id,
+                                       &render_device_id,
+                                       graph,
+                                       diagnostics,
+                                       probe_endpoint,
+                                       open_endpoint,
+                                       nullptr);
 }
 
 }  // namespace sar::platform

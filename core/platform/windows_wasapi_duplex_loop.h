@@ -20,6 +20,7 @@
 namespace sar::platform {
 
 class WasapiDuplexLoopOpenResult;
+struct WindowsWasapiDuplexLoopTestAccess;
 
 [[nodiscard]] bool wasapi_clock_position_to_audio_frames(
     std::uint64_t position,
@@ -69,9 +70,33 @@ class WindowsWasapiDuplexLoop : public WasapiDuplexRuntime {
 
  private:
   friend class WasapiDuplexLoopOpenResult;
+  friend struct WindowsWasapiDuplexLoopTestAccess;
   friend WasapiDuplexLoopOpenResult open_default_wasapi_duplex_loop(
       graph::Graph& graph,
       diagnostics::EngineDiagnostics& diagnostics);
+  friend WasapiDuplexLoopOpenResult open_wasapi_duplex_loop(
+      const std::string& capture_device_id,
+      const std::string& render_device_id,
+      graph::Graph& graph,
+      diagnostics::EngineDiagnostics& diagnostics);
+
+  using ProbeStreamFunction = WasapiStreamProbeResult (*)(
+      const std::string* device_id,
+      WasapiStreamDirection direction,
+      void* context);
+  using OpenStreamFunction = WasapiStreamOpenResult (*)(
+      WasapiStreamProbe probe,
+      std::uint32_t requested_sample_rate,
+      void* context);
+
+  static WasapiDuplexLoopOpenResult open(
+      const std::string* capture_device_id,
+      const std::string* render_device_id,
+      graph::Graph& graph,
+      diagnostics::EngineDiagnostics& diagnostics,
+      ProbeStreamFunction probe_stream,
+      OpenStreamFunction open_stream,
+      void* context);
 
   WindowsWasapiDuplexLoop(WindowsWasapiStream capture_stream,
                           WindowsWasapiStream render_stream,
@@ -117,6 +142,12 @@ class WasapiDuplexLoopOpenResult {
 };
 
 [[nodiscard]] WasapiDuplexLoopOpenResult open_default_wasapi_duplex_loop(
+    graph::Graph& graph,
+    diagnostics::EngineDiagnostics& diagnostics);
+
+[[nodiscard]] WasapiDuplexLoopOpenResult open_wasapi_duplex_loop(
+    const std::string& capture_device_id,
+    const std::string& render_device_id,
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics);
 

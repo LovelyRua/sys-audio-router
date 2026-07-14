@@ -9,7 +9,40 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <string>
 #include <thread>
+
+namespace sar::platform {
+
+struct WindowsWasapiDuplexLoopTestAccess {
+  using ProbeStreamFunction = WasapiStreamProbeResult (*)(
+      const std::string* device_id,
+      WasapiStreamDirection direction,
+      void* context);
+  using OpenStreamFunction = WasapiStreamOpenResult (*)(
+      WasapiStreamProbe probe,
+      std::uint32_t requested_sample_rate,
+      void* context);
+
+  static WasapiDuplexLoopOpenResult open(
+      const std::string* capture_device_id,
+      const std::string* render_device_id,
+      graph::Graph& graph,
+      diagnostics::EngineDiagnostics& diagnostics,
+      ProbeStreamFunction probe_stream,
+      OpenStreamFunction open_stream,
+      void* context) {
+    return WindowsWasapiDuplexLoop::open(capture_device_id,
+                                         render_device_id,
+                                         graph,
+                                         diagnostics,
+                                         probe_stream,
+                                         open_stream,
+                                         context);
+  }
+};
+
+}  // namespace sar::platform
 
 namespace {
 
@@ -60,6 +93,86 @@ bool has_error_code(const sar::platform::WasapiDuplexLoopOpenResult& result,
 
 std::uint32_t mismatched_sample_rate(std::uint32_t sample_rate) noexcept {
   return sample_rate == 48000 ? 44100 : 48000;
+}
+
+sar::platform::WasapiStreamProbe make_scripted_probe(
+    sar::platform::WasapiStreamDirection direction,
+    std::string device_id) {
+  sar::platform::WasapiStreamProbe probe;
+  probe.direction = direction;
+  probe.device_id = std::move(device_id);
+  probe.device_label = direction == sar::platform::WasapiStreamDirection::Render
+                           ? "Scripted render"
+                           : "Scripted capture";
+  probe.default_period_100ns = 100000;
+  probe.minimum_period_100ns = 30000;
+  probe.buffer_frames = probe.mix_format.frames_per_block;
+  return probe;
+}
+
+struct ScriptedDuplexOpen {
+  int next_step = 0;
+  bool order_ok = true;
+  bool fail_capture_open = false;
+  bool render_used_default = false;
+  bool capture_used_default = false;
+  std::string requested_render_id;
+  std::string requested_capture_id;
+  std::uint32_t render_requested_sample_rate = 1;
+  std::uint32_t capture_requested_sample_rate = 0;
+};
+
+sar::platform::WasapiStreamProbeResult scripted_probe(
+    const std::string* device_id,
+    sar::platform::WasapiStreamDirection direction,
+    void* context) {
+  auto& script = *static_cast<ScriptedDuplexOpen*>(context);
+  const auto expected_step =
+      direction == sar::platform::WasapiStreamDirection::Render ? 0 : 2;
+  script.order_ok = script.order_ok && script.next_step == expected_step;
+  ++script.next_step;
+  if (direction == sar::platform::WasapiStreamDirection::Render) {
+    script.render_used_default = device_id == nullptr;
+    script.requested_render_id = device_id == nullptr ? "" : *device_id;
+    return sar::platform::WasapiStreamProbeResult::success(
+        make_scripted_probe(direction, "stable-render-id"));
+  }
+
+  script.capture_used_default = device_id == nullptr;
+  script.requested_capture_id = device_id == nullptr ? "" : *device_id;
+  return sar::platform::WasapiStreamProbeResult::success(
+      make_scripted_probe(direction, "stable-capture-id"));
+}
+
+sar::platform::WasapiStreamOpenResult scripted_open(
+    sar::platform::WasapiStreamProbe probe,
+    std::uint32_t requested_sample_rate,
+    void* context) {
+  auto& script = *static_cast<ScriptedDuplexOpen*>(context);
+  const auto render =
+      probe.direction == sar::platform::WasapiStreamDirection::Render;
+  script.order_ok = script.order_ok && script.next_step == (render ? 1 : 3);
+  ++script.next_step;
+  if (render) {
+    script.render_requested_sample_rate = requested_sample_rate;
+  } else {
+    script.capture_requested_sample_rate = requested_sample_rate;
+    if (script.fail_capture_open) {
+      return sar::platform::WasapiStreamOpenResult::failure({{
+          "scripted_capture_open_failed",
+          "Scripted capture open failure.",
+          -123,
+          456,
+      }});
+    }
+  }
+
+  sar::platform::WindowsWasapiStream stream;
+  const auto result = stream.open(std::move(probe));
+  if (!result.ok()) {
+    return sar::platform::WasapiStreamOpenResult::failure(result.errors());
+  }
+  return sar::platform::WasapiStreamOpenResult::success(std::move(stream));
 }
 
 }  // namespace
@@ -138,6 +251,88 @@ int main() {
               converted_frames == 0,
           "Expected overflowing IAudioClock conversion rejected")) {
     return failure;
+  }
+
+  {
+    sar::graph::Graph graph(41, 2, 128, 48000);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    const auto result =
+        sar::platform::open_wasapi_duplex_loop("", "", graph, diagnostics);
+    if (const auto failure = expect(!result.ok(),
+                                    "Expected empty explicit device ID failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(has_error_code(result, "invalid_device_id_encoding"),
+                                    "Expected empty device ID probe error propagation")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::graph::Graph graph(42, 2, 128, 48000);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    ScriptedDuplexOpen script;
+    const std::string capture_device_id = "requested-capture-id";
+    const std::string render_device_id = "requested-render-id";
+    auto result = sar::platform::WindowsWasapiDuplexLoopTestAccess::open(
+        &capture_device_id,
+        &render_device_id,
+        graph,
+        diagnostics,
+        scripted_probe,
+        scripted_open,
+        &script);
+    if (const auto failure = expect(result.ok(),
+                                    "Expected scripted explicit duplex construction")) {
+      return failure;
+    }
+    if (const auto failure = expect(script.order_ok && script.next_step == 4,
+                                    "Expected render-first shared duplex construction")) {
+      return failure;
+    }
+    if (const auto failure = expect(script.requested_capture_id == capture_device_id &&
+                                        script.requested_render_id == render_device_id,
+                                    "Expected requested endpoint IDs passed to probes")) {
+      return failure;
+    }
+    if (const auto failure = expect(script.render_requested_sample_rate == 0 &&
+                                        script.capture_requested_sample_rate == 48000,
+                                    "Expected capture to request render sample rate")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            result.loop().capture_probe().device_id == "stable-capture-id" &&
+                result.loop().render_probe().device_id == "stable-render-id",
+            "Expected opened loop to retain stable probed endpoint IDs")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::graph::Graph graph(43, 2, 128, 48000);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    ScriptedDuplexOpen script;
+    script.fail_capture_open = true;
+    auto result = sar::platform::WindowsWasapiDuplexLoopTestAccess::open(
+        nullptr,
+        nullptr,
+        graph,
+        diagnostics,
+        scripted_probe,
+        scripted_open,
+        &script);
+    if (const auto failure = expect(!result.ok() && script.render_used_default &&
+                                        script.capture_used_default,
+                                    "Expected default selection to use shared construction")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            has_error_code(result, "scripted_capture_open_failed") &&
+                result.errors().front().native_hresult == -123 &&
+                result.errors().front().native_win32_code == 456,
+            "Expected shared duplex open error conversion")) {
+      return failure;
+    }
   }
 
   const auto availability = default_endpoint_availability();
