@@ -10,6 +10,13 @@
 
 namespace sar::platform {
 
+namespace {
+
+constexpr auto kAudioClientDeviceInvalidated =
+    static_cast<std::int32_t>(0x88890004U);
+
+}  // namespace
+
 WasapiDuplexRuntimeOpenResult WasapiDuplexRuntimeOpenResult::success(
     std::unique_ptr<WasapiDuplexRuntime> runtime) {
   return {std::move(runtime), {}};
@@ -46,7 +53,10 @@ WasapiFailureClass classify_wasapi_failures(
   }
   auto combined = WasapiFailureClass::Transient;
   for (const auto& error : errors) {
-    const auto failure_class = classify_wasapi_failure_code(error.code);
+    const auto failure_class =
+        error.native_hresult == kAudioClientDeviceInvalidated
+            ? WasapiFailureClass::DeviceInvalidated
+            : classify_wasapi_failure_code(error.code);
     if (failure_class == WasapiFailureClass::Fatal) {
       return WasapiFailureClass::Fatal;
     }

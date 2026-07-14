@@ -63,7 +63,8 @@ std::vector<WasapiRealtimeWorkerError> convert_errors(
   std::vector<WasapiRealtimeWorkerError> converted;
   converted.reserve(errors.size());
   for (const auto& error : errors) {
-    converted.push_back({error.code, error.message});
+    converted.push_back({error.code, error.message, error.native_hresult,
+                         error.native_win32_code});
   }
   return converted;
 }
@@ -339,8 +340,20 @@ std::vector<WasapiRealtimeWorkerError> WindowsWasapiRealtimeWorker::last_errors(
   }
   for (std::size_t index = 0; index < realtime.size(); ++index) {
     const auto& error = realtime.records[index];
+    const auto has_hresult =
+        (error.context & static_cast<std::uint16_t>(
+                             WasapiRealtimeErrorContext::NativeHresult)) != 0;
+    const auto has_win32 =
+        (error.context & static_cast<std::uint16_t>(
+                             WasapiRealtimeErrorContext::NativeWin32)) != 0;
     result.push_back({wasapi_realtime_error_code(error),
-                      wasapi_realtime_error_message(error)});
+                      wasapi_realtime_error_message(error),
+                      has_hresult
+                          ? std::optional<std::int32_t>(
+                                static_cast<std::int32_t>(error.value))
+                          : std::nullopt,
+                      has_win32 ? std::optional<std::uint32_t>(error.value)
+                                : std::nullopt});
   }
   {
     std::lock_guard lock(errors_mutex_);

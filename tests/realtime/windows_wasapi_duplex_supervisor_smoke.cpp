@@ -58,6 +58,11 @@ class ScriptedRuntime final : public WasapiDuplexRuntime {
 int main() {
   const std::vector<WasapiRealtimeWorkerError> invalidated = {
       {"wasapi_device_lookup_failed", "device unavailable"}};
+  const std::vector<WasapiRealtimeWorkerError> native_invalidated = {{
+      "wasapi_render_buffer_failed",
+      "render device invalidated",
+      static_cast<std::int32_t>(0x88890004U),
+  }};
   const std::vector<WasapiRealtimeWorkerError> transient = {
       {"wasapi_render_buffer_failed", "render failed"}};
   const std::vector<WasapiRealtimeWorkerError> fatal = {
@@ -66,6 +71,8 @@ int main() {
       {"future_error", "unknown"}};
 
   assert(sar::platform::classify_wasapi_failures(invalidated) ==
+         WasapiFailureClass::DeviceInvalidated);
+  assert(sar::platform::classify_wasapi_failures(native_invalidated) ==
          WasapiFailureClass::DeviceInvalidated);
   assert(sar::platform::classify_wasapi_failures(transient) ==
          WasapiFailureClass::Transient);

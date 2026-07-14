@@ -583,6 +583,12 @@ int main() {
             "Expected process and cleanup errors to remain observable")) {
       return failure;
     }
+    if (const auto failure = expect(
+            errors.front().native_hresult ==
+                static_cast<std::int32_t>(0x80004005U),
+            "Expected realtime worker error to preserve native HRESULT")) {
+      return failure;
+    }
     if (const auto failure = expect(worker.stats().process_error_cycles == 1 &&
                                         worker.stats().stream_stop_error_cycles == 1,
                                     "Expected one process and one stop error")) {

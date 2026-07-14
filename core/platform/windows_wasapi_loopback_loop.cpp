@@ -13,7 +13,8 @@ std::vector<WasapiRealtimeWorkerError> convert_errors(
   std::vector<WasapiRealtimeWorkerError> result;
   result.reserve(errors.size());
   for (const auto& error : errors) {
-    result.push_back({error.code, error.message});
+    result.push_back({error.code, error.message, error.native_hresult,
+                      error.native_win32_code});
   }
   return result;
 }

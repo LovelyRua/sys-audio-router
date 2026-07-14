@@ -9,6 +9,7 @@
 #include <condition_variable>
 #include <cstdint>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -18,6 +19,8 @@ namespace sar::platform {
 struct WasapiRealtimeWorkerError {
   std::string code;
   std::string message;
+  std::optional<std::int32_t> native_hresult = std::nullopt;
+  std::optional<std::uint32_t> native_win32_code = std::nullopt;
 };
 
 struct WasapiRealtimeWorkerStats {
