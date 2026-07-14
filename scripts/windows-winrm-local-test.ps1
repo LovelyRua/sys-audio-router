@@ -294,6 +294,9 @@ try {
             Set-Content -LiteralPath $activeToken -Encoding ASCII
       }
       $slotStarted = $true
+      if ($CleanupEnabled) {
+        Invoke-FinishedSlotRetention -DryRun:$CleanupDryRun
+      }
       if (Test-Path -LiteralPath $repoDir) {
         Remove-Item -LiteralPath $repoDir -Recurse -Force
       }

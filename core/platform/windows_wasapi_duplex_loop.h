@@ -64,7 +64,7 @@ class WindowsWasapiDuplexLoop : public WasapiDuplexRuntime {
   [[nodiscard]] const WasapiStreamProbe& render_probe() const noexcept;
   [[nodiscard]] WasapiStreamDiagnostics capture_diagnostics() const noexcept;
   [[nodiscard]] WasapiStreamDiagnostics render_diagnostics() const noexcept;
-  [[nodiscard]] WasapiRealtimeWorkerStats stats() const noexcept;
+  [[nodiscard]] WasapiRealtimeWorkerStats stats() const noexcept override;
   [[nodiscard]] WasapiDuplexLoopSummary summary() const;
   [[nodiscard]] std::vector<WasapiRealtimeWorkerError> last_errors() const override;
 

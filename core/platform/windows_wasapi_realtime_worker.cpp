@@ -179,6 +179,7 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   capture_rate_adapter_reset_cycles_.store(0);
   render_recovery_silence_cycles_.store(0);
   render_recovery_silence_frames_.store(0);
+  maximum_render_recovery_silence_frames_.store(0);
   minimum_capture_rate_correction_bits_.store(double_bits(0.0));
   maximum_capture_rate_correction_bits_.store(double_bits(0.0));
   last_captured_frames_.store(0);
@@ -309,6 +310,8 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
       render_recovery_silence_cycles_.load();
   result.render_recovery_silence_frames =
       render_recovery_silence_frames_.load();
+  result.maximum_render_recovery_silence_frames =
+      maximum_render_recovery_silence_frames_.load();
   result.minimum_capture_rate_correction_ppm =
       bits_double(minimum_capture_rate_correction_bits_.load());
   result.maximum_capture_rate_correction_ppm =
@@ -407,6 +410,9 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
 
   publish_startup_result(true);
 
+  std::uint64_t current_render_recovery_silence_frames = 0;
+  std::uint64_t maximum_render_recovery_silence_frames = 0;
+  bool render_recovery_episode_active = false;
   while (!stop_requested_.load()) {
     auto result = runner_.process_once(graph_, diagnostics_, timeout_ms);
     if (!result.ok()) {
@@ -446,11 +452,27 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
         result.stats().capture_rate_adapter_recovering);
     if (result.stats().capture_rate_adapter_reset) {
       capture_rate_adapter_reset_cycles_.fetch_add(1);
+      current_render_recovery_silence_frames = 0;
+      render_recovery_episode_active = true;
     }
     if (result.stats().render_recovery_silence) {
       render_recovery_silence_cycles_.fetch_add(1);
       render_recovery_silence_frames_.fetch_add(
           result.stats().render_recovery_silence_frames);
+      if (render_recovery_episode_active) {
+        current_render_recovery_silence_frames +=
+            result.stats().render_recovery_silence_frames;
+        maximum_render_recovery_silence_frames = std::max(
+            maximum_render_recovery_silence_frames,
+            current_render_recovery_silence_frames);
+        maximum_render_recovery_silence_frames_.store(
+            maximum_render_recovery_silence_frames);
+      }
+    }
+    if (render_recovery_episode_active &&
+        !result.stats().capture_rate_adapter_recovering) {
+      current_render_recovery_silence_frames = 0;
+      render_recovery_episode_active = false;
     }
     if (result.stats().capture_rate_adapter_active) {
       const auto correction = result.stats().capture_rate_correction_ppm;

@@ -46,6 +46,7 @@ sar::platform::WasapiRealtimeWorkerStats make_active_stats() {
   stats.last_graph_processed = true;
   stats.render_recovery_silence_cycles = 2;
   stats.render_recovery_silence_frames = 128;
+  stats.maximum_render_recovery_silence_frames = 64;
   stats.capture_rate_adapter_recovering = true;
   stats.last_render_recovery_silence = true;
   return stats;
@@ -139,6 +140,7 @@ int main() {
                        "capture_timestamp_error_frames=0 "
                        "render_recovery_silence_cycles=0 "
                        "render_recovery_silence_frames=0 "
+                       "maximum_render_recovery_silence_frames=0 "
                        "process_error_cycles=0 stream_start_error_cycles=0 "
                        "stream_stop_error_cycles=0 stream_wait_cancellation_cycles=0 "
                        "xrun_count=0 capture_fifo_fill_frames=0 "
@@ -202,6 +204,7 @@ int main() {
                        summary.render_fifo_underflow_frames == 24 &&
                        summary.render_recovery_silence_cycles == 2 &&
                        summary.render_recovery_silence_frames == 128 &&
+                       summary.maximum_render_recovery_silence_frames == 64 &&
                        summary.capture_rate_adapter_recovering &&
                        summary.last_render_recovery_silence,
                    "Expected copied FIFO diagnostics")) {
@@ -225,6 +228,9 @@ int main() {
                        summary_line.find("render_fifo_underflow_cycles=4") !=
                            std::string::npos &&
                        summary_line.find("render_fifo_underflow_frames=24") !=
+                           std::string::npos &&
+                       summary_line.find(
+                           "maximum_render_recovery_silence_frames=64") !=
                            std::string::npos,
                    "Expected machine-readable FIFO diagnostics")) {
       return failure;

@@ -23,6 +23,7 @@ class WasapiDuplexRuntime {
   [[nodiscard]] virtual WasapiRealtimeWorkerResult start(std::uint32_t timeout_ms) = 0;
   virtual void stop() noexcept = 0;
   [[nodiscard]] virtual bool running() const noexcept = 0;
+  [[nodiscard]] virtual WasapiRealtimeWorkerStats stats() const noexcept = 0;
   [[nodiscard]] virtual std::vector<WasapiRealtimeWorkerError> last_errors() const = 0;
 };
 
@@ -68,6 +69,7 @@ struct WasapiDuplexSupervisorSummary {
   std::uint64_t failed_recovery_count = 0;
   std::uint64_t last_recovery_duration_ms = 0;
   std::uint64_t maximum_recovery_duration_ms = 0;
+  std::uint64_t maximum_render_recovery_silence_frames = 0;
   std::uint64_t capture_endpoint_generation = 0;
   std::uint64_t render_endpoint_generation = 0;
   std::uint64_t endpoint_notification_reopen_count = 0;
@@ -118,6 +120,7 @@ class WindowsWasapiDuplexSupervisor {
   void attempt_open(std::uint64_t now_ms);
   void handle_failure(std::vector<WasapiRealtimeWorkerError> errors,
                       std::uint64_t now_ms);
+  void retain_runtime_diagnostics() noexcept;
   void quiesce(std::uint64_t now_ms) noexcept;
 
   WasapiDuplexRuntimeFactory factory_;
@@ -134,6 +137,7 @@ class WindowsWasapiDuplexSupervisor {
   std::uint64_t recovery_started_at_ms_ = 0;
   std::uint64_t last_recovery_duration_ms_ = 0;
   std::uint64_t maximum_recovery_duration_ms_ = 0;
+  std::uint64_t maximum_render_recovery_silence_frames_ = 0;
   std::uint64_t endpoint_notification_reopen_count_ = 0;
   std::uint64_t endpoint_notification_reset_failure_count_ = 0;
   std::uint64_t endpoint_notification_reopen_at_ms_ = 0;

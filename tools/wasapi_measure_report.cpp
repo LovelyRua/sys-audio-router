@@ -106,6 +106,8 @@ void print_wasapi_runtime_summary(
       << summary.render_recovery_silence_cycles << '\n';
   out << "  Render recovery silence frames: "
       << summary.render_recovery_silence_frames << '\n';
+  out << "  Maximum render recovery silence frames: "
+      << summary.maximum_render_recovery_silence_frames << '\n';
   out << "  Capture rate adapter recovering: "
       << (summary.capture_rate_adapter_recovering ? "yes" : "no") << '\n';
   out << "  Last render recovery silence: "
@@ -213,6 +215,8 @@ void print_wasapi_worker_stats(
       << stats.render_recovery_silence_cycles
       << " render_recovery_silence_frames="
       << stats.render_recovery_silence_frames
+      << " maximum_render_recovery_silence_frames="
+      << stats.maximum_render_recovery_silence_frames
       << " minimum_capture_rate_correction_ppm="
       << stats.minimum_capture_rate_correction_ppm
       << " maximum_capture_rate_correction_ppm="
@@ -285,6 +289,8 @@ void print_wasapi_worker_stats(
       << stats.render_recovery_silence_cycles << '\n';
   out << "  Render recovery silence frames: "
       << stats.render_recovery_silence_frames << '\n';
+  out << "  Maximum render recovery silence frames: "
+      << stats.maximum_render_recovery_silence_frames << '\n';
   out << "  Minimum capture rate correction ppm: "
       << stats.minimum_capture_rate_correction_ppm << '\n';
   out << "  Maximum capture rate correction ppm: "

@@ -32,6 +32,7 @@ using sar::platform::WasapiEndpointSelection;
 using sar::platform::WasapiEndpointSelectionPolicy;
 using sar::platform::WasapiRealtimeWorkerError;
 using sar::platform::WasapiRealtimeWorkerResult;
+using sar::platform::WasapiRealtimeWorkerStats;
 using sar::platform::WasapiRecoveryState;
 using sar::platform::WindowsWasapiDuplexSupervisor;
 
@@ -41,6 +42,7 @@ struct RuntimeState {
   std::uint32_t stop_count = 0;
   std::vector<WasapiRealtimeWorkerError> start_errors;
   std::vector<WasapiRealtimeWorkerError> runtime_errors;
+  WasapiRealtimeWorkerStats stats;
 };
 
 class ScriptedRuntime final : public WasapiDuplexRuntime {
@@ -63,6 +65,10 @@ class ScriptedRuntime final : public WasapiDuplexRuntime {
   }
 
   bool running() const noexcept override { return state_->running; }
+
+  WasapiRealtimeWorkerStats stats() const noexcept override {
+    return state_->stats;
+  }
 
   std::vector<WasapiRealtimeWorkerError> last_errors() const override {
     return state_->runtime_errors;
@@ -135,6 +141,7 @@ int main() {
   assert(supervisor.summary().last_recovery_duration_ms == 0);
 
   first_runtime->runtime_errors = transient;
+  first_runtime->stats.maximum_render_recovery_silence_frames = 192;
   first_runtime->running = false;
   supervisor.tick(200);
   assert(supervisor.state() == WasapiRecoveryState::Backoff);
@@ -153,6 +160,7 @@ int main() {
   assert(supervisor.summary().successful_recovery_count == 2);
   assert(supervisor.summary().last_recovery_duration_ms == 500);
   assert(supervisor.summary().maximum_recovery_duration_ms == 500);
+  assert(supervisor.summary().maximum_render_recovery_silence_frames == 192);
 
   supervisor.stop(800);
   assert(supervisor.state() == WasapiRecoveryState::Stopped);

@@ -108,8 +108,11 @@ the soak gates.
   and prove, with scripted discontinuities and real-device observations, that no
   pre-discontinuity samples reach the graph. For each discontinuity, graph output
   must resume within `target_fill_frames + render_buffer_frames` of labeled
-  recovery silence, with zero capture FIFO overflow. Add a per-event maximum so
-  the bound is testable rather than inferred from aggregate counters.
+  recovery silence, with zero capture FIFO overflow. The realtime worker now
+  reports a per-event maximum, the supervisor retains it across runtime reopen,
+  and the recovery acceptance script can apply an explicit frame threshold.
+  Synthetic two-episode coverage proves the maximum is not the aggregate total;
+  long-duration real-device evidence against the bound still remains.
 - **Device invalidation and reopen:** classify
   `AUDCLNT_E_DEVICE_INVALIDATED` separately, leave the realtime worker without a
   blocked wait or join, and reopen on the control side. A disable/enable or

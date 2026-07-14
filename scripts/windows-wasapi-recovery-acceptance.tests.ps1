@@ -48,7 +48,8 @@ function Assert-Case {
 
   $result = Invoke-AcceptanceCase -Name $Name -Lines $Lines `
       -ProcessExitCode $ProcessExitCode -ExtraArgument $ExtraArgument
-  Assert-Equal $ExpectedExitCode $result.ExitCode "Unexpected exit code for '$Name'."
+  Assert-Equal $ExpectedExitCode $result.ExitCode `
+      "Unexpected exit code for '$Name'. Output: $($result.Text)"
   Assert-Equal $true $result.Text.Contains($ExpectedText) "Unexpected summary for '$Name'."
   Assert-Equal $true $result.Text.Contains("wasapi_recovery_acceptance passed=$([int]($ExpectedExitCode -eq 0))") `
       "Missing machine-readable summary for '$Name'."
@@ -70,10 +71,10 @@ $temporaryDirectory = Join-Path ([System.IO.Path]::GetTempPath()) `
     ("sar-recovery-acceptance-" + [guid]::NewGuid().ToString("N"))
 [void](New-Item -ItemType Directory -Path $temporaryDirectory)
 
-$initial = 'wasapi_recovery_supervisor elapsed_ms=0 state=running running=1 attempt_count=0 recovery_episode_count=0 successful_recovery_count=0 failed_recovery_count=0 notification_reset_failure_count=0 maximum_recovery_duration_ms=0 error_count=0 active_capture_device_id="capture\\endpoint" active_render_device_id="render\"endpoint"'
-$recovering = 'wasapi_recovery_supervisor elapsed_ms=500 state=opening running=0 attempt_count=2 recovery_episode_count=1 successful_recovery_count=0 failed_recovery_count=0 notification_reset_failure_count=0 maximum_recovery_duration_ms=0 error_count=1 active_capture_device_id="" active_render_device_id=""'
-$healthy = 'wasapi_recovery_supervisor elapsed_ms=1200 state=running running=1 attempt_count=2 recovery_episode_count=1 successful_recovery_count=1 failed_recovery_count=0 notification_reset_failure_count=0 maximum_recovery_duration_ms=4999 error_count=0 active_capture_device_id="capture\\endpoint" active_render_device_id="render\"endpoint"'
-$stopped = 'wasapi_recovery_supervisor elapsed_ms=1201 state=stopped running=0 attempt_count=0 recovery_episode_count=1 successful_recovery_count=1 failed_recovery_count=0 notification_reset_failure_count=0 maximum_recovery_duration_ms=4999 error_count=0 active_capture_device_id="capture\\endpoint" active_render_device_id="render\"endpoint"'
+$initial = 'wasapi_recovery_supervisor elapsed_ms=0 state=running running=1 attempt_count=0 recovery_episode_count=0 successful_recovery_count=0 failed_recovery_count=0 notification_reset_failure_count=0 maximum_recovery_duration_ms=0 maximum_render_recovery_silence_frames=0 error_count=0 active_capture_device_id="capture\\endpoint" active_render_device_id="render\"endpoint"'
+$recovering = 'wasapi_recovery_supervisor elapsed_ms=500 state=opening running=0 attempt_count=2 recovery_episode_count=1 successful_recovery_count=0 failed_recovery_count=0 notification_reset_failure_count=0 maximum_recovery_duration_ms=0 maximum_render_recovery_silence_frames=64 error_count=1 active_capture_device_id="" active_render_device_id=""'
+$healthy = 'wasapi_recovery_supervisor elapsed_ms=1200 state=running running=1 attempt_count=2 recovery_episode_count=1 successful_recovery_count=1 failed_recovery_count=0 notification_reset_failure_count=0 maximum_recovery_duration_ms=4999 maximum_render_recovery_silence_frames=64 error_count=0 active_capture_device_id="capture\\endpoint" active_render_device_id="render\"endpoint"'
+$stopped = 'wasapi_recovery_supervisor elapsed_ms=1201 state=stopped running=0 attempt_count=0 recovery_episode_count=1 successful_recovery_count=1 failed_recovery_count=0 notification_reset_failure_count=0 maximum_recovery_duration_ms=4999 maximum_render_recovery_silence_frames=64 error_count=0 active_capture_device_id="capture\\endpoint" active_render_device_id="render\"endpoint"'
 $noLastErrors = 'wasapi_recovery_last_errors count=0'
 
 try {
@@ -138,6 +139,31 @@ try {
   $tooSlow = $healthy -replace 'maximum_recovery_duration_ms=4999', 'maximum_recovery_duration_ms=5001'
   Assert-Case -Name "too-slow" -Lines @($tooSlow, $stopped, $noLastErrors) -ExpectedExitCode 1 `
       -ExpectedText 'reason="maximum_recovery_duration_exceeded"'
+
+  Assert-Case -Name "recovery-silence-limit" `
+      -Lines @($initial, $recovering, $healthy, $stopped, $noLastErrors) `
+      -ExpectedExitCode 0 `
+      -ExpectedText 'maximum_render_recovery_silence_frames_threshold=64' `
+      -ExtraArgument @("-MaximumRenderRecoverySilenceFrames", "64")
+  $tooMuchRecoverySilence = $healthy -replace `
+      'maximum_render_recovery_silence_frames=64', `
+      'maximum_render_recovery_silence_frames=65'
+  Assert-Case -Name "recovery-silence-limit-exceeded" `
+      -Lines @($initial, $recovering, $tooMuchRecoverySilence, $stopped, $noLastErrors) `
+      -ExpectedExitCode 1 `
+      -ExpectedText 'reason="maximum_render_recovery_silence_frames_exceeded"' `
+      -ExtraArgument @("-MaximumRenderRecoverySilenceFrames", "64")
+  $legacyRecoverySilence = $healthy -replace `
+      ' maximum_render_recovery_silence_frames=64', ''
+  Assert-Case -Name "legacy-recovery-silence" `
+      -Lines @($initial, $recovering, $legacyRecoverySilence, $stopped, $noLastErrors) `
+      -ExpectedExitCode 0 `
+      -ExpectedText 'maximum_render_recovery_silence_frames=missing'
+  Assert-Case -Name "missing-recovery-silence-with-gate" `
+      -Lines @($initial, $recovering, $legacyRecoverySilence, $stopped, $noLastErrors) `
+      -ExpectedExitCode 1 `
+      -ExpectedText 'reason="missing_maximum_render_recovery_silence_frames"' `
+      -ExtraArgument @("-MaximumRenderRecoverySilenceFrames", "64")
 
   $resetFailure = $healthy -replace 'notification_reset_failure_count=0', 'notification_reset_failure_count=1'
   Assert-Case -Name "reset-failure" -Lines @($resetFailure, $stopped, $noLastErrors) `

@@ -176,6 +176,8 @@ void print_supervisor_summary(
             << summary.last_recovery_duration_ms
             << " maximum_recovery_duration_ms="
             << summary.maximum_recovery_duration_ms
+            << " maximum_render_recovery_silence_frames="
+            << summary.maximum_render_recovery_silence_frames
             << " error_count=" << summary.error_count
             << " capture_generation="
             << summary.capture_endpoint_generation

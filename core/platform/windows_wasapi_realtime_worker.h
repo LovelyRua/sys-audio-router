@@ -63,6 +63,7 @@ struct WasapiRealtimeWorkerStats {
   std::uint64_t capture_rate_adapter_reset_cycles = 0;
   std::uint64_t render_recovery_silence_cycles = 0;
   std::uint64_t render_recovery_silence_frames = 0;
+  std::uint64_t maximum_render_recovery_silence_frames = 0;
   double minimum_capture_rate_correction_ppm = 0.0;
   double maximum_capture_rate_correction_ppm = 0.0;
   std::uint32_t last_captured_frames = 0;
@@ -162,6 +163,7 @@ class WindowsWasapiRealtimeWorker {
   std::atomic_uint64_t capture_rate_adapter_reset_cycles_ = 0;
   std::atomic_uint64_t render_recovery_silence_cycles_ = 0;
   std::atomic_uint64_t render_recovery_silence_frames_ = 0;
+  std::atomic_uint64_t maximum_render_recovery_silence_frames_ = 0;
   std::atomic_uint64_t minimum_capture_rate_correction_bits_ = 0;
   std::atomic_uint64_t maximum_capture_rate_correction_bits_ = 0;
   std::atomic<std::uint32_t> last_captured_frames_ = 0;

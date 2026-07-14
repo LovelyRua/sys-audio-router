@@ -242,10 +242,14 @@ These tools print
 runtime health, reason codes, stream diagnostics lines, stream shape,
 transferred-frame summaries, stop wait duration, partial/silent transfer
 counters, capture discontinuity/timestamp counters, adaptive-capture recovery
-state and recovery-silence totals, last-cycle flags, worker counters, and engine
-diagnostics for lab captures. Recovery silence remains part of total render FIFO
-underflow and is also reported as a labeled subset, so a lab run preserves the
-full dropout count while identifying the portion caused by SRC re-priming.
+state, recovery-silence totals, the maximum silence frames for one recovery
+episode, last-cycle flags, worker counters, and engine diagnostics for lab
+captures. Recovery silence remains part of total render FIFO underflow and is
+also reported as a labeled subset, so a lab run preserves the full dropout count
+while identifying the portion caused by SRC re-priming. The supervisor retains
+the episode maximum across child-runtime replacement. The recovery acceptance
+script can enforce an explicit maximum while leaving the gate disabled for
+legacy logs that do not contain the field.
 
 Current real-device evidence includes a strict-healthy 48 kHz render run that
 submitted 96,000 frames over two seconds with zero xruns, wait timeouts, or FIFO
@@ -321,9 +325,12 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 - Full-duplex adaptive capture resampling is wired and bounded, but controller
   tuning and discontinuity recovery still need long-duration real-device
   evidence. Hardware capture discontinuities can still trigger render underflow
-  while the bridge resets and re-primes. Recovery-silence totals exist, but a
-  per-discontinuity maximum is not yet reported, so the alpha recovery bound
-  cannot yet be enforced from a run summary.
+  while the bridge resets and re-primes. Recovery-silence totals and the maximum
+  cumulative silence frames for one discontinuity episode are now reported and
+  can be thresholded by the recovery acceptance script. Synthetic coverage
+  distinguishes a 128-frame episode maximum from 192 aggregate frames. The
+  remaining gate is long-duration real-device evidence against the configured
+  `target_fill_frames + render_buffer_frames` bound.
 - WASAPI failures preserve native HRESULT/Win32 values through the stream and
   realtime-worker layers, and device invalidation feeds a bounded control-thread
   reopen policy. A lock-free endpoint-notification source and endpoint-selection

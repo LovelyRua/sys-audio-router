@@ -276,6 +276,7 @@ void WindowsWasapiDuplexSupervisor::stop(std::uint64_t now_ms) noexcept {
   if (policy_.state() == WasapiRecoveryState::Quiescing) {
     quiesce(now_ms);
   } else if (runtime_) {
+    retain_runtime_diagnostics();
     runtime_->stop();
     runtime_.reset();
     active_endpoints_.capture_device_id.clear();
@@ -293,6 +294,8 @@ bool WindowsWasapiDuplexSupervisor::running() const noexcept {
 }
 
 WasapiDuplexSupervisorSummary WindowsWasapiDuplexSupervisor::summary() const {
+  const auto active_maximum_render_recovery_silence_frames =
+      runtime_ ? runtime_->stats().maximum_render_recovery_silence_frames : 0;
   return {.state = policy_.state(),
           .attempt_count = policy_.attempt_count(),
           .next_attempt_at_ms = policy_.next_attempt_at_ms(),
@@ -304,6 +307,9 @@ WasapiDuplexSupervisorSummary WindowsWasapiDuplexSupervisor::summary() const {
           .failed_recovery_count = failed_recovery_count_,
           .last_recovery_duration_ms = last_recovery_duration_ms_,
           .maximum_recovery_duration_ms = maximum_recovery_duration_ms_,
+          .maximum_render_recovery_silence_frames = std::max(
+              maximum_render_recovery_silence_frames_,
+              active_maximum_render_recovery_silence_frames),
           .capture_endpoint_generation = endpoint_generations_.capture,
           .render_endpoint_generation = endpoint_generations_.render,
           .endpoint_notification_reopen_count =
@@ -379,10 +385,20 @@ void WindowsWasapiDuplexSupervisor::handle_failure(
   }
 }
 
+void WindowsWasapiDuplexSupervisor::retain_runtime_diagnostics() noexcept {
+  if (!runtime_) {
+    return;
+  }
+  maximum_render_recovery_silence_frames_ =
+      std::max(maximum_render_recovery_silence_frames_,
+               runtime_->stats().maximum_render_recovery_silence_frames);
+}
+
 void WindowsWasapiDuplexSupervisor::quiesce(std::uint64_t now_ms) noexcept {
   endpoint_notification_reopen_pending_ = false;
   endpoint_notification_reopen_at_ms_ = 0;
   if (runtime_) {
+    retain_runtime_diagnostics();
     runtime_->stop();
     runtime_.reset();
   }

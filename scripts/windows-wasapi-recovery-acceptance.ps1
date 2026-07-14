@@ -18,10 +18,16 @@ param(
   [long]$MaximumRecoveryAttemptCount = 3,
 
   [ValidateRange(0, [long]::MaxValue)]
-  [long]$MaximumRecoveryDurationMilliseconds = 5000
+  [long]$MaximumRecoveryDurationMilliseconds = 5000,
+
+  [Nullable[long]]$MaximumRenderRecoverySilenceFrames = $null
 )
 
 $ErrorActionPreference = "Stop"
+if ($null -ne $MaximumRenderRecoverySilenceFrames -and
+    $MaximumRenderRecoverySilenceFrames -lt 0) {
+  throw "MaximumRenderRecoverySilenceFrames must be non-negative."
+}
 $requireSuccessfulRecovery = !$AllowNoSuccessfulRecovery
 
 function ConvertFrom-RecoveryKeyValueLine {
@@ -127,6 +133,7 @@ $activeRenderDeviceId = ""
 $successfulRecoveryCount = $null
 $failedRecoveryCount = $null
 $maximumRecoveryDurationMs = $null
+$observedMaximumRenderRecoverySilenceFrames = $null
 $notificationResetFailureCount = $null
 $finalErrorCount = $null
 $lastErrorCount = $null
@@ -162,6 +169,16 @@ if ($null -ne $finalSnapshot) {
       -Values $finalSnapshot -Name "successful_recovery_count" -Failures $failures
   $maximumRecoveryDurationMs = ConvertTo-RecoveryUnsignedInteger `
       -Values $finalSnapshot -Name "maximum_recovery_duration_ms" -Failures $failures
+  if ($null -ne $MaximumRenderRecoverySilenceFrames) {
+    $observedMaximumRenderRecoverySilenceFrames = ConvertTo-RecoveryUnsignedInteger `
+        -Values $finalSnapshot -Name "maximum_render_recovery_silence_frames" `
+        -Failures $failures
+  } elseif ($finalSnapshot.ContainsKey("maximum_render_recovery_silence_frames")) {
+    $optionalMetricFailures = [System.Collections.Generic.List[string]]::new()
+    $observedMaximumRenderRecoverySilenceFrames = ConvertTo-RecoveryUnsignedInteger `
+        -Values $finalSnapshot -Name "maximum_render_recovery_silence_frames" `
+        -Failures $optionalMetricFailures
+  }
   $notificationResetFailureCount = ConvertTo-RecoveryUnsignedInteger `
       -Values $finalSnapshot -Name "notification_reset_failure_count" -Failures $failures
   if ($null -ne $successfulRecoveryCount -and $requireSuccessfulRecovery -and
@@ -171,6 +188,12 @@ if ($null -ne $finalSnapshot) {
   if ($null -ne $maximumRecoveryDurationMs -and
       $maximumRecoveryDurationMs -gt $MaximumRecoveryDurationMilliseconds) {
     $failures.Add("maximum_recovery_duration_exceeded")
+  }
+  if ($null -ne $MaximumRenderRecoverySilenceFrames -and
+      $null -ne $observedMaximumRenderRecoverySilenceFrames -and
+      $observedMaximumRenderRecoverySilenceFrames -gt
+          $MaximumRenderRecoverySilenceFrames) {
+    $failures.Add("maximum_render_recovery_silence_frames_exceeded")
   }
   if ($null -ne $notificationResetFailureCount -and
       $notificationResetFailureCount -ne 0) {
@@ -284,6 +307,8 @@ Write-Output (
     " maximum_recovery_attempt_count_threshold=$MaximumRecoveryAttemptCount" +
     " maximum_recovery_duration_ms=$(& $numberOrMissing $maximumRecoveryDurationMs)" +
     " maximum_recovery_duration_threshold_ms=$MaximumRecoveryDurationMilliseconds" +
+    " maximum_render_recovery_silence_frames=$(& $numberOrMissing $observedMaximumRenderRecoverySilenceFrames)" +
+    " maximum_render_recovery_silence_frames_threshold=$(& $numberOrMissing $MaximumRenderRecoverySilenceFrames)" +
     " notification_reset_failure_count=$(& $numberOrMissing $notificationResetFailureCount)" +
     " reason=$(ConvertTo-SummaryValue $reason)")
 

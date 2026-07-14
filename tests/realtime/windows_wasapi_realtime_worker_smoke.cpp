@@ -215,6 +215,7 @@ int main() {
                                         stats.capture_fifo_correction_ppm == 0.0 &&
                                         stats.capture_resampler_ratio == 1.0 &&
                                         stats.capture_rate_adapter_reset_cycles == 0 &&
+                                        stats.maximum_render_recovery_silence_frames == 0 &&
                                         stats.minimum_capture_rate_correction_ppm == 0.0 &&
                                         stats.maximum_capture_rate_correction_ppm == 0.0,
                                     "Expected graph-only worker default capture rate stats")) {
@@ -340,6 +341,7 @@ int main() {
                        worker.stats().capture_fifo_correction_ppm == 0.0 &&
                        worker.stats().capture_resampler_ratio == 1.0 &&
                        worker.stats().capture_rate_adapter_reset_cycles == 0 &&
+                       worker.stats().maximum_render_recovery_silence_frames == 0 &&
                        worker.stats().minimum_capture_rate_correction_ppm == 0.0 &&
                        worker.stats().maximum_capture_rate_correction_ppm == 0.0,
                    "Expected restart to reset capture rate stats")) {
@@ -421,6 +423,73 @@ int main() {
                        stats.maximum_capture_rate_correction_ppm >=
                            stats.capture_rate_correction_ppm,
                    "Expected capture rate range without adapter resets")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::tests::ScriptedWasapiStream capture(
+        make_adaptive_probe(sar::platform::WasapiStreamDirection::Capture));
+    sar::tests::ScriptedWasapiStream render(
+        make_adaptive_probe(sar::platform::WasapiStreamDirection::Render));
+    capture.enqueue_capture({.frames = 32, .samples = {adaptive_samples(0)}});
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Idle});
+    capture.enqueue_capture({.frames = 32,
+                             .samples = {adaptive_samples(64)},
+                             .data_discontinuity = true});
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Idle});
+    capture.enqueue_capture({.frames = 32, .samples = {adaptive_samples(128)}});
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Idle});
+    capture.enqueue_capture({.frames = 32,
+                             .samples = {adaptive_samples(192)},
+                             .data_discontinuity = true});
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Idle});
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Idle});
+    capture.enqueue_capture({.frames = 32, .samples = {adaptive_samples(256)}});
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Idle});
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Cancelled});
+    render.enqueue_render({.writable_frames = 64});
+    render.enqueue_render({.writable_frames = 64});
+    render.enqueue_render({.writable_frames = 64});
+    render.enqueue_render({.writable_frames = 64});
+    render.enqueue_render({.writable_frames = 64});
+    render.enqueue_render({.writable_frames = 64});
+
+    sar::platform::WindowsWasapiGraphRunner runner(
+        &capture, &render, 1, 1, 64, 64, 64, 256, true, true);
+    sar::graph::Graph graph(19, 1, 64, 48000);
+    graph.add_node(std::make_unique<sar::graph::PassthroughNode>());
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    sar::platform::WindowsWasapiRealtimeWorker worker(runner, graph, diagnostics);
+
+    const auto start_result = worker.start(1);
+    if (const auto failure = expect(
+            start_result.ok(), "Expected discontinuity recovery worker start")) {
+      return failure;
+    }
+    for (int attempt = 0; attempt < 100 && worker.running(); ++attempt) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    worker.stop();
+
+    const auto stats = worker.stats();
+    if (stats.capture_rate_adapter_reset_cycles != 2 ||
+        stats.render_recovery_silence_cycles != 3 ||
+        stats.render_recovery_silence_frames != 192 ||
+        stats.maximum_render_recovery_silence_frames != 128) {
+      std::cerr << "Recovery silence stats: resets="
+                << stats.capture_rate_adapter_reset_cycles
+                << " cycles=" << stats.render_recovery_silence_cycles
+                << " total_frames=" << stats.render_recovery_silence_frames
+                << " maximum_frames="
+                << stats.maximum_render_recovery_silence_frames << '\n';
+    }
+    if (const auto failure = expect(
+            stats.capture_rate_adapter_reset_cycles == 2 &&
+                stats.render_recovery_silence_cycles == 3 &&
+                stats.render_recovery_silence_frames == 192 &&
+                stats.maximum_render_recovery_silence_frames == 128,
+            "Expected bounded per-discontinuity recovery silence maximum")) {
       return failure;
     }
   }
