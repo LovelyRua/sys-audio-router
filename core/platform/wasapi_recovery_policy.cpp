@@ -9,7 +9,7 @@ namespace sar::platform {
 namespace {
 
 constexpr std::array<std::uint64_t, WasapiRecoveryPolicy::kMaxAttempts>
-    kAttemptDelaysMs = {0, 250, 1250};
+    kAttemptDelaysMs = {0, 500, 3000};
 
 std::uint64_t saturating_add(std::uint64_t value,
                              std::uint64_t increment) noexcept {

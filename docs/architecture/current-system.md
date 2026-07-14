@@ -212,7 +212,7 @@ are ready. The refill that follows remains bounded by the configured FIFO target
 
 `WindowsWasapiDuplexSupervisor` is a control-plane owner above the complete
 duplex loop. It classifies failures, synchronously quiesces and destroys the old
-runtime, then rebuilds it with 0/250/1250 ms retry delays and a five-second hard
+runtime, then rebuilds it with 0/500/3000 ms retry delays and a five-second hard
 recovery deadline. It is currently driven by explicit control-plane `tick()`
 calls. A lock-free `IMMNotificationClient` generation/event source and an
 independent capture/render endpoint-selection policy feed the supervisor on the

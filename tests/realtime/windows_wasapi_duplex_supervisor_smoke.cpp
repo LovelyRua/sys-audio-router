@@ -139,22 +139,22 @@ int main() {
   supervisor.tick(200);
   assert(supervisor.state() == WasapiRecoveryState::Backoff);
   assert(supervisor.summary().attempt_count == 2);
-  assert(supervisor.summary().next_attempt_at_ms == 450);
+  assert(supervisor.summary().next_attempt_at_ms == 700);
   assert(first_runtime->stop_count == 1);
   assert(open_count == 2);
   assert(supervisor.summary().recovery_episode_count == 2);
 
-  supervisor.tick(449);
+  supervisor.tick(699);
   assert(supervisor.state() == WasapiRecoveryState::Backoff);
-  supervisor.tick(450);
+  supervisor.tick(700);
   assert(supervisor.running());
   assert(open_count == 3);
   assert(second_runtime->start_count == 1);
   assert(supervisor.summary().successful_recovery_count == 2);
-  assert(supervisor.summary().last_recovery_duration_ms == 250);
-  assert(supervisor.summary().maximum_recovery_duration_ms == 250);
+  assert(supervisor.summary().last_recovery_duration_ms == 500);
+  assert(supervisor.summary().maximum_recovery_duration_ms == 500);
 
-  supervisor.stop(500);
+  supervisor.stop(800);
   assert(supervisor.state() == WasapiRecoveryState::Stopped);
   assert(second_runtime->stop_count == 1);
 
@@ -171,6 +171,30 @@ int main() {
   assert(fatal_runtime->start_count == 1);
   assert(fatal_runtime->stop_count == 1);
 
+  auto delayed_runtime = std::make_shared<RuntimeState>();
+  std::uint32_t delayed_open_count = 0;
+  WindowsWasapiDuplexSupervisor delayed_supervisor(
+      [&] {
+        ++delayed_open_count;
+        if (delayed_open_count < 4) {
+          return WasapiDuplexRuntimeOpenResult::failure(transient);
+        }
+        return WasapiDuplexRuntimeOpenResult::success(
+            std::make_unique<ScriptedRuntime>(delayed_runtime));
+      },
+      10);
+  delayed_supervisor.start(0);
+  delayed_supervisor.tick(0);
+  delayed_supervisor.tick(500);
+  delayed_supervisor.tick(3499);
+  assert(delayed_supervisor.state() == WasapiRecoveryState::Backoff);
+  delayed_supervisor.tick(3500);
+  assert(delayed_supervisor.running());
+  assert(delayed_open_count == 4);
+  assert(delayed_supervisor.summary().successful_recovery_count == 1);
+  assert(delayed_supervisor.summary().last_recovery_duration_ms == 3500);
+  delayed_supervisor.stop(3600);
+
   std::uint32_t failed_open_count = 0;
   WindowsWasapiDuplexSupervisor exhausted_supervisor(
       [&] {
@@ -180,8 +204,8 @@ int main() {
       10);
   exhausted_supervisor.start(0);
   exhausted_supervisor.tick(0);
-  exhausted_supervisor.tick(250);
-  exhausted_supervisor.tick(1500);
+  exhausted_supervisor.tick(500);
+  exhausted_supervisor.tick(3500);
   assert(exhausted_supervisor.state() == WasapiRecoveryState::Faulted);
   assert(failed_open_count == 4);
   assert(exhausted_supervisor.summary().runtime_open_count == 4);

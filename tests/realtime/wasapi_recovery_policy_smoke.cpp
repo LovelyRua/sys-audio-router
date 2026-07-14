@@ -84,21 +84,21 @@ int main() {
 
     policy.tick(100);
     policy.on_failure(pinned_unavailable, 200);
-    if (expect(policy.next_attempt_at_ms() == 450,
-               "Second pinned recovery attempt must wait 250 ms")) {
+    if (expect(policy.next_attempt_at_ms() == 700,
+               "Second pinned recovery attempt must wait 500 ms")) {
       return 1;
     }
 
-    policy.tick(450);
-    policy.on_failure(pinned_unavailable, 500);
-    if (expect(policy.next_attempt_at_ms() == 1750,
-               "Third pinned recovery attempt must wait 1250 ms") ||
+    policy.tick(700);
+    policy.on_failure(pinned_unavailable, 750);
+    if (expect(policy.next_attempt_at_ms() == 3750,
+               "Third pinned recovery attempt must wait 3000 ms") ||
         expect(policy.recovery_deadline_at_ms() == 5100,
                "Pinned retries must preserve the original deadline")) {
       return 1;
     }
 
-    policy.tick(1750);
+    policy.tick(3750);
     policy.tick(5099);
     if (expect_state(policy, WasapiRecoveryState::Opening,
                      "Pinned recovery must remain active before deadline")) {
@@ -175,30 +175,30 @@ int main() {
     policy.on_failure(WasapiFailureClass::Transient, 120);
     if (expect(policy.attempt_count() == 2,
                "Second failure must consume the second attempt") ||
-        expect(policy.next_attempt_at_ms() == 370,
-               "Second recovery attempt must wait 250 ms")) {
+        expect(policy.next_attempt_at_ms() == 620,
+               "Second recovery attempt must wait 500 ms")) {
       return 1;
     }
-    policy.tick(369);
+    policy.tick(619);
     if (expect_state(policy, WasapiRecoveryState::Backoff,
                      "Second backoff must not open early")) {
       return 1;
     }
-    policy.tick(370);
-    policy.on_failure(WasapiFailureClass::Transient, 400);
+    policy.tick(620);
+    policy.on_failure(WasapiFailureClass::Transient, 650);
     if (expect(policy.attempt_count() == 3,
                "Third failure must consume the final attempt") ||
-        expect(policy.next_attempt_at_ms() == 1650,
-               "Third recovery attempt must wait 1250 ms")) {
+        expect(policy.next_attempt_at_ms() == 3650,
+               "Third recovery attempt must wait 3000 ms")) {
       return 1;
     }
-    policy.tick(1649);
+    policy.tick(3649);
     if (expect_state(policy, WasapiRecoveryState::Backoff,
                      "Third backoff must not open early")) {
       return 1;
     }
-    policy.tick(1650);
-    policy.on_failure(WasapiFailureClass::Transient, 1700);
+    policy.tick(3650);
+    policy.on_failure(WasapiFailureClass::Transient, 3700);
     if (expect_state(policy, WasapiRecoveryState::Faulted,
                      "A fourth recovery request must fault")) {
       return 1;
