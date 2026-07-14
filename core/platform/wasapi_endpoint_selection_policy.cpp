@@ -104,6 +104,25 @@ WasapiEndpointResolutionResult::WasapiEndpointResolutionResult(
     std::vector<WasapiEndpointSelectionError> errors)
     : device_id_(std::move(device_id)), errors_(std::move(errors)) {}
 
+bool WasapiEndpointPairResolutionResult::ok() const noexcept {
+  return errors_.empty();
+}
+
+const WasapiEndpointPair& WasapiEndpointPairResolutionResult::endpoints()
+    const noexcept {
+  return endpoints_;
+}
+
+const std::vector<WasapiEndpointSelectionError>&
+WasapiEndpointPairResolutionResult::errors() const noexcept {
+  return errors_;
+}
+
+WasapiEndpointPairResolutionResult::WasapiEndpointPairResolutionResult(
+    WasapiEndpointPair endpoints,
+    std::vector<WasapiEndpointSelectionError> errors)
+    : endpoints_(std::move(endpoints)), errors_(std::move(errors)) {}
+
 WasapiEndpointSelectionPolicy::WasapiEndpointSelectionPolicy()
     : WasapiEndpointSelectionPolicy(WasapiEndpointSelection::follow_default(),
                                     WasapiEndpointSelection::follow_default()) {}
@@ -185,6 +204,37 @@ WasapiEndpointResolutionResult WasapiEndpointSelectionPolicy::resolve(
         make_discovery_error(direction, selection(direction)));
   }
   return resolve(direction, discovery.devices());
+}
+
+WasapiEndpointPairResolutionResult WasapiEndpointSelectionPolicy::resolve_pair(
+    const std::vector<AudioDeviceDescriptor>& devices) const {
+  auto capture = resolve(WasapiEndpointDirection::Capture, devices);
+  auto render = resolve(WasapiEndpointDirection::Render, devices);
+
+  WasapiEndpointPair endpoints{
+      capture.device_id(),
+      render.device_id(),
+  };
+  std::vector<WasapiEndpointSelectionError> errors;
+  errors.reserve(capture.errors().size() + render.errors().size());
+  errors.insert(errors.end(), capture.errors().begin(), capture.errors().end());
+  errors.insert(errors.end(), render.errors().begin(), render.errors().end());
+  return {std::move(endpoints), std::move(errors)};
+}
+
+WasapiEndpointPairResolutionResult WasapiEndpointSelectionPolicy::resolve_pair(
+    const AudioDeviceListResult& discovery) const {
+  if (discovery.ok()) {
+    return resolve_pair(discovery.devices());
+  }
+
+  std::vector<WasapiEndpointSelectionError> errors;
+  errors.reserve(2);
+  errors.push_back(make_discovery_error(WasapiEndpointDirection::Capture,
+                                        capture_));
+  errors.push_back(
+      make_discovery_error(WasapiEndpointDirection::Render, render_));
+  return {{}, std::move(errors)};
 }
 
 }  // namespace sar::platform

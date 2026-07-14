@@ -108,18 +108,12 @@ int main() {
       output_id.empty()
           ? sar::platform::WasapiEndpointSelection::follow_default()
           : sar::platform::WasapiEndpointSelection::pinned_device_id(output_id));
-  if (!input_id.empty()) {
-    const auto pinned = provider.resolve_endpoint(
-        pinned_policy, sar::platform::WasapiEndpointDirection::Capture);
-    if (expect(pinned.ok() && pinned.device_id() == input_id,
-               "Expected provider to resolve pinned capture endpoint")) {
-      return 1;
-    }
-  }
-  if (!output_id.empty()) {
-    const auto pinned = provider.resolve_endpoint(
-        pinned_policy, sar::platform::WasapiEndpointDirection::Render);
-    if (expect(pinned.ok() && pinned.device_id() == output_id,
+  if (!input_id.empty() && !output_id.empty()) {
+    const auto pinned = provider.resolve_endpoint_pair(pinned_policy);
+    if (expect(pinned.ok(), "Expected provider to resolve endpoint pair") ||
+        expect(pinned.endpoints().capture_device_id == input_id,
+               "Expected provider to resolve pinned capture endpoint") ||
+        expect(pinned.endpoints().render_device_id == output_id,
                "Expected provider to resolve pinned render endpoint")) {
       return 1;
     }
@@ -129,15 +123,16 @@ int main() {
       sar::platform::WasapiEndpointSelection::pinned_device_id(
           "sar-missing-capture-endpoint"),
       sar::platform::WasapiEndpointSelection::follow_default());
-  const auto missing = provider.resolve_endpoint(
-      missing_policy, sar::platform::WasapiEndpointDirection::Capture);
-  const auto missing_again = provider.resolve_endpoint(
-      missing_policy, sar::platform::WasapiEndpointDirection::Capture);
+  const auto missing = provider.resolve_endpoint_pair(missing_policy);
+  const auto missing_again = provider.resolve_endpoint_pair(missing_policy);
   if (expect(!missing.ok(), "Expected missing pinned endpoint to fail") ||
-      expect(missing.errors().size() == 1 &&
+      expect(!missing.errors().empty() &&
                  missing.errors()[0].code ==
                      "wasapi_pinned_endpoint_unavailable",
              "Expected stable missing pinned endpoint error") ||
+      expect(!saw_default_output ||
+                 !missing.endpoints().render_device_id.empty(),
+             "Expected failed pair to retain resolved default render ID") ||
       expect(!missing_again.ok() &&
                  missing_again.errors()[0].code == missing.errors()[0].code &&
                  missing_again.errors()[0].message ==
@@ -147,19 +142,12 @@ int main() {
   }
 
   const sar::platform::WasapiEndpointSelectionPolicy default_policy;
-  if (saw_default_input) {
-    const auto resolved = provider.resolve_endpoint(
-        default_policy, sar::platform::WasapiEndpointDirection::Capture);
-    if (expect(resolved.ok() && !resolved.device_id().empty(),
-               "Expected provider to resolve default capture endpoint")) {
-      return 1;
-    }
-  }
-  if (saw_default_output) {
-    const auto resolved = provider.resolve_endpoint(
-        default_policy, sar::platform::WasapiEndpointDirection::Render);
-    if (expect(resolved.ok() && !resolved.device_id().empty(),
-               "Expected provider to resolve default render endpoint")) {
+  if (saw_default_input && saw_default_output) {
+    const auto resolved = provider.resolve_endpoint_pair(default_policy);
+    if (expect(resolved.ok() &&
+                   !resolved.endpoints().capture_device_id.empty() &&
+                   !resolved.endpoints().render_device_id.empty(),
+               "Expected provider to resolve both default endpoints")) {
       return 1;
     }
   }

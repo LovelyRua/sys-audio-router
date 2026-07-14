@@ -64,6 +64,29 @@ class WasapiEndpointResolutionResult {
   std::vector<WasapiEndpointSelectionError> errors_;
 };
 
+struct WasapiEndpointPair {
+  std::string capture_device_id;
+  std::string render_device_id;
+};
+
+class WasapiEndpointPairResolutionResult {
+ public:
+  [[nodiscard]] bool ok() const noexcept;
+  [[nodiscard]] const WasapiEndpointPair& endpoints() const noexcept;
+  [[nodiscard]] const std::vector<WasapiEndpointSelectionError>& errors()
+      const noexcept;
+
+ private:
+  friend class WasapiEndpointSelectionPolicy;
+
+  WasapiEndpointPairResolutionResult(
+      WasapiEndpointPair endpoints,
+      std::vector<WasapiEndpointSelectionError> errors);
+
+  WasapiEndpointPair endpoints_;
+  std::vector<WasapiEndpointSelectionError> errors_;
+};
+
 class WasapiEndpointSelectionPolicy {
  public:
   WasapiEndpointSelectionPolicy();
@@ -89,6 +112,10 @@ class WasapiEndpointSelectionPolicy {
       const std::vector<AudioDeviceDescriptor>& devices) const;
   [[nodiscard]] WasapiEndpointResolutionResult resolve(
       WasapiEndpointDirection direction,
+      const AudioDeviceListResult& discovery) const;
+  [[nodiscard]] WasapiEndpointPairResolutionResult resolve_pair(
+      const std::vector<AudioDeviceDescriptor>& devices) const;
+  [[nodiscard]] WasapiEndpointPairResolutionResult resolve_pair(
       const AudioDeviceListResult& discovery) const;
 
  private:

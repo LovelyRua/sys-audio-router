@@ -121,14 +121,26 @@ int main() {
     WasapiEndpointSelectionPolicy policy(
         WasapiEndpointSelection::follow_default(),
         WasapiEndpointSelection::pinned_device_id("render-pinned"));
-    const auto capture = policy.resolve(WasapiEndpointDirection::Capture, devices);
-    const auto render = policy.resolve(WasapiEndpointDirection::Render, devices);
-    if (expect(capture.ok(), "FollowDefault capture must resolve") ||
-        expect(capture.device_id() == "capture-default",
+    const auto pair = policy.resolve_pair(devices);
+    if (expect(pair.ok(), "Mixed endpoint pair must resolve") ||
+        expect(pair.endpoints().capture_device_id == "capture-default",
                "FollowDefault capture must select its directional default") ||
-        expect(render.ok(), "Pinned render must resolve") ||
-        expect(render.device_id() == "render-pinned",
+        expect(pair.endpoints().render_device_id == "render-pinned",
                "Pinned render must select the explicit device ID")) {
+      return 1;
+    }
+  }
+
+  {
+    WasapiEndpointSelectionPolicy policy(
+        WasapiEndpointSelection::pinned_device_id("capture-pinned"),
+        WasapiEndpointSelection::pinned_device_id("render-pinned"));
+    const auto pair = policy.resolve_pair(devices);
+    if (expect(pair.ok(), "Two pinned endpoints must resolve as a pair") ||
+        expect(pair.endpoints().capture_device_id == "capture-pinned",
+               "Pinned pair must preserve the capture device ID") ||
+        expect(pair.endpoints().render_device_id == "render-pinned",
+               "Pinned pair must preserve the render device ID")) {
       return 1;
     }
   }
@@ -180,28 +192,74 @@ int main() {
 
   {
     WasapiEndpointSelectionPolicy policy(
-        WasapiEndpointSelection::pinned_device_id("capture-pinned"),
+        WasapiEndpointSelection::pinned_device_id("missing-capture"),
         WasapiEndpointSelection::follow_default());
+    const auto first = policy.resolve_pair(devices);
+    const auto second = policy.resolve_pair(devices);
+    if (expect(!first.ok(), "Pair with one missing endpoint must fail") ||
+        expect(first.endpoints().capture_device_id.empty(),
+               "Missing capture endpoint must not produce an ID") ||
+        expect(first.endpoints().render_device_id == "render-default",
+               "Failed pair must retain the resolved render ID") ||
+        expect(first.errors().size() == 1,
+               "One missing endpoint must report one directional error") ||
+        expect(first.errors()[0].direction ==
+                   WasapiEndpointDirection::Capture,
+               "Missing capture endpoint must retain its direction") ||
+        expect(second.endpoints().render_device_id ==
+                   first.endpoints().render_device_id &&
+                   second.errors()[0].message == first.errors()[0].message,
+               "Repeated partial pair failures must be stable")) {
+      return 1;
+    }
+  }
+
+  {
+    WasapiEndpointSelectionPolicy policy(
+        WasapiEndpointSelection::pinned_device_id("missing-capture"),
+        WasapiEndpointSelection::pinned_device_id("missing-render"));
+    const auto pair = policy.resolve_pair(devices);
+    if (expect(!pair.ok(), "Pair with two missing endpoints must fail") ||
+        expect(pair.errors().size() == 2,
+               "Two missing endpoints must retain both errors") ||
+        expect(pair.errors()[0].direction ==
+                   WasapiEndpointDirection::Capture &&
+                   pair.errors()[1].direction ==
+                       WasapiEndpointDirection::Render,
+               "Pair errors must have stable capture-render ordering") ||
+        expect(pair.errors()[0].device_id == "missing-capture" &&
+                   pair.errors()[1].device_id == "missing-render",
+               "Pair errors must retain both requested device IDs")) {
+      return 1;
+    }
+  }
+
+  {
+    WasapiEndpointSelectionPolicy policy(
+        WasapiEndpointSelection::pinned_device_id("capture-pinned"),
+        WasapiEndpointSelection::pinned_device_id("render-pinned"));
     const auto discovery = AudioDeviceListResult::failure({
         {"wasapi_enum_failed", "Machine-specific discovery detail."},
     });
-    const auto first =
-        policy.resolve(WasapiEndpointDirection::Capture, discovery);
-    const auto second =
-        policy.resolve(WasapiEndpointDirection::Capture, discovery);
-    if (expect(!first.ok(), "Failed discovery must not resolve an endpoint") ||
-        expect(first.errors().size() == 1,
-               "Failed discovery must report one stable selection error") ||
-        expect(first.errors()[0].code ==
-                   "wasapi_endpoint_discovery_failed",
+    const auto first = policy.resolve_pair(discovery);
+    const auto second = policy.resolve_pair(discovery);
+    if (expect(!first.ok(), "Failed discovery must not resolve a pair") ||
+        expect(first.errors().size() == 2,
+               "Failed discovery must report both directional errors") ||
+        expect(first.errors()[0].code == "wasapi_endpoint_discovery_failed" &&
+                   first.errors()[1].code ==
+                       "wasapi_endpoint_discovery_failed",
                "Failed discovery must use the stable integration error code") ||
         expect(first.errors()[0].direction ==
-                   WasapiEndpointDirection::Capture,
-               "Failed discovery must preserve endpoint direction") ||
-        expect(first.errors()[0].device_id == "capture-pinned",
-               "Failed pinned discovery must preserve the requested ID") ||
-        expect(second.errors()[0].code == first.errors()[0].code &&
-                   second.errors()[0].message == first.errors()[0].message,
+                   WasapiEndpointDirection::Capture &&
+                   first.errors()[1].direction ==
+                       WasapiEndpointDirection::Render,
+               "Failed discovery must preserve both endpoint directions") ||
+        expect(first.errors()[0].device_id == "capture-pinned" &&
+                   first.errors()[1].device_id == "render-pinned",
+               "Failed discovery must preserve both requested IDs") ||
+        expect(second.errors()[0].message == first.errors()[0].message &&
+                   second.errors()[1].message == first.errors()[1].message,
                "Repeated discovery failures must be stable")) {
       return 1;
     }
