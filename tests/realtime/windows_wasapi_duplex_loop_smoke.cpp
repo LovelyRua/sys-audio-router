@@ -540,10 +540,22 @@ int main() {
                                   "Expected duplex summary rendered frames")) {
     return failure;
   }
+  std::uint64_t expected_capture_frames = 0;
+  if (const auto failure = expect(
+          sar::platform::wasapi_clock_position_to_audio_frames(
+              stats.captured_frames,
+              loop->capture_probe().mix_format.sample_rate,
+              loop->render_probe().mix_format.sample_rate,
+              expected_capture_frames),
+          "Expected duplex summary frame-domain conversion")) {
+    return failure;
+  }
   const auto expected_frame_balance =
-      stats.captured_frames >= stats.rendered_frames
-          ? static_cast<std::int64_t>(stats.captured_frames - stats.rendered_frames)
-          : -static_cast<std::int64_t>(stats.rendered_frames - stats.captured_frames);
+      expected_capture_frames >= stats.rendered_frames
+          ? static_cast<std::int64_t>(expected_capture_frames -
+                                      stats.rendered_frames)
+          : -static_cast<std::int64_t>(stats.rendered_frames -
+                                       expected_capture_frames);
   if (const auto failure = expect(final_summary.frame_balance == expected_frame_balance,
                                   "Expected duplex summary frame balance")) {
     return failure;

@@ -470,9 +470,14 @@ int main() {
   {
     sar::tests::ScriptedWasapiStream capture_stream(make_mismatched_capture_probe());
     sar::tests::ScriptedWasapiStream render_stream(make_render_probe());
-    capture_stream.enqueue_capture({.frames = 64,
-                                    .samples = {std::vector<float>(64, 0.5F),
-                                                std::vector<float>(64, -0.5F)}});
+    for (std::size_t packet = 0; packet < 5; ++packet) {
+      capture_stream.enqueue_capture({.frames = 64,
+                                      .samples = {std::vector<float>(64, 0.5F),
+                                                  std::vector<float>(64, -0.5F)}});
+    }
+    capture_stream.enqueue_capture(
+        {.status = sar::platform::WasapiStreamIoStatus::Idle});
+    render_stream.enqueue_render({.writable_frames = 64});
     render_stream.enqueue_render({.writable_frames = 64});
 
     sar::platform::WindowsWasapiGraphRunner runner(
@@ -487,10 +492,11 @@ int main() {
     }
     constexpr auto expected_nominal_ratio = 48000.0 / 44100.0;
     if (const auto failure = expect(
-            result.stats().capture_rate_adapter_active &&
+            result.stats().graph_processed &&
+                result.stats().capture_rate_adapter_active &&
                 std::abs(result.stats().capture_resampler_ratio -
                          expected_nominal_ratio) < 0.01,
-            "Expected 48 kHz / 44.1 kHz adaptive capture ratio")) {
+            "Expected 48 kHz / 44.1 kHz adaptive capture output and ratio")) {
       return failure;
     }
   }

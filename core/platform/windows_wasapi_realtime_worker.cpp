@@ -470,7 +470,9 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
         result.stats().capture_rate_adapter_recovering);
     if (result.stats().capture_rate_adapter_reset) {
       capture_rate_adapter_reset_cycles_.fetch_add(1);
-      current_render_recovery_silence_frames = 0;
+      if (!render_recovery_episode_active) {
+        current_render_recovery_silence_frames = 0;
+      }
       render_recovery_episode_active = true;
     }
     if (result.stats().render_startup_silence) {

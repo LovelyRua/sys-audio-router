@@ -519,6 +519,83 @@ int main() {
   }
 
   {
+    sar::tests::ScriptedWasapiStream capture(
+        make_adaptive_probe(sar::platform::WasapiStreamDirection::Capture));
+    sar::tests::ScriptedWasapiStream render(
+        make_adaptive_probe(sar::platform::WasapiStreamDirection::Render));
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Idle});
+    capture.enqueue_capture({.frames = 32, .samples = {adaptive_samples(0)}});
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Idle});
+    capture.enqueue_capture({.frames = 32,
+                             .samples = {adaptive_samples(64)},
+                             .data_discontinuity = true});
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Idle});
+    capture.enqueue_capture({.frames = 32,
+                             .samples = {adaptive_samples(128)},
+                             .data_discontinuity = true});
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Idle});
+    capture.enqueue_capture({.frames = 32, .samples = {adaptive_samples(192)}});
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Idle});
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Cancelled});
+    render.enqueue_render({.writable_frames = 64});
+    render.enqueue_render({.writable_frames = 64});
+    render.enqueue_render({.writable_frames = 64});
+    render.enqueue_render({.writable_frames = 64});
+    render.enqueue_render({.writable_frames = 64});
+    render.enqueue_render({.writable_frames = 64});
+    render.enqueue_render({.writable_frames = 64});
+    render.enqueue_render({.writable_frames = 64});
+    render.enqueue_render({.writable_frames = 64});
+
+    sar::platform::WindowsWasapiGraphRunner runner(
+        &capture, &render, 1, 1, 64, 64, 64, 256, true, true);
+    sar::graph::Graph graph(20, 1, 64, 48000);
+    graph.add_node(std::make_unique<sar::graph::PassthroughNode>());
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    sar::platform::WindowsWasapiRealtimeWorker worker(runner, graph, diagnostics);
+
+    const auto start_result = worker.start(1);
+    if (const auto failure = expect(
+            start_result.ok(), "Expected consecutive-reset recovery worker start")) {
+      return failure;
+    }
+    for (int attempt = 0; attempt < 100 && worker.running(); ++attempt) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    worker.stop();
+
+    const auto stats = worker.stats();
+    if (stats.capture_discontinuity_cycles != 2 ||
+        stats.capture_discontinuity_frames != 64 ||
+        stats.capture_rate_adapter_reset_cycles != 2 ||
+        stats.graph_processed_cycles != 2 ||
+        stats.render_recovery_silence_cycles != 2 ||
+        stats.render_recovery_silence_frames != 128 ||
+        stats.maximum_render_recovery_silence_frames != 128) {
+      std::cerr << "Consecutive reset recovery stats: discontinuities="
+                << stats.capture_discontinuity_cycles
+                << " discontinuity_frames=" << stats.capture_discontinuity_frames
+                << " resets=" << stats.capture_rate_adapter_reset_cycles
+                << " graph_cycles=" << stats.graph_processed_cycles
+                << " recovery_cycles=" << stats.render_recovery_silence_cycles
+                << " recovery_frames=" << stats.render_recovery_silence_frames
+                << " maximum_frames="
+                << stats.maximum_render_recovery_silence_frames << '\n';
+    }
+    if (const auto failure = expect(
+            stats.capture_discontinuity_cycles == 2 &&
+                stats.capture_discontinuity_frames == 64 &&
+                stats.capture_rate_adapter_reset_cycles == 2 &&
+                stats.graph_processed_cycles == 2 &&
+                stats.render_recovery_silence_cycles == 2 &&
+                stats.render_recovery_silence_frames == 128 &&
+                stats.maximum_render_recovery_silence_frames == 128,
+            "Expected consecutive resets to preserve one recovery silence episode")) {
+      return failure;
+    }
+  }
+
+  {
     sar::platform::WindowsWasapiGraphRunner runner(nullptr, nullptr, 2, 16);
     sar::graph::Graph graph(14, 2, 16);
     sar::diagnostics::EngineDiagnostics diagnostics;

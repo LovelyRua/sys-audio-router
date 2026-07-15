@@ -271,12 +271,12 @@ int main() {
         render_probe);
     if (const auto failure =
             expect(has_worker_error_code(errors, "graph_sample_rate_mismatch"),
-                   "Expected duplex capture sample-rate mismatch")) {
+                   "Expected duplex render sample-rate mismatch")) {
       return failure;
     }
     if (const auto failure =
-            expect(has_worker_error_message(errors, "capture stream sample rate"),
-                   "Expected duplex capture sample-rate message priority")) {
+            expect(has_worker_error_message(errors, "render stream sample rate"),
+                   "Expected duplex render sample-rate message")) {
       return failure;
     }
 
