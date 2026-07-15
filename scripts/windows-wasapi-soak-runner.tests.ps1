@@ -198,7 +198,6 @@ $missingFields = @(
   "stream_stop_error_cycles",
   "wait_timeout_cycles",
   "render_wait_timeout_cycles",
-  "duplex_event_wait_timeout_cycles",
   "capture_fifo_overflow_cycles",
   "capture_fifo_overflow_frames",
   "render_fifo_overflow_cycles",
@@ -220,6 +219,20 @@ foreach ($missingName in $missingFields) {
   Assert-Equal 1 $missingResult.FailureCount "Missing $missingName should fail the attempt."
   Assert-Equal $true $missingText.Contains("reason=missing_metric:$missingName") "Missing explicit $missingName reason."
 }
+
+$legacySummary = New-ValidSummary -Mode duplex
+$legacySummary = $legacySummary -replace
+    "\sduplex_event_wait_timeout_cycles=[^\s]+", ""
+$legacyOutput = Invoke-SingleSummary -Mode duplex -Summary $legacySummary
+Assert-Equal 0 $legacyOutput[-1].ParseFailureCount `
+    "Legacy output without duplex event timeout telemetry should parse."
+
+$invalidOptionalOutput = Invoke-SingleSummary -Mode duplex `
+    -Summary (New-ValidSummary -Mode duplex -Override @{
+      duplex_event_wait_timeout_cycles = "not-a-number"
+    })
+Assert-Equal 1 $invalidOptionalOutput[-1].ParseFailureCount `
+    "Present but invalid duplex event timeout telemetry should fail parsing."
 
 foreach ($invalidValue in @("-1", "+1", "1.5", "not-a-number", "18446744073709551616")) {
   $invalidOutput = Invoke-SingleSummary -Mode duplex `

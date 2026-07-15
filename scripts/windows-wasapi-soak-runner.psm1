@@ -142,7 +142,6 @@ function ConvertFrom-WasapiMeasurementOutput {
   }
   if ($Mode -eq "duplex") {
     foreach ($name in @(
-        "duplex_event_wait_timeout_cycles",
         "render_fifo_underflow_frames",
         "render_startup_silence_frames",
         "render_recovery_silence_frames",
@@ -159,6 +158,15 @@ function ConvertFrom-WasapiMeasurementOutput {
       return [pscustomobject]@{ Ok = $false; Error = $parsed.Error }
     }
     $metrics[$metricName] = [uint64]$parsed.Value
+  }
+  foreach ($metricName in @("duplex_event_wait_timeout_cycles")) {
+    if ($fields.ContainsKey($metricName)) {
+      $parsed = ConvertTo-WasapiSoakUnsignedInteger -Fields $fields -Name $metricName
+      if (!$parsed.Ok) {
+        return [pscustomobject]@{ Ok = $false; Error = $parsed.Error }
+      }
+      $metrics[$metricName] = [uint64]$parsed.Value
+    }
   }
   foreach ($metricName in Get-WasapiSoakMetricNames) {
     if (!$metrics.ContainsKey($metricName)) {
