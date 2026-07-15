@@ -83,6 +83,31 @@ int main() {
       fast, fast);
   assert(shared_offset.valid);
   assert(near(shared_offset.correction_ppm, 0.0, 1.0e-9));
+
+  constexpr ClockDomain capture_clock{2, 44100};
+  constexpr ClockDomain render_clock{3, 48000};
+  constexpr std::uint64_t hundred_seconds_100ns = 1'000'000'000;
+  const auto capture_44100_nominal = ClockDriftEstimator::estimate(
+      {capture_clock, 0, 10'000'000},
+      {capture_clock, 4'410'000, 10'000'000 + hundred_seconds_100ns});
+  const auto render_48000_nominal = ClockDriftEstimator::estimate(
+      {render_clock, 0, 10'000'000},
+      {render_clock, 4'800'000, 10'000'000 + hundred_seconds_100ns});
+  const auto mismatched_nominal_rates =
+      ClockDriftEstimator::relative_rate_correction(capture_44100_nominal,
+                                                    render_48000_nominal);
+  assert(mismatched_nominal_rates.valid);
+  assert(near(mismatched_nominal_rates.correction_ppm, 0.0, 1.0e-9));
+
+  const auto capture_44100_fast = ClockDriftEstimator::estimate(
+      {capture_clock, 0, 10'000'000},
+      {capture_clock, 4'410'441, 10'000'000 + hundred_seconds_100ns});
+  const auto mismatched_rates_with_drift =
+      ClockDriftEstimator::relative_rate_correction(capture_44100_fast,
+                                                    render_48000_nominal);
+  assert(mismatched_rates_with_drift.valid);
+  assert(near(mismatched_rates_with_drift.correction_ppm, 100.0, 1.0e-6));
+
   assert(!ClockDriftEstimator::relative_rate_correction({}, nominal).valid);
 
   std::cout << "Clock drift estimator smoke test passed\n";

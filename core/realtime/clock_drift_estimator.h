@@ -59,13 +59,25 @@ class ClockDriftEstimator {
     if (!capture.valid || !render.valid ||
         !std::isfinite(capture.observed_sample_rate) ||
         !std::isfinite(render.observed_sample_rate) ||
+        !std::isfinite(capture.nominal_error_ppm) ||
+        !std::isfinite(render.nominal_error_ppm) ||
         capture.observed_sample_rate <= 0.0 ||
         render.observed_sample_rate <= 0.0) {
       return {};
     }
 
+    const auto capture_rate_factor =
+        1.0 + capture.nominal_error_ppm / 1'000'000.0;
+    const auto render_rate_factor =
+        1.0 + render.nominal_error_ppm / 1'000'000.0;
+    if (!std::isfinite(capture_rate_factor) ||
+        !std::isfinite(render_rate_factor) || capture_rate_factor <= 0.0 ||
+        render_rate_factor <= 0.0) {
+      return {};
+    }
+
     const auto correction_ppm =
-        (capture.observed_sample_rate / render.observed_sample_rate - 1.0) *
+        (capture_rate_factor / render_rate_factor - 1.0) *
         1'000'000.0;
     return std::isfinite(correction_ppm)
                ? ClockRateFeedForward{true, correction_ppm}
