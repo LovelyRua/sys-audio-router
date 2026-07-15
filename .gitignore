@@ -1,5 +1,6 @@
 # Build output
 build/
+build*/
 out/
 dist/
 target/
@@ -23,6 +24,7 @@ credentials/
 # Local scratch
 tmp/
 .codegraph/
+.sar-evidence/
 
 # Local collaborator worktrees/clones nested under this coordination checkout
 system-audio-route-a/

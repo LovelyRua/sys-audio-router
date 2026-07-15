@@ -113,6 +113,32 @@ scripts\windows-winrm-local-measure.cmd 192.168.123.123 codex <password> enginee
 scripts\windows-winrm-local-measure.cmd 192.168.123.123 codex <password> engineer-a both 5000 10 true false
 ```
 
+For a pinned duplex soak, set both endpoint IDs and use a wait timeout with at
+least one device period of scheduling margin:
+
+```bat
+set "SAR_MEASURE_MODE=duplex"
+set "SAR_MEASURE_DURATION_MS=28800000"
+set "SAR_MEASURE_TIMEOUT_MS=20"
+set "SAR_MEASURE_CAPTURE_ID=<capture-endpoint-id>"
+set "SAR_MEASURE_RENDER_ID=<render-endpoint-id>"
+set "SAR_MEASURE_MAX_RECOVERY_SILENCE_FRAMES=2594"
+set "SAR_MEASURE_MIN_FRAME_COVERAGE_BPS=9999"
+scripts\windows-winrm-local-measure.cmd 192.168.123.123 codex <password> engineer-a-soak
+```
+
+The two endpoint IDs must be supplied together. Every invocation creates a
+timestamped `.sar-evidence` directory by default. Set
+`SAR_MEASURE_EVIDENCE_DIR` to choose another local directory. The bundle keeps
+the source commit and run configuration in `manifest.json`, plus each attempt's
+command, combined process output, and the final soak summary. Evidence is copied
+back even when the remote gate fails whenever the WinRM session remains usable;
+`.sar-evidence` is intentionally excluded from Git.
+Set `SAR_MEASURE_MAX_RECOVERY_SILENCE_FRAMES` to the callback-quantized recovery
+bound for the selected endpoint pair; zero leaves that optional bound disabled.
+Set `SAR_MEASURE_MIN_FRAME_COVERAGE_BPS=9999` for the roadmap's 99.99% long-soak
+gate. Short diagnostic runs default to 9,900 basis points (99%).
+
 The eighth argument enables `--require-healthy`. When enabled, the command fails
 on faulted or degraded runtime summaries. The ninth argument allows endpoint
 unavailability so WinRM-only sessions can still verify upload, configure, build,
@@ -129,7 +155,7 @@ fields before the matching human-readable stream diagnostics block.
 
 ## Expected Test Targets
 
-The Windows suite currently has 41 CTest targets, including the portable core
+The Windows suite currently has 83 CTest targets, including the portable core
 smoke tests plus WASAPI stream, graph runner, realtime thread, realtime
 worker/render/duplex loop, runtime summary, preflight, and measure tool smoke
 tests.

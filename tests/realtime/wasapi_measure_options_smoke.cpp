@@ -27,9 +27,61 @@ bool parse_case(ParseCase parse_case, sar::tools::WasapiMeasureOptions& options)
       parse_case.argc, parse_case.argv, options);
 }
 
+bool parse_duplex_case(ParseCase parse_case,
+                       sar::tools::WasapiMeasureOptions& options) {
+  return sar::tools::parse_wasapi_measure_options(
+      parse_case.argc, parse_case.argv, options, true);
+}
+
 }  // namespace
 
 int main() {
+  {
+    char program[] = "sar_measure_wasapi_duplex_loop";
+    char capture[] = "--capture-id";
+    char capture_id[] = "capture-endpoint-id";
+    char render[] = "--render-id";
+    char render_id[] = "render-endpoint-id";
+    char* argv[] = {program, capture, capture_id, render, render_id};
+    sar::tools::WasapiMeasureOptions options;
+    if (const auto failure = expect(parse_duplex_case(make_case(argv, 5), options),
+                                    "Expected duplex endpoint parse success")) {
+      return failure;
+    }
+    if (const auto failure = expect(options.capture_device_id == capture_id,
+                                    "Expected parsed capture endpoint ID")) {
+      return failure;
+    }
+    if (const auto failure = expect(options.render_device_id == render_id,
+                                    "Expected parsed render endpoint ID")) {
+      return failure;
+    }
+  }
+
+  {
+    char program[] = "sar_measure_wasapi_render_loop";
+    char capture[] = "--capture-id";
+    char capture_id[] = "capture-endpoint-id";
+    char* argv[] = {program, capture, capture_id};
+    sar::tools::WasapiMeasureOptions options;
+    if (const auto failure = expect(!parse_case(make_case(argv, 3), options),
+                                    "Expected endpoint option rejection by default")) {
+      return failure;
+    }
+  }
+
+  {
+    char program[] = "sar_measure_wasapi_duplex_loop";
+    char render[] = "--render-id";
+    char empty[] = "";
+    char* argv[] = {program, render, empty};
+    sar::tools::WasapiMeasureOptions options;
+    if (const auto failure = expect(!parse_duplex_case(make_case(argv, 3), options),
+                                    "Expected empty endpoint ID failure")) {
+      return failure;
+    }
+  }
+
   {
     char program[] = "sar_measure_wasapi_render_loop";
     char* argv[] = {program};
@@ -44,6 +96,14 @@ int main() {
     }
     if (const auto failure = expect(options.timeout_ms == 10,
                                     "Expected default timeout")) {
+      return failure;
+    }
+    if (const auto failure = expect(options.capture_device_id.empty(),
+                                    "Expected default capture endpoint ID empty")) {
+      return failure;
+    }
+    if (const auto failure = expect(options.render_device_id.empty(),
+                                    "Expected default render endpoint ID empty")) {
       return failure;
     }
     if (const auto failure = expect(!options.require_healthy,

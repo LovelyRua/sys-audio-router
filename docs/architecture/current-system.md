@@ -318,9 +318,21 @@ Startup, discontinuity recovery, and normal-state capture starvation remain
 visible as separate counters rather than being treated as render deadline
 misses.
 
+The WinRM measurement workflow now accepts a pinned capture/render endpoint pair
+and writes a local evidence bundle containing the source commit, thresholds,
+endpoint IDs, per-attempt command and combined output, and strict soak summary.
+Each duplex attempt independently checks configurable render-frame coverage,
+wait and process errors, FIFO overflow, exact underflow attribution, and the
+per-recovery silence maximum. A three-attempt 5-second validation deliberately
+retained a failed third attempt and copied its complete evidence home. A
+subsequent pinned 10-second 44.1-to-48 kHz run passed the 99.99% coverage gate,
+rendering 482,016 frames against a 480,000-frame target with zero timeout,
+overflow, or unattributed underflow and a 2,016-frame recovery maximum against
+the 2,594-frame bound.
+
 ## Current Testing Model
 
-The Windows CTest suite currently has 81 smoke targets. Several tests are
+The Windows CTest suite currently has 83 smoke targets. Several tests are
 synthetic because WinRM sessions may not expose interactive audio endpoints even
 when the VM has a desktop audio stack.
 

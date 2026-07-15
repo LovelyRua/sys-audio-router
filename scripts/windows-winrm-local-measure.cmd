@@ -11,6 +11,11 @@ set "TIMEOUT_MS=%SAR_MEASURE_TIMEOUT_MS%"
 set "REQUIRE_HEALTHY=%SAR_MEASURE_REQUIRE_HEALTHY%"
 set "ALLOW_UNAVAILABLE=%SAR_MEASURE_ALLOW_UNAVAILABLE%"
 set "ITERATIONS=%SAR_MEASURE_ITERATIONS%"
+set "CAPTURE_ID=%SAR_MEASURE_CAPTURE_ID%"
+set "RENDER_ID=%SAR_MEASURE_RENDER_ID%"
+set "EVIDENCE_DIR=%SAR_MEASURE_EVIDENCE_DIR%"
+set "MAX_RECOVERY_SILENCE_FRAMES=%SAR_MEASURE_MAX_RECOVERY_SILENCE_FRAMES%"
+set "MIN_FRAME_COVERAGE_BPS=%SAR_MEASURE_MIN_FRAME_COVERAGE_BPS%"
 set "CLEANUP=%SAR_SLOT_CLEANUP%"
 set "CLEANUP_DRY_RUN=%SAR_SLOT_CLEANUP_DRY_RUN%"
 set "RETENTION_DAYS=%SAR_SLOT_RETENTION_DAYS%"
@@ -52,6 +57,8 @@ if "%RETENTION_DAYS%"=="" set "RETENTION_DAYS=14"
 if "%RETENTION_COUNT%"=="" set "RETENTION_COUNT=8"
 if "%CLEANUP_LIMIT%"=="" set "CLEANUP_LIMIT=2"
 if "%STALE_ACTIVE_HOURS%"=="" set "STALE_ACTIVE_HOURS=24"
+if "%MAX_RECOVERY_SILENCE_FRAMES%"=="" set "MAX_RECOVERY_SILENCE_FRAMES=0"
+if "%MIN_FRAME_COVERAGE_BPS%"=="" set "MIN_FRAME_COVERAGE_BPS=9900"
 
 echo System Audio Route local WASAPI measurement
 echo Host: %HOST%
@@ -63,9 +70,14 @@ echo Timeout ms: %TIMEOUT_MS%
 echo Require healthy: %REQUIRE_HEALTHY%
 echo Allow unavailable endpoint: %ALLOW_UNAVAILABLE%
 echo Iterations: %ITERATIONS%
+echo Capture ID: %CAPTURE_ID%
+echo Render ID: %RENDER_ID%
+echo Evidence directory: %EVIDENCE_DIR%
+echo Maximum recovery silence frames: %MAX_RECOVERY_SILENCE_FRAMES%
+echo Minimum rendered frame coverage bps: %MIN_FRAME_COVERAGE_BPS%
 echo Slot cleanup: %CLEANUP%
 echo Slot cleanup dry run: %CLEANUP_DRY_RUN%
 echo.
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0windows-winrm-local-measure.ps1" -HostName "%HOST%" -UserName "%USER%" -Password "%PASSWORD%" -Slot "%SLOT%" -RepoRoot "%~dp0.." -Mode "%MODE%" -DurationMs "%DURATION_MS%" -TimeoutMs "%TIMEOUT_MS%" -Iterations "%ITERATIONS%" -RequireHealthyText "%REQUIRE_HEALTHY%" -AllowUnavailableText "%ALLOW_UNAVAILABLE%" -CleanupCompletedSlotsText "%CLEANUP%" -CleanupDryRunText "%CLEANUP_DRY_RUN%" -RetentionDays "%RETENTION_DAYS%" -RetentionCount "%RETENTION_COUNT%" -CleanupLimit "%CLEANUP_LIMIT%" -StaleActiveHours "%STALE_ACTIVE_HOURS%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0windows-winrm-local-measure.ps1" -HostName "%HOST%" -UserName "%USER%" -Password "%PASSWORD%" -Slot "%SLOT%" -RepoRoot "%~dp0.." -Mode "%MODE%" -DurationMs "%DURATION_MS%" -TimeoutMs "%TIMEOUT_MS%" -Iterations "%ITERATIONS%" -CaptureId "%CAPTURE_ID%" -RenderId "%RENDER_ID%" -EvidenceDirectory "%EVIDENCE_DIR%" -MaximumRenderRecoverySilenceFrames "%MAX_RECOVERY_SILENCE_FRAMES%" -MinimumRenderedFrameCoverageBasisPoints "%MIN_FRAME_COVERAGE_BPS%" -RequireHealthyText "%REQUIRE_HEALTHY%" -AllowUnavailableText "%ALLOW_UNAVAILABLE%" -CleanupCompletedSlotsText "%CLEANUP%" -CleanupDryRunText "%CLEANUP_DRY_RUN%" -RetentionDays "%RETENTION_DAYS%" -RetentionCount "%RETENTION_COUNT%" -CleanupLimit "%CLEANUP_LIMIT%" -StaleActiveHours "%STALE_ACTIVE_HOURS%"
 exit /b %errorlevel%

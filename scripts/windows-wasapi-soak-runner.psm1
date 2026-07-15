@@ -19,8 +19,21 @@ function Get-WasapiSoakMetricNames {
     "capture_discontinuity_cycles",
     "render_fifo_underflow_cycles",
     "wait_timeout_cycles",
+    "render_wait_timeout_cycles",
     "capture_fifo_overflow_cycles",
-    "render_fifo_overflow_cycles"
+    "capture_fifo_overflow_frames",
+    "render_fifo_overflow_cycles",
+    "render_fifo_overflow_frames",
+    "process_error_cycles",
+    "stream_start_error_cycles",
+    "stream_stop_error_cycles",
+    "rendered_frames",
+    "target_rendered_frames",
+    "render_fifo_underflow_frames",
+    "render_startup_silence_frames",
+    "render_recovery_silence_frames",
+    "render_capture_starvation_silence_frames",
+    "maximum_render_recovery_silence_frames"
   )
 }
 
@@ -35,20 +48,49 @@ function New-WasapiSoakMetricState {
   return [pscustomobject]@{
     Attempts = $Attempts
     ParsedAttempts = [uint64]0
+    AcceptedAttempts = [uint64]0
     ParseFailures = [uint64]0
+    GateFailures = [uint64]0
     DurationMilliseconds = [uint64]0
     Totals = $totals
   }
+}
+
+function ConvertTo-WasapiSoakUnsignedInteger {
+  param(
+    [hashtable]$Fields,
+    [string]$Name
+  )
+
+  if (!$Fields.ContainsKey($Name)) {
+    return [pscustomobject]@{ Ok = $false; Error = "missing_metric:$Name" }
+  }
+
+  [uint64]$value = 0
+  if (![uint64]::TryParse(
+      [string]$Fields[$Name],
+      [System.Globalization.NumberStyles]::None,
+      [System.Globalization.CultureInfo]::InvariantCulture,
+      [ref]$value)) {
+    return [pscustomobject]@{ Ok = $false; Error = "invalid_metric:$Name" }
+  }
+  return [pscustomobject]@{ Ok = $true; Value = $value }
 }
 
 function ConvertFrom-WasapiMeasurementOutput {
   param(
     [Parameter(Mandatory = $true)]
     [AllowEmptyCollection()]
-    [string[]]$Lines
+    [string[]]$Lines,
+    [Parameter(Mandatory = $true)]
+    [ValidateSet("render", "duplex", "loopback")]
+    [string]$Mode,
+    [uint64]$MaximumRenderRecoverySilenceFrames = 0,
+    [ValidateRange(0, 10000)]
+    [uint32]$MinimumRenderedFrameCoverageBasisPoints = 9900
   )
 
-  $durationMatches = @($Lines | Where-Object { $_ -match '^\s*Duration ms:\s*\d+\s*$' })
+  $durationMatches = @($Lines | Where-Object { $_ -match '^\s*Duration ms:\s*\S+\s*$' })
   if ($durationMatches.Count -ne 1) {
     $reason = if ($durationMatches.Count -eq 0) { "missing_duration" } else { "duplicate_duration" }
     return [pscustomobject]@{ Ok = $false; Error = $reason }
@@ -63,30 +105,118 @@ function ConvertFrom-WasapiMeasurementOutput {
   [uint64]$durationMilliseconds = 0
   if (![uint64]::TryParse(
       ($durationMatches[0] -replace '^\s*Duration ms:\s*', '').Trim(),
+      [System.Globalization.NumberStyles]::None,
+      [System.Globalization.CultureInfo]::InvariantCulture,
       [ref]$durationMilliseconds) -or $durationMilliseconds -eq 0) {
     return [pscustomobject]@{ Ok = $false; Error = "invalid_duration" }
   }
 
   $fields = @{}
-  foreach ($match in [regex]::Matches($summaryLines[0], '(?:^|\s)([^\s=]+)=([^\s]*)')) {
-    $fields[$match.Groups[1].Value] = $match.Groups[2].Value
+  foreach ($match in [regex]::Matches($summaryLines[0], '(?:^|\s)([^\s=]+)=([^\s]+)')) {
+    $name = $match.Groups[1].Value
+    if ($fields.ContainsKey($name)) {
+      return [pscustomobject]@{ Ok = $false; Error = "duplicate_metric:$name" }
+    }
+    $fields[$name] = $match.Groups[2].Value
+  }
+
+  $requiredMetrics = [System.Collections.Generic.List[string]]::new()
+  foreach ($name in @(
+      "capture_discontinuity_cycles",
+      "render_fifo_underflow_cycles",
+      "wait_timeout_cycles",
+      "capture_fifo_overflow_cycles",
+      "capture_fifo_overflow_frames",
+      "render_fifo_overflow_cycles",
+      "render_fifo_overflow_frames",
+      "process_error_cycles",
+      "stream_start_error_cycles",
+      "stream_stop_error_cycles")) {
+    $requiredMetrics.Add($name)
+  }
+  if ($Mode -ne "loopback") {
+    foreach ($name in @("render_wait_timeout_cycles", "rendered_frames", "render_sample_rate")) {
+      $requiredMetrics.Add($name)
+    }
+  }
+  if ($Mode -eq "duplex") {
+    foreach ($name in @(
+        "render_fifo_underflow_frames",
+        "render_startup_silence_frames",
+        "render_recovery_silence_frames",
+        "render_capture_starvation_silence_frames",
+        "maximum_render_recovery_silence_frames")) {
+      $requiredMetrics.Add($name)
+    }
   }
 
   $metrics = @{}
+  foreach ($metricName in $requiredMetrics) {
+    $parsed = ConvertTo-WasapiSoakUnsignedInteger -Fields $fields -Name $metricName
+    if (!$parsed.Ok) {
+      return [pscustomobject]@{ Ok = $false; Error = $parsed.Error }
+    }
+    $metrics[$metricName] = [uint64]$parsed.Value
+  }
   foreach ($metricName in Get-WasapiSoakMetricNames) {
-    if (!$fields.ContainsKey($metricName)) {
-      return [pscustomobject]@{ Ok = $false; Error = "missing_metric:$metricName" }
+    if (!$metrics.ContainsKey($metricName)) {
+      $metrics[$metricName] = [uint64]0
     }
-    [uint64]$metricValue = 0
-    if (![uint64]::TryParse($fields[$metricName], [ref]$metricValue)) {
-      return [pscustomobject]@{ Ok = $false; Error = "invalid_metric:$metricName" }
+  }
+
+  $failures = [System.Collections.Generic.List[string]]::new()
+  foreach ($metricName in @(
+      "process_error_cycles",
+      "stream_start_error_cycles",
+      "stream_stop_error_cycles",
+      "wait_timeout_cycles",
+      "capture_fifo_overflow_cycles",
+      "capture_fifo_overflow_frames",
+      "render_fifo_overflow_cycles",
+      "render_fifo_overflow_frames")) {
+    if ($metrics[$metricName] -ne 0) {
+      $failures.Add("${metricName}_nonzero")
     }
-    $metrics[$metricName] = $metricValue
+  }
+
+  if ($Mode -ne "loopback") {
+    if ($metrics.render_wait_timeout_cycles -ne 0) {
+      $failures.Add("render_wait_timeout_cycles_nonzero")
+    }
+    if ($metrics.render_sample_rate -eq 0) {
+      $failures.Add("render_sample_rate_zero")
+    } else {
+      $target = ([System.Numerics.BigInteger]$metrics.render_sample_rate *
+          [System.Numerics.BigInteger]$durationMilliseconds) / 1000
+      if ($target -gt [uint64]::MaxValue) {
+        return [pscustomobject]@{ Ok = $false; Error = "metric_overflow:target_rendered_frames" }
+      }
+      $metrics.target_rendered_frames = [uint64]$target
+      $minimum = ($target * $MinimumRenderedFrameCoverageBasisPoints + 9999) / 10000
+      if ([System.Numerics.BigInteger]$metrics.rendered_frames -lt $minimum) {
+        $failures.Add("rendered_frame_coverage_below_minimum")
+      }
+    }
+  }
+
+  if ($Mode -eq "duplex") {
+    $attributed = [System.Numerics.BigInteger]$metrics.render_startup_silence_frames +
+        [System.Numerics.BigInteger]$metrics.render_recovery_silence_frames +
+        [System.Numerics.BigInteger]$metrics.render_capture_starvation_silence_frames
+    if ($attributed -ne [System.Numerics.BigInteger]$metrics.render_fifo_underflow_frames) {
+      $failures.Add("render_underflow_not_exactly_attributed")
+    }
+    if ($MaximumRenderRecoverySilenceFrames -ne 0 -and
+        $metrics.maximum_render_recovery_silence_frames -gt
+            $MaximumRenderRecoverySilenceFrames) {
+      $failures.Add("maximum_render_recovery_silence_frames_exceeded")
+    }
   }
 
   return [pscustomobject]@{
     Ok = $true
-    Error = ""
+    Passed = $failures.Count -eq 0
+    Error = [string]::Join(",", $failures)
     DurationMilliseconds = $durationMilliseconds
     Metrics = $metrics
   }
@@ -95,15 +225,27 @@ function ConvertFrom-WasapiMeasurementOutput {
 function Add-WasapiSoakMeasurement {
   param(
     [Parameter(Mandatory = $true)]$State,
-    [Parameter(Mandatory = $true)]$Measurement
+    [Parameter(Mandatory = $true)]$Measurement,
+    [Parameter(Mandatory = $true)][bool]$AttemptAccepted
   )
 
   $State.ParsedAttempts = [uint64]($State.ParsedAttempts + 1)
+  if ($AttemptAccepted) {
+    $State.AcceptedAttempts = [uint64]($State.AcceptedAttempts + 1)
+  }
+  if (!$Measurement.Passed) {
+    $State.GateFailures = [uint64]($State.GateFailures + 1)
+  }
   $State.DurationMilliseconds = [uint64](
       $State.DurationMilliseconds + $Measurement.DurationMilliseconds)
   foreach ($metricName in Get-WasapiSoakMetricNames) {
-    $State.Totals[$metricName] = [uint64](
-        $State.Totals[$metricName] + $Measurement.Metrics[$metricName])
+    if ($metricName -eq "maximum_render_recovery_silence_frames") {
+      $State.Totals[$metricName] = [uint64][math]::Max(
+          $State.Totals[$metricName], $Measurement.Metrics[$metricName])
+    } else {
+      $State.Totals[$metricName] = [uint64](
+          $State.Totals[$metricName] + $Measurement.Metrics[$metricName])
+    }
   }
 }
 
@@ -119,11 +261,17 @@ function Format-WasapiSoakMetricSummary {
     "[soak] metrics $Label",
     "attempts=$($State.Attempts)",
     "parsed=$($State.ParsedAttempts)",
+    "accepted=$($State.AcceptedAttempts)",
     "parse_failures=$($State.ParseFailures)",
+    "gate_failures=$($State.GateFailures)",
     "duration_seconds=$durationSeconds"
   )
   foreach ($metricName in Get-WasapiSoakMetricNames) {
     $total = [uint64]$State.Totals[$metricName]
+    if ($metricName -eq "maximum_render_recovery_silence_frames") {
+      $parts += "${metricName}_maximum=$total"
+      continue
+    }
     $rate = "n/a"
     if ($State.DurationMilliseconds -ne 0) {
       $rate = (($total * 1000.0) / $State.DurationMilliseconds).ToString("0.000000", $culture)
@@ -142,6 +290,9 @@ function Invoke-WasapiSoak {
     [Parameter(Mandatory = $true)]
     [ValidateRange(1, [uint32]::MaxValue)]
     [uint32]$Iterations,
+    [uint64]$MaximumRenderRecoverySilenceFrames = 0,
+    [ValidateRange(0, 10000)]
+    [uint32]$MinimumRenderedFrameCoverageBasisPoints = 9900,
     [Parameter(Mandatory = $true)]
     [scriptblock]$RunMeasurement
   )
@@ -185,19 +336,30 @@ function Invoke-WasapiSoak {
           }
         }
       }
-      if ([int]$exitCode -ne 0) {
-        $failures[$modeName] = [uint64]($failures[$modeName] + 1)
-      }
 
-      $measurement = ConvertFrom-WasapiMeasurementOutput -Lines $measurementLines.ToArray()
+      $attemptFailed = [int]$exitCode -ne 0
+      $measurement = ConvertFrom-WasapiMeasurementOutput `
+          -Lines $measurementLines.ToArray() -Mode $modeName `
+          -MaximumRenderRecoverySilenceFrames $MaximumRenderRecoverySilenceFrames `
+          -MinimumRenderedFrameCoverageBasisPoints $MinimumRenderedFrameCoverageBasisPoints
       if ($measurement.Ok) {
-        Add-WasapiSoakMeasurement -State $metricsByMode[$modeName] -Measurement $measurement
-        Add-WasapiSoakMeasurement -State $totalMetrics -Measurement $measurement
+        if (!$measurement.Passed) {
+          $attemptFailed = $true
+          Write-Output "[soak] gate_failure mode=$modeName iteration=$iteration reason=$($measurement.Error)"
+        }
+        Add-WasapiSoakMeasurement -State $metricsByMode[$modeName] `
+            -Measurement $measurement -AttemptAccepted (!$attemptFailed)
+        Add-WasapiSoakMeasurement -State $totalMetrics `
+            -Measurement $measurement -AttemptAccepted (!$attemptFailed)
       } else {
+        $attemptFailed = $true
         $metricsByMode[$modeName].ParseFailures = [uint64](
             $metricsByMode[$modeName].ParseFailures + 1)
         $totalMetrics.ParseFailures = [uint64]($totalMetrics.ParseFailures + 1)
         Write-Output "[soak] parse_failure mode=$modeName iteration=$iteration reason=$($measurement.Error)"
+      }
+      if ($attemptFailed) {
+        $failures[$modeName] = [uint64]($failures[$modeName] + 1)
       }
     }
   }
@@ -221,6 +383,7 @@ function Invoke-WasapiSoak {
     MetricsByMode = $metricsByMode
     TotalMetrics = $totalMetrics
     ParseFailureCount = $totalMetrics.ParseFailures
+    GateFailureCount = $totalMetrics.GateFailures
   }
 }
 

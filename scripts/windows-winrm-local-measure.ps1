@@ -10,6 +10,12 @@ param(
   [uint32]$DurationMs = 1000,
   [uint32]$TimeoutMs = 10,
   [uint32]$Iterations = 1,
+  [string]$CaptureId = "",
+  [string]$RenderId = "",
+  [string]$EvidenceDirectory = "",
+  [uint64]$MaximumRenderRecoverySilenceFrames = 0,
+  [ValidateRange(0, 10000)]
+  [uint32]$MinimumRenderedFrameCoverageBasisPoints = 9900,
   [string]$RequireHealthyText = "false",
   [string]$AllowUnavailableText = "false",
   [switch]$CleanupCompletedSlots,
@@ -55,6 +61,23 @@ if ($AllowUnavailableText -match '^(1|true|yes|y|on)$') {
 if ($Iterations -eq 0) {
   throw "Iterations must be at least one."
 }
+if ([string]::IsNullOrWhiteSpace($CaptureId) -ne
+    [string]::IsNullOrWhiteSpace($RenderId)) {
+  throw "CaptureId and RenderId must be supplied together."
+}
+
+$gitHead = (& git -C $RepoRoot rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($gitHead)) {
+  throw "Could not resolve the source commit for the evidence manifest."
+}
+if ([string]::IsNullOrWhiteSpace($EvidenceDirectory)) {
+  $evidenceStamp = [datetime]::UtcNow.ToString("yyyyMMddTHHmmssZ")
+  $EvidenceDirectory = Join-Path $RepoRoot ".sar-evidence\$evidenceStamp-$safeSlot"
+} elseif (![System.IO.Path]::IsPathRooted($EvidenceDirectory)) {
+  $EvidenceDirectory = Join-Path $RepoRoot $EvidenceDirectory
+}
+$EvidenceDirectory = [System.IO.Path]::GetFullPath($EvidenceDirectory)
+$remoteEvidenceDirectory = "C:\Windows\Temp\sar-evidence-$safeSlot"
 
 $archive = Join-Path $env:TEMP "sar-local-measure-$safeSlot.zip"
 if (Test-Path $archive) {
@@ -108,7 +131,10 @@ try {
   Invoke-Command -Session $session -ArgumentList `
       $safeSlot, $remoteArchive, $Mode, $DurationMs, $TimeoutMs, $requireHealthy, `
       $allowUnavailable, $Iterations, $cleanupEnabled, $cleanupDryRunRequested, `
-      $RetentionDays, $RetentionCount, $CleanupLimit, $StaleActiveHours `
+      $RetentionDays, $RetentionCount, $CleanupLimit, $StaleActiveHours, `
+      $CaptureId, $RenderId, $remoteEvidenceDirectory, $gitHead `
+      , $MaximumRenderRecoverySilenceFrames `
+      , $MinimumRenderedFrameCoverageBasisPoints `
       -ScriptBlock {
     param(
       [string]$SafeSlot,
@@ -124,7 +150,13 @@ try {
       [uint32]$RetentionDays,
       [uint32]$RetentionCount,
       [uint32]$CleanupLimit,
-      [uint32]$StaleActiveHours
+      [uint32]$StaleActiveHours,
+      [string]$CaptureId,
+      [string]$RenderId,
+      [string]$EvidenceDirectory,
+      [string]$GitHead
+      ,[uint64]$MaximumRenderRecoverySilenceFrames
+      ,[uint32]$MinimumRenderedFrameCoverageBasisPoints
     )
 
     $ErrorActionPreference = "Stop"
@@ -138,6 +170,7 @@ try {
     $finishedMarker = Join-Path $repoDir ".sar-slot-finished.json"
     $slotOutcome = "failure"
     $slotStarted = $false
+    $evidenceManifest = $null
     $measureArgs = @("--duration-ms", "$DurationMs", "--timeout-ms", "$TimeoutMs")
     if ($RequireHealthy) {
       $measureArgs += "--require-healthy"
@@ -333,6 +366,28 @@ try {
             Set-Content -LiteralPath $activeToken -Encoding ASCII
       }
       $slotStarted = $true
+      if (Test-Path -LiteralPath $EvidenceDirectory) {
+        Remove-Item -LiteralPath $EvidenceDirectory -Recurse -Force
+      }
+      New-Item -ItemType Directory -Path $EvidenceDirectory | Out-Null
+      $evidenceManifest = [ordered]@{
+        schema_version = 1
+        started_utc = [datetime]::UtcNow.ToString('o')
+        host = $env:COMPUTERNAME
+        slot = $SafeSlot
+        git_head = $GitHead
+        mode = $Mode
+        duration_ms = $DurationMs
+        timeout_ms = $TimeoutMs
+        iterations = $Iterations
+        capture_id = $CaptureId
+        render_id = $RenderId
+        maximum_render_recovery_silence_frames = $MaximumRenderRecoverySilenceFrames
+        minimum_rendered_frame_coverage_basis_points = $MinimumRenderedFrameCoverageBasisPoints
+        outcome = "running"
+      }
+      $evidenceManifest | ConvertTo-Json -Depth 4 |
+          Set-Content -LiteralPath (Join-Path $EvidenceDirectory "manifest.json") -Encoding UTF8
       if ($CleanupEnabled) {
         Invoke-FinishedSlotRetention -DryRun:$CleanupDryRun
       }
@@ -399,20 +454,41 @@ try {
       }
 
       Import-Module (Join-Path $repoDir "scripts\windows-wasapi-soak-runner.psm1") -Force
-      $soakOutput = @(Invoke-WasapiSoak -Mode $Mode -Iterations $Iterations -RunMeasurement {
+      $soakOutput = @(Invoke-WasapiSoak -Mode $Mode -Iterations $Iterations `
+          -MaximumRenderRecoverySilenceFrames $MaximumRenderRecoverySilenceFrames `
+          -MinimumRenderedFrameCoverageBasisPoints $MinimumRenderedFrameCoverageBasisPoints `
+          -RunMeasurement {
         param($modeName, $iteration)
         $previousErrorActionPreference = $ErrorActionPreference
         $measurementExitCode = 1
         $ErrorActionPreference = "Continue"
         try {
-          & $executables[$modeName] @measureArgs 2>&1 | Write-Host
+          $attemptArgs = @($measureArgs)
+          if ($modeName -eq "duplex" -and
+              ![string]::IsNullOrWhiteSpace($CaptureId)) {
+            $attemptArgs += @("--capture-id", $CaptureId, "--render-id", $RenderId)
+          }
+          $attemptBase = "attempt-{0}-{1:D3}" -f $modeName, $iteration
+          $commandText = '"{0}" {1}' -f $executables[$modeName],
+              ([string]::Join(' ', ($attemptArgs | ForEach-Object {
+                if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ }
+              })))
+          Set-Content -LiteralPath (Join-Path $EvidenceDirectory "$attemptBase.command.txt") `
+              -Value $commandText -Encoding UTF8
+          $measurementOutput = @(& $executables[$modeName] @attemptArgs 2>&1 |
+              ForEach-Object { [string]$_ })
           $measurementExitCode = $LASTEXITCODE
+          Set-Content -LiteralPath (Join-Path $EvidenceDirectory "$attemptBase.combined.log") `
+              -Value $measurementOutput -Encoding UTF8
+          $measurementOutput | Write-Host
         } finally {
           $ErrorActionPreference = $previousErrorActionPreference
         }
         return $measurementExitCode
       })
       $soakOutput[0..($soakOutput.Count - 2)] | Write-Output
+      $soakOutput[0..($soakOutput.Count - 2)] |
+          Set-Content -LiteralPath (Join-Path $EvidenceDirectory "soak-summary.log") -Encoding UTF8
       $soakResult = $soakOutput[-1]
       if (!$AllowUnavailable -and $soakResult.FailureCount -ne 0) {
         throw "Local WASAPI measurement failed in $($soakResult.FailureCount) of $($soakResult.Attempts) attempts."
@@ -424,6 +500,12 @@ try {
     } finally {
       if ($slotStarted) {
         try {
+          if ($null -ne $evidenceManifest) {
+            $evidenceManifest.outcome = $slotOutcome
+            $evidenceManifest.finished_utc = [datetime]::UtcNow.ToString('o')
+            $evidenceManifest | ConvertTo-Json -Depth 4 |
+                Set-Content -LiteralPath (Join-Path $EvidenceDirectory "manifest.json") -Encoding UTF8
+          }
           New-Item -ItemType Directory -Path $repoDir -Force | Out-Null
           $finishedRecord = [ordered]@{
             outcome = $slotOutcome
@@ -463,6 +545,15 @@ try {
 } finally {
   try {
     if ($null -ne $session) {
+      if (Invoke-Command -Session $session -ArgumentList $remoteEvidenceDirectory `
+          -ScriptBlock { param($Path) Test-Path -LiteralPath $Path }) {
+        New-Item -ItemType Directory -Path $EvidenceDirectory -Force | Out-Null
+        Copy-Item -Path "$remoteEvidenceDirectory\*" -Destination $EvidenceDirectory `
+            -FromSession $session -Recurse -Force
+        Write-Host "Evidence:   $EvidenceDirectory"
+        Invoke-Command -Session $session -ArgumentList $remoteEvidenceDirectory `
+            -ScriptBlock { param($Path) Remove-Item -LiteralPath $Path -Recurse -Force }
+      }
       Remove-PSSession $session
     }
   } catch {

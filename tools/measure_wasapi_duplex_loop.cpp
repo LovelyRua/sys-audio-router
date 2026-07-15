@@ -11,9 +11,22 @@
 #include <chrono>
 #include <iostream>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <thread>
 
 namespace {
+
+std::string hex_encode(std::string_view text) {
+  constexpr char digits[] = "0123456789abcdef";
+  std::string encoded;
+  encoded.reserve(text.size() * 2);
+  for (const unsigned char byte : text) {
+    encoded.push_back(digits[byte >> 4U]);
+    encoded.push_back(digits[byte & 0x0fU]);
+  }
+  return encoded;
+}
 
 void print_probe_errors(const char* label,
                         const sar::platform::WasapiStreamProbeResult& result) {
@@ -27,33 +40,64 @@ void print_probe_errors(const char* label,
 
 int main(int argc, char** argv) {
   sar::tools::WasapiMeasureOptions options;
-  if (!sar::tools::parse_wasapi_measure_options(argc, argv, options)) {
+  if (!sar::tools::parse_wasapi_measure_options(argc, argv, options, true)) {
     return 2;
   }
   if (options.show_help) {
     std::cout << "Usage: sar_measure_wasapi_duplex_loop "
-                 "[--duration-ms N] [--timeout-ms N] [--require-healthy]\n";
+                 "[--duration-ms N] [--timeout-ms N] [--require-healthy] "
+                 "[--capture-id ID --render-id ID]\n";
     return 0;
   }
 
-  const auto capture_probe_result =
-      sar::platform::probe_default_wasapi_stream(sar::platform::WasapiStreamDirection::Capture);
-  const auto render_probe_result =
-      sar::platform::probe_default_wasapi_stream(sar::platform::WasapiStreamDirection::Render);
+  const bool has_capture_id = !options.capture_device_id.empty();
+  const bool has_render_id = !options.render_device_id.empty();
+  if (has_capture_id != has_render_id) {
+    std::cerr << "--capture-id and --render-id must be supplied together\n";
+    return 2;
+  }
+
+  std::cout << "wasapi_endpoint_selection"
+            << " mode=" << (has_capture_id ? "explicit" : "default")
+            << " capture_id_hex=" << hex_encode(options.capture_device_id)
+            << " render_id_hex=" << hex_encode(options.render_device_id) << '\n';
+
+  const auto capture_probe_result = has_capture_id
+      ? sar::platform::probe_wasapi_stream(
+            options.capture_device_id,
+            sar::platform::WasapiStreamDirection::Capture)
+      : sar::platform::probe_default_wasapi_stream(
+            sar::platform::WasapiStreamDirection::Capture);
+  const auto render_probe_result = has_render_id
+      ? sar::platform::probe_wasapi_stream(
+            options.render_device_id,
+            sar::platform::WasapiStreamDirection::Render)
+      : sar::platform::probe_default_wasapi_stream(
+            sar::platform::WasapiStreamDirection::Render);
   if (!capture_probe_result.ok() || !render_probe_result.ok()) {
     if (!capture_probe_result.ok()) {
-      print_probe_errors("Default capture stream", capture_probe_result);
+      print_probe_errors(has_capture_id ? "Selected capture stream"
+                                        : "Default capture stream",
+                         capture_probe_result);
     }
     if (!render_probe_result.ok()) {
-      print_probe_errors("Default render stream", render_probe_result);
+      print_probe_errors(has_render_id ? "Selected render stream"
+                                       : "Default render stream",
+                         render_probe_result);
     }
     return 1;
   }
 
   const auto& capture_probe = capture_probe_result.probe();
   const auto& render_probe = render_probe_result.probe();
-  sar::tools::print_wasapi_probe(std::cout, "Default capture stream", capture_probe);
-  sar::tools::print_wasapi_probe(std::cout, "Default render stream", render_probe);
+  sar::tools::print_wasapi_probe(std::cout,
+                                 has_capture_id ? "Selected capture stream"
+                                                : "Default capture stream",
+                                 capture_probe);
+  sar::tools::print_wasapi_probe(std::cout,
+                                 has_render_id ? "Selected render stream"
+                                               : "Default render stream",
+                                 render_probe);
   std::cout << "Measurement\n";
   std::cout << "  Duration ms: " << options.duration_ms << '\n';
   std::cout << "  Timeout ms: " << options.timeout_ms << '\n';
@@ -65,7 +109,14 @@ int main(int argc, char** argv) {
   graph.add_node(std::make_unique<sar::graph::GainNode>(0.0F));
   sar::diagnostics::EngineDiagnostics diagnostics;
 
-  auto open_result = sar::platform::open_default_wasapi_duplex_loop(graph, diagnostics);
+  auto open_result = has_capture_id
+                         ? sar::platform::open_wasapi_duplex_loop(
+                               options.capture_device_id,
+                               options.render_device_id,
+                               graph,
+                               diagnostics)
+                         : sar::platform::open_default_wasapi_duplex_loop(graph,
+                                                                          diagnostics);
   if (!open_result.ok()) {
     std::cerr << "Duplex loop open failed\n";
     for (const auto& error : open_result.errors()) {

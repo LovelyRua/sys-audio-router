@@ -33,7 +33,8 @@ bool parse_u32(std::string_view text, std::uint32_t& value) {
 
 bool parse_wasapi_measure_options(int argc,
                                   char** argv,
-                                  WasapiMeasureOptions& options) {
+                                  WasapiMeasureOptions& options,
+                                  bool allow_endpoint_selection) {
   for (int index = 1; index < argc; ++index) {
     const std::string_view arg(argv[index]);
     if (arg == "--help" || arg == "-h") {
@@ -54,6 +55,20 @@ bool parse_wasapi_measure_options(int argc,
       return true;
     };
 
+    auto parse_next_id = [&](std::string& target) {
+      if (index + 1 >= argc) {
+        std::cerr << "Missing value for " << arg << '\n';
+        return false;
+      }
+      ++index;
+      if (argv[index][0] == '\0') {
+        std::cerr << "Empty device ID for " << arg << '\n';
+        return false;
+      }
+      target = argv[index];
+      return true;
+    };
+
     if (arg == "--duration-ms") {
       if (!parse_next(options.duration_ms)) {
         return false;
@@ -64,6 +79,14 @@ bool parse_wasapi_measure_options(int argc,
       }
     } else if (arg == "--require-healthy") {
       options.require_healthy = true;
+    } else if (allow_endpoint_selection && arg == "--capture-id") {
+      if (!parse_next_id(options.capture_device_id)) {
+        return false;
+      }
+    } else if (allow_endpoint_selection && arg == "--render-id") {
+      if (!parse_next_id(options.render_device_id)) {
+        return false;
+      }
     } else {
       std::cerr << "Unknown argument: " << arg << '\n';
       return false;

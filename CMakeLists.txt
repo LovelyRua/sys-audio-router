@@ -492,6 +492,10 @@ if(WIN32)
     COMMAND sar_measure_wasapi_duplex_loop --timeout-ms -1)
   add_test(NAME windows_wasapi_duplex_loop_measure_unknown_arg
     COMMAND sar_measure_wasapi_duplex_loop --definitely-not-a-real-option)
+  add_test(NAME windows_wasapi_duplex_loop_measure_capture_id_only
+    COMMAND sar_measure_wasapi_duplex_loop --capture-id capture-endpoint-id)
+  add_test(NAME windows_wasapi_duplex_loop_measure_render_id_only
+    COMMAND sar_measure_wasapi_duplex_loop --render-id render-endpoint-id)
   add_test(NAME windows_wasapi_loopback_loop_measure_help
     COMMAND sar_measure_wasapi_loopback_loop --help)
   add_test(NAME windows_wasapi_loopback_loop_measure_short_help
@@ -545,6 +549,8 @@ if(WIN32)
     windows_wasapi_duplex_loop_measure_bad_duration
     windows_wasapi_duplex_loop_measure_bad_timeout
     windows_wasapi_duplex_loop_measure_unknown_arg
+    windows_wasapi_duplex_loop_measure_capture_id_only
+    windows_wasapi_duplex_loop_measure_render_id_only
     windows_wasapi_loopback_loop_measure_missing_duration
     windows_wasapi_loopback_loop_measure_bad_duration
     windows_wasapi_loopback_loop_measure_bad_timeout
@@ -567,11 +573,13 @@ if(WIN32)
     windows_wasapi_render_loop_measure_short_help
     PROPERTIES PASS_REGULAR_EXPRESSION "--require-healthy")
   set_tests_properties(
-    windows_wasapi_duplex_loop_measure_help
-    windows_wasapi_duplex_loop_measure_short_help
     windows_wasapi_loopback_loop_measure_help
     windows_wasapi_loopback_loop_measure_short_help
     PROPERTIES PASS_REGULAR_EXPRESSION "--require-healthy")
+  set_tests_properties(
+    windows_wasapi_duplex_loop_measure_help
+    windows_wasapi_duplex_loop_measure_short_help
+    PROPERTIES PASS_REGULAR_EXPRESSION "--require-healthy.*--capture-id ID --render-id ID")
   set_tests_properties(
     windows_wasapi_recovery_measure_help
     windows_wasapi_recovery_measure_short_help

@@ -9,6 +9,63 @@ function Assert-Equal {
   }
 }
 
+function New-ValidSummary {
+  param(
+    [ValidateSet("render", "duplex", "loopback")]
+    [string]$Mode,
+    [hashtable]$Override = @{}
+  )
+
+  $values = [ordered]@{
+    capture_discontinuity_cycles = "2"
+    render_fifo_underflow_cycles = "3"
+    wait_timeout_cycles = "0"
+    render_wait_timeout_cycles = "0"
+    capture_fifo_overflow_cycles = "0"
+    capture_fifo_overflow_frames = "0"
+    render_fifo_overflow_cycles = "0"
+    render_fifo_overflow_frames = "0"
+    process_error_cycles = "0"
+    stream_start_error_cycles = "0"
+    stream_stop_error_cycles = "0"
+    rendered_frames = "48000"
+    render_sample_rate = "48000"
+    render_fifo_underflow_frames = "96"
+    render_startup_silence_frames = "32"
+    render_recovery_silence_frames = "48"
+    render_capture_starvation_silence_frames = "16"
+    maximum_render_recovery_silence_frames = "48"
+  }
+  foreach ($name in $Override.Keys) {
+    $values[$name] = [string]$Override[$name]
+  }
+  return "wasapi_runtime_summary " + [string]::Join(
+      " ", @($values.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }))
+}
+
+function Invoke-SingleSummary {
+  param(
+    [ValidateSet("render", "duplex", "loopback")]
+    [string]$Mode,
+    [string]$Summary,
+    [string]$Duration = "1000",
+    [int]$ExitCode = 0,
+    [string[]]$ExtraLines = @(),
+    [uint64]$MaximumRenderRecoverySilenceFrames = 0,
+    [uint32]$MinimumRenderedFrameCoverageBasisPoints = 9900
+  )
+
+  return @(Invoke-WasapiSoak -Mode $Mode -Iterations 1 `
+      -MaximumRenderRecoverySilenceFrames $MaximumRenderRecoverySilenceFrames `
+      -MinimumRenderedFrameCoverageBasisPoints $MinimumRenderedFrameCoverageBasisPoints `
+      -RunMeasurement {
+    Write-Host "  Duration ms: $Duration"
+    Write-Host $Summary
+    foreach ($line in $ExtraLines) { Write-Host $line }
+    return $ExitCode
+  })
+}
+
 foreach ($scriptName in @("windows-wasapi-soak-runner.psm1", "windows-winrm-local-measure.ps1")) {
   $tokens = $null
   $parseErrors = $null
@@ -30,73 +87,185 @@ foreach ($mode in $expectedModes.Keys) {
 }
 
 $calls = [System.Collections.Generic.List[string]]::new()
-$output = @(Invoke-WasapiSoak -Mode all -Iterations 3 -RunMeasurement {
+$output = @(Invoke-WasapiSoak -Mode all -Iterations 2 -RunMeasurement {
   param($modeName, $iteration)
   $calls.Add("$iteration`:$modeName") | Out-Null
-  if (($modeName -eq "render" -and $iteration -eq 2) -or $modeName -eq "loopback") {
-    return 1
-  }
+  Write-Host "  Duration ms: 1000"
+  Write-Host (New-ValidSummary -Mode $modeName)
+  if ($modeName -eq "loopback" -and $iteration -eq 2) { return 1 }
   return 0
 })
 $result = $output[-1]
 $text = [string]::Join("`n", $output[0..($output.Count - 2)])
-
-Assert-Equal 9 $calls.Count "Unexpected invocation count."
-Assert-Equal "1:render,1:duplex,1:loopback,2:render,2:duplex,2:loopback,3:render,3:duplex,3:loopback" ([string]::Join(",", $calls)) "Unexpected invocation order."
-Assert-Equal 3 $result.Iterations "Unexpected result iteration count."
-Assert-Equal 9 $result.Attempts "Unexpected result attempt count."
-Assert-Equal 4 $result.FailureCount "Unexpected total failure count."
-Assert-Equal 1 $result.FailuresByMode.render "Unexpected render failure count."
-Assert-Equal 0 $result.FailuresByMode.duplex "Unexpected duplex failure count."
-Assert-Equal 3 $result.FailuresByMode.loopback "Unexpected loopback failure count."
-Assert-Equal $true $text.Contains("[soak] mode=render iterations=3 failures=1") "Missing render summary."
-Assert-Equal $true $text.Contains("[soak] mode=duplex iterations=3 failures=0") "Missing duplex summary."
-Assert-Equal $true $text.Contains("[soak] mode=loopback iterations=3 failures=3") "Missing loopback summary."
-Assert-Equal $true $text.Contains("[soak] completed modes=3 iterations=3 attempts=9 failures=4") "Missing aggregate summary."
-Assert-Equal 9 $result.ParseFailureCount "Missing output should be reported as a parse failure."
+Assert-Equal 6 $calls.Count "Unexpected invocation count."
+Assert-Equal "1:render,1:duplex,1:loopback,2:render,2:duplex,2:loopback" ([string]::Join(",", $calls)) "Unexpected invocation order."
+Assert-Equal 6 $result.Attempts "Unexpected attempt count."
+Assert-Equal 1 $result.FailureCount "Unexpected process failure count."
+Assert-Equal 0 $result.ParseFailureCount "Valid summaries should parse."
+Assert-Equal 0 $result.GateFailureCount "Healthy summaries should pass the gate."
+Assert-Equal 5 $result.TotalMetrics.AcceptedAttempts "A nonzero process exit must not be accepted."
+Assert-Equal $true $text.Contains("[soak] completed modes=3 iterations=2 attempts=6 failures=1") "Missing aggregate summary."
 
 $metricOutput = @(Invoke-WasapiSoak -Mode duplex -Iterations 2 -RunMeasurement {
   param($modeName, $iteration)
-  Write-Host "Measurement"
   Write-Host "  Duration ms: $($iteration * 1000)"
   if ($iteration -eq 1) {
-    Write-Host "wasapi_runtime_summary capture_discontinuity_cycles=2 render_fifo_underflow_cycles=3 wait_timeout_cycles=4 capture_fifo_overflow_cycles=5 render_fifo_overflow_cycles=6"
+    Write-Host (New-ValidSummary -Mode duplex)
   } else {
-    Write-Host "wasapi_runtime_summary capture_discontinuity_cycles=4 render_fifo_underflow_cycles=6 wait_timeout_cycles=8 capture_fifo_overflow_cycles=10 render_fifo_overflow_cycles=12"
+    Write-Host (New-ValidSummary -Mode duplex -Override @{
+      capture_discontinuity_cycles = 4
+      render_fifo_underflow_cycles = 6
+      rendered_frames = 96000
+      render_fifo_underflow_frames = 192
+      render_startup_silence_frames = 64
+      render_recovery_silence_frames = 96
+      render_capture_starvation_silence_frames = 32
+    })
   }
   return 0
 })
 $metricResult = $metricOutput[-1]
 $metricText = [string]::Join("`n", $metricOutput[0..($metricOutput.Count - 2)])
 $duplexMetrics = $metricResult.MetricsByMode.duplex
-
-Assert-Equal 0 $metricResult.ParseFailureCount "Valid measurement output should parse."
 Assert-Equal 2 $duplexMetrics.ParsedAttempts "Unexpected parsed attempt count."
+Assert-Equal 2 $duplexMetrics.AcceptedAttempts "Unexpected accepted attempt count."
 Assert-Equal 3000 $duplexMetrics.DurationMilliseconds "Unexpected measured duration."
 Assert-Equal 6 $duplexMetrics.Totals.capture_discontinuity_cycles "Unexpected discontinuity total."
 Assert-Equal 9 $duplexMetrics.Totals.render_fifo_underflow_cycles "Unexpected underflow total."
-Assert-Equal 12 $duplexMetrics.Totals.wait_timeout_cycles "Unexpected timeout total."
-Assert-Equal 15 $duplexMetrics.Totals.capture_fifo_overflow_cycles "Unexpected capture overflow total."
-Assert-Equal 18 $duplexMetrics.Totals.render_fifo_overflow_cycles "Unexpected render overflow total."
+Assert-Equal 144000 $duplexMetrics.Totals.rendered_frames "Unexpected rendered frame total."
+Assert-Equal 144000 $duplexMetrics.Totals.target_rendered_frames "Unexpected target frame total."
+Assert-Equal 288 $duplexMetrics.Totals.render_fifo_underflow_frames "Unexpected underflow frame total."
+Assert-Equal 48 $duplexMetrics.Totals.maximum_render_recovery_silence_frames `
+    "Recovery episode maximum must not be summed across attempts."
+Assert-Equal $true $metricText.Contains(
+    "maximum_render_recovery_silence_frames_maximum=48") `
+    "Missing recovery episode maximum summary."
 Assert-Equal $true $metricText.Contains("duration_seconds=3.000") "Missing normalized duration."
-Assert-Equal $true $metricText.Contains("capture_discontinuity_cycles_total=6 capture_discontinuity_cycles_per_second=2.000000") "Missing discontinuity rate."
-Assert-Equal $true $metricText.Contains("render_fifo_underflow_cycles_total=9 render_fifo_underflow_cycles_per_second=3.000000") "Missing underflow rate."
 
-$malformedOutput = @(Invoke-WasapiSoak -Mode render -Iterations 1 -RunMeasurement {
-  Write-Host "  Duration ms: 1000"
-  Write-Host "wasapi_runtime_summary capture_discontinuity_cycles=not-a-number"
-  return 0
-})
-$malformedResult = $malformedOutput[-1]
-$malformedText = [string]::Join("`n", $malformedOutput[0..($malformedOutput.Count - 2)])
-Assert-Equal 1 $malformedResult.ParseFailureCount "Malformed metrics should count as a parse failure."
-Assert-Equal $true $malformedText.Contains("[soak] parse_failure mode=render iteration=1 reason=invalid_metric:capture_discontinuity_cycles") "Missing explicit parse failure."
-Assert-Equal $true $malformedText.Contains("parsed=0 parse_failures=1 duration_seconds=0.000") "Missing parse failure summary."
+$gateCases = @(
+  @{ Name = "process errors"; Override = @{ process_error_cycles = 1 }; Reason = "process_error_cycles_nonzero" },
+  @{ Name = "start errors"; Override = @{ stream_start_error_cycles = 1 }; Reason = "stream_start_error_cycles_nonzero" },
+  @{ Name = "stop errors"; Override = @{ stream_stop_error_cycles = 1 }; Reason = "stream_stop_error_cycles_nonzero" },
+  @{ Name = "wait timeouts"; Override = @{ wait_timeout_cycles = 1 }; Reason = "wait_timeout_cycles_nonzero" },
+  @{ Name = "render wait timeouts"; Override = @{ render_wait_timeout_cycles = 1 }; Reason = "render_wait_timeout_cycles_nonzero" },
+  @{ Name = "capture overflow"; Override = @{ capture_fifo_overflow_cycles = 1 }; Reason = "capture_fifo_overflow_cycles_nonzero" },
+  @{ Name = "capture overflow frames"; Override = @{ capture_fifo_overflow_frames = 1 }; Reason = "capture_fifo_overflow_frames_nonzero" },
+  @{ Name = "render overflow"; Override = @{ render_fifo_overflow_cycles = 1 }; Reason = "render_fifo_overflow_cycles_nonzero" },
+  @{ Name = "render overflow frames"; Override = @{ render_fifo_overflow_frames = 1 }; Reason = "render_fifo_overflow_frames_nonzero" },
+  @{ Name = "low coverage"; Override = @{ rendered_frames = 47519 }; Reason = "rendered_frame_coverage_below_minimum" },
+  @{ Name = "zero sample rate"; Override = @{ render_sample_rate = 0 }; Reason = "render_sample_rate_zero" },
+  @{ Name = "unattributed underflow"; Override = @{ render_fifo_underflow_frames = 97 }; Reason = "render_underflow_not_exactly_attributed" },
+  @{ Name = "over-attributed underflow"; Override = @{ render_fifo_underflow_frames = 95 }; Reason = "render_underflow_not_exactly_attributed" }
+)
+foreach ($case in $gateCases) {
+  $caseOutput = Invoke-SingleSummary -Mode duplex `
+      -Summary (New-ValidSummary -Mode duplex -Override $case.Override)
+  $caseResult = $caseOutput[-1]
+  $caseText = [string]::Join("`n", $caseOutput[0..($caseOutput.Count - 2)])
+  Assert-Equal 1 $caseResult.FailureCount "$($case.Name) should fail the attempt."
+  Assert-Equal 1 $caseResult.GateFailureCount "$($case.Name) should count as a gate failure."
+  Assert-Equal 0 $caseResult.ParseFailureCount "$($case.Name) is syntactically valid."
+  Assert-Equal $true $caseText.Contains("reason=$($case.Reason)") "Missing $($case.Name) reason."
+}
+
+$recoveryBoundOutput = Invoke-SingleSummary -Mode duplex `
+    -Summary (New-ValidSummary -Mode duplex -Override @{
+      maximum_render_recovery_silence_frames = 49
+    }) -MaximumRenderRecoverySilenceFrames 48
+$recoveryBoundResult = $recoveryBoundOutput[-1]
+$recoveryBoundText = [string]::Join("`n", $recoveryBoundOutput[0..($recoveryBoundOutput.Count - 2)])
+Assert-Equal 1 $recoveryBoundResult.FailureCount `
+    "Recovery silence above the configured bound must fail."
+Assert-Equal $true $recoveryBoundText.Contains(
+    "maximum_render_recovery_silence_frames_exceeded") `
+    "Missing recovery silence bound failure reason."
+
+$strictCoverageOutput = Invoke-SingleSummary -Mode duplex `
+    -Summary (New-ValidSummary -Mode duplex -Override @{ rendered_frames = 47995 }) `
+    -MinimumRenderedFrameCoverageBasisPoints 9999
+Assert-Equal 1 $strictCoverageOutput[-1].FailureCount `
+    "99.99 percent coverage must reject 47,995 of 48,000 frames."
+
+# Exactly 99% coverage passes; one frame below the ceiling-adjusted threshold fails.
+$coveragePass = (Invoke-SingleSummary -Mode duplex `
+    -Summary (New-ValidSummary -Mode duplex -Override @{ rendered_frames = 47520 }))[-1]
+Assert-Equal 0 $coveragePass.FailureCount "Exact minimum rendered coverage should pass."
+
+$missingFields = @(
+  "process_error_cycles",
+  "stream_start_error_cycles",
+  "stream_stop_error_cycles",
+  "wait_timeout_cycles",
+  "render_wait_timeout_cycles",
+  "capture_fifo_overflow_cycles",
+  "capture_fifo_overflow_frames",
+  "render_fifo_overflow_cycles",
+  "render_fifo_overflow_frames",
+  "rendered_frames",
+  "render_sample_rate",
+  "render_fifo_underflow_frames",
+  "render_startup_silence_frames",
+  "render_recovery_silence_frames",
+  "render_capture_starvation_silence_frames"
+)
+foreach ($missingName in $missingFields) {
+  $summary = New-ValidSummary -Mode duplex
+  $summary = $summary -replace "\s$([regex]::Escape($missingName))=[^\s]+", ""
+  $missingOutput = Invoke-SingleSummary -Mode duplex -Summary $summary
+  $missingResult = $missingOutput[-1]
+  $missingText = [string]::Join("`n", $missingOutput[0..($missingOutput.Count - 2)])
+  Assert-Equal 1 $missingResult.ParseFailureCount "Missing $missingName should fail parsing."
+  Assert-Equal 1 $missingResult.FailureCount "Missing $missingName should fail the attempt."
+  Assert-Equal $true $missingText.Contains("reason=missing_metric:$missingName") "Missing explicit $missingName reason."
+}
+
+foreach ($invalidValue in @("-1", "+1", "1.5", "not-a-number", "18446744073709551616")) {
+  $invalidOutput = Invoke-SingleSummary -Mode duplex `
+      -Summary (New-ValidSummary -Mode duplex -Override @{ process_error_cycles = $invalidValue })
+  $invalidResult = $invalidOutput[-1]
+  Assert-Equal 1 $invalidResult.ParseFailureCount "Invalid unsigned value '$invalidValue' should fail parsing."
+  Assert-Equal 1 $invalidResult.FailureCount "Invalid unsigned value '$invalidValue' should fail the attempt."
+}
+
+$duplicateOutput = Invoke-SingleSummary -Mode duplex `
+    -Summary ((New-ValidSummary -Mode duplex) + " process_error_cycles=0")
+$duplicateText = [string]::Join("`n", $duplicateOutput[0..($duplicateOutput.Count - 2)])
+Assert-Equal 1 $duplicateOutput[-1].ParseFailureCount "Duplicate metrics should fail parsing."
+Assert-Equal $true $duplicateText.Contains("reason=duplicate_metric:process_error_cycles") "Missing duplicate metric reason."
+
+$duplicateSummaryOutput = Invoke-SingleSummary -Mode duplex `
+    -Summary (New-ValidSummary -Mode duplex) `
+    -ExtraLines @(New-ValidSummary -Mode duplex)
+Assert-Equal 1 $duplicateSummaryOutput[-1].ParseFailureCount "Duplicate summaries should fail parsing."
+
+$invalidDurationOutput = Invoke-SingleSummary -Mode duplex `
+    -Summary (New-ValidSummary -Mode duplex) -Duration "0"
+Assert-Equal 1 $invalidDurationOutput[-1].ParseFailureCount "Zero duration should fail parsing."
+
+# Render does not require duplex-only attribution fields.
+$renderSummary = New-ValidSummary -Mode render
+foreach ($name in @(
+    "render_fifo_underflow_frames",
+    "render_startup_silence_frames",
+    "render_recovery_silence_frames",
+    "render_capture_starvation_silence_frames")) {
+  $renderSummary = $renderSummary -replace "\s$([regex]::Escape($name))=[^\s]+", ""
+}
+$renderResult = (Invoke-SingleSummary -Mode render -Summary $renderSummary)[-1]
+Assert-Equal 0 $renderResult.FailureCount "Render mode should not require duplex attribution."
+
+# Loopback is capture-only and therefore does not require render coverage or render wait fields.
+$loopbackSummary = New-ValidSummary -Mode loopback
+foreach ($name in @("render_wait_timeout_cycles", "rendered_frames", "render_sample_rate")) {
+  $loopbackSummary = $loopbackSummary -replace "\s$([regex]::Escape($name))=[^\s]+", ""
+}
+$loopbackResult = (Invoke-SingleSummary -Mode loopback -Summary $loopbackSummary)[-1]
+Assert-Equal 0 $loopbackResult.FailureCount "Loopback mode should preserve capture-only behavior."
 
 $rawOutput = @(Invoke-WasapiSoak -Mode render -Iterations 1 -RunMeasurement {
   Write-Host "raw measurement marker"
   Write-Host "  Duration ms: 1000"
-  Write-Host "wasapi_runtime_summary capture_discontinuity_cycles=0 render_fifo_underflow_cycles=0 wait_timeout_cycles=0 capture_fifo_overflow_cycles=0 render_fifo_overflow_cycles=0"
+  Write-Host (New-ValidSummary -Mode render)
   return 0
 } 6>&1)
 Assert-Equal $true ([string]::Join("`n", $rawOutput).Contains("raw measurement marker")) "Raw measurement output was not replayed."
@@ -104,7 +273,8 @@ Assert-Equal $true ([string]::Join("`n", $rawOutput).Contains("raw measurement m
 $nullResult = @(Invoke-WasapiSoak -Mode render -Iterations 2 -RunMeasurement {
   return $null
 })[-1]
-Assert-Equal 0 $nullResult.FailureCount "Null runner output should mean success."
+Assert-Equal 2 $nullResult.FailureCount "Missing output must fail every attempt."
+Assert-Equal 2 $nullResult.ParseFailureCount "Missing output should be reported as parse failures."
 
 $invalidIterationsRejected = $false
 try {
