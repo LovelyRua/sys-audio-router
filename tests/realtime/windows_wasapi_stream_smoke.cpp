@@ -12,6 +12,13 @@ struct WindowsWasapiStreamTestAccess {
                                           std::int32_t stop_result) noexcept {
     return stream.complete_stop(stop_result);
   }
+
+  static bool render_wait_timeout_is_actionable(bool wait_timed_out,
+                                                std::uint32_t padding_frames,
+                                                std::uint32_t buffer_frames) noexcept {
+    return WindowsWasapiStream::render_wait_timeout_is_actionable(
+        wait_timed_out, padding_frames, buffer_frames);
+  }
 };
 
 }  // namespace sar::platform
@@ -79,6 +86,28 @@ bool has_default_output_device() {
 }  // namespace
 
 int main() {
+  {
+    using sar::platform::WindowsWasapiStreamTestAccess;
+    if (const auto failure = expect(
+            WindowsWasapiStreamTestAccess::render_wait_timeout_is_actionable(
+                true, 480, 480),
+            "Expected a full render buffer after the deadline to time out")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            !WindowsWasapiStreamTestAccess::render_wait_timeout_is_actionable(
+                true, 479, 480),
+            "Expected writable render space to recover a late event")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            !WindowsWasapiStreamTestAccess::render_wait_timeout_is_actionable(
+                false, 480, 480),
+            "Expected an observed render event not to time out")) {
+      return failure;
+    }
+  }
+
   {
     const sar::platform::WasapiStreamError error{
         "synthetic_error", "Synthetic stream error."};

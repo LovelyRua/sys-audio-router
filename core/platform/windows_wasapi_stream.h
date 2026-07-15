@@ -175,6 +175,11 @@ class WindowsWasapiStream final : public WasapiStreamIo {
       WasapiStreamMode mode,
       std::uint32_t requested_sample_rate);
 
+  [[nodiscard]] static bool render_wait_timeout_is_actionable(
+      bool wait_timed_out,
+      std::uint32_t padding_frames,
+      std::uint32_t buffer_frames) noexcept;
+
   struct Impl;
 
   [[nodiscard]] WasapiStreamResult complete_stop(

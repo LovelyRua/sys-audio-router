@@ -570,6 +570,7 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
     });
   }
 
+  bool wait_timed_out = false;
   if (!std::exchange(impl_->samples_ready_latched, false)) {
     const auto wait_result = wait_for_stream_event(impl_->samples_ready_event.get(),
                                                   impl_->stop_requested_event.get(),
@@ -578,9 +579,8 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
       return WasapiStreamIoResult::cancellation();
     }
     if (wait_result.status == WasapiEventWaitStatus::TimedOut) {
-      return WasapiStreamIoResult::timeout();
-    }
-    if (wait_result.status != WasapiEventWaitStatus::SamplesReady) {
+      wait_timed_out = true;
+    } else if (wait_result.status != WasapiEventWaitStatus::SamplesReady) {
       return WasapiStreamIoResult::failure({
           {
               "wasapi_event_wait_failed",
@@ -605,6 +605,10 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
     });
   }
 
+  if (render_wait_timeout_is_actionable(
+          wait_timed_out, padding_frames, probe_.buffer_frames)) {
+    return WasapiStreamIoResult::timeout();
+  }
   if (padding_frames >= probe_.buffer_frames) {
     return WasapiStreamIoResult::success(0);
   }
@@ -653,6 +657,13 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
   }
 
   return WasapiStreamIoResult::success(requested_frames);
+}
+
+bool WindowsWasapiStream::render_wait_timeout_is_actionable(
+    bool wait_timed_out,
+    std::uint32_t padding_frames,
+    std::uint32_t buffer_frames) noexcept {
+  return wait_timed_out && padding_frames >= buffer_frames;
 }
 
 WasapiStreamIoResult WindowsWasapiStream::capture_once(
