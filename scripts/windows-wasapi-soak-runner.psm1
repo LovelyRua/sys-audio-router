@@ -20,6 +20,7 @@ function Get-WasapiSoakMetricNames {
     "render_fifo_underflow_cycles",
     "wait_timeout_cycles",
     "render_wait_timeout_cycles",
+    "duplex_event_wait_timeout_cycles",
     "capture_fifo_overflow_cycles",
     "capture_fifo_overflow_frames",
     "render_fifo_overflow_cycles",
@@ -141,6 +142,7 @@ function ConvertFrom-WasapiMeasurementOutput {
   }
   if ($Mode -eq "duplex") {
     foreach ($name in @(
+        "duplex_event_wait_timeout_cycles",
         "render_fifo_underflow_frames",
         "render_startup_silence_frames",
         "render_recovery_silence_frames",

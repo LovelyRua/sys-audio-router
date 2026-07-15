@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <limits>
 #include <system_error>
 #include <thread>
@@ -92,6 +93,43 @@ std::int64_t signed_frame_balance(std::uint64_t captured,
                               : -static_cast<std::int64_t>(difference);
 }
 
+constexpr std::uint64_t kMinimumClockObservationWindow100ns = 50'000'000;
+constexpr std::uint64_t kMaximumClockObservationWindow100ns = 600'000'000;
+constexpr long double kClockQuantizationBudgetPpm = 2000.0L;
+
+std::uint64_t clock_observation_window_100ns(
+    std::uint32_t capture_sample_rate,
+    std::uint32_t capture_quantum_frames,
+    std::uint32_t render_sample_rate,
+    std::uint32_t render_quantum_frames) noexcept {
+  if (capture_sample_rate == 0 || render_sample_rate == 0) {
+    return kMaximumClockObservationWindow100ns;
+  }
+
+  const auto quantization_seconds =
+      static_cast<long double>(capture_quantum_frames) /
+          static_cast<long double>(capture_sample_rate) +
+      static_cast<long double>(render_quantum_frames) /
+          static_cast<long double>(render_sample_rate);
+  const auto required_100ns =
+      quantization_seconds * 10'000'000.0L * 1'000'000.0L /
+      kClockQuantizationBudgetPpm;
+  if (!std::isfinite(required_100ns) ||
+      required_100ns >=
+          static_cast<long double>(kMaximumClockObservationWindow100ns)) {
+    return kMaximumClockObservationWindow100ns;
+  }
+
+  return std::clamp(
+      static_cast<std::uint64_t>(std::ceil(required_100ns)),
+      kMinimumClockObservationWindow100ns,
+      kMaximumClockObservationWindow100ns);
+}
+
+bool clock_snapshot_can_anchor(const WasapiClockSnapshot& snapshot) noexcept {
+  return snapshot.frequency > 0 && snapshot.qpc_position_100ns > 0;
+}
+
 }  // namespace
 
 bool wasapi_clock_position_to_audio_frames(std::uint64_t position,
@@ -124,6 +162,108 @@ bool wasapi_capture_clock_baseline_is_trustworthy(
     const WasapiClockSnapshot& snapshot) noexcept {
   return captured_frames > 0 && snapshot.frequency > 0 &&
          snapshot.qpc_position_100ns > 0;
+}
+
+WasapiDuplexClockFeedForwardEstimator::WasapiDuplexClockFeedForwardEstimator(
+    std::uint32_t capture_sample_rate,
+    std::uint32_t capture_quantum_frames,
+    std::uint32_t render_sample_rate,
+    std::uint32_t render_quantum_frames) noexcept
+    : capture_sample_rate_(capture_sample_rate),
+      render_sample_rate_(render_sample_rate),
+      minimum_window_duration_100ns_(clock_observation_window_100ns(
+          capture_sample_rate,
+          capture_quantum_frames,
+          render_sample_rate,
+          render_quantum_frames)) {}
+
+WasapiDuplexClockObservation
+WasapiDuplexClockFeedForwardEstimator::observe(
+    const WasapiClockSnapshot& capture,
+    const WasapiClockSnapshot& render) noexcept {
+  if (!clock_snapshot_can_anchor(capture) ||
+      !clock_snapshot_can_anchor(render) || capture_sample_rate_ == 0 ||
+      render_sample_rate_ == 0) {
+    anchor_available_ = false;
+    return {WasapiDuplexClockObservationStatus::Invalid};
+  }
+
+  if (!anchor_available_) {
+    set_anchor(capture, render);
+    return {};
+  }
+
+  if (capture.frequency != capture_anchor_.frequency ||
+      render.frequency != render_anchor_.frequency ||
+      capture.position <= capture_anchor_.position ||
+      render.position <= render_anchor_.position ||
+      capture.qpc_position_100ns <= capture_anchor_.qpc_position_100ns ||
+      render.qpc_position_100ns <= render_anchor_.qpc_position_100ns) {
+    set_anchor(capture, render);
+    return {WasapiDuplexClockObservationStatus::Invalid};
+  }
+
+  const auto capture_duration =
+      capture.qpc_position_100ns - capture_anchor_.qpc_position_100ns;
+  const auto render_duration =
+      render.qpc_position_100ns - render_anchor_.qpc_position_100ns;
+  const auto window_duration = std::min(capture_duration, render_duration);
+  if (window_duration < minimum_window_duration_100ns_) {
+    return {WasapiDuplexClockObservationStatus::WarmingUp, {},
+            window_duration};
+  }
+
+  std::uint64_t capture_anchor_frames = 0;
+  std::uint64_t capture_frames = 0;
+  std::uint64_t render_anchor_frames = 0;
+  std::uint64_t render_frames = 0;
+  realtime::ClockRateFeedForward feed_forward;
+  if (wasapi_clock_position_to_audio_frames(
+          capture_anchor_.position, capture_anchor_.frequency,
+          capture_sample_rate_, capture_anchor_frames) &&
+      wasapi_clock_position_to_audio_frames(
+          capture.position, capture.frequency, capture_sample_rate_,
+          capture_frames) &&
+      wasapi_clock_position_to_audio_frames(
+          render_anchor_.position, render_anchor_.frequency,
+          render_sample_rate_, render_anchor_frames) &&
+      wasapi_clock_position_to_audio_frames(
+          render.position, render.frequency, render_sample_rate_,
+          render_frames)) {
+    const realtime::ClockDomain capture_domain{1, capture_sample_rate_};
+    const realtime::ClockDomain render_domain{2, render_sample_rate_};
+    const auto capture_drift = realtime::ClockDriftEstimator::estimate(
+        {capture_domain, capture_anchor_frames,
+         capture_anchor_.qpc_position_100ns},
+        {capture_domain, capture_frames, capture.qpc_position_100ns});
+    const auto render_drift = realtime::ClockDriftEstimator::estimate(
+        {render_domain, render_anchor_frames,
+         render_anchor_.qpc_position_100ns},
+        {render_domain, render_frames, render.qpc_position_100ns});
+    feed_forward = realtime::ClockDriftEstimator::relative_rate_correction(
+        capture_drift, render_drift);
+  }
+
+  if (window_duration >= kMaximumClockObservationWindow100ns) {
+    set_anchor(capture, render);
+  }
+  return {feed_forward.valid ? WasapiDuplexClockObservationStatus::Ready
+                             : WasapiDuplexClockObservationStatus::Invalid,
+          feed_forward, window_duration};
+}
+
+std::uint64_t
+WasapiDuplexClockFeedForwardEstimator::minimum_window_duration_100ns()
+    const noexcept {
+  return minimum_window_duration_100ns_;
+}
+
+void WasapiDuplexClockFeedForwardEstimator::set_anchor(
+    const WasapiClockSnapshot& capture,
+    const WasapiClockSnapshot& render) noexcept {
+  capture_anchor_ = capture;
+  render_anchor_ = render;
+  anchor_available_ = true;
 }
 
 WindowsWasapiDuplexLoop::~WindowsWasapiDuplexLoop() {
@@ -212,8 +352,13 @@ void WindowsWasapiDuplexLoop::run_clock_observer() noexcept {
     return;
   }
 
-  auto previous_capture = capture_clock_baseline_;
-  auto previous_render = render_clock_baseline_;
+  WasapiDuplexClockFeedForwardEstimator estimator(
+      capture_probe().mix_format.sample_rate,
+      capture_probe().buffer_frames,
+      render_probe().mix_format.sample_rate,
+      render_probe().buffer_frames);
+  static_cast<void>(
+      estimator.observe(capture_clock_baseline_, render_clock_baseline_));
   double smoothed_correction_ppm = 0.0;
   std::uint32_t consecutive_invalid_samples = 0;
 
@@ -228,61 +373,21 @@ void WindowsWasapiDuplexLoop::run_clock_observer() noexcept {
     WasapiClockSnapshot render;
     const auto capture_available = capture_stream_.read_clock(capture);
     const auto render_available = render_stream_.read_clock(render);
-    auto feed_forward = realtime::ClockRateFeedForward{};
+    auto observation = WasapiDuplexClockObservation{
+        WasapiDuplexClockObservationStatus::Invalid};
     if (capture_available && render_available) {
-      const realtime::ClockDomain capture_domain{
-          1, capture_probe().mix_format.sample_rate};
-      const realtime::ClockDomain render_domain{
-          2, render_probe().mix_format.sample_rate};
-      std::uint64_t previous_capture_frames = 0;
-      std::uint64_t capture_frames = 0;
-      std::uint64_t previous_render_frames = 0;
-      std::uint64_t render_frames = 0;
-      if (wasapi_clock_position_to_audio_frames(
-              previous_capture.position,
-              previous_capture.frequency,
-              capture_domain.nominal_sample_rate,
-              previous_capture_frames) &&
-          wasapi_clock_position_to_audio_frames(
-              capture.position,
-              capture.frequency,
-              capture_domain.nominal_sample_rate,
-              capture_frames) &&
-          wasapi_clock_position_to_audio_frames(
-              previous_render.position,
-              previous_render.frequency,
-              render_domain.nominal_sample_rate,
-              previous_render_frames) &&
-          wasapi_clock_position_to_audio_frames(
-              render.position,
-              render.frequency,
-              render_domain.nominal_sample_rate,
-              render_frames)) {
-        const auto capture_drift = realtime::ClockDriftEstimator::estimate(
-            {capture_domain,
-             previous_capture_frames,
-             previous_capture.qpc_position_100ns},
-            {capture_domain, capture_frames, capture.qpc_position_100ns});
-        const auto render_drift = realtime::ClockDriftEstimator::estimate(
-            {render_domain,
-             previous_render_frames,
-             previous_render.qpc_position_100ns},
-            {render_domain, render_frames, render.qpc_position_100ns});
-        feed_forward = realtime::ClockDriftEstimator::relative_rate_correction(
-            capture_drift, render_drift);
-      }
-      previous_capture = capture;
-      previous_render = render;
+      observation = estimator.observe(capture, render);
     }
 
-    if (feed_forward.valid &&
-        std::abs(feed_forward.correction_ppm) <= 2500.0) {
+    if (observation.status == WasapiDuplexClockObservationStatus::Ready &&
+        std::abs(observation.feed_forward.correction_ppm) <= 2500.0) {
       constexpr double kSmoothingFactor = 0.2;
       constexpr double kMaximumSlewPerObservationPpm = 125.0;
       const auto filtered_correction_ppm =
           smoothed_correction_ppm +
           kSmoothingFactor *
-              (feed_forward.correction_ppm - smoothed_correction_ppm);
+              (observation.feed_forward.correction_ppm -
+               smoothed_correction_ppm);
       const auto correction_step = std::clamp(
           filtered_correction_ppm - smoothed_correction_ppm,
           -kMaximumSlewPerObservationPpm,
@@ -291,7 +396,9 @@ void WindowsWasapiDuplexLoop::run_clock_observer() noexcept {
       consecutive_invalid_samples = 0;
       runner_.set_capture_clock_feed_forward_ppm(smoothed_correction_ppm);
       capture_clock_feed_forward_valid_.store(true, std::memory_order_relaxed);
-    } else if (++consecutive_invalid_samples >= 3) {
+    } else if (observation.status !=
+                   WasapiDuplexClockObservationStatus::WarmingUp &&
+               ++consecutive_invalid_samples >= 3) {
       runner_.set_capture_clock_feed_forward_ppm(0.0);
       capture_clock_feed_forward_valid_.store(false, std::memory_order_relaxed);
       smoothed_correction_ppm = 0.0;

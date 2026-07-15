@@ -21,6 +21,7 @@ function New-ValidSummary {
     render_fifo_underflow_cycles = "3"
     wait_timeout_cycles = "0"
     render_wait_timeout_cycles = "0"
+    duplex_event_wait_timeout_cycles = "0"
     capture_fifo_overflow_cycles = "0"
     capture_fifo_overflow_frames = "0"
     render_fifo_overflow_cycles = "0"
@@ -197,6 +198,7 @@ $missingFields = @(
   "stream_stop_error_cycles",
   "wait_timeout_cycles",
   "render_wait_timeout_cycles",
+  "duplex_event_wait_timeout_cycles",
   "capture_fifo_overflow_cycles",
   "capture_fifo_overflow_frames",
   "render_fifo_overflow_cycles",

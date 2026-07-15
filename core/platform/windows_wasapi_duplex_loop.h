@@ -32,6 +32,44 @@ struct WindowsWasapiDuplexLoopTestAccess;
     std::uint64_t captured_frames,
     const WasapiClockSnapshot& snapshot) noexcept;
 
+enum class WasapiDuplexClockObservationStatus {
+  WarmingUp,
+  Ready,
+  Invalid,
+};
+
+struct WasapiDuplexClockObservation {
+  WasapiDuplexClockObservationStatus status =
+      WasapiDuplexClockObservationStatus::WarmingUp;
+  realtime::ClockRateFeedForward feed_forward;
+  std::uint64_t window_duration_100ns = 0;
+};
+
+class WasapiDuplexClockFeedForwardEstimator {
+ public:
+  WasapiDuplexClockFeedForwardEstimator(
+      std::uint32_t capture_sample_rate,
+      std::uint32_t capture_quantum_frames,
+      std::uint32_t render_sample_rate,
+      std::uint32_t render_quantum_frames) noexcept;
+
+  [[nodiscard]] WasapiDuplexClockObservation observe(
+      const WasapiClockSnapshot& capture,
+      const WasapiClockSnapshot& render) noexcept;
+  [[nodiscard]] std::uint64_t minimum_window_duration_100ns() const noexcept;
+
+ private:
+  void set_anchor(const WasapiClockSnapshot& capture,
+                  const WasapiClockSnapshot& render) noexcept;
+
+  std::uint32_t capture_sample_rate_ = 0;
+  std::uint32_t render_sample_rate_ = 0;
+  std::uint64_t minimum_window_duration_100ns_ = 0;
+  WasapiClockSnapshot capture_anchor_;
+  WasapiClockSnapshot render_anchor_;
+  bool anchor_available_ = false;
+};
+
 struct WasapiDuplexLoopSummary {
   bool running = false;
   std::size_t error_count = 0;

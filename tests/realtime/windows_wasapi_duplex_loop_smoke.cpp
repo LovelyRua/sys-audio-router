@@ -256,6 +256,104 @@ int main() {
   }
 
   {
+    constexpr std::uint32_t capture_rate = 44100;
+    constexpr std::uint32_t capture_quantum = 970;
+    constexpr std::uint32_t render_rate = 48000;
+    constexpr std::uint32_t render_quantum = 1056;
+    sar::platform::WasapiDuplexClockFeedForwardEstimator estimator(
+        capture_rate, capture_quantum, render_rate, render_quantum);
+    if (const auto failure = expect(
+            estimator.minimum_window_duration_100ns() > 200'000'000 &&
+                estimator.minimum_window_duration_100ns() < 230'000'000,
+            "Expected quantization-derived duplex clock window near 22 seconds")) {
+      return failure;
+    }
+
+    const sar::platform::WasapiClockSnapshot capture_anchor{
+        1, 1, capture_rate};
+    const sar::platform::WasapiClockSnapshot render_anchor{
+        1, 1, render_rate};
+    if (const auto failure = expect(
+            estimator.observe(capture_anchor, render_anchor).status ==
+                sar::platform::WasapiDuplexClockObservationStatus::WarmingUp,
+            "Expected first duplex clock sample to establish an anchor")) {
+      return failure;
+    }
+
+    constexpr std::uint64_t short_window_100ns = 5'000'000;
+    const auto short_observation = estimator.observe(
+        {1 + capture_rate / 2 + capture_quantum,
+         1 + short_window_100ns,
+         capture_rate},
+        {1 + render_rate / 2 - render_quantum,
+         1 + short_window_100ns,
+         render_rate});
+    if (const auto failure = expect(
+            short_observation.status ==
+                sar::platform::WasapiDuplexClockObservationStatus::WarmingUp,
+            "Expected 500ms packet-quantized sample to remain warming up")) {
+      return failure;
+    }
+
+    constexpr std::uint64_t long_window_seconds = 22;
+    constexpr std::uint64_t long_window_100ns =
+        long_window_seconds * 10'000'000;
+    const auto long_observation = estimator.observe(
+        {1 + capture_rate * long_window_seconds + capture_quantum,
+         1 + long_window_100ns,
+         capture_rate},
+        {1 + render_rate * long_window_seconds - render_quantum,
+         1 + long_window_100ns,
+         render_rate});
+    if (const auto failure = expect(
+            long_observation.status ==
+                    sar::platform::WasapiDuplexClockObservationStatus::Ready &&
+                long_observation.feed_forward.valid &&
+                std::abs(long_observation.feed_forward.correction_ppm) <=
+                    2500.0,
+            "Expected long anchor window to bound 970/1056-frame quantization")) {
+      return failure;
+    }
+
+    constexpr std::uint64_t maximum_window_seconds = 60;
+    constexpr std::uint64_t maximum_window_100ns =
+        maximum_window_seconds * 10'000'000;
+    const auto rolling_observation = estimator.observe(
+        {1 + capture_rate * maximum_window_seconds,
+         1 + maximum_window_100ns,
+         capture_rate},
+        {1 + render_rate * maximum_window_seconds,
+         1 + maximum_window_100ns,
+         render_rate});
+    if (const auto failure = expect(
+            rolling_observation.status ==
+                sar::platform::WasapiDuplexClockObservationStatus::Ready,
+            "Expected maximum duplex clock window to produce before rolling")) {
+      return failure;
+    }
+    const auto post_roll_observation = estimator.observe(
+        {1 + capture_rate * maximum_window_seconds + capture_rate / 2,
+         1 + maximum_window_100ns + short_window_100ns,
+         capture_rate},
+        {1 + render_rate * maximum_window_seconds + render_rate / 2,
+         1 + maximum_window_100ns + short_window_100ns,
+         render_rate});
+    if (const auto failure = expect(
+            post_roll_observation.status ==
+                sar::platform::WasapiDuplexClockObservationStatus::WarmingUp,
+            "Expected rolled duplex clock anchor to warm without invalidation")) {
+      return failure;
+    }
+
+    if (const auto failure = expect(
+            estimator.observe(capture_anchor, render_anchor).status ==
+                sar::platform::WasapiDuplexClockObservationStatus::Invalid,
+            "Expected regressed duplex clocks to invalidate and re-anchor")) {
+      return failure;
+    }
+  }
+
+  {
     sar::graph::Graph graph(41, 2, 128, 48000);
     sar::diagnostics::EngineDiagnostics diagnostics;
     const auto result =

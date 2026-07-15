@@ -136,7 +136,9 @@ int main() {
                        "reason_code=no_cycles loop_cycles=0 "
                        "graph_processed_cycles=0 idle_cycles=0 "
                        "wait_timeout_cycles=0 capture_wait_timeout_cycles=0 "
-                       "render_wait_timeout_cycles=0 capture_partial_cycles=0 "
+                       "render_wait_timeout_cycles=0 "
+                       "duplex_event_wait_timeout_cycles=0 "
+                       "capture_partial_cycles=0 "
                        "render_partial_cycles=0 capture_partial_frames=0 "
                        "render_partial_frames=0 capture_silent_cycles=0 "
                        "capture_silent_frames=0 "
@@ -266,6 +268,7 @@ int main() {
     stats.wait_timeout_cycles = 2;
     stats.capture_wait_timeout_cycles = 1;
     stats.render_wait_timeout_cycles = 1;
+    stats.duplex_event_wait_timeout_cycles = 7;
     stats.capture_partial_cycles = 3;
     stats.render_partial_cycles = 4;
     stats.capture_partial_frames = 12;
@@ -326,6 +329,11 @@ int main() {
     }
     if (const auto failure = expect(summary.render_wait_timeout_cycles == 1,
                                     "Expected copied render timeout count")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            summary.duplex_event_wait_timeout_cycles == 7,
+            "Expected copied duplex event timeout count")) {
       return failure;
     }
     if (const auto failure = expect(summary.capture_partial_cycles == 3,

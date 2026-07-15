@@ -177,6 +177,8 @@ void print_wasapi_worker_stats(
       << " wait_timeout_cycles=" << stats.wait_timeout_cycles
       << " capture_wait_timeout_cycles=" << stats.capture_wait_timeout_cycles
       << " render_wait_timeout_cycles=" << stats.render_wait_timeout_cycles
+      << " duplex_event_wait_timeout_cycles="
+      << stats.duplex_event_wait_timeout_cycles
       << " capture_partial_cycles=" << stats.capture_partial_cycles
       << " capture_partial_frames=" << stats.capture_partial_frames
       << " render_partial_cycles=" << stats.render_partial_cycles
@@ -272,6 +274,8 @@ void print_wasapi_worker_stats(
       << stats.capture_wait_timeout_cycles << '\n';
   out << "  Render wait timeout cycles: "
       << stats.render_wait_timeout_cycles << '\n';
+  out << "  Duplex event wait timeout cycles: "
+      << stats.duplex_event_wait_timeout_cycles << '\n';
   out << "  Capture partial cycles: " << stats.capture_partial_cycles << '\n';
   out << "  Capture partial frames: " << stats.capture_partial_frames << '\n';
   out << "  Render partial cycles: " << stats.render_partial_cycles << '\n';

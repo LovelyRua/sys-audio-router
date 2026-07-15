@@ -103,6 +103,7 @@ sar::platform::WasapiRealtimeWorkerStats make_stats() {
   stats.wait_timeout_cycles = 4;
   stats.capture_wait_timeout_cycles = 5;
   stats.render_wait_timeout_cycles = 6;
+  stats.duplex_event_wait_timeout_cycles = 7;
   stats.capture_partial_cycles = 7;
   stats.capture_partial_frames = 8;
   stats.render_partial_cycles = 9;
@@ -383,6 +384,11 @@ int main() {
     if (const auto failure =
             expect(contains(text, "capture_wait_timeout_cycles=5"),
                    "Expected machine-readable capture timeout count")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            contains(text, "duplex_event_wait_timeout_cycles=7"),
+            "Expected machine-readable duplex event timeout count")) {
       return failure;
     }
     if (const auto failure =

@@ -164,6 +164,11 @@ int main() {
                                     "Expected graph-only worker without render timeouts")) {
       return failure;
     }
+    if (const auto failure = expect(
+            stats.duplex_event_wait_timeout_cycles == 0,
+            "Expected graph-only worker without duplex event timeouts")) {
+      return failure;
+    }
     if (const auto failure =
             expect(stats.wait_timeout_cycles <= stats.capture_wait_timeout_cycles +
                                                 stats.render_wait_timeout_cycles,

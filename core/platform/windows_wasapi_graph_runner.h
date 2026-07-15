@@ -43,6 +43,7 @@ struct WasapiGraphRunnerStats {
   bool render_stream_idle = false;
   bool capture_wait_timed_out = false;
   bool render_wait_timed_out = false;
+  bool duplex_event_wait_timed_out = false;
   bool cancelled = false;
   bool capture_partial = false;
   bool render_partial = false;

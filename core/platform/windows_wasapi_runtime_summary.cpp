@@ -69,6 +69,8 @@ std::string format_wasapi_runtime_summary_line(
          << " capture_wait_timeout_cycles="
          << summary.capture_wait_timeout_cycles
          << " render_wait_timeout_cycles=" << summary.render_wait_timeout_cycles
+         << " duplex_event_wait_timeout_cycles="
+         << summary.duplex_event_wait_timeout_cycles
          << " capture_partial_cycles=" << summary.capture_partial_cycles
          << " render_partial_cycles=" << summary.render_partial_cycles
          << " capture_partial_frames=" << summary.capture_partial_frames
@@ -193,6 +195,8 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
   summary.wait_timeout_cycles = stats.wait_timeout_cycles;
   summary.capture_wait_timeout_cycles = stats.capture_wait_timeout_cycles;
   summary.render_wait_timeout_cycles = stats.render_wait_timeout_cycles;
+  summary.duplex_event_wait_timeout_cycles =
+      stats.duplex_event_wait_timeout_cycles;
   summary.capture_partial_cycles = stats.capture_partial_cycles;
   summary.render_partial_cycles = stats.render_partial_cycles;
   summary.capture_partial_frames = stats.capture_partial_frames;

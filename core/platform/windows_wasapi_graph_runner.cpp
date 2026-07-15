@@ -453,7 +453,6 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
   }
 
   bool coordinated_duplex_wait = false;
-  bool coordinated_duplex_wait_timed_out = false;
   if (render_master_ && native_capture_stream_ != nullptr &&
       native_render_stream_ != nullptr) {
     const auto wait_status = wait_for_wasapi_duplex_events(
@@ -470,7 +469,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     }
     coordinated_duplex_wait =
         wait_status != WasapiDuplexEventWaitStatus::Unavailable;
-    coordinated_duplex_wait_timed_out =
+    stats.duplex_event_wait_timed_out =
         wait_status == WasapiDuplexEventWaitStatus::TimedOut;
   }
   const auto render_timeout_ms = coordinated_duplex_wait ? 0U : timeout_ms;
@@ -504,8 +503,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
         render_path_->fifo.consume(render_result.frames()));
     stats.render_stream_idle = stats.rendered_frames == 0;
     stats.render_wait_timed_out =
-        (!coordinated_duplex_wait && render_result.timed_out()) ||
-        (coordinated_duplex_wait_timed_out && stats.rendered_frames == 0);
+        !coordinated_duplex_wait && render_result.timed_out();
     stats.render_partial =
         stats.rendered_frames > 0 && stats.rendered_frames < staged;
     stats.render_partial_frames =
@@ -811,8 +809,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     stats.rendered_frames = render_result.frames();
     stats.render_stream_idle = stats.rendered_frames == 0;
     stats.render_wait_timed_out =
-        (!coordinated_duplex_wait && render_result.timed_out()) ||
-        (coordinated_duplex_wait_timed_out && stats.rendered_frames == 0);
+        !coordinated_duplex_wait && render_result.timed_out();
     if (stats.rendered_frames > 0) {
       ++diagnostics.render_fifo_underflow_cycles;
       diagnostics.render_fifo_underflow_frames += stats.rendered_frames;
