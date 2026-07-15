@@ -121,6 +121,44 @@ function ConvertFrom-WasapiMeasurementOutput {
     $fields[$name] = $match.Groups[2].Value
   }
 
+  $renderObservedSampleRate = $null
+  if ($Mode -eq "duplex") {
+    $clockLines = @($Lines | Where-Object { $_ -match '^wasapi_duplex_clock(?:\s|$)' })
+    if ($clockLines.Count -gt 1) {
+      return [pscustomobject]@{ Ok = $false; Error = "duplicate_duplex_clock" }
+    }
+    if ($clockLines.Count -eq 1) {
+      $clockFields = @{}
+      foreach ($match in [regex]::Matches(
+          $clockLines[0], '(?:^|\s)([^\s=]+)=([^\s]+)')) {
+        $clockFields[$match.Groups[1].Value] = $match.Groups[2].Value
+      }
+      if ($clockFields.ContainsKey("render_drift_valid")) {
+        $renderDriftValid = $clockFields.render_drift_valid
+        if ($renderDriftValid -ne "0" -and $renderDriftValid -ne "1") {
+          return [pscustomobject]@{ Ok = $false; Error = "invalid_duplex_clock:render_drift_valid" }
+        }
+        if ($renderDriftValid -eq "1") {
+          if (!$clockFields.ContainsKey("render_observed_rate")) {
+            return [pscustomobject]@{ Ok = $false; Error = "missing_duplex_clock:render_observed_rate" }
+          }
+          [double]$observedRate = 0
+          if (![double]::TryParse(
+              $clockFields.render_observed_rate,
+              [System.Globalization.NumberStyles]::Float,
+              [System.Globalization.CultureInfo]::InvariantCulture,
+              [ref]$observedRate) -or
+              [double]::IsNaN($observedRate) -or
+              [double]::IsInfinity($observedRate) -or
+              $observedRate -le 0 -or $observedRate -gt [uint32]::MaxValue) {
+            return [pscustomobject]@{ Ok = $false; Error = "invalid_duplex_clock:render_observed_rate" }
+          }
+          $renderObservedSampleRate = $observedRate
+        }
+      }
+    }
+  }
+
   $requiredMetrics = [System.Collections.Generic.List[string]]::new()
   foreach ($name in @(
       "capture_discontinuity_cycles",
@@ -196,8 +234,13 @@ function ConvertFrom-WasapiMeasurementOutput {
     if ($metrics.render_sample_rate -eq 0) {
       $failures.Add("render_sample_rate_zero")
     } else {
-      $target = ([System.Numerics.BigInteger]$metrics.render_sample_rate *
-          [System.Numerics.BigInteger]$durationMilliseconds) / 1000
+      $target = if ($null -ne $renderObservedSampleRate) {
+        [System.Numerics.BigInteger][math]::Ceiling(
+            $renderObservedSampleRate * $durationMilliseconds / 1000.0)
+      } else {
+        ([System.Numerics.BigInteger]$metrics.render_sample_rate *
+            [System.Numerics.BigInteger]$durationMilliseconds) / 1000
+      }
       if ($target -gt [uint64]::MaxValue) {
         return [pscustomobject]@{ Ok = $false; Error = "metric_overflow:target_rendered_frames" }
       }

@@ -192,6 +192,28 @@ $coveragePass = (Invoke-SingleSummary -Mode duplex `
     -Summary (New-ValidSummary -Mode duplex -Override @{ rendered_frames = 47520 }))[-1]
 Assert-Equal 0 $coveragePass.FailureCount "Exact minimum rendered coverage should pass."
 
+$observedClockCoverage = (Invoke-SingleSummary -Mode duplex `
+    -Duration "30000" `
+    -Summary (New-ValidSummary -Mode duplex -Override @{
+      rendered_frames = 1419072
+    }) `
+    -ExtraLines @(
+      "wasapi_duplex_clock render_drift_valid=1 render_observed_rate=47248.7"
+    ))[-1]
+Assert-Equal 0 $observedClockCoverage.FailureCount `
+    "Coverage should use the valid observed render clock instead of its nominal rate."
+Assert-Equal 1417461 `
+    $observedClockCoverage.TotalMetrics.Totals.target_rendered_frames `
+    "Unexpected observed-clock render target."
+
+$invalidObservedClock = (Invoke-SingleSummary -Mode duplex `
+    -Summary (New-ValidSummary -Mode duplex) `
+    -ExtraLines @(
+      "wasapi_duplex_clock render_drift_valid=1 render_observed_rate=not-a-number"
+    ))[-1]
+Assert-Equal 1 $invalidObservedClock.ParseFailureCount `
+    "Invalid observed render clock rate should fail parsing."
+
 $missingFields = @(
   "process_error_cycles",
   "stream_start_error_cycles",
