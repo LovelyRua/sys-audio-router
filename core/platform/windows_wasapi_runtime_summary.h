@@ -45,6 +45,7 @@ struct WasapiRuntimeSummary {
   std::uint64_t render_capture_starvation_silence_frames = 0;
   std::uint64_t render_recovery_silence_cycles = 0;
   std::uint64_t render_recovery_silence_frames = 0;
+  std::uint64_t render_recovery_silence_episodes = 0;
   std::uint64_t maximum_render_recovery_silence_frames = 0;
   std::uint64_t process_error_cycles = 0;
   std::uint64_t stream_start_error_cycles = 0;

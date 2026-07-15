@@ -73,6 +73,7 @@ sar::platform::WasapiRuntimeSummary make_summary() {
   summary.render_fifo_overflow_frames = 72;
   summary.render_fifo_underflow_cycles = 4;
   summary.render_fifo_underflow_frames = 24;
+  summary.render_recovery_silence_episodes = 6;
   return summary;
 }
 
@@ -131,6 +132,7 @@ sar::platform::WasapiRealtimeWorkerStats make_stats() {
   stats.render_capture_starvation_silence_frames = 384;
   stats.render_recovery_silence_cycles = 5;
   stats.render_recovery_silence_frames = 640;
+  stats.render_recovery_silence_episodes = 4;
   stats.maximum_render_recovery_silence_frames = 192;
   stats.minimum_capture_rate_correction_ppm = -22.0;
   stats.maximum_capture_rate_correction_ppm = 17.0;
@@ -276,6 +278,12 @@ int main() {
                        contains(text, "Render FIFO fill frames: 96") &&
                        contains(text, "Render FIFO underflow frames: 24"),
                    "Expected readable runtime FIFO diagnostics")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            contains(text, "render_recovery_silence_episodes=6") &&
+                contains(text, "Render recovery silence episodes: 6"),
+            "Expected runtime recovery silence episode count")) {
       return failure;
     }
   }
@@ -433,6 +441,7 @@ int main() {
                        contains(text, "render_capture_starvation_silence_frames=384") &&
                        contains(text, "render_recovery_silence_cycles=5") &&
                        contains(text, "render_recovery_silence_frames=640") &&
+                       contains(text, "render_recovery_silence_episodes=4") &&
                        contains(
                            text,
                            "maximum_render_recovery_silence_frames=192") &&
@@ -514,6 +523,7 @@ int main() {
                        contains(text, "Capture FIFO correction ppm: 8.25") &&
                        contains(text, "Capture rate adapter active: yes") &&
                        contains(text, "Capture rate adapter reset cycles: 4") &&
+                       contains(text, "Render recovery silence episodes: 4") &&
                        contains(text, "Minimum capture rate correction ppm: -22") &&
                        contains(text, "Maximum capture rate correction ppm: 17"),
                    "Expected readable capture rate statistics")) {

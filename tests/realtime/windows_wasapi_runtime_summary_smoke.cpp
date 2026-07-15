@@ -46,6 +46,7 @@ sar::platform::WasapiRealtimeWorkerStats make_active_stats() {
   stats.last_graph_processed = true;
   stats.render_recovery_silence_cycles = 2;
   stats.render_recovery_silence_frames = 128;
+  stats.render_recovery_silence_episodes = 1;
   stats.maximum_render_recovery_silence_frames = 64;
   stats.render_startup_silence_cycles = 1;
   stats.render_startup_silence_frames = 64;
@@ -152,6 +153,7 @@ int main() {
                        "render_capture_starvation_silence_frames=0 "
                        "render_recovery_silence_cycles=0 "
                        "render_recovery_silence_frames=0 "
+                       "render_recovery_silence_episodes=0 "
                        "maximum_render_recovery_silence_frames=0 "
                        "process_error_cycles=0 stream_start_error_cycles=0 "
                        "stream_stop_error_cycles=0 stream_wait_cancellation_cycles=0 "
@@ -221,6 +223,7 @@ int main() {
                        summary.render_capture_starvation_silence_cycles == 3 &&
                        summary.render_capture_starvation_silence_frames == 96 &&
                        summary.render_recovery_silence_cycles == 2 &&
+                       summary.render_recovery_silence_episodes == 1 &&
                        summary.render_recovery_silence_frames == 128 &&
                        summary.maximum_render_recovery_silence_frames == 64 &&
                        summary.capture_rate_adapter_recovering &&
@@ -253,6 +256,9 @@ int main() {
                            std::string::npos &&
                        summary_line.find(
                            "render_capture_starvation_silence_frames=96") !=
+                           std::string::npos &&
+                       summary_line.find(
+                           "render_recovery_silence_episodes=1") !=
                            std::string::npos &&
                        summary_line.find(
                            "maximum_render_recovery_silence_frames=64") !=

@@ -97,6 +97,8 @@ std::string format_wasapi_runtime_summary_line(
          << summary.render_recovery_silence_cycles
          << " render_recovery_silence_frames="
          << summary.render_recovery_silence_frames
+         << " render_recovery_silence_episodes="
+         << summary.render_recovery_silence_episodes
          << " maximum_render_recovery_silence_frames="
          << summary.maximum_render_recovery_silence_frames
          << " process_error_cycles=" << summary.process_error_cycles
@@ -217,6 +219,8 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
       stats.render_recovery_silence_cycles;
   summary.render_recovery_silence_frames =
       stats.render_recovery_silence_frames;
+  summary.render_recovery_silence_episodes =
+      stats.render_recovery_silence_episodes;
   summary.maximum_render_recovery_silence_frames =
       stats.maximum_render_recovery_silence_frames;
   summary.process_error_cycles = stats.process_error_cycles;

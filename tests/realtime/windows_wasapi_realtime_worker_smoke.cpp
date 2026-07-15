@@ -224,6 +224,7 @@ int main() {
                                         stats.render_startup_silence_frames == 0 &&
                                         stats.render_capture_starvation_silence_cycles == 0 &&
                                         stats.render_capture_starvation_silence_frames == 0 &&
+                                        stats.render_recovery_silence_episodes == 0 &&
                                         stats.maximum_render_recovery_silence_frames == 0 &&
                                         stats.minimum_capture_rate_correction_ppm == 0.0 &&
                                         stats.maximum_capture_rate_correction_ppm == 0.0,
@@ -354,6 +355,7 @@ int main() {
                        worker.stats().render_startup_silence_frames == 0 &&
                        worker.stats().render_capture_starvation_silence_cycles == 0 &&
                        worker.stats().render_capture_starvation_silence_frames == 0 &&
+                       worker.stats().render_recovery_silence_episodes == 0 &&
                        worker.stats().maximum_render_recovery_silence_frames == 0 &&
                        worker.stats().minimum_capture_rate_correction_ppm == 0.0 &&
                        worker.stats().maximum_capture_rate_correction_ppm == 0.0,
@@ -495,6 +497,7 @@ int main() {
         stats.render_startup_silence_frames != 64 ||
         stats.render_recovery_silence_cycles != 3 ||
         stats.render_recovery_silence_frames != 192 ||
+        stats.render_recovery_silence_episodes != 2 ||
         stats.maximum_render_recovery_silence_frames != 128) {
       std::cerr << "Recovery silence stats: resets="
                 << stats.capture_rate_adapter_reset_cycles
@@ -502,6 +505,7 @@ int main() {
                 << " startup_frames=" << stats.render_startup_silence_frames
                 << " cycles=" << stats.render_recovery_silence_cycles
                 << " total_frames=" << stats.render_recovery_silence_frames
+                << " episodes=" << stats.render_recovery_silence_episodes
                 << " maximum_frames="
                 << stats.maximum_render_recovery_silence_frames << '\n';
     }
@@ -511,6 +515,7 @@ int main() {
                 stats.render_startup_silence_frames == 64 &&
                 stats.render_recovery_silence_cycles == 3 &&
                 stats.render_recovery_silence_frames == 192 &&
+                stats.render_recovery_silence_episodes == 2 &&
                 stats.maximum_render_recovery_silence_frames == 128 &&
                 stats.render_capture_starvation_silence_cycles == 1 &&
                 stats.render_capture_starvation_silence_frames == 64 &&
@@ -576,6 +581,7 @@ int main() {
         stats.graph_processed_cycles != 1 ||
         stats.render_recovery_silence_cycles != 2 ||
         stats.render_recovery_silence_frames != 128 ||
+        stats.render_recovery_silence_episodes != 1 ||
         stats.maximum_render_recovery_silence_frames != 128) {
       std::cerr << "Consecutive reset recovery stats: discontinuities="
                 << stats.capture_discontinuity_cycles
@@ -584,6 +590,8 @@ int main() {
                 << " graph_cycles=" << stats.graph_processed_cycles
                 << " recovery_cycles=" << stats.render_recovery_silence_cycles
                 << " recovery_frames=" << stats.render_recovery_silence_frames
+                << " recovery_episodes="
+                << stats.render_recovery_silence_episodes
                 << " maximum_frames="
                 << stats.maximum_render_recovery_silence_frames << '\n';
     }
@@ -594,6 +602,7 @@ int main() {
                 stats.graph_processed_cycles == 1 &&
                 stats.render_recovery_silence_cycles == 2 &&
                 stats.render_recovery_silence_frames == 128 &&
+                stats.render_recovery_silence_episodes == 1 &&
                 stats.maximum_render_recovery_silence_frames == 128,
             "Expected consecutive resets to preserve one recovery silence episode")) {
       return failure;
