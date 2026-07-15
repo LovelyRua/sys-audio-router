@@ -557,7 +557,6 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
         if (capture_rate_adapter_) {
           capture_path_->fifo.clear();
           capture_rate_adapter_->resampler.reset();
-          capture_rate_adapter_->controller.reset();
           capture_rate_adapter_->output_frames_ready = 0;
           capture_rate_adapter_->ratio =
               capture_rate_adapter_->nominal_ratio;

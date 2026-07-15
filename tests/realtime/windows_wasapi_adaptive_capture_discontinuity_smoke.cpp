@@ -15,6 +15,7 @@ namespace {
 constexpr std::size_t kGraphFrames = 64;
 constexpr std::uint32_t kCaptureFrames = 32;
 constexpr std::size_t kFifoFrames = 128;
+constexpr std::size_t kLearningCycles = 3;
 constexpr float kPreGapSample = -0.75F;
 constexpr float kPostGapSample = 0.5F;
 
@@ -143,7 +144,20 @@ RunResult run_with_pre_gap_partial() {
   graph.add_node(std::move(recorder));
   sar::diagnostics::EngineDiagnostics diagnostics;
 
-  enqueue_capture_packet(capture, kPreGapSample);
+  for (std::size_t cycle = 0; cycle < kLearningCycles; ++cycle) {
+    const auto packet_count = cycle == 0 ? 3 : 2;
+    for (std::size_t packet = 0; packet < packet_count; ++packet) {
+      enqueue_capture_packet(capture, kPreGapSample);
+    }
+    end_capture_cycle(capture, render);
+    const auto learning = process_cycle(runner, graph, diagnostics);
+    assert(learning.ok());
+    assert(learning.stats().graph_processed);
+    assert(learning.stats().capture_fifo_correction_ppm > 0.0);
+    assert_no_capture_overflow(diagnostics);
+  }
+  const auto learned_process_calls = recorder_ptr->process_calls();
+
   enqueue_capture_packet(capture, kPreGapSample);
   end_capture_cycle(capture, render);
   const auto pre_gap = process_cycle(runner, graph, diagnostics);
@@ -151,7 +165,10 @@ RunResult run_with_pre_gap_partial() {
   assert(!pre_gap.stats().graph_processed);
   assert(pre_gap.stats().capture_resampler_output_frames > 0);
   assert(pre_gap.stats().capture_resampler_output_frames < kGraphFrames);
-  assert(recorder_ptr->process_calls() == 0);
+  assert(pre_gap.stats().capture_fifo_correction_ppm > 0.0);
+  const auto learned_correction_ppm =
+      pre_gap.stats().capture_fifo_correction_ppm;
+  assert(recorder_ptr->process_calls() == learned_process_calls);
   assert_no_capture_overflow(diagnostics);
 
   enqueue_capture_packet(capture, kPostGapSample, true);
@@ -169,7 +186,7 @@ RunResult run_with_pre_gap_partial() {
   assert(diagnostics.xrun_count == 1);
   assert(diagnostics.render_fifo_underflow_cycles == 1);
   assert(diagnostics.render_fifo_underflow_frames == kGraphFrames);
-  assert(recorder_ptr->process_calls() == 0);
+  assert(recorder_ptr->process_calls() == learned_process_calls);
   assert_no_capture_overflow(diagnostics);
 
   enqueue_capture_packet(capture, kPostGapSample);
@@ -177,6 +194,8 @@ RunResult run_with_pre_gap_partial() {
   const auto recovered = process_cycle(runner, graph, diagnostics);
   assert(recovered.ok());
   assert(recovered.stats().graph_processed);
+  assert(recovered.stats().capture_fifo_correction_ppm > 0.0);
+  assert(recovered.stats().capture_fifo_correction_ppm < learned_correction_ppm);
   assert(!recovered.stats().capture_rate_adapter_recovering);
   assert(!recovered.stats().render_recovery_silence);
   assert(recovered.stats().render_recovery_silence_frames == 0);
@@ -184,8 +203,8 @@ RunResult run_with_pre_gap_partial() {
   assert(diagnostics.render_fifo_underflow_frames == kGraphFrames);
   assert_no_capture_overflow(diagnostics);
 
-  assert(recorder_ptr->process_calls() == 1);
-  assert(render.render_submissions().size() == 3);
+  assert(recorder_ptr->process_calls() == learned_process_calls + 1);
+  assert(render.render_submissions().size() == kLearningCycles + 3);
   return {recorder_ptr->observed(),
           render.render_submissions().back().samples.front()};
 }
