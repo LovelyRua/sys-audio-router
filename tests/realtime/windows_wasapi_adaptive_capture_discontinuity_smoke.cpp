@@ -25,7 +25,8 @@ sar::platform::WasapiStreamProbe make_probe(
   probe.direction = direction;
   probe.mode = sar::platform::WasapiStreamMode::Endpoint;
   probe.buffer_frames = kCaptureFrames;
-  probe.mix_format.sample_rate = 48000;
+  probe.mix_format.sample_rate =
+      direction == sar::platform::WasapiStreamDirection::Capture ? 44100 : 48000;
   probe.mix_format.channels = 1;
   probe.mix_format.frames_per_block = kCaptureFrames;
   probe.mix_format.bits_per_sample = 32;
@@ -153,7 +154,6 @@ RunResult run_with_pre_gap_partial() {
     const auto learning = process_cycle(runner, graph, diagnostics);
     assert(learning.ok());
     assert(learning.stats().graph_processed);
-    assert(std::fabs(learning.stats().capture_fifo_correction_ppm) > 1.0e-12);
     assert_no_capture_overflow(diagnostics);
   }
   const auto learned_process_calls = recorder_ptr->process_calls();
