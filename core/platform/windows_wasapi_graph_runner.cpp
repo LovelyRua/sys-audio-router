@@ -37,8 +37,9 @@ std::vector<WasapiStreamError> validate_graph_shape(
 std::vector<WasapiStreamError> validate_graph_sample_rate(
     const graph::Graph& graph,
     const WasapiStreamIo* capture_stream,
-    const WasapiStreamIo* render_stream) {
-  if (capture_stream != nullptr &&
+    const WasapiStreamIo* render_stream,
+    bool adapt_capture_rate = false) {
+  if (!adapt_capture_rate && capture_stream != nullptr &&
       graph.sample_rate() != capture_stream->probe().mix_format.sample_rate) {
     return {
         {
@@ -59,6 +60,12 @@ std::vector<WasapiStreamError> validate_graph_sample_rate(
   }
 
   return {};
+}
+
+std::size_t source_frames_for_output(std::size_t output_frames,
+                                     double ratio) noexcept {
+  return static_cast<std::size_t>(
+      std::ceil(static_cast<double>(output_frames) / ratio));
 }
 
 void interleave_planar(const realtime::AudioBuffer& source,
@@ -142,14 +149,20 @@ WindowsWasapiGraphRunner::BufferedPath::BufferedPath(
 WindowsWasapiGraphRunner::CaptureRateAdapter::CaptureRateAdapter(
     std::size_t channels,
     std::size_t graph_frames,
-    std::size_t fifo_frames)
-    : controller({.target_fill_frames = graph_frames,
+    std::size_t fifo_frames,
+    std::uint32_t capture_sample_rate,
+    std::uint32_t graph_sample_rate)
+    : nominal_ratio(static_cast<double>(graph_sample_rate) /
+                    static_cast<double>(capture_sample_rate)),
+      controller({.target_fill_frames =
+                      source_frames_for_output(graph_frames, nominal_ratio),
                   .maximum_correction_ppm = 2500.0,
                   .maximum_slew_ppm_per_second = 250.0}),
       source_planar(channels, fifo_frames),
       source_interleaved(channels * fifo_frames, 0.0F),
       output_interleaved(channels * graph_frames, 0.0F),
-      target_fill_frames(controller.config().target_fill_frames) {
+      target_fill_frames(controller.config().target_fill_frames),
+      ratio(nominal_ratio) {
   if (resampler.initialize(channels) !=
       realtime::AdaptiveResamplerStatus::success) {
     throw std::runtime_error("Failed to initialize capture adaptive resampler");
@@ -180,20 +193,33 @@ WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(
       (render_stream != nullptr && render_packet_capacity_frames == 0)) {
     throw std::invalid_argument("Invalid buffered WASAPI graph runner capacity");
   }
-  if (adapt_capture_rate &&
-      (capture_stream == nullptr || render_stream == nullptr ||
-       !prime_render_silence ||
-       capture_packet_capacity_frames >
-           fifo_capacity_frames - graph_block_frames)) {
-    throw std::invalid_argument(
-        "Adaptive capture FIFO must hold one graph block and capture packet");
+  if (adapt_capture_rate) {
+    if (capture_stream == nullptr || render_stream == nullptr ||
+        !prime_render_silence ||
+        capture_stream->probe().mix_format.sample_rate == 0 ||
+        render_stream->probe().mix_format.sample_rate == 0) {
+      throw std::invalid_argument("Invalid adaptive capture stream configuration");
+    }
+    const auto nominal_ratio =
+        static_cast<double>(render_stream->probe().mix_format.sample_rate) /
+        capture_stream->probe().mix_format.sample_rate;
+    const auto nominal_capture_block =
+        source_frames_for_output(graph_block_frames, nominal_ratio);
+    if (nominal_capture_block > fifo_capacity_frames ||
+        capture_packet_capacity_frames >
+            fifo_capacity_frames - nominal_capture_block) {
+      throw std::invalid_argument(
+          "Adaptive capture FIFO must hold one graph block and capture packet");
+    }
   }
   if (capture_stream != nullptr) {
     capture_path_.emplace(input_channels, capture_packet_capacity_frames,
                           fifo_capacity_frames);
     if (adapt_capture_rate) {
       capture_rate_adapter_.emplace(input_channels, graph_block_frames,
-                                    fifo_capacity_frames);
+                                    fifo_capacity_frames,
+                                    capture_stream->probe().mix_format.sample_rate,
+                                    render_stream->probe().mix_format.sample_rate);
     }
   }
   if (render_stream != nullptr) {
@@ -236,7 +262,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::start_streams() noexcept {
     capture_rate_adapter_->resampler.reset();
     capture_rate_adapter_->controller.reset();
     capture_rate_adapter_->output_frames_ready = 0;
-    capture_rate_adapter_->ratio = 1.0;
+    capture_rate_adapter_->ratio = capture_rate_adapter_->nominal_ratio;
     capture_rate_adapter_->ratio_set_for_block = false;
     capture_rate_adapter_->primed = false;
     capture_rate_adapter_->recovery_active = false;
@@ -420,7 +446,8 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
         capture_rate_adapter_->recovery_active;
   }
   auto sample_rate_errors =
-      validate_graph_sample_rate(graph, capture_stream_, render_stream_);
+      validate_graph_sample_rate(graph, capture_stream_, render_stream_,
+                                 capture_rate_adapter_.has_value());
   if (!sample_rate_errors.empty()) {
     return WasapiGraphRunnerResult::failure(std::move(sample_rate_errors));
   }
@@ -533,7 +560,8 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
           capture_rate_adapter_->resampler.reset();
           capture_rate_adapter_->controller.reset();
           capture_rate_adapter_->output_frames_ready = 0;
-          capture_rate_adapter_->ratio = 1.0;
+          capture_rate_adapter_->ratio =
+              capture_rate_adapter_->nominal_ratio;
           capture_rate_adapter_->ratio_set_for_block = false;
           capture_rate_adapter_->primed = false;
           capture_rate_adapter_->recovery_active = true;
@@ -587,13 +615,15 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
 
         if (adapter.recovery_preroll_pending) {
           const auto preroll_capacity = adapter.source_planar.frames();
+          const auto nominal_preroll_frames = source_frames_for_output(
+              graph_block_frames_, adapter.nominal_ratio);
           const auto extra_preroll_frames =
-              preroll_capacity > graph_block_frames_
-                  ? std::min(graph_block_frames_,
-                             preroll_capacity - graph_block_frames_)
+              preroll_capacity > nominal_preroll_frames
+                  ? std::min(nominal_preroll_frames,
+                             preroll_capacity - nominal_preroll_frames)
                   : std::size_t{0};
           const auto preroll_frames =
-              graph_block_frames_ + extra_preroll_frames;
+              nominal_preroll_frames + extra_preroll_frames;
           static_cast<void>(capture_path_->fifo.peek(adapter.source_planar, 1));
           for (std::size_t channel = 0; channel < input_.channels(); ++channel) {
             const auto edge_sample = adapter.source_planar.channel(channel)[0];
@@ -617,7 +647,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
                 static_cast<std::uint32_t>(remaining_frames),
                 adapter.output_interleaved,
                 static_cast<std::uint32_t>(graph_block_frames_),
-                1.0);
+                adapter.nominal_ratio);
             if (!preroll_result.ok()) {
               return WasapiGraphRunnerResult::failure({{
                   "capture_resampler_preroll_failed",
@@ -653,7 +683,8 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
                 clock_feed_forward_ppm + fifo_correction_ppm,
                 -2500.0,
                 2500.0);
-            adapter.ratio = 1.0 / (1.0 + correction_ppm * 0.000001);
+            adapter.ratio =
+                adapter.nominal_ratio / (1.0 + correction_ppm * 0.000001);
             adapter.ratio_set_for_block = true;
             stats.capture_rate_correction_ppm = correction_ppm;
             stats.capture_clock_feed_forward_ppm = clock_feed_forward_ppm;

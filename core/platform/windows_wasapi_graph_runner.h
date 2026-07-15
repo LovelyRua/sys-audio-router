@@ -119,8 +119,11 @@ class WindowsWasapiGraphRunner {
   struct CaptureRateAdapter {
     CaptureRateAdapter(std::size_t channels,
                        std::size_t graph_frames,
-                       std::size_t fifo_frames);
+                       std::size_t fifo_frames,
+                       std::uint32_t capture_sample_rate,
+                       std::uint32_t graph_sample_rate);
 
+    double nominal_ratio = 1.0;
     realtime::AdaptiveResampler resampler;
     realtime::FifoWaterlineController controller;
     realtime::AudioBuffer source_planar;

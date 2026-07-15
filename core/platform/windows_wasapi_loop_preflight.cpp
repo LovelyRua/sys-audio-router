@@ -43,15 +43,6 @@ std::vector<WasapiRealtimeWorkerError> validate_wasapi_duplex_graph_preflight(
     const graph::Graph& graph,
     const WasapiStreamProbe& capture_probe,
     const WasapiStreamProbe& render_probe) {
-  if (graph.sample_rate() != capture_probe.mix_format.sample_rate) {
-    return {
-        {
-            "graph_sample_rate_mismatch",
-            "Graph sample rate must match the WASAPI capture stream sample rate.",
-        },
-    };
-  }
-
   if (graph.sample_rate() != render_probe.mix_format.sample_rate) {
     return {
         {

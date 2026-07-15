@@ -1,11 +1,14 @@
 #include "core/platform/windows_wasapi_graph_runner.h"
 
 #include "core/graph/node.h"
+#include "tests/realtime/scripted_wasapi_stream.h"
 #include "tests/realtime/test_helpers.h"
 
+#include <cmath>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -460,6 +463,54 @@ int main() {
     if (const auto failure =
             expect(sar::tests::nearly_equal(input.channel(0)[0], 0.5F),
                    "Expected capture sample-rate preflight not to clear input")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::tests::ScriptedWasapiStream capture_stream(make_mismatched_capture_probe());
+    sar::tests::ScriptedWasapiStream render_stream(make_render_probe());
+    capture_stream.enqueue_capture({.frames = 64,
+                                    .samples = {std::vector<float>(64, 0.5F),
+                                                std::vector<float>(64, -0.5F)}});
+    render_stream.enqueue_render({.writable_frames = 64});
+
+    sar::platform::WindowsWasapiGraphRunner runner(
+        &capture_stream, &render_stream, 2, 2, 64, 64, 64, 256, true, true);
+    sar::graph::Graph graph(14, 2, 64, 48000);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    const auto result = runner.process_once(graph, diagnostics, 0);
+
+    if (const auto failure = expect(result.ok(),
+                                    "Expected native-rate adaptive capture success")) {
+      return failure;
+    }
+    constexpr auto expected_nominal_ratio = 48000.0 / 44100.0;
+    if (const auto failure = expect(
+            result.stats().capture_rate_adapter_active &&
+                std::abs(result.stats().capture_resampler_ratio -
+                         expected_nominal_ratio) < 0.01,
+            "Expected 48 kHz / 44.1 kHz adaptive capture ratio")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::tests::ScriptedWasapiStream capture_stream(make_mismatched_capture_probe());
+    sar::tests::ScriptedWasapiStream render_stream(make_mismatched_render_probe());
+    sar::platform::WindowsWasapiGraphRunner runner(
+        &capture_stream, &render_stream, 2, 2, 64, 64, 64, 256, true, true);
+    sar::graph::Graph graph(15, 2, 64, 48000);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    const auto result = runner.process_once(graph, diagnostics, 0);
+
+    if (const auto failure = expect(!result.ok(),
+                                    "Expected adaptive render sample-rate mismatch")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(has_error_code(result, "graph_sample_rate_mismatch"),
+                   "Expected adaptive render graph_sample_rate_mismatch")) {
       return failure;
     }
   }

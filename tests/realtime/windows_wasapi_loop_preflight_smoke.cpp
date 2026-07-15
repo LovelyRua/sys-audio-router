@@ -82,6 +82,8 @@ int main() {
       make_probe(sar::platform::WasapiStreamDirection::Capture, 48000, 4, 96);
   const auto render_probe =
       make_probe(sar::platform::WasapiStreamDirection::Render, 48000, 2, 128);
+  const auto native_rate_capture_probe =
+      make_probe(sar::platform::WasapiStreamDirection::Capture, 44100, 4, 96);
   const auto mismatched_render_probe =
       make_probe(sar::platform::WasapiStreamDirection::Render, 44100, 2, 128);
 
@@ -141,6 +143,18 @@ int main() {
   }
 
   {
+    auto graph = make_processing_graph(11, 4, 128, 48000);
+    const auto errors = sar::platform::validate_wasapi_duplex_graph_preflight(
+        graph,
+        native_rate_capture_probe,
+        render_probe);
+    if (const auto failure =
+            expect(errors.empty(), "Expected native-rate capture preflight success")) {
+      return failure;
+    }
+  }
+
+  {
     sar::graph::Graph graph(4, 2, 128, 44100);
     const auto errors =
         sar::platform::validate_wasapi_render_graph_preflight(graph, render_probe);
@@ -164,12 +178,12 @@ int main() {
         render_probe);
     if (const auto failure =
             expect(has_error_code(errors, "graph_sample_rate_mismatch"),
-                   "Expected duplex capture sample-rate mismatch")) {
+                   "Expected duplex render sample-rate mismatch")) {
       return failure;
     }
     if (const auto failure =
-            expect(has_error_message(errors, "capture stream sample rate"),
-                   "Expected duplex capture sample-rate message")) {
+            expect(has_error_message(errors, "render stream sample rate"),
+                   "Expected duplex render sample-rate message")) {
       return failure;
     }
   }

@@ -104,6 +104,8 @@ sar::platform::WasapiStreamProbe make_scripted_probe(
   probe.device_label = direction == sar::platform::WasapiStreamDirection::Render
                            ? "Scripted render"
                            : "Scripted capture";
+  probe.mix_format.sample_rate =
+      direction == sar::platform::WasapiStreamDirection::Render ? 48000 : 44100;
   probe.default_period_100ns = 100000;
   probe.minimum_period_100ns = 30000;
   probe.buffer_frames = probe.mix_format.frames_per_block;
@@ -119,7 +121,7 @@ struct ScriptedDuplexOpen {
   std::string requested_render_id;
   std::string requested_capture_id;
   std::uint32_t render_requested_sample_rate = 1;
-  std::uint32_t capture_requested_sample_rate = 0;
+  std::uint32_t capture_requested_sample_rate = 1;
 };
 
 sar::platform::WasapiStreamProbeResult scripted_probe(
@@ -296,14 +298,20 @@ int main() {
       return failure;
     }
     if (const auto failure = expect(script.render_requested_sample_rate == 0 &&
-                                        script.capture_requested_sample_rate == 48000,
-                                    "Expected capture to request render sample rate")) {
+                                        script.capture_requested_sample_rate == 0,
+                                    "Expected capture to open at its native sample rate")) {
       return failure;
     }
     if (const auto failure = expect(
             result.loop().capture_probe().device_id == "stable-capture-id" &&
                 result.loop().render_probe().device_id == "stable-render-id",
             "Expected opened loop to retain stable probed endpoint IDs")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            result.loop().capture_probe().mix_format.sample_rate == 44100 &&
+                result.loop().render_probe().mix_format.sample_rate == 48000,
+            "Expected opened loop to preserve native endpoint sample rates")) {
       return failure;
     }
   }
@@ -348,17 +356,16 @@ int main() {
   auto duplex_sample_rate = 48000U;
   if (!capture_probe_result.ok() || !render_probe_result.ok()) {
     std::cout << "Windows WASAPI duplex loop preflight skipped: probe failed\n";
-  } else if (capture_probe_result.probe().mix_format.sample_rate ==
-             render_probe_result.probe().mix_format.sample_rate) {
+  } else {
     const auto& capture_probe = capture_probe_result.probe();
     const auto& render_probe = render_probe_result.probe();
-    duplex_sample_rate = capture_probe.mix_format.sample_rate;
+    duplex_sample_rate = render_probe.mix_format.sample_rate;
     {
       sar::graph::Graph mismatched_graph(
           33,
           std::max(capture_probe.mix_format.channels, render_probe.mix_format.channels),
           std::max(capture_probe.buffer_frames, render_probe.buffer_frames),
-          mismatched_sample_rate(capture_probe.mix_format.sample_rate));
+          mismatched_sample_rate(render_probe.mix_format.sample_rate));
       sar::diagnostics::EngineDiagnostics diagnostics;
       auto result = sar::platform::open_default_wasapi_duplex_loop(mismatched_graph,
                                                                    diagnostics);
@@ -380,7 +387,7 @@ int main() {
           34,
           std::max(capture_probe.mix_format.channels, render_probe.mix_format.channels),
           required_frames - 1,
-          capture_probe.mix_format.sample_rate);
+          render_probe.mix_format.sample_rate);
       undersized_graph.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
       undersized_graph.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
       sar::diagnostics::EngineDiagnostics diagnostics;
@@ -403,10 +410,6 @@ int main() {
   auto result = sar::platform::open_default_wasapi_duplex_loop(graph, diagnostics);
   if (!result.ok()) {
     for (const auto& error : result.errors()) {
-      if (error.code == "duplex_sample_rate_mismatch") {
-        std::cout << "Windows WASAPI duplex loop skipped: " << error.message << '\n';
-        return 0;
-      }
       std::cerr << error.code << ": " << error.message << '\n';
     }
     return 1;
@@ -493,9 +496,9 @@ int main() {
     return failure;
   }
 
-  if (const auto failure = expect(loop->capture_probe().mix_format.sample_rate ==
-                                      loop->render_probe().mix_format.sample_rate,
-                                  "Expected matching duplex sample rate")) {
+  if (const auto failure = expect(loop->render_probe().mix_format.sample_rate ==
+                                      graph.sample_rate(),
+                                  "Expected graph to match render sample rate")) {
     return failure;
   }
 

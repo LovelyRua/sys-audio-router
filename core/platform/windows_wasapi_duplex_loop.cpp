@@ -380,8 +380,15 @@ WasapiDuplexLoopSummary WindowsWasapiDuplexLoop::summary() const {
           {domain, current_frames, result.render_clock.qpc_position_100ns});
     }
   }
-  result.frame_balance =
-      signed_frame_balance(result.worker.captured_frames, result.worker.rendered_frames);
+  std::uint64_t capture_frames_in_render_domain = 0;
+  if (wasapi_clock_position_to_audio_frames(
+          result.worker.captured_frames,
+          capture_probe().mix_format.sample_rate,
+          render_probe().mix_format.sample_rate,
+          capture_frames_in_render_domain)) {
+    result.frame_balance = signed_frame_balance(
+        capture_frames_in_render_domain, result.worker.rendered_frames);
+  }
   return result;
 }
 
@@ -440,22 +447,9 @@ WasapiDuplexLoopOpenResult WindowsWasapiDuplexLoop::open(
         convert_errors(capture_probe_result.errors()));
   }
 
-  auto capture_result = open_stream(
-      capture_probe_result.probe(),
-      render_result.stream().probe().mix_format.sample_rate,
-      context);
+  auto capture_result = open_stream(capture_probe_result.probe(), 0, context);
   if (!capture_result.ok()) {
     return WasapiDuplexLoopOpenResult::failure(convert_errors(capture_result.errors()));
-  }
-
-  if (!compatible_wasapi_duplex_sample_rates(capture_result.stream().probe(),
-                                             render_result.stream().probe())) {
-    return WasapiDuplexLoopOpenResult::failure({
-        {
-            "duplex_sample_rate_mismatch",
-            "WASAPI capture and render streams need a sample-rate adapter before duplex use.",
-        },
-    });
   }
 
   auto graph_errors =
