@@ -35,8 +35,8 @@ sar::platform::WasapiStreamProbe make_probe(
   return probe;
 }
 
-std::vector<float> constant_packet(float sample) {
-  return std::vector<float>(kCaptureFrames, sample);
+std::vector<float> constant_packet(float sample, std::uint32_t frames) {
+  return std::vector<float>(frames, sample);
 }
 
 class RecordingPassthroughNode final : public sar::graph::Node {
@@ -67,10 +67,11 @@ class RecordingPassthroughNode final : public sar::graph::Node {
 
 void enqueue_capture_packet(sar::tests::ScriptedWasapiStream& capture,
                             float sample,
-                            bool data_discontinuity = false) {
+                            bool data_discontinuity = false,
+                            std::uint32_t frames = kCaptureFrames) {
   capture.enqueue_capture({
-      .frames = kCaptureFrames,
-      .samples = {constant_packet(sample)},
+      .frames = frames,
+      .samples = {constant_packet(sample, frames)},
       .data_discontinuity = data_discontinuity,
   });
 }
@@ -158,7 +159,7 @@ RunResult run_with_pre_gap_partial() {
   }
   const auto learned_process_calls = recorder_ptr->process_calls();
 
-  enqueue_capture_packet(capture, kPreGapSample);
+  enqueue_capture_packet(capture, kPreGapSample, false, 1);
   end_capture_cycle(capture, render);
   const auto pre_gap = process_cycle(runner, graph, diagnostics);
   assert(pre_gap.ok());
