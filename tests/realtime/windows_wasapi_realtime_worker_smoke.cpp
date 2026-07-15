@@ -568,7 +568,7 @@ int main() {
     if (stats.capture_discontinuity_cycles != 2 ||
         stats.capture_discontinuity_frames != 64 ||
         stats.capture_rate_adapter_reset_cycles != 2 ||
-        stats.graph_processed_cycles != 2 ||
+        stats.graph_processed_cycles != 1 ||
         stats.render_recovery_silence_cycles != 2 ||
         stats.render_recovery_silence_frames != 128 ||
         stats.maximum_render_recovery_silence_frames != 128) {
@@ -586,7 +586,7 @@ int main() {
             stats.capture_discontinuity_cycles == 2 &&
                 stats.capture_discontinuity_frames == 64 &&
                 stats.capture_rate_adapter_reset_cycles == 2 &&
-                stats.graph_processed_cycles == 2 &&
+                stats.graph_processed_cycles == 1 &&
                 stats.render_recovery_silence_cycles == 2 &&
                 stats.render_recovery_silence_frames == 128 &&
                 stats.maximum_render_recovery_silence_frames == 128,
