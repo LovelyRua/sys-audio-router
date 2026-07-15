@@ -33,6 +33,7 @@ function Get-WasapiSoakMetricNames {
     "render_fifo_underflow_frames",
     "render_startup_silence_frames",
     "render_recovery_silence_frames",
+    "render_recovery_silence_episodes",
     "render_capture_starvation_silence_frames",
     "maximum_render_recovery_silence_frames"
   )
@@ -183,6 +184,7 @@ function ConvertFrom-WasapiMeasurementOutput {
         "render_fifo_underflow_frames",
         "render_startup_silence_frames",
         "render_recovery_silence_frames",
+        "render_recovery_silence_episodes",
         "render_capture_starvation_silence_frames",
         "maximum_render_recovery_silence_frames")) {
       $requiredMetrics.Add($name)
@@ -258,6 +260,10 @@ function ConvertFrom-WasapiMeasurementOutput {
         [System.Numerics.BigInteger]$metrics.render_capture_starvation_silence_frames
     if ($attributed -ne [System.Numerics.BigInteger]$metrics.render_fifo_underflow_frames) {
       $failures.Add("render_underflow_not_exactly_attributed")
+    }
+    if ($metrics.render_recovery_silence_episodes -gt
+        $metrics.capture_discontinuity_cycles) {
+      $failures.Add("recovery_silence_episodes_exceed_discontinuities")
     }
     if ($MaximumRenderRecoverySilenceFrames -ne 0 -and
         $metrics.maximum_render_recovery_silence_frames -gt

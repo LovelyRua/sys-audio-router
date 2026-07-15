@@ -34,6 +34,7 @@ function New-ValidSummary {
     render_fifo_underflow_frames = "96"
     render_startup_silence_frames = "32"
     render_recovery_silence_frames = "48"
+    render_recovery_silence_episodes = "1"
     render_capture_starvation_silence_frames = "16"
     maximum_render_recovery_silence_frames = "48"
   }
@@ -120,6 +121,7 @@ $metricOutput = @(Invoke-WasapiSoak -Mode duplex -Iterations 2 -RunMeasurement {
       render_fifo_underflow_frames = 192
       render_startup_silence_frames = 64
       render_recovery_silence_frames = 96
+      render_recovery_silence_episodes = 3
       render_capture_starvation_silence_frames = 32
     })
   }
@@ -136,11 +138,19 @@ Assert-Equal 9 $duplexMetrics.Totals.render_fifo_underflow_cycles "Unexpected un
 Assert-Equal 144000 $duplexMetrics.Totals.rendered_frames "Unexpected rendered frame total."
 Assert-Equal 144000 $duplexMetrics.Totals.target_rendered_frames "Unexpected target frame total."
 Assert-Equal 288 $duplexMetrics.Totals.render_fifo_underflow_frames "Unexpected underflow frame total."
+Assert-Equal 4 $duplexMetrics.Totals.render_recovery_silence_episodes `
+    "Unexpected recovery silence episode total."
 Assert-Equal 48 $duplexMetrics.Totals.maximum_render_recovery_silence_frames `
     "Recovery episode maximum must not be summed across attempts."
 Assert-Equal $true $metricText.Contains(
     "maximum_render_recovery_silence_frames_maximum=48") `
     "Missing recovery episode maximum summary."
+Assert-Equal $true $metricText.Contains(
+    "render_recovery_silence_episodes_total=4") `
+    "Missing recovery silence episode total summary."
+Assert-Equal $true $metricText.Contains(
+    "render_recovery_silence_episodes_per_second=1.333333") `
+    "Missing normalized recovery silence episode rate."
 Assert-Equal $true $metricText.Contains("duration_seconds=3.000") "Missing normalized duration."
 
 $gateCases = @(
@@ -155,6 +165,7 @@ $gateCases = @(
   @{ Name = "render overflow frames"; Override = @{ render_fifo_overflow_frames = 1 }; Reason = "render_fifo_overflow_frames_nonzero" },
   @{ Name = "low coverage"; Override = @{ rendered_frames = 47519 }; Reason = "rendered_frame_coverage_below_minimum" },
   @{ Name = "zero sample rate"; Override = @{ render_sample_rate = 0 }; Reason = "render_sample_rate_zero" },
+  @{ Name = "excess recovery silence episodes"; Override = @{ render_recovery_silence_episodes = 3 }; Reason = "recovery_silence_episodes_exceed_discontinuities" },
   @{ Name = "unattributed underflow"; Override = @{ render_fifo_underflow_frames = 97 }; Reason = "render_underflow_not_exactly_attributed" },
   @{ Name = "over-attributed underflow"; Override = @{ render_fifo_underflow_frames = 95 }; Reason = "render_underflow_not_exactly_attributed" }
 )
@@ -229,6 +240,7 @@ $missingFields = @(
   "render_fifo_underflow_frames",
   "render_startup_silence_frames",
   "render_recovery_silence_frames",
+  "render_recovery_silence_episodes",
   "render_capture_starvation_silence_frames"
 )
 foreach ($missingName in $missingFields) {
@@ -255,6 +267,13 @@ $invalidOptionalOutput = Invoke-SingleSummary -Mode duplex `
     })
 Assert-Equal 1 $invalidOptionalOutput[-1].ParseFailureCount `
     "Present but invalid duplex event timeout telemetry should fail parsing."
+
+$invalidRecoveryEpisodesOutput = Invoke-SingleSummary -Mode duplex `
+    -Summary (New-ValidSummary -Mode duplex -Override @{
+      render_recovery_silence_episodes = "not-a-number"
+    })
+Assert-Equal 1 $invalidRecoveryEpisodesOutput[-1].ParseFailureCount `
+    "Invalid recovery silence episode telemetry should fail parsing."
 
 foreach ($invalidValue in @("-1", "+1", "1.5", "not-a-number", "18446744073709551616")) {
   $invalidOutput = Invoke-SingleSummary -Mode duplex `
@@ -285,6 +304,7 @@ foreach ($name in @(
     "render_fifo_underflow_frames",
     "render_startup_silence_frames",
     "render_recovery_silence_frames",
+    "render_recovery_silence_episodes",
     "render_capture_starvation_silence_frames")) {
   $renderSummary = $renderSummary -replace "\s$([regex]::Escape($name))=[^\s]+", ""
 }
