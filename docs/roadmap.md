@@ -61,11 +61,12 @@ probing, render loopback probing, shared-mode event-driven stream handles,
 single-cycle render/capture pumping, graph runner orchestration, MMCSS scope,
 realtime worker, and render, duplex, and capture-only loopback wrappers and
 measurement tools exist. Fixed-capacity FIFOs preserve frame counts in the
-single-ended paths when device periods and graph blocks differ. Windows Audio
-Engine sample-rate conversion has also enabled a real shared-mode duplex path
-from the default 44.1 kHz capture endpoint to the 48 kHz render endpoint.
+single-ended paths when device periods and graph blocks differ. Native-rate
+capture opening plus internal adaptive resampling now enables a real shared-mode
+duplex path from a 44.1 kHz capture endpoint to a 48 kHz render endpoint without
+first routing capture through Windows Audio Engine SRC.
 
-The Windows suite currently contains 62 smoke tests. A strict-healthy two-second
+The Windows suite currently contains 83 CTest targets. A strict-healthy two-second
 render measurement submitted 96,000 frames with zero xruns, wait timeouts, or
 FIFO faults. A five-second duplex measurement processed approximately 240,000
 render-domain frames, but still exposed capture discontinuity and render

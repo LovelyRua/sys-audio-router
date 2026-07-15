@@ -161,8 +161,10 @@ are required to apply the roadmap's long-soak thresholds.
   selection.
 - Default render-endpoint loopback probing and capture stream opening.
 - Shared-mode WASAPI initialization.
-- Windows Audio Engine sample-rate conversion in shared mode, allowing the
-  default 44.1 kHz capture endpoint to run with a 48 kHz render endpoint.
+- Native-rate shared-mode capture opening for duplex streams. The internal
+  adaptive resampler applies nominal capture-to-render conversion before its
+  bounded clock/FIFO ppm correction, avoiding a second Windows Audio Engine
+  conversion stage.
 - Event-driven stream handles.
 - `IAudioRenderClient` and `IAudioCaptureClient` ownership.
 - `IAudioClock` ownership with allocation-free raw position, frequency, and QPC
@@ -200,8 +202,9 @@ first measured full-duplex real-device loop. Its summary includes capture/render
 stream diagnostics, worker counters, and runtime health. The duplex capture
 FIFO reserves two native-buffer spans beyond the graph block so a delayed
 capture service cycle can drain queued packets without immediately exhausting
-bridge capacity. The adaptive controller still targets one graph block of fill;
-the additional capacity is catch-up reserve, not added steady-state latency.
+bridge capacity. The adaptive controller targets the native-capture frame
+equivalent of one graph block of fill; the additional capacity is catch-up
+reserve, not added steady-state latency.
 Native duplex streams use one coordinated wait over both samples-ready events
 and both stop events. The selected auto-reset samples-ready event is latched in
 its stream, so the subsequent zero-time capture or render pump does not wait for
@@ -328,7 +331,11 @@ retained a failed third attempt and copied its complete evidence home. A
 subsequent pinned 10-second 44.1-to-48 kHz run passed the 99.99% coverage gate,
 rendering 482,016 frames against a 480,000-frame target with zero timeout,
 overflow, or unattributed underflow and a 2,016-frame recovery maximum against
-the 2,594-frame bound.
+the 2,594-frame bound. That run used the previous Windows Audio Engine SRC
+opening strategy and reported 158 capture discontinuity cycles. A native 48 kHz
+capture control run reported one discontinuity cycle, motivating native-rate
+capture; equivalent 44.1-to-48 kHz hardware evidence for the new internal
+nominal-rate path is still pending.
 
 ## Current Testing Model
 
