@@ -334,8 +334,14 @@ overflow, or unattributed underflow and a 2,016-frame recovery maximum against
 the 2,594-frame bound. That run used the previous Windows Audio Engine SRC
 opening strategy and reported 158 capture discontinuity cycles. A native 48 kHz
 capture control run reported one discontinuity cycle, motivating native-rate
-capture; equivalent 44.1-to-48 kHz hardware evidence for the new internal
-nominal-rate path is still pending.
+capture. The first equivalent 10-second 44.1-to-48 kHz run through the new
+internal nominal-rate path reported six discontinuity cycles, zero wait timeout,
+zero FIFO overflow, and a 1,344-frame recovery maximum. Three following
+10-second attempts totalled 18 discontinuity cycles, or 0.6 per second versus
+15.8 per second in the old run, with zero FIFO overflow and a 2,016-frame maximum.
+Two attempts passed every soak gate; one reported a single render wait timeout,
+so render-deadline stability remains open despite the large discontinuity
+reduction.
 
 ## Current Testing Model
 
@@ -362,7 +368,10 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   can be thresholded by the recovery acceptance script. Synthetic coverage
   distinguishes a 128-frame episode maximum from 192 aggregate frames. The
   remaining gate is long-duration real-device evidence against the configured
-  `target_fill_frames + render_buffer_frames` bound.
+  `target_fill_frames + render_buffer_frames` bound. Native-rate capture reduced
+  one 44.1-to-48 kHz path from 15.8 to 0.6 reported discontinuity cycles per
+  second across the retained short runs, but one of three attempts still had a
+  render wait timeout.
 - WASAPI failures preserve native HRESULT/Win32 values through the stream and
   realtime-worker layers, and device invalidation feeds a bounded control-thread
   reopen policy. A lock-free endpoint-notification source and endpoint-selection
