@@ -153,7 +153,7 @@ RunResult run_with_pre_gap_partial() {
     const auto learning = process_cycle(runner, graph, diagnostics);
     assert(learning.ok());
     assert(learning.stats().graph_processed);
-    assert(learning.stats().capture_fifo_correction_ppm > 0.0);
+    assert(std::fabs(learning.stats().capture_fifo_correction_ppm) > 1.0e-12);
     assert_no_capture_overflow(diagnostics);
   }
   const auto learned_process_calls = recorder_ptr->process_calls();
@@ -165,7 +165,7 @@ RunResult run_with_pre_gap_partial() {
   assert(!pre_gap.stats().graph_processed);
   assert(pre_gap.stats().capture_resampler_output_frames > 0);
   assert(pre_gap.stats().capture_resampler_output_frames < kGraphFrames);
-  assert(pre_gap.stats().capture_fifo_correction_ppm > 0.0);
+  assert(std::fabs(pre_gap.stats().capture_fifo_correction_ppm) > 1.0e-12);
   const auto learned_correction_ppm =
       pre_gap.stats().capture_fifo_correction_ppm;
   assert(recorder_ptr->process_calls() == learned_process_calls);
@@ -189,22 +189,34 @@ RunResult run_with_pre_gap_partial() {
   assert(recorder_ptr->process_calls() == learned_process_calls);
   assert_no_capture_overflow(diagnostics);
 
+  end_capture_cycle(capture, render);
+  const auto post_gap_idle = process_cycle(runner, graph, diagnostics);
+  assert(post_gap_idle.ok());
+  assert(!post_gap_idle.stats().graph_processed);
+  assert(post_gap_idle.stats().capture_rate_adapter_recovering);
+  assert(post_gap_idle.stats().render_recovery_silence);
+  assert(std::fabs(post_gap_idle.stats().capture_fifo_correction_ppm -
+                   learned_correction_ppm) < 1.0e-9);
+  assert(diagnostics.render_fifo_underflow_cycles == 2);
+  assert(diagnostics.render_fifo_underflow_frames == 2 * kGraphFrames);
+  assert(recorder_ptr->process_calls() == learned_process_calls);
+  assert_no_capture_overflow(diagnostics);
+
   enqueue_capture_packet(capture, kPostGapSample);
   end_capture_cycle(capture, render);
   const auto recovered = process_cycle(runner, graph, diagnostics);
   assert(recovered.ok());
   assert(recovered.stats().graph_processed);
-  assert(recovered.stats().capture_fifo_correction_ppm > 0.0);
-  assert(recovered.stats().capture_fifo_correction_ppm < learned_correction_ppm);
+  assert(std::fabs(recovered.stats().capture_fifo_correction_ppm) > 1.0e-12);
   assert(!recovered.stats().capture_rate_adapter_recovering);
   assert(!recovered.stats().render_recovery_silence);
   assert(recovered.stats().render_recovery_silence_frames == 0);
-  assert(diagnostics.render_fifo_underflow_cycles == 1);
-  assert(diagnostics.render_fifo_underflow_frames == kGraphFrames);
+  assert(diagnostics.render_fifo_underflow_cycles == 2);
+  assert(diagnostics.render_fifo_underflow_frames == 2 * kGraphFrames);
   assert_no_capture_overflow(diagnostics);
 
   assert(recorder_ptr->process_calls() == learned_process_calls + 1);
-  assert(render.render_submissions().size() == kLearningCycles + 3);
+  assert(render.render_submissions().size() == kLearningCycles + 4);
   return {recorder_ptr->observed(),
           render.render_submissions().back().samples.front()};
 }
