@@ -437,6 +437,7 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
   std::uint64_t current_render_recovery_silence_frames = 0;
   std::uint64_t maximum_render_recovery_silence_frames = 0;
   bool render_recovery_episode_active = false;
+  bool render_recovery_episode_counted = false;
   while (!stop_requested_.load()) {
     auto result = runner_.process_once(graph_, diagnostics_, timeout_ms);
     if (!result.ok()) {
@@ -476,9 +477,12 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
         result.stats().capture_rate_adapter_recovering);
     if (result.stats().capture_rate_adapter_reset) {
       capture_rate_adapter_reset_cycles_.fetch_add(1);
+      // A second discontinuity can arrive before recovery completes. Keep the
+      // episode continuous, but restart the per-discontinuity recovery bound.
       if (!render_recovery_episode_active) {
-        current_render_recovery_silence_frames = 0;
+        render_recovery_episode_counted = false;
       }
+      current_render_recovery_silence_frames = 0;
       render_recovery_episode_active = true;
     }
     if (result.stats().render_startup_silence) {
@@ -496,8 +500,9 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
       render_recovery_silence_frames_.fetch_add(
           result.stats().render_recovery_silence_frames);
       if (render_recovery_episode_active) {
-        if (current_render_recovery_silence_frames == 0) {
+        if (!render_recovery_episode_counted) {
           render_recovery_silence_episodes_.fetch_add(1);
+          render_recovery_episode_counted = true;
         }
         current_render_recovery_silence_frames +=
             result.stats().render_recovery_silence_frames;
@@ -512,6 +517,7 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
         !result.stats().capture_rate_adapter_recovering) {
       current_render_recovery_silence_frames = 0;
       render_recovery_episode_active = false;
+      render_recovery_episode_counted = false;
     }
     if (result.stats().capture_rate_adapter_active) {
       const auto correction = result.stats().capture_rate_correction_ppm;

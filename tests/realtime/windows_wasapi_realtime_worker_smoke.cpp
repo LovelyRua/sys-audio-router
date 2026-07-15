@@ -582,7 +582,7 @@ int main() {
         stats.render_recovery_silence_cycles != 2 ||
         stats.render_recovery_silence_frames != 128 ||
         stats.render_recovery_silence_episodes != 1 ||
-        stats.maximum_render_recovery_silence_frames != 128) {
+        stats.maximum_render_recovery_silence_frames != 64) {
       std::cerr << "Consecutive reset recovery stats: discontinuities="
                 << stats.capture_discontinuity_cycles
                 << " discontinuity_frames=" << stats.capture_discontinuity_frames
@@ -603,8 +603,9 @@ int main() {
                 stats.render_recovery_silence_cycles == 2 &&
                 stats.render_recovery_silence_frames == 128 &&
                 stats.render_recovery_silence_episodes == 1 &&
-                stats.maximum_render_recovery_silence_frames == 128,
-            "Expected consecutive resets to preserve one recovery silence episode")) {
+                stats.maximum_render_recovery_silence_frames == 64,
+            "Expected consecutive resets to preserve one episode while restarting "
+            "the per-discontinuity recovery bound")) {
       return failure;
     }
   }
