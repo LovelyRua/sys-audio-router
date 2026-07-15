@@ -172,4 +172,22 @@ foreach ($wrapperName in @("windows-winrm-local-test.cmd", "windows-winrm-local-
   }
 }
 
+$archiveNamespaces = @{
+  "windows-winrm-local-test.ps1" = "local-test"
+  "windows-winrm-local-measure.ps1" = "local-measure"
+}
+foreach ($entry in $archiveNamespaces.GetEnumerator()) {
+  $scriptText = Get-Content -LiteralPath (Join-Path $PSScriptRoot $entry.Key) -Raw
+  Assert-Equal $true $scriptText.Contains(
+      "`$slotKey = `"$($entry.Value)-`$SafeSlot`"") `
+      "Archive workflow '$($entry.Key)' does not namespace its remote slot."
+  Assert-Equal $true $scriptText.Contains(
+      '"sys-audio-router-$slotKey"') `
+      "Archive workflow '$($entry.Key)' does not namespace its repository directory."
+  Assert-Equal $true $scriptText.Contains('"build-$slotKey"') `
+      "Archive workflow '$($entry.Key)' does not namespace its build directory."
+  Assert-Equal $true $scriptText.Contains('".sar-slot-active\$slotKey"') `
+      "Archive workflow '$($entry.Key)' does not namespace its active token."
+}
+
 Write-Output "WinRM slot retention tests passed"
