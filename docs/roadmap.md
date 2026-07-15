@@ -112,8 +112,10 @@ the soak gates.
   recovery silence, with zero capture FIFO overflow. The realtime worker now
   reports a per-event maximum, the supervisor retains it across runtime reopen,
   and the recovery acceptance script can apply an explicit frame threshold.
-  Synthetic two-episode coverage proves the maximum is not the aggregate total;
-  long-duration real-device evidence against the bound still remains.
+  Synthetic two-episode coverage proves the maximum is not the aggregate total.
+  Consecutive resets retain one continuous episode while restarting the
+  per-discontinuity frame bound at each reset.
+  Long-duration real-device evidence against the bound still remains.
 - **Device invalidation and reopen:** classify
   `AUDCLNT_E_DEVICE_INVALIDATED` separately, leave the realtime worker without a
   blocked wait or join, and reopen on the control side. A disable/enable or
@@ -153,7 +155,11 @@ the soak gates.
   target, and report zero stream faults, processing failures, FIFO overflows,
   unlabeled render underflows, and wait timeouts. Every reported discontinuity
   must satisfy the recovery bound above; raw summaries and command lines are
-  retained with the test report.
+  retained with the test report. A 60-second 44.1-to-48 kHz candidate checkpoint
+  on 2026-07-15 passed the 99.99% coverage, zero timeout/error/overflow, exact
+  underflow-attribution, and 2,594-frame recovery gates; its maximum recovery
+  was 960 frames. This is short-run evidence only and does not complete either
+  eight-hour pairing or the 24-hour gate.
 
 ## Phase 3: Virtual ASIO v1
 

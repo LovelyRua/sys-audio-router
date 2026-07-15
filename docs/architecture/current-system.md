@@ -343,6 +343,20 @@ Two attempts passed every soak gate; one reported a single render wait timeout,
 so render-deadline stability remains open despite the large discontinuity
 reduction.
 
+On 2026-07-15, commit `c2e0029` passed a 60-second backend Alpha candidate
+checkpoint on the default CABLE-B 44.1 kHz capture to 48 kHz render pairing.
+The run rendered 2,881,632 frames against a 2,880,750 hardware-clock target
+(about 100.03% coverage), with zero capture or render wait timeout, FIFO
+overflow, processing error, stream start/stop error, or unattributed render
+underflow. Two capture discontinuities formed one continuous recovery episode;
+the total and maximum per-discontinuity recovery silence were both 960 frames,
+below the 2,594-frame bound. Capture clock feed-forward was valid at shutdown.
+The worker now keeps the continuous episode count while restarting the bounded
+frame measurement at every adapter reset, so closely spaced discontinuities do
+not turn a per-discontinuity gate into an aggregate-episode gate. This short
+candidate checkpoint does not replace the two eight-hour pairings, 24-hour
+soak, or physical unplug/replug evidence required for Backend Alpha exit.
+
 ## Current Testing Model
 
 The Windows CTest suite currently has 83 smoke targets. Several tests are
