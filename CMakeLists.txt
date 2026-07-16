@@ -35,8 +35,10 @@ add_library(sar_core
   core/control/preset_document.cpp
   core/control/control_response.cpp
   core/control/control_session.cpp
+  core/control/control_wire_protocol.cpp
   core/platform/audio_device.cpp
   core/platform/audio_device_registry.cpp
+  core/platform/mock_asio_transport.cpp
   core/platform/mock_audio_device_provider.cpp
   core/platform/sample_converter.cpp
   core/platform/virtual_endpoint.cpp
@@ -51,6 +53,7 @@ add_library(sar_core
   core/graph/graph_builder.cpp
   core/graph/graph_snapshot.cpp
   core/graph/route_matrix.cpp
+  core/service/engine_control_service.cpp
 )
 
 target_include_directories(sar_core
@@ -76,6 +79,7 @@ if(WIN32)
     core/platform/windows_realtime_thread.cpp
     core/platform/windows_wasapi_stream.cpp
     core/platform/windows_wasapi_stream_probe.cpp
+    core/service/windows_named_pipe_control.cpp
   )
   target_link_libraries(sar_core PUBLIC avrt ole32 uuid)
 endif()
@@ -140,6 +144,24 @@ add_executable(sar_control_session_smoke
 
 target_link_libraries(sar_control_session_smoke PRIVATE sar_core)
 
+add_executable(sar_control_wire_protocol_smoke
+  tests/realtime/control_wire_protocol_smoke.cpp
+)
+
+target_link_libraries(sar_control_wire_protocol_smoke PRIVATE sar_core)
+
+add_executable(sar_engine_control_service_smoke
+  tests/realtime/engine_control_service_smoke.cpp
+)
+
+target_link_libraries(sar_engine_control_service_smoke PRIVATE sar_core)
+
+add_executable(sar_mock_asio_transport_smoke
+  tests/realtime/mock_asio_transport_smoke.cpp
+)
+
+target_link_libraries(sar_mock_asio_transport_smoke PRIVATE sar_core)
+
 add_executable(sar_audio_device_smoke
   tests/realtime/audio_device_smoke.cpp
 )
@@ -183,6 +205,24 @@ add_executable(sar_wasapi_realtime_error_smoke
 target_link_libraries(sar_wasapi_realtime_error_smoke PRIVATE sar_core)
 
 if(WIN32)
+  add_executable(sar_engine_service
+    tools/sar_engine_service.cpp
+  )
+
+  target_link_libraries(sar_engine_service PRIVATE sar_core)
+
+  add_executable(sar_control_cli
+    tools/sar_control_cli.cpp
+  )
+
+  target_link_libraries(sar_control_cli PRIVATE sar_core)
+
+  add_executable(sar_windows_named_pipe_control_smoke
+    tests/realtime/windows_named_pipe_control_smoke.cpp
+  )
+
+  target_link_libraries(sar_windows_named_pipe_control_smoke PRIVATE sar_core)
+
   add_executable(sar_windows_wasapi_device_smoke
     tests/realtime/windows_wasapi_device_smoke.cpp
   )
@@ -426,6 +466,9 @@ add_test(NAME preset_document_smoke COMMAND sar_preset_document_smoke)
 add_test(NAME control_command_smoke COMMAND sar_control_command_smoke)
 add_test(NAME control_response_smoke COMMAND sar_control_response_smoke)
 add_test(NAME control_session_smoke COMMAND sar_control_session_smoke)
+add_test(NAME control_wire_protocol_smoke COMMAND sar_control_wire_protocol_smoke)
+add_test(NAME engine_control_service_smoke COMMAND sar_engine_control_service_smoke)
+add_test(NAME mock_asio_transport_smoke COMMAND sar_mock_asio_transport_smoke)
 add_test(NAME audio_device_smoke COMMAND sar_audio_device_smoke)
 add_test(NAME audio_device_registry_smoke COMMAND sar_audio_device_registry_smoke)
 add_test(NAME virtual_endpoint_smoke COMMAND sar_virtual_endpoint_smoke)
@@ -435,6 +478,8 @@ add_test(NAME wasapi_endpoint_selection_policy_smoke
 add_test(NAME wasapi_recovery_policy_smoke COMMAND sar_wasapi_recovery_policy_smoke)
 add_test(NAME wasapi_realtime_error_smoke COMMAND sar_wasapi_realtime_error_smoke)
 if(WIN32)
+  add_test(NAME windows_named_pipe_control_smoke
+           COMMAND sar_windows_named_pipe_control_smoke)
   add_test(NAME windows_wasapi_device_smoke COMMAND sar_windows_wasapi_device_smoke)
   add_test(NAME windows_wasapi_endpoint_notification_smoke
            COMMAND sar_windows_wasapi_endpoint_notification_smoke)
