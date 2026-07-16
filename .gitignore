@@ -25,6 +25,7 @@ credentials/
 tmp/
 .codegraph/
 .sar-evidence/
+.codex/processes.json
 
 # Local collaborator worktrees/clones nested under this coordination checkout
 system-audio-route-a/
