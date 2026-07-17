@@ -42,6 +42,13 @@ struct ControlResponse {
   };
   ActiveGraphSummary active_graph;
   bool has_active_graph = false;
+  struct AudioRuntimeState {
+    bool installed = false;
+    bool running = false;
+    std::uint64_t graph_version = 0;
+  };
+  AudioRuntimeState audio_runtime;
+  bool has_audio_runtime_state = false;
 };
 
 [[nodiscard]] ControlResponse command_accepted(std::string command_id);
@@ -63,5 +70,10 @@ struct ControlResponse {
     std::vector<platform::AudioDeviceDescriptor> devices,
     const graph::Graph& graph,
     std::uint64_t next_graph_version);
+[[nodiscard]] ControlResponse audio_runtime_state_response(
+    std::string command_id,
+    bool installed,
+    bool running,
+    std::uint64_t graph_version);
 
 }  // namespace sar::control

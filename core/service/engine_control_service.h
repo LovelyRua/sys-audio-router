@@ -8,6 +8,7 @@
 #include <memory>
 #include <mutex>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace sar::service {
@@ -42,6 +43,11 @@ class EngineControlService {
  private:
   explicit EngineControlService(
       std::unique_ptr<control::ControlSession> session) noexcept;
+  [[nodiscard]] EngineAudioRuntimeResult start_audio_runtime_locked(
+      std::uint32_t timeout_ms);
+  void stop_audio_runtime_locked() noexcept;
+  [[nodiscard]] control::ControlResponse audio_runtime_state_response_locked(
+      std::string command_id) const;
 
   std::unique_ptr<control::ControlSession> session_;
   std::unique_ptr<EngineAudioRuntime> audio_runtime_;

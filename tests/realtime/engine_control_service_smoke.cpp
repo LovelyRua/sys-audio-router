@@ -80,6 +80,24 @@ int main() {
   assert(!missing_runtime.ok());
   assert(missing_runtime.errors()[0].code == "audio_runtime_not_installed");
 
+  sar::control::ControlCommand runtime_state;
+  runtime_state.command_id = "runtime-state-1";
+  runtime_state.type = sar::control::ControlCommandType::QueryAudioRuntime;
+  const auto missing_runtime_state = send(*service, runtime_state);
+  assert(missing_runtime_state.has_audio_runtime_state);
+  assert(!missing_runtime_state.audio_runtime.installed);
+  assert(!missing_runtime_state.audio_runtime.running);
+  assert(missing_runtime_state.audio_runtime.graph_version == 0);
+
+  sar::control::ControlCommand runtime_start;
+  runtime_start.command_id = "runtime-start-1";
+  runtime_start.type = sar::control::ControlCommandType::StartAudioRuntime;
+  const auto missing_runtime_start = send(*service, runtime_start);
+  assert(missing_runtime_start.status ==
+         sar::control::ControlResponseStatus::Rejected);
+  assert(missing_runtime_start.errors[0].code ==
+         "audio_runtime_not_installed");
+
   auto fake_runtime = std::make_unique<FakeAudioRuntime>();
   auto* runtime_observer = fake_runtime.get();
   const auto installed =
@@ -88,10 +106,22 @@ int main() {
   assert(service->has_audio_runtime());
   assert(!service->audio_runtime_running());
 
-  const auto started = service->start_audio_runtime(4);
-  assert(started.ok());
+  runtime_start.command_id = "runtime-start-2";
+  const auto started = send(*service, runtime_start);
+  assert(started.status == sar::control::ControlResponseStatus::Accepted);
+  assert(started.has_audio_runtime_state);
+  assert(started.audio_runtime.installed);
+  assert(started.audio_runtime.running);
+  assert(started.audio_runtime.graph_version == 10);
   assert(service->audio_runtime_running());
   assert(runtime_observer->start_calls == 1);
+
+  runtime_start.command_id = "runtime-start-3";
+  const auto duplicate_start = send(*service, runtime_start);
+  assert(duplicate_start.status ==
+         sar::control::ControlResponseStatus::Rejected);
+  assert(duplicate_start.errors[0].code ==
+         "audio_runtime_already_running");
 
   sar::control::ControlCommand diagnostics;
   diagnostics.command_id = "diagnostics-1";
@@ -119,16 +149,26 @@ int main() {
   assert(!replace_while_running.ok());
   assert(replace_while_running.errors()[0].code == "audio_runtime_running");
 
-  service->stop_audio_runtime();
+  sar::control::ControlCommand runtime_stop;
+  runtime_stop.command_id = "runtime-stop-1";
+  runtime_stop.type = sar::control::ControlCommandType::StopAudioRuntime;
+  const auto stopped = send(*service, runtime_stop);
+  assert(stopped.status == sar::control::ControlResponseStatus::Accepted);
+  assert(stopped.has_audio_runtime_state);
+  assert(stopped.audio_runtime.installed);
+  assert(!stopped.audio_runtime.running);
+  assert(stopped.audio_runtime.graph_version == 10);
   assert(!service->audio_runtime_running());
   assert(runtime_observer->stop_calls == 1);
 
   const auto applied = send(*service, gain);
   assert(applied.status == sar::control::ControlResponseStatus::Accepted);
 
-  const auto stale_runtime = service->start_audio_runtime();
-  assert(!stale_runtime.ok());
-  assert(stale_runtime.errors()[0].code == "audio_runtime_graph_stale");
+  runtime_start.command_id = "runtime-start-4";
+  const auto stale_runtime = send(*service, runtime_start);
+  assert(stale_runtime.status ==
+         sar::control::ControlResponseStatus::Rejected);
+  assert(stale_runtime.errors[0].code == "audio_runtime_graph_stale");
 
   state.command_id = "state-2";
   const auto after = send(*service, state);

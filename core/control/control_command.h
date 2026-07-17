@@ -21,6 +21,9 @@ enum class ControlCommandType {
   QueryDiagnostics,
   QueryActiveGraph,
   QuerySessionState,
+  QueryAudioRuntime,
+  StartAudioRuntime,
+  StopAudioRuntime,
 };
 
 struct ControlCommand {

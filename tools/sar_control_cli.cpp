@@ -28,7 +28,8 @@ std::vector<std::uint8_t> as_u8(std::span<const std::byte> input) {
 
 void usage() {
   std::cerr << "Usage: sar_control_cli [--pipe NAME] state|diagnostics|graph|"
-               "set-gain INPUT OUTPUT VALUE|set-mute INPUT OUTPUT true|false\n";
+               "runtime-state|runtime-start|runtime-stop|set-gain INPUT OUTPUT "
+               "VALUE|set-mute INPUT OUTPUT true|false\n";
 }
 
 }  // namespace
@@ -55,6 +56,12 @@ int main(int argc, char** argv) {
     command.type = sar::control::ControlCommandType::QueryDiagnostics;
   } else if (operation == "graph") {
     command.type = sar::control::ControlCommandType::QueryActiveGraph;
+  } else if (operation == "runtime-state") {
+    command.type = sar::control::ControlCommandType::QueryAudioRuntime;
+  } else if (operation == "runtime-start") {
+    command.type = sar::control::ControlCommandType::StartAudioRuntime;
+  } else if (operation == "runtime-stop") {
+    command.type = sar::control::ControlCommandType::StopAudioRuntime;
   } else if (operation == "set-gain" && index + 2 < argc) {
     command.type = sar::control::ControlCommandType::SetGain;
     command.input_id = argv[index++];
@@ -139,6 +146,14 @@ int main(int argc, char** argv) {
               << response.response.diagnostics.render_fifo_underflow_frames
               << " callback_peak_us="
               << response.response.diagnostics.peak_callback_seconds * 1'000'000.0;
+  }
+  if (response.response.has_audio_runtime_state) {
+    std::cout << " runtime_installed="
+              << (response.response.audio_runtime.installed ? "true" : "false")
+              << " runtime_running="
+              << (response.response.audio_runtime.running ? "true" : "false")
+              << " runtime_graph_version="
+              << response.response.audio_runtime.graph_version;
   }
   std::cout << '\n';
   return 0;

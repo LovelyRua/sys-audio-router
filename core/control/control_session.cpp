@@ -105,6 +105,15 @@ ControlResponse ControlSession::handle(const ControlCommand& command,
                                   next_graph_version_);
   }
 
+  if (command.type == ControlCommandType::QueryAudioRuntime ||
+      command.type == ControlCommandType::StartAudioRuntime ||
+      command.type == ControlCommandType::StopAudioRuntime) {
+    return command_rejected(command.command_id, {
+        {"audio_runtime_command_requires_service",
+         "Audio runtime commands must be handled by the engine service."},
+    });
+  }
+
   if (command.type == ControlCommandType::ListDevices) {
     auto result = virtual_endpoints_.list_devices();
     if (!result.ok()) {

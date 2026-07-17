@@ -44,6 +44,11 @@ EngineAudioRuntimeResult EngineControlService::install_audio_runtime(
 EngineAudioRuntimeResult EngineControlService::start_audio_runtime(
     std::uint32_t timeout_ms) {
   std::lock_guard lock(control_mutex_);
+  return start_audio_runtime_locked(timeout_ms);
+}
+
+EngineAudioRuntimeResult EngineControlService::start_audio_runtime_locked(
+    std::uint32_t timeout_ms) {
   if (!audio_runtime_) {
     return EngineAudioRuntimeResult::failure({
         {"audio_runtime_not_installed",
@@ -66,6 +71,10 @@ EngineAudioRuntimeResult EngineControlService::start_audio_runtime(
 
 void EngineControlService::stop_audio_runtime() noexcept {
   std::lock_guard lock(control_mutex_);
+  stop_audio_runtime_locked();
+}
+
+void EngineControlService::stop_audio_runtime_locked() noexcept {
   if (audio_runtime_) {
     audio_runtime_->stop();
   }
@@ -100,6 +109,34 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
   }
 
   std::lock_guard lock(control_mutex_);
+  const auto validation = control::validate_command(decoded.command);
+  if (!validation.ok()) {
+    return control::encode_control_response(control::command_rejected(
+        decoded.command.command_id, validation.errors()));
+  }
+  if (decoded.command.type == control::ControlCommandType::QueryAudioRuntime) {
+    return control::encode_control_response(
+        audio_runtime_state_response_locked(decoded.command.command_id));
+  }
+  if (decoded.command.type == control::ControlCommandType::StartAudioRuntime) {
+    const auto result = start_audio_runtime_locked(10);
+    if (!result.ok()) {
+      std::vector<control::PresetError> errors;
+      errors.reserve(result.errors().size());
+      for (const auto& error : result.errors()) {
+        errors.push_back({error.code, error.message});
+      }
+      return control::encode_control_response(control::command_rejected(
+          decoded.command.command_id, std::move(errors)));
+    }
+    return control::encode_control_response(
+        audio_runtime_state_response_locked(decoded.command.command_id));
+  }
+  if (decoded.command.type == control::ControlCommandType::StopAudioRuntime) {
+    stop_audio_runtime_locked();
+    return control::encode_control_response(
+        audio_runtime_state_response_locked(decoded.command.command_id));
+  }
   if (audio_runtime_ && audio_runtime_->running() &&
       control::control_command_mutates_preset(decoded.command.type)) {
     return control::encode_control_response(control::command_rejected(
@@ -114,6 +151,15 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
   }
   return control::encode_control_response(
       session_->handle(decoded.command, diagnostics));
+}
+
+control::ControlResponse EngineControlService::audio_runtime_state_response_locked(
+    std::string command_id) const {
+  return control::audio_runtime_state_response(
+      std::move(command_id),
+      audio_runtime_ != nullptr,
+      audio_runtime_ && audio_runtime_->running(),
+      audio_runtime_ ? audio_runtime_->graph_version() : 0);
 }
 
 void EngineControlService::process(

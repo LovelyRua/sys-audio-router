@@ -180,8 +180,11 @@ render-only blocks with zero xruns and 987 supervised duplex blocks across a
 xrun, 1,088 render underflow frames, zero capture/render overflow, and a
 279.6-microsecond peak callback. FIFO diagnostics are mirrored into atomic
 worker snapshots so service queries do not race the realtime diagnostics writer.
-No
-DAW-visible ASIO driver is implemented or registered yet.
+Control wire version 2 and `sar_control_cli` now expose runtime state, start, and
+stop operations without restarting the service process. A physical named-pipe
+stop/start check then processed 304 duplex blocks in three seconds with zero
+capture/render overflow and a 41.1-microsecond peak callback. A DAW-visible
+ASIO driver is not implemented or registered yet.
 
 Deliverables:
 

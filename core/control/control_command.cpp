@@ -78,6 +78,9 @@ ControlCommandValidationResult validate_command(const ControlCommand& command) {
     case ControlCommandType::QueryDiagnostics:
     case ControlCommandType::QueryActiveGraph:
     case ControlCommandType::QuerySessionState:
+    case ControlCommandType::QueryAudioRuntime:
+    case ControlCommandType::StartAudioRuntime:
+    case ControlCommandType::StopAudioRuntime:
       break;
 
     case ControlCommandType::CreateVirtualEndpoint:
@@ -142,6 +145,9 @@ bool control_command_mutates_preset(ControlCommandType type) noexcept {
     case ControlCommandType::QueryDiagnostics:
     case ControlCommandType::QueryActiveGraph:
     case ControlCommandType::QuerySessionState:
+    case ControlCommandType::QueryAudioRuntime:
+    case ControlCommandType::StartAudioRuntime:
+    case ControlCommandType::StopAudioRuntime:
       return false;
   }
 
@@ -250,6 +256,9 @@ ControlApplyResult apply_command(const PresetDocument& current,
     case ControlCommandType::QueryDiagnostics:
     case ControlCommandType::QueryActiveGraph:
     case ControlCommandType::QuerySessionState:
+    case ControlCommandType::QueryAudioRuntime:
+    case ControlCommandType::StartAudioRuntime:
+    case ControlCommandType::StopAudioRuntime:
     case ControlCommandType::LoadPreset:
       break;
   }

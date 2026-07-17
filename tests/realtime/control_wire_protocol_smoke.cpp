@@ -56,6 +56,10 @@ int main() {
   response.has_diagnostics = true;
   response.diagnostics.graph_version = 6;
   response.diagnostics.processed_blocks = 123;
+  response.has_audio_runtime_state = true;
+  response.audio_runtime.installed = true;
+  response.audio_runtime.running = true;
+  response.audio_runtime.graph_version = 6;
   response.has_devices = true;
   response.devices.push_back({
       "virtual-asio-1",
@@ -78,6 +82,10 @@ int main() {
   assert(decoded_response.response.devices.size() == 1);
   assert(decoded_response.response.devices[0].is_virtual);
   assert(decoded_response.response.diagnostics.processed_blocks == 123);
+  assert(decoded_response.response.has_audio_runtime_state);
+  assert(decoded_response.response.audio_runtime.installed);
+  assert(decoded_response.response.audio_runtime.running);
+  assert(decoded_response.response.audio_runtime.graph_version == 6);
 
   auto truncated = encoded_command.bytes;
   truncated.pop_back();

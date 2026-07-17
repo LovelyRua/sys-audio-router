@@ -80,4 +80,16 @@ ControlResponse session_state_response(
   return response;
 }
 
+ControlResponse audio_runtime_state_response(std::string command_id,
+                                             bool installed,
+                                             bool running,
+                                             std::uint64_t graph_version) {
+  auto response = command_accepted(std::move(command_id));
+  response.audio_runtime.installed = installed;
+  response.audio_runtime.running = running;
+  response.audio_runtime.graph_version = graph_version;
+  response.has_audio_runtime_state = true;
+  return response;
+}
+
 }  // namespace sar::control

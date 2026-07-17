@@ -75,8 +75,10 @@ and next graph version. It handles:
 
 `EngineControlService` now owns a `ControlSession` behind a versioned, bounded
 binary protocol. On Windows, `sar_engine_service` hosts that control surface on
-a named pipe and `sar_control_cli` can query state, graph, and diagnostics or
-apply gain and mute commands. The pipe path is control-plane only; audio data is
+a named pipe and `sar_control_cli` can query state, graph, diagnostics, and
+audio-runtime state; start or stop an installed runtime; or apply gain and mute
+commands. Control wire version 2 carries installed/running/runtime graph-version
+state in lifecycle responses. The pipe path is control-plane only; audio data is
 not copied through it. The service can now own a live WASAPI render or duplex
 runtime, select an explicit capture/render endpoint pair for duplex operation,
 start and stop it through an injectable runtime contract, and serve its realtime
@@ -85,6 +87,11 @@ are rejected while the runtime is active, and a stopped runtime cannot restart
 after its bound graph version becomes stale. Persistence, service installation,
 automatic rebuild after graph changes, concurrent client policy, and UI binding
 remain future work.
+
+A physical HDA lifecycle check exercised runtime state, stop, state, start,
+diagnostics, and stop through one named-pipe service process. The restarted
+44.1-to-48 kHz duplex runtime processed 304 blocks in three seconds with one
+startup xrun, zero capture/render overflow, and a 41.1-microsecond peak callback.
 
 `MockAsioTransport` is the first engine-side Virtual ASIO transport experiment.
 It preallocates fixed-format client-to-engine and engine-to-client block queues,
@@ -439,8 +446,9 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 - Graph execution is still linear.
 - The named-pipe control service can own a WASAPI render or duplex runtime and
   select explicit duplex endpoint IDs. Its duplex mode now drives bounded
-  supervisor recovery and follow-default endpoint notifications, but it does not
-  yet rebuild the runtime after graph changes, persist sessions, install as a
+  supervisor recovery and follow-default endpoint notifications. It accepts
+  runtime state/start/stop commands over the named pipe, but does not yet
+  rebuild the runtime after graph changes, persist sessions, install as a
   Windows service, or define concurrent-client authorization and arbitration.
 - Preset-to-graph build currently supports one route matrix node with matching
   matrix input/output counts.

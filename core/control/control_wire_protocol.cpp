@@ -416,7 +416,7 @@ ControlCommandDecodeResult decode_control_command(
   }
   command.schema_version = reader.scalar<std::uint32_t>();
   command.command_id = reader.string();
-  command.type = reader.enumeration<ControlCommandType>(12);
+  command.type = reader.enumeration<ControlCommandType>(15);
   command.endpoint_id = reader.string();
   command.endpoint_label = reader.string();
   command.input_id = reader.string();
@@ -465,6 +465,12 @@ ControlWireEncodeResult encode_control_response(const ControlResponse& response)
       writer.string(node.id);
       writer.string(node.label);
     }
+  }
+  writer.boolean(response.has_audio_runtime_state);
+  if (response.has_audio_runtime_state) {
+    writer.boolean(response.audio_runtime.installed);
+    writer.boolean(response.audio_runtime.running);
+    writer.scalar(response.audio_runtime.graph_version);
   }
   return writer.finish();
 }
@@ -524,6 +530,12 @@ ControlResponseDecodeResult decode_control_response(
         response.active_graph.nodes.push_back({reader.string(), reader.string()});
       }
     }
+  }
+  response.has_audio_runtime_state = reader.boolean();
+  if (reader.ok() && response.has_audio_runtime_state) {
+    response.audio_runtime.installed = reader.boolean();
+    response.audio_runtime.running = reader.boolean();
+    response.audio_runtime.graph_version = reader.scalar<std::uint64_t>();
   }
   reader.finish();
   return {std::move(response), reader.error()};
