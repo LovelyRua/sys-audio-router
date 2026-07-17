@@ -19,6 +19,16 @@ std::vector<WasapiRealtimeWorkerError> convert_errors(
   return converted;
 }
 
+std::vector<WasapiRealtimeWorkerError> convert_errors(
+    const std::vector<WasapiStreamProbeError>& errors) {
+  std::vector<WasapiRealtimeWorkerError> converted;
+  converted.reserve(errors.size());
+  for (const auto& error : errors) {
+    converted.push_back({error.code, error.message});
+  }
+  return converted;
+}
+
 }  // namespace
 
 WindowsWasapiRenderLoop::~WindowsWasapiRenderLoop() {
@@ -88,6 +98,25 @@ WindowsWasapiRenderLoop::WindowsWasapiRenderLoop(
               graph.frames() + render_stream_.probe().buffer_frames),
       worker_(runner_, graph, diagnostics) {}
 
+WasapiRenderLoopOpenResult WindowsWasapiRenderLoop::open_from_stream(
+    WasapiStreamOpenResult stream_result,
+    graph::Graph& graph,
+    diagnostics::EngineDiagnostics& diagnostics) {
+  if (!stream_result.ok()) {
+    return WasapiRenderLoopOpenResult::failure(convert_errors(stream_result.errors()));
+  }
+
+  auto graph_errors =
+      validate_wasapi_render_graph_preflight(graph, stream_result.stream().probe());
+  if (!graph_errors.empty()) {
+    return WasapiRenderLoopOpenResult::failure(std::move(graph_errors));
+  }
+
+  auto loop = std::unique_ptr<WindowsWasapiRenderLoop>(
+      new WindowsWasapiRenderLoop(stream_result.take_stream(), graph, diagnostics));
+  return WasapiRenderLoopOpenResult::success(std::move(loop));
+}
+
 WasapiRenderLoopOpenResult WasapiRenderLoopOpenResult::success(
     std::unique_ptr<WindowsWasapiRenderLoop> loop) {
   return {std::move(loop), {}};
@@ -127,20 +156,28 @@ WasapiRenderLoopOpenResult::WasapiRenderLoopOpenResult(
 WasapiRenderLoopOpenResult open_default_wasapi_render_loop(
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics) {
-  auto stream_result = open_default_wasapi_stream_shell(WasapiStreamDirection::Render);
-  if (!stream_result.ok()) {
-    return WasapiRenderLoopOpenResult::failure(convert_errors(stream_result.errors()));
-  }
+  return WindowsWasapiRenderLoop::open_from_stream(
+      open_default_wasapi_stream_shell(WasapiStreamDirection::Render),
+      graph,
+      diagnostics);
+}
 
-  auto graph_errors =
-      validate_wasapi_render_graph_preflight(graph, stream_result.stream().probe());
-  if (!graph_errors.empty()) {
-    return WasapiRenderLoopOpenResult::failure(std::move(graph_errors));
+WasapiRenderLoopOpenResult open_wasapi_render_loop(
+    const std::string& render_device_id,
+    graph::Graph& graph,
+    diagnostics::EngineDiagnostics& diagnostics) {
+  if (render_device_id.empty()) {
+    return WasapiRenderLoopOpenResult::failure({
+        {"missing_render_device_id",
+         "Explicit WASAPI render loop requires a render device ID."},
+    });
   }
-
-  auto loop = std::unique_ptr<WindowsWasapiRenderLoop>(
-      new WindowsWasapiRenderLoop(stream_result.take_stream(), graph, diagnostics));
-  return WasapiRenderLoopOpenResult::success(std::move(loop));
+  auto probe = probe_wasapi_stream(render_device_id, WasapiStreamDirection::Render);
+  if (!probe.ok()) {
+    return WasapiRenderLoopOpenResult::failure(convert_errors(probe.errors()));
+  }
+  return WindowsWasapiRenderLoop::open_from_stream(
+      open_wasapi_stream_shell(probe.probe()), graph, diagnostics);
 }
 
 }  // namespace sar::platform

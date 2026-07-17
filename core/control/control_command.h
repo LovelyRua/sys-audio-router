@@ -24,6 +24,19 @@ enum class ControlCommandType {
   QueryAudioRuntime,
   StartAudioRuntime,
   StopAudioRuntime,
+  ConfigureAudioRuntime,
+};
+
+enum class AudioRuntimeMode {
+  None,
+  WasapiRender,
+  WasapiDuplex,
+};
+
+struct AudioRuntimeConfiguration {
+  AudioRuntimeMode mode = AudioRuntimeMode::None;
+  std::string capture_device_id;
+  std::string render_device_id;
 };
 
 struct ControlCommand {
@@ -38,6 +51,7 @@ struct ControlCommand {
   float gain = 0.0F;
   bool mute = false;
   PresetDocument preset;
+  AudioRuntimeConfiguration audio_runtime;
 };
 
 class ControlCommandValidationResult {

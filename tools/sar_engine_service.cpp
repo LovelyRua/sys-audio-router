@@ -66,27 +66,37 @@ sar::service::EngineAudioRuntimeBuildResult convert_runtime_result(
       result.take_runtime());
 }
 
-sar::service::EngineAudioRuntimeBuilder make_wasapi_runtime_builder(
-    bool duplex,
-    std::string capture_device_id,
-    std::string render_device_id) {
-  return [duplex,
-          capture_device_id = std::move(capture_device_id),
-          render_device_id = std::move(render_device_id)](
-             std::shared_ptr<sar::graph::Graph> graph) {
-    if (!duplex) {
+sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator() {
+  return [](const sar::control::AudioRuntimeConfiguration& configuration,
+            std::shared_ptr<sar::graph::Graph> graph) {
+    if (configuration.mode ==
+        sar::control::AudioRuntimeMode::WasapiRender) {
+      if (!configuration.render_device_id.empty()) {
+        return convert_runtime_result(
+            sar::service::WindowsWasapiEngineRuntime::open_render(
+                configuration.render_device_id, std::move(graph)));
+      }
       return convert_runtime_result(
           sar::service::WindowsWasapiEngineRuntime::open_default_render(
               std::move(graph)));
     }
-    if (capture_device_id.empty()) {
+    if (configuration.mode ==
+        sar::control::AudioRuntimeMode::WasapiDuplex) {
+      if (!configuration.capture_device_id.empty()) {
+        return convert_runtime_result(
+            sar::service::WindowsWasapiEngineRuntime::open_duplex(
+                configuration.capture_device_id,
+                configuration.render_device_id,
+                std::move(graph)));
+      }
       return convert_runtime_result(
           sar::service::WindowsWasapiEngineRuntime::open_default_duplex(
               std::move(graph)));
     }
-    return convert_runtime_result(
-        sar::service::WindowsWasapiEngineRuntime::open_duplex(
-            capture_device_id, render_device_id, std::move(graph)));
+    return sar::service::EngineAudioRuntimeBuildResult::failure({
+        {"unsupported_audio_runtime_mode",
+         "Windows service does not support the requested runtime mode."},
+    });
   };
 }
 
@@ -129,10 +139,12 @@ int main(int argc, char** argv) {
   }
   const bool has_capture_id = !capture_device_id.empty();
   const bool has_render_id = !render_device_id.empty();
-  if (has_capture_id != has_render_id ||
-      ((has_capture_id || has_render_id) && !wasapi_duplex)) {
-    std::cerr << "Endpoint IDs require --wasapi-duplex with both "
-                 "--capture-id and --render-id.\n";
+  if ((wasapi_duplex && has_capture_id != has_render_id) ||
+      (wasapi_render && has_capture_id) ||
+      (!wasapi_render && !wasapi_duplex &&
+       (has_capture_id || has_render_id))) {
+    std::cerr << "Render mode accepts an optional render ID; duplex mode "
+                 "requires both endpoint IDs or neither.\n";
     return 2;
   }
 
@@ -145,21 +157,19 @@ int main(int argc, char** argv) {
     return 1;
   }
   auto service = service_result.take_service();
+  service->set_audio_runtime_configurator(
+      make_wasapi_runtime_configurator());
   if (wasapi_render || wasapi_duplex) {
-    auto runtime_builder = make_wasapi_runtime_builder(
-        wasapi_duplex, capture_device_id, render_device_id);
-    auto runtime_result = runtime_builder(service->session().current_graph());
-    if (!runtime_result.ok()) {
-      for (const auto& error : runtime_result.errors()) {
-        std::cerr << error.code << ": " << error.message << '\n';
-      }
-      return 1;
-    }
-    auto install_result =
-        service->install_audio_runtime(runtime_result.take_runtime(),
-                                       std::move(runtime_builder));
-    if (!install_result.ok()) {
-      for (const auto& error : install_result.errors()) {
+    sar::control::AudioRuntimeConfiguration configuration;
+    configuration.mode = wasapi_duplex
+                             ? sar::control::AudioRuntimeMode::WasapiDuplex
+                             : sar::control::AudioRuntimeMode::WasapiRender;
+    configuration.capture_device_id = capture_device_id;
+    configuration.render_device_id = render_device_id;
+    auto configure_result =
+        service->configure_audio_runtime(std::move(configuration));
+    if (!configure_result.ok()) {
+      for (const auto& error : configure_result.errors()) {
         std::cerr << error.code << ": " << error.message << '\n';
       }
       return 1;

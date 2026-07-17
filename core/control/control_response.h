@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/control/preset_document.h"
+#include "core/control/control_command.h"
 #include "core/diagnostics/engine_diagnostics.h"
 #include "core/graph/graph.h"
 #include "core/platform/audio_device.h"
@@ -46,6 +46,8 @@ struct ControlResponse {
     bool installed = false;
     bool running = false;
     std::uint64_t graph_version = 0;
+    bool configured = false;
+    AudioRuntimeConfiguration configuration;
   };
   AudioRuntimeState audio_runtime;
   bool has_audio_runtime_state = false;

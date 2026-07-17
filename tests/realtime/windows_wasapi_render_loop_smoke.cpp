@@ -348,6 +348,23 @@ int main() {
         return failure;
       }
     }
+
+    sar::graph::Graph explicit_graph(33,
+                                     probe.mix_format.channels,
+                                     probe.buffer_frames,
+                                     probe.mix_format.sample_rate);
+    sar::diagnostics::EngineDiagnostics explicit_diagnostics;
+    auto explicit_result = sar::platform::open_wasapi_render_loop(
+        probe.device_id, explicit_graph, explicit_diagnostics);
+    if (const auto failure =
+            expect(explicit_result.ok(), "Expected explicit render loop open")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            explicit_result.loop().probe().device_id == probe.device_id,
+            "Expected explicit render loop to preserve device ID")) {
+      return failure;
+    }
   }
 
   sar::graph::Graph graph(21, 2, 128, render_sample_rate);

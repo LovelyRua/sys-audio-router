@@ -246,4 +246,67 @@ int main() {
   assert(retained_runtime.audio_runtime.installed);
   assert(!retained_runtime.audio_runtime.running);
   assert(retained_runtime.audio_runtime.graph_version == 21);
+
+  auto configure_create =
+      sar::service::EngineControlService::create(make_preset(), 30);
+  assert(configure_create.ok());
+  auto configure_service = configure_create.take_service();
+  sar::control::ControlCommand configure;
+  configure.command_id = "configure-duplex-1";
+  configure.type =
+      sar::control::ControlCommandType::ConfigureAudioRuntime;
+  configure.audio_runtime.mode =
+      sar::control::AudioRuntimeMode::WasapiDuplex;
+  configure.audio_runtime.capture_device_id = "capture-pinned";
+  configure.audio_runtime.render_device_id = "render-pinned";
+  const auto missing_configurator = send(*configure_service, configure);
+  assert(missing_configurator.status ==
+         sar::control::ControlResponseStatus::Rejected);
+  assert(missing_configurator.errors[0].code ==
+         "audio_runtime_configurator_not_installed");
+
+  std::uint32_t configure_calls = 0;
+  sar::control::AudioRuntimeConfiguration observed_configuration;
+  configure_service->set_audio_runtime_configurator(
+      [&](const sar::control::AudioRuntimeConfiguration& configuration,
+          std::shared_ptr<sar::graph::Graph> graph) {
+        ++configure_calls;
+        observed_configuration = configuration;
+        return sar::service::EngineAudioRuntimeBuildResult::success(
+            std::make_unique<FakeAudioRuntime>(graph->version()));
+      });
+  const auto configured = send(*configure_service, configure);
+  assert(configured.status == sar::control::ControlResponseStatus::Accepted);
+  assert(configure_calls == 1);
+  assert(configured.audio_runtime.installed);
+  assert(!configured.audio_runtime.running);
+  assert(configured.audio_runtime.configured);
+  assert(configured.audio_runtime.configuration.mode ==
+         sar::control::AudioRuntimeMode::WasapiDuplex);
+  assert(configured.audio_runtime.configuration.capture_device_id ==
+         "capture-pinned");
+  assert(observed_configuration.render_device_id == "render-pinned");
+
+  runtime_start.command_id = "configured-runtime-start";
+  const auto configured_start = send(*configure_service, runtime_start);
+  assert(configured_start.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  configure.command_id = "configure-while-running";
+  const auto configure_running = send(*configure_service, configure);
+  assert(configure_running.status ==
+         sar::control::ControlResponseStatus::Rejected);
+  assert(configure_running.errors[0].code == "audio_runtime_running");
+
+  configure_service->stop_audio_runtime();
+  configure.command_id = "configure-render-default";
+  configure.audio_runtime = {};
+  configure.audio_runtime.mode =
+      sar::control::AudioRuntimeMode::WasapiRender;
+  const auto render_configured = send(*configure_service, configure);
+  assert(render_configured.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  assert(configure_calls == 2);
+  assert(render_configured.audio_runtime.configuration.mode ==
+         sar::control::AudioRuntimeMode::WasapiRender);
+  assert(render_configured.audio_runtime.configuration.render_device_id.empty());
 }

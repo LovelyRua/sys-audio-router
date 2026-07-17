@@ -29,7 +29,21 @@ std::vector<std::uint8_t> as_u8(std::span<const std::byte> input) {
 void usage() {
   std::cerr << "Usage: sar_control_cli [--pipe NAME] state|diagnostics|graph|"
                "runtime-state|runtime-start|runtime-stop|set-gain INPUT OUTPUT "
-               "VALUE|set-mute INPUT OUTPUT true|false\n";
+               "VALUE|set-mute INPUT OUTPUT true|false|"
+               "runtime-configure-render [RENDER_ID]|"
+               "runtime-configure-duplex [CAPTURE_ID RENDER_ID]\n";
+}
+
+const char* runtime_mode_name(sar::control::AudioRuntimeMode mode) {
+  switch (mode) {
+    case sar::control::AudioRuntimeMode::None:
+      return "none";
+    case sar::control::AudioRuntimeMode::WasapiRender:
+      return "wasapi-render";
+    case sar::control::AudioRuntimeMode::WasapiDuplex:
+      return "wasapi-duplex";
+  }
+  return "unknown";
 }
 
 }  // namespace
@@ -62,6 +76,24 @@ int main(int argc, char** argv) {
     command.type = sar::control::ControlCommandType::StartAudioRuntime;
   } else if (operation == "runtime-stop") {
     command.type = sar::control::ControlCommandType::StopAudioRuntime;
+  } else if (operation == "runtime-configure-render") {
+    command.type = sar::control::ControlCommandType::ConfigureAudioRuntime;
+    command.audio_runtime.mode =
+        sar::control::AudioRuntimeMode::WasapiRender;
+    if (index < argc) {
+      command.audio_runtime.render_device_id = argv[index++];
+    }
+  } else if (operation == "runtime-configure-duplex") {
+    command.type = sar::control::ControlCommandType::ConfigureAudioRuntime;
+    command.audio_runtime.mode =
+        sar::control::AudioRuntimeMode::WasapiDuplex;
+    if (index + 1 < argc) {
+      command.audio_runtime.capture_device_id = argv[index++];
+      command.audio_runtime.render_device_id = argv[index++];
+    } else if (index < argc) {
+      usage();
+      return 2;
+    }
   } else if (operation == "set-gain" && index + 2 < argc) {
     command.type = sar::control::ControlCommandType::SetGain;
     command.input_id = argv[index++];
@@ -154,6 +186,23 @@ int main(int argc, char** argv) {
               << (response.response.audio_runtime.running ? "true" : "false")
               << " runtime_graph_version="
               << response.response.audio_runtime.graph_version;
+    if (response.response.audio_runtime.configured) {
+      std::cout << " runtime_mode="
+                << runtime_mode_name(
+                       response.response.audio_runtime.configuration.mode)
+                << " capture_id="
+                << (response.response.audio_runtime.configuration
+                            .capture_device_id.empty()
+                        ? "default"
+                        : response.response.audio_runtime.configuration
+                              .capture_device_id)
+                << " render_id="
+                << (response.response.audio_runtime.configuration
+                            .render_device_id.empty()
+                        ? "default"
+                        : response.response.audio_runtime.configuration
+                              .render_device_id);
+    }
   }
   std::cout << '\n';
   return 0;

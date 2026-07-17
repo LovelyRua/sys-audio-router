@@ -404,6 +404,9 @@ ControlWireEncodeResult encode_control_command(const ControlCommand& command) {
   writer.floating(command.gain);
   writer.boolean(command.mute);
   encode_preset(writer, command.preset);
+  writer.scalar(static_cast<std::uint32_t>(command.audio_runtime.mode));
+  writer.string(command.audio_runtime.capture_device_id);
+  writer.string(command.audio_runtime.render_device_id);
   return writer.finish();
 }
 
@@ -416,7 +419,7 @@ ControlCommandDecodeResult decode_control_command(
   }
   command.schema_version = reader.scalar<std::uint32_t>();
   command.command_id = reader.string();
-  command.type = reader.enumeration<ControlCommandType>(15);
+  command.type = reader.enumeration<ControlCommandType>(16);
   command.endpoint_id = reader.string();
   command.endpoint_label = reader.string();
   command.input_id = reader.string();
@@ -424,6 +427,9 @@ ControlCommandDecodeResult decode_control_command(
   command.gain = reader.float32();
   command.mute = reader.boolean();
   command.preset = decode_preset(reader);
+  command.audio_runtime.mode = reader.enumeration<AudioRuntimeMode>(2);
+  command.audio_runtime.capture_device_id = reader.string();
+  command.audio_runtime.render_device_id = reader.string();
   reader.finish();
   return {std::move(command), reader.error()};
 }
@@ -471,6 +477,11 @@ ControlWireEncodeResult encode_control_response(const ControlResponse& response)
     writer.boolean(response.audio_runtime.installed);
     writer.boolean(response.audio_runtime.running);
     writer.scalar(response.audio_runtime.graph_version);
+    writer.boolean(response.audio_runtime.configured);
+    writer.scalar(static_cast<std::uint32_t>(
+        response.audio_runtime.configuration.mode));
+    writer.string(response.audio_runtime.configuration.capture_device_id);
+    writer.string(response.audio_runtime.configuration.render_device_id);
   }
   return writer.finish();
 }
@@ -536,6 +547,11 @@ ControlResponseDecodeResult decode_control_response(
     response.audio_runtime.installed = reader.boolean();
     response.audio_runtime.running = reader.boolean();
     response.audio_runtime.graph_version = reader.scalar<std::uint64_t>();
+    response.audio_runtime.configured = reader.boolean();
+    response.audio_runtime.configuration.mode =
+        reader.enumeration<AudioRuntimeMode>(2);
+    response.audio_runtime.configuration.capture_device_id = reader.string();
+    response.audio_runtime.configuration.render_device_id = reader.string();
   }
   reader.finish();
   return {std::move(response), reader.error()};

@@ -76,6 +76,33 @@ WindowsWasapiEngineRuntime::open_default_render(
   return WindowsWasapiEngineRuntimeOpenResult::success(std::move(runtime));
 }
 
+WindowsWasapiEngineRuntimeOpenResult WindowsWasapiEngineRuntime::open_render(
+    std::string render_device_id,
+    std::shared_ptr<graph::Graph> graph) {
+  if (!graph) {
+    return WindowsWasapiEngineRuntimeOpenResult::failure({
+        {"null_runtime_graph", "WASAPI engine runtime requires a graph."},
+    });
+  }
+  if (render_device_id.empty()) {
+    return WindowsWasapiEngineRuntimeOpenResult::failure({
+        {"missing_render_device_id",
+         "Explicit render runtime requires a render device ID."},
+    });
+  }
+
+  auto runtime = std::unique_ptr<WindowsWasapiEngineRuntime>(
+      new WindowsWasapiEngineRuntime(std::move(graph)));
+  auto loop = platform::open_wasapi_render_loop(
+      render_device_id, *runtime->graph_, runtime->realtime_diagnostics_);
+  if (!loop.ok()) {
+    return WindowsWasapiEngineRuntimeOpenResult::failure(
+        convert_errors(loop.errors()));
+  }
+  runtime->render_loop_ = loop.take_loop();
+  return WindowsWasapiEngineRuntimeOpenResult::success(std::move(runtime));
+}
+
 WindowsWasapiEngineRuntimeOpenResult
 WindowsWasapiEngineRuntime::open_default_duplex(
     std::shared_ptr<graph::Graph> graph) {

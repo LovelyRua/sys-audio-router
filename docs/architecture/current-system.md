@@ -77,8 +77,11 @@ and next graph version. It handles:
 binary protocol. On Windows, `sar_engine_service` hosts that control surface on
 a named pipe and `sar_control_cli` can query state, graph, diagnostics, and
 audio-runtime state; start or stop an installed runtime; or apply gain and mute
-commands. Control wire version 2 carries installed/running/runtime graph-version
-state in lifecycle responses. The pipe path is control-plane only; audio data is
+commands. Control wire version 3 carries installed/running/runtime graph-version
+state plus the active runtime mode and endpoint selection in lifecycle
+responses. A stopped service can configure default or pinned WASAPI render and
+default or pinned-pair duplex runtimes through the same protocol; configuration
+is rejected while audio is running. The pipe path is control-plane only; audio data is
 not copied through it. The service can now own a live WASAPI render or duplex
 runtime, select an explicit capture/render endpoint pair for duplex operation,
 start and stop it through an injectable runtime contract, and serve its realtime
@@ -100,6 +103,12 @@ change that published graph v2, and restarted through the control protocol. The
 runtime builder preserved both endpoint IDs, rebound to graph v2, and processed
 302 blocks in three seconds with zero capture/render overflow and a
 57.7-microsecond peak callback.
+The wire-v3 configuration acceptance check launched the service with no audio
+arguments, configured and started the pinned physical duplex pair, then stopped
+and reconfigured the same process for pinned render. Duplex processed 302 blocks
+in three seconds with zero overflow and a 59.7-microsecond peak callback; render
+processed 216 blocks in two seconds with zero xruns, underflow, or overflow and
+a 39.3-microsecond peak callback.
 
 `MockAsioTransport` is the first engine-side Virtual ASIO transport experiment.
 It preallocates fixed-format client-to-engine and engine-to-client block queues,

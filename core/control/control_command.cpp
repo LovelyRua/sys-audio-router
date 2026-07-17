@@ -83,6 +83,29 @@ ControlCommandValidationResult validate_command(const ControlCommand& command) {
     case ControlCommandType::StopAudioRuntime:
       break;
 
+    case ControlCommandType::ConfigureAudioRuntime:
+      if (command.audio_runtime.mode == AudioRuntimeMode::None) {
+        errors.push_back({
+            "missing_audio_runtime_mode",
+            "ConfigureAudioRuntime requires a runtime mode.",
+        });
+      } else if (command.audio_runtime.mode == AudioRuntimeMode::WasapiRender) {
+        if (!command.audio_runtime.capture_device_id.empty()) {
+          errors.push_back({
+              "unexpected_capture_device_id",
+              "WASAPI render configuration does not accept a capture device ID.",
+          });
+        }
+      } else if (command.audio_runtime.mode == AudioRuntimeMode::WasapiDuplex &&
+                 command.audio_runtime.capture_device_id.empty() !=
+                     command.audio_runtime.render_device_id.empty()) {
+        errors.push_back({
+            "incomplete_duplex_device_ids",
+            "WASAPI duplex configuration requires both device IDs or neither.",
+        });
+      }
+      break;
+
     case ControlCommandType::CreateVirtualEndpoint:
       require_non_empty(command.endpoint_id,
                         "empty_endpoint_id",
@@ -148,6 +171,7 @@ bool control_command_mutates_preset(ControlCommandType type) noexcept {
     case ControlCommandType::QueryAudioRuntime:
     case ControlCommandType::StartAudioRuntime:
     case ControlCommandType::StopAudioRuntime:
+    case ControlCommandType::ConfigureAudioRuntime:
       return false;
   }
 
@@ -259,6 +283,7 @@ ControlApplyResult apply_command(const PresetDocument& current,
     case ControlCommandType::QueryAudioRuntime:
     case ControlCommandType::StartAudioRuntime:
     case ControlCommandType::StopAudioRuntime:
+    case ControlCommandType::ConfigureAudioRuntime:
     case ControlCommandType::LoadPreset:
       break;
   }

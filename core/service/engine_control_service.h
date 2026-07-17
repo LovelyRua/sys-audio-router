@@ -5,8 +5,10 @@
 #include "core/service/engine_audio_runtime.h"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -14,6 +16,10 @@
 namespace sar::service {
 
 class EngineControlServiceCreateResult;
+
+using EngineAudioRuntimeConfigurator = std::function<EngineAudioRuntimeBuildResult(
+    const control::AudioRuntimeConfiguration&,
+    std::shared_ptr<graph::Graph>)>;
 
 class EngineControlService {
  public:
@@ -27,6 +33,10 @@ class EngineControlService {
       EngineAudioRuntimeBuilder builder = {});
   [[nodiscard]] EngineAudioRuntimeResult start_audio_runtime(
       std::uint32_t timeout_ms = 10);
+  void set_audio_runtime_configurator(
+      EngineAudioRuntimeConfigurator configurator);
+  [[nodiscard]] EngineAudioRuntimeResult configure_audio_runtime(
+      control::AudioRuntimeConfiguration configuration);
   void stop_audio_runtime() noexcept;
   [[nodiscard]] bool has_audio_runtime() const noexcept;
   [[nodiscard]] bool audio_runtime_running() const noexcept;
@@ -47,6 +57,8 @@ class EngineControlService {
   [[nodiscard]] EngineAudioRuntimeResult start_audio_runtime_locked(
       std::uint32_t timeout_ms);
   [[nodiscard]] EngineAudioRuntimeResult rebuild_audio_runtime_locked();
+  [[nodiscard]] EngineAudioRuntimeResult configure_audio_runtime_locked(
+      control::AudioRuntimeConfiguration configuration);
   void stop_audio_runtime_locked() noexcept;
   [[nodiscard]] control::ControlResponse audio_runtime_state_response_locked(
       std::string command_id) const;
@@ -54,6 +66,9 @@ class EngineControlService {
   std::unique_ptr<control::ControlSession> session_;
   std::unique_ptr<EngineAudioRuntime> audio_runtime_;
   EngineAudioRuntimeBuilder audio_runtime_builder_;
+  EngineAudioRuntimeConfigurator audio_runtime_configurator_;
+  std::optional<control::AudioRuntimeConfiguration>
+      audio_runtime_configuration_;
   mutable std::mutex control_mutex_;
 };
 

@@ -301,6 +301,46 @@ int main() {
     }
   }
 
+  {
+    sar::control::ControlCommand command;
+    command.command_id = "configure_runtime";
+    command.type =
+        sar::control::ControlCommandType::ConfigureAudioRuntime;
+    auto result = sar::control::validate_command(command);
+    if (const auto failure = expect(
+            has_error_code(result, "missing_audio_runtime_mode"),
+            "Expected missing runtime mode validation error")) {
+      return failure;
+    }
+
+    command.audio_runtime.mode =
+        sar::control::AudioRuntimeMode::WasapiDuplex;
+    command.audio_runtime.capture_device_id = "capture-only";
+    result = sar::control::validate_command(command);
+    if (const auto failure = expect(
+            has_error_code(result, "incomplete_duplex_device_ids"),
+            "Expected incomplete duplex IDs validation error")) {
+      return failure;
+    }
+
+    command.audio_runtime.mode =
+        sar::control::AudioRuntimeMode::WasapiRender;
+    result = sar::control::validate_command(command);
+    if (const auto failure = expect(
+            has_error_code(result, "unexpected_capture_device_id"),
+            "Expected render capture ID validation error")) {
+      return failure;
+    }
+
+    command.audio_runtime.capture_device_id.clear();
+    command.audio_runtime.render_device_id = "render-1";
+    result = sar::control::validate_command(command);
+    if (const auto failure = expect(result.ok(),
+                                    "Expected pinned render configuration success")) {
+      return failure;
+    }
+  }
+
   std::cout << "Control command smoke test passed\n";
   return 0;
 }

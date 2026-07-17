@@ -180,8 +180,10 @@ render-only blocks with zero xruns and 987 supervised duplex blocks across a
 xrun, 1,088 render underflow frames, zero capture/render overflow, and a
 279.6-microsecond peak callback. FIFO diagnostics are mirrored into atomic
 worker snapshots so service queries do not race the realtime diagnostics writer.
-Control wire version 2 and `sar_control_cli` now expose runtime state, start, and
-stop operations without restarting the service process. A physical named-pipe
+Control wire version 3 and `sar_control_cli` now expose runtime state, start,
+stop, and WASAPI runtime configuration without restarting the service process.
+Render mode accepts default or pinned output selection; duplex accepts default
+or paired pinned capture/render selection. A physical named-pipe
 stop/start check then processed 304 duplex blocks in three seconds with zero
 capture/render overflow and a 41.1-microsecond peak callback. A DAW-visible
 ASIO driver is not implemented or registered yet.
@@ -193,6 +195,10 @@ stopped runtime installed and return a deterministic control error.
 The physical pinned-endpoint acceptance path rebuilt graph-v1 duplex against a
 gain-edited graph v2, then processed 302 blocks in three seconds with zero
 capture/render overflow and a 57.7-microsecond peak callback.
+The no-audio-arguments service acceptance check then configured pinned duplex
+and pinned render entirely over wire v3. Duplex processed 302 blocks in three
+seconds with zero overflow; render processed 216 blocks in two seconds with zero
+xruns, underflow, or overflow.
 
 Deliverables:
 

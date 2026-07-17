@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace sar::platform {
@@ -24,6 +25,10 @@ struct WasapiRenderLoopSummary {
 };
 
 [[nodiscard]] WasapiRenderLoopOpenResult open_default_wasapi_render_loop(
+    graph::Graph& graph,
+    diagnostics::EngineDiagnostics& diagnostics);
+[[nodiscard]] WasapiRenderLoopOpenResult open_wasapi_render_loop(
+    const std::string& render_device_id,
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics);
 
@@ -50,10 +55,18 @@ class WindowsWasapiRenderLoop {
   friend WasapiRenderLoopOpenResult open_default_wasapi_render_loop(
       graph::Graph& graph,
       diagnostics::EngineDiagnostics& diagnostics);
+  friend WasapiRenderLoopOpenResult open_wasapi_render_loop(
+      const std::string& render_device_id,
+      graph::Graph& graph,
+      diagnostics::EngineDiagnostics& diagnostics);
 
   WindowsWasapiRenderLoop(WindowsWasapiStream render_stream,
                           graph::Graph& graph,
                           diagnostics::EngineDiagnostics& diagnostics);
+  [[nodiscard]] static WasapiRenderLoopOpenResult open_from_stream(
+      WasapiStreamOpenResult stream_result,
+      graph::Graph& graph,
+      diagnostics::EngineDiagnostics& diagnostics);
 
   WindowsWasapiStream render_stream_;
   WindowsWasapiGraphRunner runner_;

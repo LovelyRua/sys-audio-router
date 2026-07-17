@@ -27,6 +27,10 @@ int main() {
   command.output_id = "output-1";
   command.gain = 0.25F;
   command.preset = make_preset();
+  command.audio_runtime.mode =
+      sar::control::AudioRuntimeMode::WasapiDuplex;
+  command.audio_runtime.capture_device_id = "capture-1";
+  command.audio_runtime.render_device_id = "render-1";
 
   const auto encoded_command = sar::control::encode_control_command(command);
   assert(encoded_command.ok());
@@ -39,6 +43,10 @@ int main() {
   assert(decoded_command.command.output_id == command.output_id);
   assert(decoded_command.command.gain == command.gain);
   assert(decoded_command.command.preset.matrix.routes.size() == 1);
+  assert(decoded_command.command.audio_runtime.mode ==
+         sar::control::AudioRuntimeMode::WasapiDuplex);
+  assert(decoded_command.command.audio_runtime.capture_device_id == "capture-1");
+  assert(decoded_command.command.audio_runtime.render_device_id == "render-1");
 
   sar::control::ControlResponse response;
   response.command_id = command.command_id;
@@ -60,6 +68,8 @@ int main() {
   response.audio_runtime.installed = true;
   response.audio_runtime.running = true;
   response.audio_runtime.graph_version = 6;
+  response.audio_runtime.configured = true;
+  response.audio_runtime.configuration = command.audio_runtime;
   response.has_devices = true;
   response.devices.push_back({
       "virtual-asio-1",
@@ -86,6 +96,11 @@ int main() {
   assert(decoded_response.response.audio_runtime.installed);
   assert(decoded_response.response.audio_runtime.running);
   assert(decoded_response.response.audio_runtime.graph_version == 6);
+  assert(decoded_response.response.audio_runtime.configured);
+  assert(decoded_response.response.audio_runtime.configuration.mode ==
+         sar::control::AudioRuntimeMode::WasapiDuplex);
+  assert(decoded_response.response.audio_runtime.configuration.capture_device_id ==
+         "capture-1");
 
   auto truncated = encoded_command.bytes;
   truncated.pop_back();

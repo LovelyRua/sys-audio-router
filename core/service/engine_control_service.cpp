@@ -41,6 +41,74 @@ EngineAudioRuntimeResult EngineControlService::install_audio_runtime(
   }
   audio_runtime_ = std::move(runtime);
   audio_runtime_builder_ = std::move(builder);
+  audio_runtime_configuration_.reset();
+  return EngineAudioRuntimeResult::success();
+}
+
+void EngineControlService::set_audio_runtime_configurator(
+    EngineAudioRuntimeConfigurator configurator) {
+  std::lock_guard lock(control_mutex_);
+  audio_runtime_configurator_ = std::move(configurator);
+}
+
+EngineAudioRuntimeResult EngineControlService::configure_audio_runtime(
+    control::AudioRuntimeConfiguration configuration) {
+  std::lock_guard lock(control_mutex_);
+  return configure_audio_runtime_locked(std::move(configuration));
+}
+
+EngineAudioRuntimeResult EngineControlService::configure_audio_runtime_locked(
+    control::AudioRuntimeConfiguration configuration) {
+  if (audio_runtime_ && audio_runtime_->running()) {
+    return EngineAudioRuntimeResult::failure({
+        {"audio_runtime_running",
+         "Stop the active audio runtime before changing its configuration."},
+    });
+  }
+  if (!audio_runtime_configurator_) {
+    return EngineAudioRuntimeResult::failure({
+        {"audio_runtime_configurator_not_installed",
+         "Install an audio runtime configurator before configuring the engine."},
+    });
+  }
+
+  try {
+    auto rebuilt =
+        audio_runtime_configurator_(configuration, session_->current_graph());
+    if (!rebuilt.ok()) {
+      if (rebuilt.errors().empty()) {
+        return EngineAudioRuntimeResult::failure({
+            {"audio_runtime_configurator_returned_null",
+             "Audio runtime configurator returned no runtime."},
+        });
+      }
+      return EngineAudioRuntimeResult::failure(rebuilt.errors());
+    }
+    auto runtime = rebuilt.take_runtime();
+    if (!runtime) {
+      return EngineAudioRuntimeResult::failure({
+          {"audio_runtime_configurator_returned_null",
+           "Audio runtime configurator returned no runtime."},
+      });
+    }
+
+    const auto configurator = audio_runtime_configurator_;
+    audio_runtime_builder_ =
+        [configurator, configuration](std::shared_ptr<graph::Graph> graph) {
+          return configurator(configuration, std::move(graph));
+        };
+    audio_runtime_ = std::move(runtime);
+    audio_runtime_configuration_ = std::move(configuration);
+  } catch (const std::exception& error) {
+    return EngineAudioRuntimeResult::failure({
+        {"audio_runtime_configurator_exception", error.what()},
+    });
+  } catch (...) {
+    return EngineAudioRuntimeResult::failure({
+        {"audio_runtime_configurator_exception",
+         "Audio runtime configurator raised an unknown exception."},
+    });
+  }
   return EngineAudioRuntimeResult::success();
 }
 
@@ -179,6 +247,22 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
     return control::encode_control_response(
         audio_runtime_state_response_locked(decoded.command.command_id));
   }
+  if (decoded.command.type ==
+      control::ControlCommandType::ConfigureAudioRuntime) {
+    const auto result =
+        configure_audio_runtime_locked(decoded.command.audio_runtime);
+    if (!result.ok()) {
+      std::vector<control::PresetError> errors;
+      errors.reserve(result.errors().size());
+      for (const auto& error : result.errors()) {
+        errors.push_back({error.code, error.message});
+      }
+      return control::encode_control_response(control::command_rejected(
+          decoded.command.command_id, std::move(errors)));
+    }
+    return control::encode_control_response(
+        audio_runtime_state_response_locked(decoded.command.command_id));
+  }
   if (audio_runtime_ && audio_runtime_->running() &&
       control::control_command_mutates_preset(decoded.command.type)) {
     return control::encode_control_response(control::command_rejected(
@@ -197,11 +281,16 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
 
 control::ControlResponse EngineControlService::audio_runtime_state_response_locked(
     std::string command_id) const {
-  return control::audio_runtime_state_response(
+  auto response = control::audio_runtime_state_response(
       std::move(command_id),
       audio_runtime_ != nullptr,
       audio_runtime_ && audio_runtime_->running(),
       audio_runtime_ ? audio_runtime_->graph_version() : 0);
+  if (audio_runtime_configuration_) {
+    response.audio_runtime.configured = true;
+    response.audio_runtime.configuration = *audio_runtime_configuration_;
+  }
+  return response;
 }
 
 void EngineControlService::process(
