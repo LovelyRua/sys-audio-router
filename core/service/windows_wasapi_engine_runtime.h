@@ -2,11 +2,16 @@
 
 #include "core/graph/graph.h"
 #include "core/platform/windows_wasapi_duplex_loop.h"
+#include "core/platform/windows_wasapi_duplex_supervisor.h"
 #include "core/platform/windows_wasapi_render_loop.h"
 #include "core/service/engine_audio_runtime.h"
 
+#include <atomic>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace sar::service {
@@ -45,11 +50,19 @@ class WindowsWasapiEngineRuntime final : public EngineAudioRuntime {
  private:
   explicit WindowsWasapiEngineRuntime(
       std::shared_ptr<graph::Graph> graph) noexcept;
+  void run_duplex_supervisor() noexcept;
 
   std::shared_ptr<graph::Graph> graph_;
   diagnostics::EngineDiagnostics realtime_diagnostics_;
   std::unique_ptr<platform::WindowsWasapiRenderLoop> render_loop_;
-  std::unique_ptr<platform::WindowsWasapiDuplexLoop> duplex_loop_;
+  platform::WasapiEndpointSelectionPolicy duplex_endpoint_policy_;
+  std::unique_ptr<platform::WindowsWasapiDuplexSupervisor> duplex_supervisor_;
+  mutable std::mutex duplex_supervisor_mutex_;
+  std::condition_variable duplex_supervisor_condition_;
+  std::thread duplex_supervisor_thread_;
+  std::atomic_bool duplex_supervisor_active_ = false;
+  bool duplex_configured_ = false;
+  bool duplex_stop_requested_ = false;
 };
 
 class WindowsWasapiEngineRuntimeOpenResult {

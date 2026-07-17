@@ -164,6 +164,14 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   stream_wait_cancellation_cycles_.store(0);
   process_error_cycles_.store(0);
   xrun_count_.store(0);
+  capture_fifo_fill_frames_.store(0);
+  render_fifo_fill_frames_.store(0);
+  capture_fifo_overflow_cycles_.store(0);
+  capture_fifo_overflow_frames_.store(0);
+  render_fifo_overflow_cycles_.store(0);
+  render_fifo_overflow_frames_.store(0);
+  render_fifo_underflow_cycles_.store(0);
+  render_fifo_underflow_frames_.store(0);
   last_callback_nanoseconds_.store(0);
   peak_callback_nanoseconds_.store(0);
   total_callback_nanoseconds_.store(0);
@@ -296,6 +304,14 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.stream_wait_cancellation_cycles = stream_wait_cancellation_cycles_.load();
   result.process_error_cycles = process_error_cycles_.load();
   result.xrun_count = xrun_count_.load();
+  result.capture_fifo_fill_frames = capture_fifo_fill_frames_.load();
+  result.render_fifo_fill_frames = render_fifo_fill_frames_.load();
+  result.capture_fifo_overflow_cycles = capture_fifo_overflow_cycles_.load();
+  result.capture_fifo_overflow_frames = capture_fifo_overflow_frames_.load();
+  result.render_fifo_overflow_cycles = render_fifo_overflow_cycles_.load();
+  result.render_fifo_overflow_frames = render_fifo_overflow_frames_.load();
+  result.render_fifo_underflow_cycles = render_fifo_underflow_cycles_.load();
+  result.render_fifo_underflow_frames = render_fifo_underflow_frames_.load();
   result.last_callback_nanoseconds = last_callback_nanoseconds_.load();
   result.peak_callback_nanoseconds = peak_callback_nanoseconds_.load();
   result.total_callback_nanoseconds = total_callback_nanoseconds_.load();
@@ -457,6 +473,18 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     xrun_count_.store(xrun_count >= xrun_baseline_
                           ? xrun_count - xrun_baseline_
                           : 0);
+    capture_fifo_fill_frames_.store(diagnostics_.capture_fifo_fill_frames);
+    render_fifo_fill_frames_.store(diagnostics_.render_fifo_fill_frames);
+    capture_fifo_overflow_cycles_.store(
+        diagnostics_.capture_fifo_overflow_cycles);
+    capture_fifo_overflow_frames_.store(
+        diagnostics_.capture_fifo_overflow_frames);
+    render_fifo_overflow_cycles_.store(diagnostics_.render_fifo_overflow_cycles);
+    render_fifo_overflow_frames_.store(diagnostics_.render_fifo_overflow_frames);
+    render_fifo_underflow_cycles_.store(
+        diagnostics_.render_fifo_underflow_cycles);
+    render_fifo_underflow_frames_.store(
+        diagnostics_.render_fifo_underflow_frames);
     loop_cycles_.fetch_add(1);
     captured_frames_.fetch_add(result.stats().captured_frames);
     rendered_frames_.fetch_add(result.stats().rendered_frames);

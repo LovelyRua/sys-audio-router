@@ -139,6 +139,8 @@ int main() {
   assert(supervisor.summary().runtime_open_count == 2);
   assert(supervisor.summary().successful_recovery_count == 1);
   assert(supervisor.summary().last_recovery_duration_ms == 0);
+  first_runtime->stats.graph_processed_cycles = 7;
+  assert(supervisor.runtime_stats().graph_processed_cycles == 7);
 
   first_runtime->runtime_errors = transient;
   first_runtime->stats.maximum_render_recovery_silence_frames = 192;

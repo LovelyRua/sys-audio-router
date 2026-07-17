@@ -114,6 +114,7 @@ class WindowsWasapiDuplexSupervisor {
   [[nodiscard]] WasapiRecoveryState state() const noexcept;
   [[nodiscard]] bool running() const noexcept;
   [[nodiscard]] WasapiDuplexSupervisorSummary summary() const;
+  [[nodiscard]] WasapiRealtimeWorkerStats runtime_stats() const noexcept;
   [[nodiscard]] const std::vector<WasapiRealtimeWorkerError>& last_errors() const noexcept;
 
  private:

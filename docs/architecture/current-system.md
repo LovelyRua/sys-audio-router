@@ -83,8 +83,8 @@ start and stop it through an injectable runtime contract, and serve its realtime
 diagnostics over the same control protocol. Graph mutations
 are rejected while the runtime is active, and a stopped runtime cannot restart
 after its bound graph version becomes stale. Persistence, service installation,
-duplex runtime selection, concurrent client policy, and UI binding remain future
-work.
+automatic rebuild after graph changes, concurrent client policy, and UI binding
+remain future work.
 
 `MockAsioTransport` is the first engine-side Virtual ASIO transport experiment.
 It preallocates fixed-format client-to-engine and engine-to-client block queues,
@@ -234,8 +234,10 @@ are ready. The refill that follows remains bounded by the configured FIFO target
 `WindowsWasapiDuplexSupervisor` is a control-plane owner above the complete
 duplex loop. It classifies failures, synchronously quiesces and destroys the old
 runtime, then rebuilds it with 0/500/3000 ms retry delays and a five-second hard
-recovery deadline. It is currently driven by explicit control-plane `tick()`
-calls. A lock-free `IMMNotificationClient` generation/event source and an
+recovery deadline. Standalone users can drive it with explicit control-plane
+`tick()` calls; the service-owned duplex adapter now supplies a dedicated 20 ms
+control thread and COM endpoint-notification apartment. A lock-free
+`IMMNotificationClient` generation/event source and an
 independent capture/render endpoint-selection policy feed the supervisor on the
 control thread. Follow-default generation changes settle for 300 ms so paired
 capture/render notifications coalesce into one bounded duplex reopen, while
@@ -436,9 +438,10 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 - No plugin hosting exists yet.
 - Graph execution is still linear.
 - The named-pipe control service can own a WASAPI render or duplex runtime and
-  select explicit duplex endpoint IDs, but it does not yet rebuild the runtime
-  after graph changes, persist sessions, install as a Windows service, or define
-  concurrent-client authorization and arbitration.
+  select explicit duplex endpoint IDs. Its duplex mode now drives bounded
+  supervisor recovery and follow-default endpoint notifications, but it does not
+  yet rebuild the runtime after graph changes, persist sessions, install as a
+  Windows service, or define concurrent-client authorization and arbitration.
 - Preset-to-graph build currently supports one route matrix node with matching
   matrix input/output counts.
 - Sample conversion does not yet cover unusual byte orders or non-PCM encoded

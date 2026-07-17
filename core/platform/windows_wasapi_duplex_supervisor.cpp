@@ -327,6 +327,11 @@ WasapiDuplexSupervisorSummary WindowsWasapiDuplexSupervisor::summary() const {
           .running = running()};
 }
 
+WasapiRealtimeWorkerStats WindowsWasapiDuplexSupervisor::runtime_stats()
+    const noexcept {
+  return runtime_ ? runtime_->stats() : WasapiRealtimeWorkerStats{};
+}
+
 const std::vector<WasapiRealtimeWorkerError>&
 WindowsWasapiDuplexSupervisor::last_errors() const noexcept {
   return last_errors_;

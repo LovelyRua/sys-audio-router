@@ -1,5 +1,11 @@
 #include "core/service/windows_wasapi_engine_runtime.h"
 
+#include "core/platform/windows_wasapi_endpoint_notification.h"
+
+#include <Windows.h>
+
+#include <chrono>
+#include <system_error>
 #include <utility>
 
 namespace sar::service {
@@ -16,6 +22,32 @@ std::vector<EngineAudioRuntimeError> convert_errors(
   }
   return converted;
 }
+
+std::uint64_t monotonic_milliseconds() noexcept {
+  return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now().time_since_epoch())
+          .count());
+}
+
+class ComApartment {
+ public:
+  ComApartment() noexcept
+      : result_(CoInitializeEx(nullptr, COINIT_MULTITHREADED)) {}
+
+  ~ComApartment() {
+    if (result_ == S_OK || result_ == S_FALSE) {
+      CoUninitialize();
+    }
+  }
+
+  [[nodiscard]] bool ok() const noexcept {
+    return SUCCEEDED(result_) || result_ == RPC_E_CHANGED_MODE;
+  }
+
+ private:
+  HRESULT result_ = E_FAIL;
+};
 
 }  // namespace
 
@@ -55,13 +87,7 @@ WindowsWasapiEngineRuntime::open_default_duplex(
 
   auto runtime = std::unique_ptr<WindowsWasapiEngineRuntime>(
       new WindowsWasapiEngineRuntime(std::move(graph)));
-  auto loop = platform::open_default_wasapi_duplex_loop(
-      *runtime->graph_, runtime->realtime_diagnostics_);
-  if (!loop.ok()) {
-    return WindowsWasapiEngineRuntimeOpenResult::failure(
-        convert_errors(loop.errors()));
-  }
-  runtime->duplex_loop_ = loop.take_loop();
+  runtime->duplex_configured_ = true;
   return WindowsWasapiEngineRuntimeOpenResult::success(std::move(runtime));
 }
 
@@ -83,30 +109,60 @@ WindowsWasapiEngineRuntimeOpenResult WindowsWasapiEngineRuntime::open_duplex(
 
   auto runtime = std::unique_ptr<WindowsWasapiEngineRuntime>(
       new WindowsWasapiEngineRuntime(std::move(graph)));
-  auto loop = platform::open_wasapi_duplex_loop(
-      capture_device_id,
-      render_device_id,
-      *runtime->graph_,
-      runtime->realtime_diagnostics_);
-  if (!loop.ok()) {
-    return WindowsWasapiEngineRuntimeOpenResult::failure(
-        convert_errors(loop.errors()));
-  }
-  runtime->duplex_loop_ = loop.take_loop();
+  runtime->duplex_endpoint_policy_ = platform::WasapiEndpointSelectionPolicy(
+      platform::WasapiEndpointSelection::pinned_device_id(
+          std::move(capture_device_id)),
+      platform::WasapiEndpointSelection::pinned_device_id(
+          std::move(render_device_id)));
+  runtime->duplex_configured_ = true;
   return WindowsWasapiEngineRuntimeOpenResult::success(std::move(runtime));
 }
 
 EngineAudioRuntimeResult WindowsWasapiEngineRuntime::start(
     std::uint32_t timeout_ms) {
-  if (!render_loop_ && !duplex_loop_) {
+  if (!render_loop_ && !duplex_configured_) {
     return EngineAudioRuntimeResult::failure({
         {"wasapi_audio_loop_not_open", "WASAPI audio loop is not open."},
     });
   }
-  const auto result = render_loop_ ? render_loop_->start(timeout_ms)
-                                   : duplex_loop_->start(timeout_ms);
-  if (!result.ok()) {
-    return EngineAudioRuntimeResult::failure(convert_errors(result.errors()));
+  if (render_loop_) {
+    const auto result = render_loop_->start(timeout_ms);
+    if (!result.ok()) {
+      return EngineAudioRuntimeResult::failure(convert_errors(result.errors()));
+    }
+    return EngineAudioRuntimeResult::success();
+  }
+
+  if (duplex_supervisor_active_.load(std::memory_order_acquire)) {
+    return EngineAudioRuntimeResult::failure({
+        {"wasapi_duplex_supervisor_running",
+         "WASAPI duplex supervisor is already running."},
+    });
+  }
+  if (duplex_supervisor_thread_.joinable()) {
+    duplex_supervisor_thread_.join();
+  }
+  std::lock_guard lock(duplex_supervisor_mutex_);
+  duplex_supervisor_ =
+      std::make_unique<platform::WindowsWasapiDuplexSupervisor>(
+          *graph_, realtime_diagnostics_, timeout_ms, duplex_endpoint_policy_);
+  duplex_supervisor_->start(monotonic_milliseconds());
+  if (duplex_supervisor_->state() == platform::WasapiRecoveryState::Faulted) {
+    auto errors = convert_errors(duplex_supervisor_->last_errors());
+    duplex_supervisor_.reset();
+    return EngineAudioRuntimeResult::failure(std::move(errors));
+  }
+  duplex_stop_requested_ = false;
+  duplex_supervisor_active_.store(true, std::memory_order_release);
+  try {
+    duplex_supervisor_thread_ = std::thread([this] { run_duplex_supervisor(); });
+  } catch (const std::system_error& error) {
+    duplex_supervisor_active_.store(false, std::memory_order_release);
+    duplex_supervisor_->stop(monotonic_milliseconds());
+    duplex_supervisor_.reset();
+    return EngineAudioRuntimeResult::failure({
+        {"wasapi_supervisor_thread_start_failed", error.what()},
+    });
   }
   return EngineAudioRuntimeResult::success();
 }
@@ -115,14 +171,28 @@ void WindowsWasapiEngineRuntime::stop() noexcept {
   if (render_loop_) {
     render_loop_->stop();
   }
-  if (duplex_loop_) {
-    duplex_loop_->stop();
+  {
+    std::lock_guard lock(duplex_supervisor_mutex_);
+    duplex_stop_requested_ = true;
   }
+  duplex_supervisor_condition_.notify_all();
+  if (duplex_supervisor_thread_.joinable()) {
+    duplex_supervisor_thread_.join();
+  }
+  {
+    std::lock_guard lock(duplex_supervisor_mutex_);
+    if (duplex_supervisor_) {
+      duplex_supervisor_->stop(monotonic_milliseconds());
+      duplex_supervisor_.reset();
+    }
+    duplex_stop_requested_ = false;
+  }
+  duplex_supervisor_active_.store(false, std::memory_order_release);
 }
 
 bool WindowsWasapiEngineRuntime::running() const noexcept {
   return (render_loop_ && render_loop_->running()) ||
-         (duplex_loop_ && duplex_loop_->running());
+         duplex_supervisor_active_.load(std::memory_order_acquire);
 }
 
 std::uint64_t WindowsWasapiEngineRuntime::graph_version() const noexcept {
@@ -131,7 +201,7 @@ std::uint64_t WindowsWasapiEngineRuntime::graph_version() const noexcept {
 
 diagnostics::EngineDiagnostics WindowsWasapiEngineRuntime::diagnostics() const {
   diagnostics::EngineDiagnostics result;
-  if (!render_loop_ && !duplex_loop_) {
+  if (!render_loop_ && !duplex_configured_) {
     return result;
   }
 
@@ -155,19 +225,67 @@ diagnostics::EngineDiagnostics WindowsWasapiEngineRuntime::diagnostics() const {
 }
 
 WindowsWasapiEngineRuntimeMode WindowsWasapiEngineRuntime::mode() const noexcept {
-  return duplex_loop_ ? WindowsWasapiEngineRuntimeMode::Duplex
-                      : WindowsWasapiEngineRuntimeMode::Render;
+  return duplex_configured_ ? WindowsWasapiEngineRuntimeMode::Duplex
+                            : WindowsWasapiEngineRuntimeMode::Render;
 }
 
 platform::WasapiRuntimeSummary
 WindowsWasapiEngineRuntime::runtime_summary() const {
-  if (duplex_loop_) {
-    return duplex_loop_->summary().runtime;
-  }
   if (render_loop_) {
     return render_loop_->summary().runtime;
   }
+  std::lock_guard lock(duplex_supervisor_mutex_);
+  if (duplex_supervisor_) {
+    return platform::summarize_wasapi_runtime(
+        duplex_supervisor_->runtime_stats(),
+        duplex_supervisor_->last_errors(),
+        nullptr,
+        nullptr);
+  }
   return {};
+}
+
+void WindowsWasapiEngineRuntime::run_duplex_supervisor() noexcept {
+  try {
+    ComApartment apartment;
+    platform::WindowsWasapiEndpointNotification notifications;
+    const bool notifications_registered =
+        apartment.ok() && SUCCEEDED(notifications.register_notifications());
+
+    while (true) {
+      std::unique_lock lock(duplex_supervisor_mutex_);
+      if (duplex_supervisor_condition_.wait_for(
+              lock,
+              std::chrono::milliseconds(20),
+              [this] { return duplex_stop_requested_; })) {
+        break;
+      }
+      if (!duplex_supervisor_) {
+        break;
+      }
+
+      const auto now_ms = monotonic_milliseconds();
+      duplex_supervisor_->tick(now_ms);
+      if (notifications_registered) {
+        static_cast<void>(duplex_supervisor_->poll_endpoint_notifications(
+            notifications, now_ms));
+      }
+      if (duplex_supervisor_->state() == platform::WasapiRecoveryState::Faulted) {
+        duplex_supervisor_active_.store(false, std::memory_order_release);
+        break;
+      }
+    }
+
+    if (notifications_registered) {
+      static_cast<void>(notifications.unregister_notifications());
+    }
+  } catch (...) {
+    std::lock_guard lock(duplex_supervisor_mutex_);
+    if (duplex_supervisor_) {
+      duplex_supervisor_->stop(monotonic_milliseconds());
+    }
+    duplex_supervisor_active_.store(false, std::memory_order_release);
+  }
 }
 
 WindowsWasapiEngineRuntime::WindowsWasapiEngineRuntime(

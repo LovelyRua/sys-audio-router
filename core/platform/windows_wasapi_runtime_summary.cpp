@@ -258,6 +258,14 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
   summary.last_render_recovery_silence =
       stats.last_render_recovery_silence;
   summary.error_count = errors.size();
+  summary.capture_fifo_fill_frames = stats.capture_fifo_fill_frames;
+  summary.render_fifo_fill_frames = stats.render_fifo_fill_frames;
+  summary.capture_fifo_overflow_cycles = stats.capture_fifo_overflow_cycles;
+  summary.capture_fifo_overflow_frames = stats.capture_fifo_overflow_frames;
+  summary.render_fifo_overflow_cycles = stats.render_fifo_overflow_cycles;
+  summary.render_fifo_overflow_frames = stats.render_fifo_overflow_frames;
+  summary.render_fifo_underflow_cycles = stats.render_fifo_underflow_cycles;
+  summary.render_fifo_underflow_frames = stats.render_fifo_underflow_frames;
 
   if (engine_diagnostics != nullptr) {
     summary.capture_fifo_fill_frames =

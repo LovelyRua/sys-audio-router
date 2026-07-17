@@ -175,10 +175,12 @@ bounded control wire protocol, named-pipe engine control service, and CLI also
 exist. The service now owns an injectable audio-runtime lifecycle and can run a
 real WASAPI render or duplex loop, including an explicit capture/render endpoint
 pair, while exposing live diagnostics. Physical HDA checks processed 80
-render-only blocks with zero xruns and 988 duplex blocks across a 44.1-to-48 kHz
-pair. The 10-second duplex check reported one startup xrun, exactly 640 render
-underflow frames, zero capture/render overflow, and a 40.5-microsecond peak
-callback. No
+render-only blocks with zero xruns and 987 supervised duplex blocks across a
+44.1-to-48 kHz pair. The final 10-second supervised check reported one startup
+xrun, 1,088 render underflow frames, zero capture/render overflow, and a
+279.6-microsecond peak callback. FIFO diagnostics are mirrored into atomic
+worker snapshots so service queries do not race the realtime diagnostics writer.
+No
 DAW-visible ASIO driver is implemented or registered yet.
 
 Deliverables:

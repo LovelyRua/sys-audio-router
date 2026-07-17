@@ -35,6 +35,22 @@ int main() {
   auto service_result = sar::service::EngineControlService::create(make_preset());
   assert(service_result.ok());
   auto service = service_result.take_service();
+  auto default_duplex =
+      sar::service::WindowsWasapiEngineRuntime::open_default_duplex(
+          service->session().current_graph());
+  assert(default_duplex.ok());
+  auto default_runtime = default_duplex.take_runtime();
+  assert(default_runtime->mode() ==
+         sar::service::WindowsWasapiEngineRuntimeMode::Duplex);
+  assert(!default_runtime->running());
+
+  auto explicit_duplex =
+      sar::service::WindowsWasapiEngineRuntime::open_duplex(
+          "capture-id", "render-id", service->session().current_graph());
+  assert(explicit_duplex.ok());
+  assert(explicit_duplex.take_runtime()->mode() ==
+         sar::service::WindowsWasapiEngineRuntimeMode::Duplex);
+
   const auto missing_capture =
       sar::service::WindowsWasapiEngineRuntime::open_duplex(
           {}, "render-id", service->session().current_graph());

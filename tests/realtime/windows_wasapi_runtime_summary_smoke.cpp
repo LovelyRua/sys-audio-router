@@ -198,6 +198,29 @@ int main() {
 
   {
     auto stats = make_active_stats();
+    stats.capture_fifo_fill_frames = 11;
+    stats.render_fifo_fill_frames = 22;
+    stats.capture_fifo_overflow_cycles = 1;
+    stats.capture_fifo_overflow_frames = 33;
+    stats.render_fifo_overflow_cycles = 2;
+    stats.render_fifo_overflow_frames = 44;
+    stats.render_fifo_underflow_cycles = 3;
+    stats.render_fifo_underflow_frames = 55;
+    const auto stats_summary = sar::platform::summarize_wasapi_runtime(
+        stats, {}, nullptr, nullptr);
+    if (const auto failure =
+            expect(stats_summary.capture_fifo_fill_frames == 11 &&
+                       stats_summary.render_fifo_fill_frames == 22 &&
+                       stats_summary.capture_fifo_overflow_cycles == 1 &&
+                       stats_summary.capture_fifo_overflow_frames == 33 &&
+                       stats_summary.render_fifo_overflow_cycles == 2 &&
+                       stats_summary.render_fifo_overflow_frames == 44 &&
+                       stats_summary.render_fifo_underflow_cycles == 3 &&
+                       stats_summary.render_fifo_underflow_frames == 55,
+                   "Expected FIFO diagnostics copied from worker stats")) {
+      return failure;
+    }
+
     sar::diagnostics::EngineDiagnostics diagnostics;
     diagnostics.capture_fifo_fill_frames = 144;
     diagnostics.render_fifo_fill_frames = 96;
