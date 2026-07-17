@@ -60,6 +60,7 @@ std::vector<std::uint8_t> as_u8(std::span<const std::byte> input) {
 
 int main(int argc, char** argv) {
   sar::service::NamedPipeControlConfig pipe_config;
+  std::string pipe_display_name = "sys-audio-route-control";
   bool once = false;
   for (int index = 1; index < argc; ++index) {
     const std::string argument = argv[index];
@@ -68,6 +69,7 @@ int main(int argc, char** argv) {
     } else if (argument == "--pipe" && index + 1 < argc) {
       const std::string name = argv[++index];
       pipe_config.pipe_name.assign(name.begin(), name.end());
+      pipe_display_name = name;
     } else {
       std::cerr << "Usage: sar_engine_service [--pipe NAME] [--once]\n";
       return 2;
@@ -102,7 +104,7 @@ int main(int argc, char** argv) {
   }
 
   SetConsoleCtrlHandler(console_handler, TRUE);
-  std::cout << "engine_service_state=running pipe=sys-audio-route-control\n";
+  std::cout << "engine_service_state=running pipe=" << pipe_display_name << '\n';
   while (!stop_requested.load()) {
     if (once && pipe_server.stats().completed_requests >= 1) {
       break;

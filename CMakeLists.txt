@@ -480,6 +480,7 @@ add_test(NAME wasapi_realtime_error_smoke COMMAND sar_wasapi_realtime_error_smok
 if(WIN32)
   add_test(NAME windows_named_pipe_control_smoke
            COMMAND sar_windows_named_pipe_control_smoke)
+  set_tests_properties(windows_named_pipe_control_smoke PROPERTIES TIMEOUT 10)
   add_test(NAME windows_wasapi_device_smoke COMMAND sar_windows_wasapi_device_smoke)
   add_test(NAME windows_wasapi_endpoint_notification_smoke
            COMMAND sar_windows_wasapi_endpoint_notification_smoke)

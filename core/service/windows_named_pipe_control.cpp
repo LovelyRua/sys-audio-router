@@ -362,17 +362,27 @@ NamedPipeControlResult transact_named_pipe_control(
   }
 
   const auto path = full_pipe_name(config.pipe_name);
-  if (!WaitNamedPipeW(path.c_str(), timeout_ms)) {
-    return NamedPipeControlResult::failure(win32_error(
-        "pipe_wait_failed", "WaitNamedPipeW failed.", GetLastError()));
-  }
-  HANDLE pipe = CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
-                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-  if (pipe == INVALID_HANDLE_VALUE) {
-    return NamedPipeControlResult::failure(win32_error(
-        "pipe_connect_failed", "CreateFileW could not connect to the pipe.",
-        GetLastError()));
-  }
+  const auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::milliseconds(timeout_ms);
+  HANDLE pipe = INVALID_HANDLE_VALUE;
+  DWORD connect_error = ERROR_SUCCESS;
+  do {
+    pipe = CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
+                       OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (pipe != INVALID_HANDLE_VALUE) {
+      break;
+    }
+    connect_error = GetLastError();
+
+    const bool transient = connect_error == ERROR_FILE_NOT_FOUND ||
+                           connect_error == ERROR_PIPE_BUSY;
+    if (!transient || std::chrono::steady_clock::now() >= deadline) {
+      return NamedPipeControlResult::failure(win32_error(
+          "pipe_connect_failed", "Could not connect to the named pipe before timeout.",
+          connect_error));
+    }
+    Sleep(1);
+  } while (true);
 
   DWORD native = ERROR_SUCCESS;
   const auto request_header =
