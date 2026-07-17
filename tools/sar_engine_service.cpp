@@ -57,6 +57,39 @@ std::vector<std::uint8_t> as_u8(std::span<const std::byte> input) {
   return result;
 }
 
+sar::service::EngineAudioRuntimeBuildResult convert_runtime_result(
+    sar::service::WindowsWasapiEngineRuntimeOpenResult result) {
+  if (!result.ok()) {
+    return sar::service::EngineAudioRuntimeBuildResult::failure(result.errors());
+  }
+  return sar::service::EngineAudioRuntimeBuildResult::success(
+      result.take_runtime());
+}
+
+sar::service::EngineAudioRuntimeBuilder make_wasapi_runtime_builder(
+    bool duplex,
+    std::string capture_device_id,
+    std::string render_device_id) {
+  return [duplex,
+          capture_device_id = std::move(capture_device_id),
+          render_device_id = std::move(render_device_id)](
+             std::shared_ptr<sar::graph::Graph> graph) {
+    if (!duplex) {
+      return convert_runtime_result(
+          sar::service::WindowsWasapiEngineRuntime::open_default_render(
+              std::move(graph)));
+    }
+    if (capture_device_id.empty()) {
+      return convert_runtime_result(
+          sar::service::WindowsWasapiEngineRuntime::open_default_duplex(
+              std::move(graph)));
+    }
+    return convert_runtime_result(
+        sar::service::WindowsWasapiEngineRuntime::open_duplex(
+            capture_device_id, render_device_id, std::move(graph)));
+  };
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -113,19 +146,9 @@ int main(int argc, char** argv) {
   }
   auto service = service_result.take_service();
   if (wasapi_render || wasapi_duplex) {
-    auto runtime_result = wasapi_duplex
-                              ? (has_capture_id
-                                     ? sar::service::WindowsWasapiEngineRuntime::
-                                           open_duplex(
-                                               capture_device_id,
-                                               render_device_id,
-                                               service->session().current_graph())
-                                     : sar::service::WindowsWasapiEngineRuntime::
-                                           open_default_duplex(
-                                               service->session().current_graph()))
-                              : sar::service::WindowsWasapiEngineRuntime::
-                                    open_default_render(
-                                        service->session().current_graph());
+    auto runtime_builder = make_wasapi_runtime_builder(
+        wasapi_duplex, capture_device_id, render_device_id);
+    auto runtime_result = runtime_builder(service->session().current_graph());
     if (!runtime_result.ok()) {
       for (const auto& error : runtime_result.errors()) {
         std::cerr << error.code << ": " << error.message << '\n';
@@ -133,7 +156,8 @@ int main(int argc, char** argv) {
       return 1;
     }
     auto install_result =
-        service->install_audio_runtime(runtime_result.take_runtime());
+        service->install_audio_runtime(runtime_result.take_runtime(),
+                                       std::move(runtime_builder));
     if (!install_result.ok()) {
       for (const auto& error : install_result.errors()) {
         std::cerr << error.code << ": " << error.message << '\n';

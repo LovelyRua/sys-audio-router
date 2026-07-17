@@ -1,8 +1,11 @@
 #pragma once
 
 #include "core/diagnostics/engine_diagnostics.h"
+#include "core/graph/graph.h"
 
 #include <cstdint>
+#include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -48,5 +51,28 @@ class EngineAudioRuntime {
  protected:
   EngineAudioRuntime() = default;
 };
+
+class EngineAudioRuntimeBuildResult {
+ public:
+  static EngineAudioRuntimeBuildResult success(
+      std::unique_ptr<EngineAudioRuntime> runtime);
+  static EngineAudioRuntimeBuildResult failure(
+      std::vector<EngineAudioRuntimeError> errors);
+
+  [[nodiscard]] bool ok() const noexcept;
+  [[nodiscard]] std::unique_ptr<EngineAudioRuntime> take_runtime() noexcept;
+  [[nodiscard]] const std::vector<EngineAudioRuntimeError>& errors() const noexcept;
+
+ private:
+  EngineAudioRuntimeBuildResult(
+      std::unique_ptr<EngineAudioRuntime> runtime,
+      std::vector<EngineAudioRuntimeError> errors) noexcept;
+
+  std::unique_ptr<EngineAudioRuntime> runtime_;
+  std::vector<EngineAudioRuntimeError> errors_;
+};
+
+using EngineAudioRuntimeBuilder = std::function<EngineAudioRuntimeBuildResult(
+    std::shared_ptr<graph::Graph>)>;
 
 }  // namespace sar::service

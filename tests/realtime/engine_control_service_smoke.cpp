@@ -18,6 +18,9 @@ sar::control::PresetDocument make_preset() {
 
 class FakeAudioRuntime final : public sar::service::EngineAudioRuntime {
  public:
+  explicit FakeAudioRuntime(std::uint64_t graph_version = 10)
+      : graph_version_(graph_version) {}
+
   sar::service::EngineAudioRuntimeResult start(std::uint32_t) override {
     running_ = true;
     ++start_calls;
@@ -184,4 +187,63 @@ int main() {
   assert(rejected.response.status ==
          sar::control::ControlResponseStatus::Rejected);
   assert(rejected.response.errors[0].code == "invalid_control_wire_request");
+
+  auto rebuild_create =
+      sar::service::EngineControlService::create(make_preset(), 20);
+  assert(rebuild_create.ok());
+  auto rebuild_service = rebuild_create.take_service();
+  std::uint32_t rebuild_calls = 0;
+  bool fail_rebuild = false;
+  FakeAudioRuntime* rebuilt_observer = nullptr;
+  sar::service::EngineAudioRuntimeBuilder builder =
+      [&](std::shared_ptr<sar::graph::Graph> graph) {
+        ++rebuild_calls;
+        if (fail_rebuild) {
+          return sar::service::EngineAudioRuntimeBuildResult::failure({
+              {"fake_runtime_rebuild_failed", "Injected runtime rebuild failure."},
+          });
+        }
+        auto runtime = std::make_unique<FakeAudioRuntime>(graph->version());
+        rebuilt_observer = runtime.get();
+        return sar::service::EngineAudioRuntimeBuildResult::success(
+            std::move(runtime));
+      };
+  auto rebuild_runtime = std::make_unique<FakeAudioRuntime>(20);
+  const auto rebuild_installed = rebuild_service->install_audio_runtime(
+      std::move(rebuild_runtime), std::move(builder));
+  assert(rebuild_installed.ok());
+  const auto initial_start = rebuild_service->start_audio_runtime();
+  assert(initial_start.ok());
+  rebuild_service->stop_audio_runtime();
+
+  gain.command_id = "rebuild-gain-1";
+  gain.gain = 0.5F;
+  const auto rebuild_graph = send(*rebuild_service, gain);
+  assert(rebuild_graph.status == sar::control::ControlResponseStatus::Accepted);
+  runtime_start.command_id = "runtime-rebuild-start-1";
+  const auto rebuilt_start = send(*rebuild_service, runtime_start);
+  assert(rebuilt_start.status == sar::control::ControlResponseStatus::Accepted);
+  assert(rebuild_calls == 1);
+  assert(rebuilt_observer != nullptr);
+  assert(rebuilt_observer->running());
+  assert(rebuilt_start.audio_runtime.graph_version == 21);
+  assert(rebuilt_start.audio_runtime.running);
+
+  rebuild_service->stop_audio_runtime();
+  gain.command_id = "rebuild-gain-2";
+  gain.gain = 0.75F;
+  const auto second_graph = send(*rebuild_service, gain);
+  assert(second_graph.status == sar::control::ControlResponseStatus::Accepted);
+  fail_rebuild = true;
+  runtime_start.command_id = "runtime-rebuild-start-2";
+  const auto failed_rebuild = send(*rebuild_service, runtime_start);
+  assert(failed_rebuild.status ==
+         sar::control::ControlResponseStatus::Rejected);
+  assert(failed_rebuild.errors[0].code == "fake_runtime_rebuild_failed");
+  assert(rebuild_calls == 2);
+  runtime_state.command_id = "runtime-state-after-rebuild-failure";
+  const auto retained_runtime = send(*rebuild_service, runtime_state);
+  assert(retained_runtime.audio_runtime.installed);
+  assert(!retained_runtime.audio_runtime.running);
+  assert(retained_runtime.audio_runtime.graph_version == 21);
 }

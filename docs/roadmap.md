@@ -186,6 +186,14 @@ stop/start check then processed 304 duplex blocks in three seconds with zero
 capture/render overflow and a 41.1-microsecond peak callback. A DAW-visible
 ASIO driver is not implemented or registered yet.
 
+Stopped Windows runtimes now retain a backend builder. After a graph mutation,
+the next runtime-start command rebuilds the render or duplex runtime against the
+new graph while preserving pinned endpoint IDs; failed rebuilds leave the prior
+stopped runtime installed and return a deterministic control error.
+The physical pinned-endpoint acceptance path rebuilt graph-v1 duplex against a
+gain-edited graph v2, then processed 302 blocks in three seconds with zero
+capture/render overflow and a 57.7-microsecond peak callback.
+
 Deliverables:
 
 - Virtual ASIO driver prototype.

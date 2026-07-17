@@ -23,7 +23,8 @@ class EngineControlService {
   ~EngineControlService();
 
   [[nodiscard]] EngineAudioRuntimeResult install_audio_runtime(
-      std::unique_ptr<EngineAudioRuntime> runtime);
+      std::unique_ptr<EngineAudioRuntime> runtime,
+      EngineAudioRuntimeBuilder builder = {});
   [[nodiscard]] EngineAudioRuntimeResult start_audio_runtime(
       std::uint32_t timeout_ms = 10);
   void stop_audio_runtime() noexcept;
@@ -45,12 +46,14 @@ class EngineControlService {
       std::unique_ptr<control::ControlSession> session) noexcept;
   [[nodiscard]] EngineAudioRuntimeResult start_audio_runtime_locked(
       std::uint32_t timeout_ms);
+  [[nodiscard]] EngineAudioRuntimeResult rebuild_audio_runtime_locked();
   void stop_audio_runtime_locked() noexcept;
   [[nodiscard]] control::ControlResponse audio_runtime_state_response_locked(
       std::string command_id) const;
 
   std::unique_ptr<control::ControlSession> session_;
   std::unique_ptr<EngineAudioRuntime> audio_runtime_;
+  EngineAudioRuntimeBuilder audio_runtime_builder_;
   mutable std::mutex control_mutex_;
 };
 

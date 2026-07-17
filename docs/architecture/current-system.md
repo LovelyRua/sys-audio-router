@@ -84,14 +84,22 @@ runtime, select an explicit capture/render endpoint pair for duplex operation,
 start and stop it through an injectable runtime contract, and serve its realtime
 diagnostics over the same control protocol. Graph mutations
 are rejected while the runtime is active, and a stopped runtime cannot restart
-after its bound graph version becomes stale. Persistence, service installation,
-automatic rebuild after graph changes, concurrent client policy, and UI binding
-remain future work.
+after its bound graph version becomes stale unless it has an installed runtime
+builder. The Windows service retains its render/duplex endpoint configuration in
+such a builder, reconstructs a stale stopped runtime against the current graph on
+the next start command, and preserves the previous stopped runtime if rebuilding
+fails. Persistence, service installation, concurrent client policy, and UI
+binding remain future work.
 
 A physical HDA lifecycle check exercised runtime state, stop, state, start,
 diagnostics, and stop through one named-pipe service process. The restarted
 44.1-to-48 kHz duplex runtime processed 304 blocks in three seconds with one
 startup xrun, zero capture/render overflow, and a 41.1-microsecond peak callback.
+An additional pinned-endpoint check stopped graph-v1 duplex, applied a gain
+change that published graph v2, and restarted through the control protocol. The
+runtime builder preserved both endpoint IDs, rebound to graph v2, and processed
+302 blocks in three seconds with zero capture/render overflow and a
+57.7-microsecond peak callback.
 
 `MockAsioTransport` is the first engine-side Virtual ASIO transport experiment.
 It preallocates fixed-format client-to-engine and engine-to-client block queues,
@@ -447,8 +455,8 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 - The named-pipe control service can own a WASAPI render or duplex runtime and
   select explicit duplex endpoint IDs. Its duplex mode now drives bounded
   supervisor recovery and follow-default endpoint notifications. It accepts
-  runtime state/start/stop commands over the named pipe, but does not yet
-  rebuild the runtime after graph changes, persist sessions, install as a
+  runtime state/start/stop commands over the named pipe and lazily rebuilds a
+  stopped stale runtime on start. It does not yet persist sessions, install as a
   Windows service, or define concurrent-client authorization and arbitration.
 - Preset-to-graph build currently supports one route matrix node with matching
   matrix input/output counts.

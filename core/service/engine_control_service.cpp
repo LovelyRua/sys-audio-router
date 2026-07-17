@@ -1,5 +1,6 @@
 #include "core/service/engine_control_service.h"
 
+#include <exception>
 #include <string>
 #include <utility>
 
@@ -23,7 +24,8 @@ EngineControlService::~EngineControlService() {
 }
 
 EngineAudioRuntimeResult EngineControlService::install_audio_runtime(
-    std::unique_ptr<EngineAudioRuntime> runtime) {
+    std::unique_ptr<EngineAudioRuntime> runtime,
+    EngineAudioRuntimeBuilder builder) {
   if (!runtime) {
     return EngineAudioRuntimeResult::failure({
         {"null_audio_runtime", "Engine audio runtime must not be null."},
@@ -38,6 +40,7 @@ EngineAudioRuntimeResult EngineControlService::install_audio_runtime(
     });
   }
   audio_runtime_ = std::move(runtime);
+  audio_runtime_builder_ = std::move(builder);
   return EngineAudioRuntimeResult::success();
 }
 
@@ -61,12 +64,51 @@ EngineAudioRuntimeResult EngineControlService::start_audio_runtime_locked(
     });
   }
   if (audio_runtime_->graph_version() != session_->current_graph()->version()) {
+    const auto rebuild = rebuild_audio_runtime_locked();
+    if (!rebuild.ok()) {
+      return rebuild;
+    }
+  }
+  return audio_runtime_->start(timeout_ms);
+}
+
+EngineAudioRuntimeResult EngineControlService::rebuild_audio_runtime_locked() {
+  if (!audio_runtime_builder_) {
     return EngineAudioRuntimeResult::failure({
         {"audio_runtime_graph_stale",
          "Rebuild the audio runtime for the current graph before starting it."},
     });
   }
-  return audio_runtime_->start(timeout_ms);
+
+  try {
+    auto rebuilt = audio_runtime_builder_(session_->current_graph());
+    if (!rebuilt.ok()) {
+      if (rebuilt.errors().empty()) {
+        return EngineAudioRuntimeResult::failure({
+            {"audio_runtime_builder_returned_null",
+             "Audio runtime builder returned no runtime."},
+        });
+      }
+      return EngineAudioRuntimeResult::failure(rebuilt.errors());
+    }
+    audio_runtime_ = rebuilt.take_runtime();
+    if (!audio_runtime_) {
+      return EngineAudioRuntimeResult::failure({
+          {"audio_runtime_builder_returned_null",
+           "Audio runtime builder returned no runtime."},
+      });
+    }
+  } catch (const std::exception& error) {
+    return EngineAudioRuntimeResult::failure({
+        {"audio_runtime_builder_exception", error.what()},
+    });
+  } catch (...) {
+    return EngineAudioRuntimeResult::failure({
+        {"audio_runtime_builder_exception",
+         "Audio runtime builder raised an unknown exception."},
+    });
+  }
+  return EngineAudioRuntimeResult::success();
 }
 
 void EngineControlService::stop_audio_runtime() noexcept {
