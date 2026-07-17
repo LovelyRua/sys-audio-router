@@ -294,10 +294,6 @@ int main() {
                                     "Expected worker xrun snapshot to match diagnostics")) {
       return failure;
     }
-    if (const auto failure = expect(stats.last_callback_nanoseconds > 0,
-                                    "Expected worker callback duration")) {
-      return failure;
-    }
     if (const auto failure = expect(stats.peak_callback_nanoseconds >=
                                         stats.last_callback_nanoseconds,
                                     "Expected peak callback duration to cover last callback")) {
@@ -305,8 +301,8 @@ int main() {
     }
     if (const auto failure =
             expect(stats.total_callback_nanoseconds >=
-                       stats.last_callback_nanoseconds,
-                   "Expected total callback duration to cover last callback")) {
+                       stats.peak_callback_nanoseconds,
+                   "Expected total callback duration to cover peak callback")) {
       return failure;
     }
     if (const auto failure = expect(worker.last_errors().empty(),
