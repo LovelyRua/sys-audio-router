@@ -8,7 +8,8 @@ where the project is going; this file describes the current executable shape.
 The project is still pre-alpha. The portable realtime core, graph execution
 prototype, control session shell, Windows WASAPI stream shell, graph runner,
 realtime worker, render, duplex, and loopback loop wrappers, sample conversion
-helpers, and smoke-test harness are in place.
+helpers, a first named-pipe engine control service, a bounded control wire
+protocol, a mock Virtual ASIO transport, and the smoke-test harness are in place.
 
 The first measured real-device loops now execute this path:
 
@@ -72,8 +73,18 @@ and next graph version. It handles:
 - Applying batches of preset mutations atomically, with one graph publication on
   success and no state mutation on failure.
 
-The current session state model is still in-process. IPC, persistence, UI
-binding, and service hosting are future work.
+`EngineControlService` now owns a `ControlSession` behind a versioned, bounded
+binary protocol. On Windows, `sar_engine_service` hosts that control surface on
+a named pipe and `sar_control_cli` can query state, graph, and diagnostics or
+apply gain and mute commands. The pipe path is control-plane only; audio data is
+not copied through it. Persistence, service installation, concurrent client
+policy, UI binding, and ownership of a live WASAPI runtime are still future work.
+
+`MockAsioTransport` is the first engine-side Virtual ASIO transport experiment.
+It preallocates fixed-format client-to-engine and engine-to-client block queues,
+keeps push/pop allocation-free and lock-free, tracks drops, underruns, sequence
+discontinuities, and connection generations, and has a two-thread stress smoke.
+It is not an ASIO driver and does not register a DAW-visible device.
 
 `core/diagnostics` tracks graph version, processed blocks, callback duration,
 peak callback duration, and xrun count. The worker mirrors per-run xrun totals
@@ -357,9 +368,18 @@ not turn a per-discontinuity gate into an aggregate-episode gate. This short
 candidate checkpoint does not replace the two eight-hour pairings, 24-hour
 soak, or physical unplug/replug evidence required for Backend Alpha exit.
 
+On 2026-07-16, the first eight-hour physical-pairing gate passed on a High
+Definition Audio 44.1 kHz capture to 48 kHz render path. It rendered
+1,383,145,632 frames against a 1,383,143,040 hardware-clock target, with zero
+capture/render wait timeout, FIFO overflow, process error, or stream start/stop
+error. All 58,368 render underflow frames were attributed to discontinuity
+recovery or capture starvation. The maximum per-discontinuity recovery was
+1,824 frames against the 2,594-frame limit. The second distinct eight-hour
+pairing, 24-hour soak, and physical unplug/replug evidence remain outstanding.
+
 ## Current Testing Model
 
-The Windows CTest suite currently has 83 smoke targets. Several tests are
+The Windows CTest suite currently has 87 smoke targets. Several tests are
 synthetic because WinRM sessions may not expose interactive audio endpoints even
 when the VM has a desktop audio stack.
 
@@ -400,8 +420,8 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   independently. `windows-wasapi-recovery-acceptance.ps1` enforces final health,
   endpoint identity, successful recovery, reset failure, process exit, and
   recovery-duration gates for retained logs.
-- Multi-hour real-device stability has not been demonstrated. The eight-hour
-  pairwise and 24-hour backend alpha soaks in the roadmap remain outstanding.
+- One eight-hour physical, mismatched-rate pairing has passed. A second distinct
+  eight-hour pairing and the 24-hour backend alpha soak remain outstanding.
 - Loopback capture is not yet connected to a selectable render destination or
   virtual endpoint.
 - No virtual ASIO driver implementation exists yet.
@@ -409,7 +429,9 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 - No UI exists yet.
 - No plugin hosting exists yet.
 - Graph execution is still linear.
-- Control sessions are in-process only; no IPC/service boundary exists yet.
+- The first named-pipe control service boundary exists, but it does not yet own
+  a live WASAPI runtime, persist sessions, install as a Windows service, or
+  define concurrent-client authorization and arbitration.
 - Preset-to-graph build currently supports one route matrix node with matching
   matrix input/output counts.
 - Sample conversion does not yet cover unusual byte orders or non-PCM encoded

@@ -158,12 +158,21 @@ the soak gates.
   retained with the test report. A 60-second 44.1-to-48 kHz candidate checkpoint
   on 2026-07-15 passed the 99.99% coverage, zero timeout/error/overflow, exact
   underflow-attribution, and 2,594-frame recovery gates; its maximum recovery
-  was 960 frames. This is short-run evidence only and does not complete either
-  eight-hour pairing or the 24-hour gate.
+  was 960 frames. The first eight-hour physical, mismatched-rate pairing passed
+  on 2026-07-16 with 1,383,145,632 rendered frames against a 1,383,143,040
+  hardware-clock target, zero wait timeout/error/overflow, exact attribution of
+  58,368 underflow frames, and a 1,824-frame recovery maximum. The second
+  distinct eight-hour pairing and the 24-hour gate remain outstanding.
 
 ## Phase 3: Virtual ASIO v1
 
 Purpose: implement the project's main differentiator.
+
+Status: engine-side foundations are underway. A fixed-format, preallocated mock
+Virtual ASIO transport now provides lock-free client-to-engine and
+engine-to-client block queues with generation and discontinuity diagnostics. A
+bounded control wire protocol, named-pipe engine control service, and CLI also
+exist. No DAW-visible ASIO driver is implemented or registered yet.
 
 Deliverables:
 
