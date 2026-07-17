@@ -44,14 +44,67 @@ WindowsWasapiEngineRuntime::open_default_render(
   return WindowsWasapiEngineRuntimeOpenResult::success(std::move(runtime));
 }
 
-EngineAudioRuntimeResult WindowsWasapiEngineRuntime::start(
-    std::uint32_t timeout_ms) {
-  if (!render_loop_) {
-    return EngineAudioRuntimeResult::failure({
-        {"wasapi_render_loop_not_open", "WASAPI render loop is not open."},
+WindowsWasapiEngineRuntimeOpenResult
+WindowsWasapiEngineRuntime::open_default_duplex(
+    std::shared_ptr<graph::Graph> graph) {
+  if (!graph) {
+    return WindowsWasapiEngineRuntimeOpenResult::failure({
+        {"null_runtime_graph", "WASAPI engine runtime requires a graph."},
     });
   }
-  const auto result = render_loop_->start(timeout_ms);
+
+  auto runtime = std::unique_ptr<WindowsWasapiEngineRuntime>(
+      new WindowsWasapiEngineRuntime(std::move(graph)));
+  auto loop = platform::open_default_wasapi_duplex_loop(
+      *runtime->graph_, runtime->realtime_diagnostics_);
+  if (!loop.ok()) {
+    return WindowsWasapiEngineRuntimeOpenResult::failure(
+        convert_errors(loop.errors()));
+  }
+  runtime->duplex_loop_ = loop.take_loop();
+  return WindowsWasapiEngineRuntimeOpenResult::success(std::move(runtime));
+}
+
+WindowsWasapiEngineRuntimeOpenResult WindowsWasapiEngineRuntime::open_duplex(
+    std::string capture_device_id,
+    std::string render_device_id,
+    std::shared_ptr<graph::Graph> graph) {
+  if (!graph) {
+    return WindowsWasapiEngineRuntimeOpenResult::failure({
+        {"null_runtime_graph", "WASAPI engine runtime requires a graph."},
+    });
+  }
+  if (capture_device_id.empty() || render_device_id.empty()) {
+    return WindowsWasapiEngineRuntimeOpenResult::failure({
+        {"missing_duplex_device_id",
+         "Explicit duplex runtime requires capture and render device IDs."},
+    });
+  }
+
+  auto runtime = std::unique_ptr<WindowsWasapiEngineRuntime>(
+      new WindowsWasapiEngineRuntime(std::move(graph)));
+  auto loop = platform::open_wasapi_duplex_loop(
+      capture_device_id,
+      render_device_id,
+      *runtime->graph_,
+      runtime->realtime_diagnostics_);
+  if (!loop.ok()) {
+    return WindowsWasapiEngineRuntimeOpenResult::failure(
+        convert_errors(loop.errors()));
+  }
+  runtime->duplex_loop_ = loop.take_loop();
+  return WindowsWasapiEngineRuntimeOpenResult::success(std::move(runtime));
+}
+
+EngineAudioRuntimeResult WindowsWasapiEngineRuntime::start(
+    std::uint32_t timeout_ms) {
+  if (!render_loop_ && !duplex_loop_) {
+    return EngineAudioRuntimeResult::failure({
+        {"wasapi_audio_loop_not_open", "WASAPI audio loop is not open."},
+    });
+  }
+  const auto result = render_loop_ ? render_loop_->start(timeout_ms)
+                                   : duplex_loop_->start(timeout_ms);
   if (!result.ok()) {
     return EngineAudioRuntimeResult::failure(convert_errors(result.errors()));
   }
@@ -62,10 +115,14 @@ void WindowsWasapiEngineRuntime::stop() noexcept {
   if (render_loop_) {
     render_loop_->stop();
   }
+  if (duplex_loop_) {
+    duplex_loop_->stop();
+  }
 }
 
 bool WindowsWasapiEngineRuntime::running() const noexcept {
-  return render_loop_ && render_loop_->running();
+  return (render_loop_ && render_loop_->running()) ||
+         (duplex_loop_ && duplex_loop_->running());
 }
 
 std::uint64_t WindowsWasapiEngineRuntime::graph_version() const noexcept {
@@ -74,11 +131,11 @@ std::uint64_t WindowsWasapiEngineRuntime::graph_version() const noexcept {
 
 diagnostics::EngineDiagnostics WindowsWasapiEngineRuntime::diagnostics() const {
   diagnostics::EngineDiagnostics result;
-  if (!render_loop_) {
+  if (!render_loop_ && !duplex_loop_) {
     return result;
   }
 
-  const auto snapshot = render_loop_->summary().runtime;
+  const auto snapshot = runtime_summary();
   result.graph_version = graph_->version();
   result.processed_blocks = snapshot.graph_processed_cycles;
   result.xrun_count = snapshot.xrun_count;
@@ -97,9 +154,20 @@ diagnostics::EngineDiagnostics WindowsWasapiEngineRuntime::diagnostics() const {
   return result;
 }
 
-platform::WasapiRenderLoopSummary WindowsWasapiEngineRuntime::summary() const {
-  return render_loop_ ? render_loop_->summary()
-                      : platform::WasapiRenderLoopSummary{};
+WindowsWasapiEngineRuntimeMode WindowsWasapiEngineRuntime::mode() const noexcept {
+  return duplex_loop_ ? WindowsWasapiEngineRuntimeMode::Duplex
+                      : WindowsWasapiEngineRuntimeMode::Render;
+}
+
+platform::WasapiRuntimeSummary
+WindowsWasapiEngineRuntime::runtime_summary() const {
+  if (duplex_loop_) {
+    return duplex_loop_->summary().runtime;
+  }
+  if (render_loop_) {
+    return render_loop_->summary().runtime;
+  }
+  return {};
 }
 
 WindowsWasapiEngineRuntime::WindowsWasapiEngineRuntime(

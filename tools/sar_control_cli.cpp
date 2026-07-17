@@ -126,7 +126,19 @@ int main(int argc, char** argv) {
   if (response.response.has_diagnostics) {
     std::cout << " processed_blocks="
               << response.response.diagnostics.processed_blocks
-              << " xruns=" << response.response.diagnostics.xrun_count;
+              << " xruns=" << response.response.diagnostics.xrun_count
+              << " capture_fifo_frames="
+              << response.response.diagnostics.capture_fifo_fill_frames
+              << " render_fifo_frames="
+              << response.response.diagnostics.render_fifo_fill_frames
+              << " capture_overflow_frames="
+              << response.response.diagnostics.capture_fifo_overflow_frames
+              << " render_overflow_frames="
+              << response.response.diagnostics.render_fifo_overflow_frames
+              << " render_underflow_frames="
+              << response.response.diagnostics.render_fifo_underflow_frames
+              << " callback_peak_us="
+              << response.response.diagnostics.peak_callback_seconds * 1'000'000.0;
   }
   std::cout << '\n';
   return 0;

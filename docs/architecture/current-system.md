@@ -77,9 +77,10 @@ and next graph version. It handles:
 binary protocol. On Windows, `sar_engine_service` hosts that control surface on
 a named pipe and `sar_control_cli` can query state, graph, and diagnostics or
 apply gain and mute commands. The pipe path is control-plane only; audio data is
-not copied through it. The service can now own a live default-device WASAPI
-render runtime, start and stop it through an injectable runtime contract, and
-serve its realtime diagnostics over the same control protocol. Graph mutations
+not copied through it. The service can now own a live WASAPI render or duplex
+runtime, select an explicit capture/render endpoint pair for duplex operation,
+start and stop it through an injectable runtime contract, and serve its realtime
+diagnostics over the same control protocol. Graph mutations
 are rejected while the runtime is active, and a stopped runtime cannot restart
 after its bound graph version becomes stale. Persistence, service installation,
 duplex runtime selection, concurrent client policy, and UI binding remain future
@@ -384,7 +385,7 @@ pairing, 24-hour soak, and physical unplug/replug evidence remain outstanding.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 87 smoke targets. Several tests are
+The Windows CTest suite currently has 90 smoke targets. Several tests are
 synthetic because WinRM sessions may not expose interactive audio endpoints even
 when the VM has a desktop audio stack.
 
@@ -434,8 +435,8 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 - No UI exists yet.
 - No plugin hosting exists yet.
 - Graph execution is still linear.
-- The named-pipe control service can own a default-device WASAPI render runtime,
-  but it does not yet select endpoints, own a duplex runtime, rebuild the runtime
+- The named-pipe control service can own a WASAPI render or duplex runtime and
+  select explicit duplex endpoint IDs, but it does not yet rebuild the runtime
   after graph changes, persist sessions, install as a Windows service, or define
   concurrent-client authorization and arbitration.
 - Preset-to-graph build currently supports one route matrix node with matching

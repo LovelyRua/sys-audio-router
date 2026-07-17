@@ -64,21 +64,43 @@ int main(int argc, char** argv) {
   std::string pipe_display_name = "sys-audio-route-control";
   bool once = false;
   bool wasapi_render = false;
+  bool wasapi_duplex = false;
+  std::string capture_device_id;
+  std::string render_device_id;
   for (int index = 1; index < argc; ++index) {
     const std::string argument = argv[index];
     if (argument == "--once") {
       once = true;
     } else if (argument == "--wasapi-render") {
       wasapi_render = true;
+    } else if (argument == "--wasapi-duplex") {
+      wasapi_duplex = true;
+    } else if (argument == "--capture-id" && index + 1 < argc) {
+      capture_device_id = argv[++index];
+    } else if (argument == "--render-id" && index + 1 < argc) {
+      render_device_id = argv[++index];
     } else if (argument == "--pipe" && index + 1 < argc) {
       const std::string name = argv[++index];
       pipe_config.pipe_name.assign(name.begin(), name.end());
       pipe_display_name = name;
     } else {
       std::cerr << "Usage: sar_engine_service [--pipe NAME] [--once] "
-                   "[--wasapi-render]\n";
+                   "[--wasapi-render|--wasapi-duplex "
+                   "[--capture-id ID --render-id ID]]\n";
       return 2;
     }
+  }
+  if (wasapi_render && wasapi_duplex) {
+    std::cerr << "Choose either --wasapi-render or --wasapi-duplex.\n";
+    return 2;
+  }
+  const bool has_capture_id = !capture_device_id.empty();
+  const bool has_render_id = !render_device_id.empty();
+  if (has_capture_id != has_render_id ||
+      ((has_capture_id || has_render_id) && !wasapi_duplex)) {
+    std::cerr << "Endpoint IDs require --wasapi-duplex with both "
+                 "--capture-id and --render-id.\n";
+    return 2;
   }
 
   auto service_result =
@@ -90,10 +112,20 @@ int main(int argc, char** argv) {
     return 1;
   }
   auto service = service_result.take_service();
-  if (wasapi_render) {
-    auto runtime_result =
-        sar::service::WindowsWasapiEngineRuntime::open_default_render(
-            service->session().current_graph());
+  if (wasapi_render || wasapi_duplex) {
+    auto runtime_result = wasapi_duplex
+                              ? (has_capture_id
+                                     ? sar::service::WindowsWasapiEngineRuntime::
+                                           open_duplex(
+                                               capture_device_id,
+                                               render_device_id,
+                                               service->session().current_graph())
+                                     : sar::service::WindowsWasapiEngineRuntime::
+                                           open_default_duplex(
+                                               service->session().current_graph()))
+                              : sar::service::WindowsWasapiEngineRuntime::
+                                    open_default_render(
+                                        service->session().current_graph());
     if (!runtime_result.ok()) {
       for (const auto& error : runtime_result.errors()) {
         std::cerr << error.code << ": " << error.message << '\n';

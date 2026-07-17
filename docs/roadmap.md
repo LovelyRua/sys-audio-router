@@ -173,8 +173,12 @@ Virtual ASIO transport now provides lock-free client-to-engine and
 engine-to-client block queues with generation and discontinuity diagnostics. A
 bounded control wire protocol, named-pipe engine control service, and CLI also
 exist. The service now owns an injectable audio-runtime lifecycle and can run a
-real default-device WASAPI render loop while exposing live diagnostics; a
-physical HDA check processed 80 blocks with zero xruns through this path. No
+real WASAPI render or duplex loop, including an explicit capture/render endpoint
+pair, while exposing live diagnostics. Physical HDA checks processed 80
+render-only blocks with zero xruns and 988 duplex blocks across a 44.1-to-48 kHz
+pair. The 10-second duplex check reported one startup xrun, exactly 640 render
+underflow frames, zero capture/render overflow, and a 40.5-microsecond peak
+callback. No
 DAW-visible ASIO driver is implemented or registered yet.
 
 Deliverables:
