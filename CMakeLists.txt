@@ -53,6 +53,7 @@ add_library(sar_core
   core/graph/graph_builder.cpp
   core/graph/graph_snapshot.cpp
   core/graph/route_matrix.cpp
+  core/service/engine_audio_runtime.cpp
   core/service/engine_control_service.cpp
 )
 
@@ -79,6 +80,7 @@ if(WIN32)
     core/platform/windows_realtime_thread.cpp
     core/platform/windows_wasapi_stream.cpp
     core/platform/windows_wasapi_stream_probe.cpp
+    core/service/windows_wasapi_engine_runtime.cpp
     core/service/windows_named_pipe_control.cpp
   )
   target_link_libraries(sar_core PUBLIC avrt ole32 uuid)

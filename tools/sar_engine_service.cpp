@@ -1,5 +1,6 @@
 #include "core/service/engine_control_service.h"
 #include "core/service/windows_named_pipe_control.h"
+#include "core/service/windows_wasapi_engine_runtime.h"
 
 #include <Windows.h>
 
@@ -62,16 +63,20 @@ int main(int argc, char** argv) {
   sar::service::NamedPipeControlConfig pipe_config;
   std::string pipe_display_name = "sys-audio-route-control";
   bool once = false;
+  bool wasapi_render = false;
   for (int index = 1; index < argc; ++index) {
     const std::string argument = argv[index];
     if (argument == "--once") {
       once = true;
+    } else if (argument == "--wasapi-render") {
+      wasapi_render = true;
     } else if (argument == "--pipe" && index + 1 < argc) {
       const std::string name = argv[++index];
       pipe_config.pipe_name.assign(name.begin(), name.end());
       pipe_display_name = name;
     } else {
-      std::cerr << "Usage: sar_engine_service [--pipe NAME] [--once]\n";
+      std::cerr << "Usage: sar_engine_service [--pipe NAME] [--once] "
+                   "[--wasapi-render]\n";
       return 2;
     }
   }
@@ -85,6 +90,32 @@ int main(int argc, char** argv) {
     return 1;
   }
   auto service = service_result.take_service();
+  if (wasapi_render) {
+    auto runtime_result =
+        sar::service::WindowsWasapiEngineRuntime::open_default_render(
+            service->session().current_graph());
+    if (!runtime_result.ok()) {
+      for (const auto& error : runtime_result.errors()) {
+        std::cerr << error.code << ": " << error.message << '\n';
+      }
+      return 1;
+    }
+    auto install_result =
+        service->install_audio_runtime(runtime_result.take_runtime());
+    if (!install_result.ok()) {
+      for (const auto& error : install_result.errors()) {
+        std::cerr << error.code << ": " << error.message << '\n';
+      }
+      return 1;
+    }
+    auto start_result = service->start_audio_runtime();
+    if (!start_result.ok()) {
+      for (const auto& error : start_result.errors()) {
+        std::cerr << error.code << ": " << error.message << '\n';
+      }
+      return 1;
+    }
+  }
   sar::service::WindowsNamedPipeControlServer pipe_server(
       pipe_config,
       [&service](std::span<const std::byte> request) {
@@ -111,6 +142,7 @@ int main(int argc, char** argv) {
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
+  service->stop_audio_runtime();
   pipe_server.stop();
   const auto stats = pipe_server.stats();
   std::cout << "engine_service_state=stopped requests="

@@ -8,28 +8,6 @@ namespace sar::control {
 
 namespace {
 
-bool mutates_preset(ControlCommandType type) noexcept {
-  switch (type) {
-    case ControlCommandType::ConnectRoute:
-    case ControlCommandType::DisconnectRoute:
-    case ControlCommandType::SetGain:
-    case ControlCommandType::SetMute:
-    case ControlCommandType::LoadPreset:
-      return true;
-
-    case ControlCommandType::ListDevices:
-    case ControlCommandType::CreateVirtualEndpoint:
-    case ControlCommandType::RemoveVirtualEndpoint:
-    case ControlCommandType::SavePreset:
-    case ControlCommandType::QueryDiagnostics:
-    case ControlCommandType::QueryActiveGraph:
-    case ControlCommandType::QuerySessionState:
-      return false;
-  }
-
-  return false;
-}
-
 std::shared_ptr<graph::Graph> share_graph(std::unique_ptr<graph::Graph> graph) {
   return std::shared_ptr<graph::Graph>(std::move(graph));
 }
@@ -152,7 +130,7 @@ ControlResponse ControlSession::handle(const ControlCommand& command,
     return command_accepted(command.command_id);
   }
 
-  if (!mutates_preset(command.type)) {
+  if (!control_command_mutates_preset(command.type)) {
     return command_accepted(command.command_id);
   }
 
@@ -186,7 +164,7 @@ ControlResponse ControlSession::handle_batch(
       return command_rejected(command_id, validation.errors());
     }
 
-    if (!mutates_preset(command.type)) {
+    if (!control_command_mutates_preset(command.type)) {
       return command_rejected(command_id, {
           {"unsupported_batch_command",
            "Control command batches currently support preset mutation commands only."},

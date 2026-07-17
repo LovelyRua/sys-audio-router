@@ -2,6 +2,7 @@
 
 #include "core/control/control_session.h"
 #include "core/control/control_wire_protocol.h"
+#include "core/service/engine_audio_runtime.h"
 
 #include <cstdint>
 #include <memory>
@@ -18,6 +19,17 @@ class EngineControlService {
   static EngineControlServiceCreateResult create(
       control::PresetDocument initial_preset,
       std::uint64_t initial_graph_version = 1);
+  ~EngineControlService();
+
+  [[nodiscard]] EngineAudioRuntimeResult install_audio_runtime(
+      std::unique_ptr<EngineAudioRuntime> runtime);
+  [[nodiscard]] EngineAudioRuntimeResult start_audio_runtime(
+      std::uint32_t timeout_ms = 10);
+  void stop_audio_runtime() noexcept;
+  [[nodiscard]] bool has_audio_runtime() const noexcept;
+  [[nodiscard]] bool audio_runtime_running() const noexcept;
+  [[nodiscard]] diagnostics::EngineDiagnostics audio_runtime_diagnostics()
+      const;
 
   [[nodiscard]] control::ControlWireEncodeResult handle_wire_request(
       std::span<const std::uint8_t> request);
@@ -32,7 +44,8 @@ class EngineControlService {
       std::unique_ptr<control::ControlSession> session) noexcept;
 
   std::unique_ptr<control::ControlSession> session_;
-  std::mutex control_mutex_;
+  std::unique_ptr<EngineAudioRuntime> audio_runtime_;
+  mutable std::mutex control_mutex_;
 };
 
 class EngineControlServiceCreateResult {

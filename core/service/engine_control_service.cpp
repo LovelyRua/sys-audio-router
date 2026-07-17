@@ -18,6 +18,76 @@ EngineControlServiceCreateResult EngineControlService::create(
           new EngineControlService(session_result.take_session())));
 }
 
+EngineControlService::~EngineControlService() {
+  stop_audio_runtime();
+}
+
+EngineAudioRuntimeResult EngineControlService::install_audio_runtime(
+    std::unique_ptr<EngineAudioRuntime> runtime) {
+  if (!runtime) {
+    return EngineAudioRuntimeResult::failure({
+        {"null_audio_runtime", "Engine audio runtime must not be null."},
+    });
+  }
+
+  std::lock_guard lock(control_mutex_);
+  if (audio_runtime_ && audio_runtime_->running()) {
+    return EngineAudioRuntimeResult::failure({
+        {"audio_runtime_running",
+         "Stop the active audio runtime before replacing it."},
+    });
+  }
+  audio_runtime_ = std::move(runtime);
+  return EngineAudioRuntimeResult::success();
+}
+
+EngineAudioRuntimeResult EngineControlService::start_audio_runtime(
+    std::uint32_t timeout_ms) {
+  std::lock_guard lock(control_mutex_);
+  if (!audio_runtime_) {
+    return EngineAudioRuntimeResult::failure({
+        {"audio_runtime_not_installed",
+         "Install an audio runtime before starting the engine."},
+    });
+  }
+  if (audio_runtime_->running()) {
+    return EngineAudioRuntimeResult::failure({
+        {"audio_runtime_already_running", "Engine audio runtime is already running."},
+    });
+  }
+  if (audio_runtime_->graph_version() != session_->current_graph()->version()) {
+    return EngineAudioRuntimeResult::failure({
+        {"audio_runtime_graph_stale",
+         "Rebuild the audio runtime for the current graph before starting it."},
+    });
+  }
+  return audio_runtime_->start(timeout_ms);
+}
+
+void EngineControlService::stop_audio_runtime() noexcept {
+  std::lock_guard lock(control_mutex_);
+  if (audio_runtime_) {
+    audio_runtime_->stop();
+  }
+}
+
+bool EngineControlService::has_audio_runtime() const noexcept {
+  std::lock_guard lock(control_mutex_);
+  return audio_runtime_ != nullptr;
+}
+
+bool EngineControlService::audio_runtime_running() const noexcept {
+  std::lock_guard lock(control_mutex_);
+  return audio_runtime_ && audio_runtime_->running();
+}
+
+diagnostics::EngineDiagnostics EngineControlService::audio_runtime_diagnostics()
+    const {
+  std::lock_guard lock(control_mutex_);
+  return audio_runtime_ ? audio_runtime_->diagnostics()
+                        : diagnostics::EngineDiagnostics{};
+}
+
 control::ControlWireEncodeResult EngineControlService::handle_wire_request(
     std::span<const std::uint8_t> request) {
   const auto decoded = control::decode_control_command(request);
@@ -30,7 +100,20 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
   }
 
   std::lock_guard lock(control_mutex_);
-  return control::encode_control_response(session_->handle(decoded.command));
+  if (audio_runtime_ && audio_runtime_->running() &&
+      control::control_command_mutates_preset(decoded.command.type)) {
+    return control::encode_control_response(control::command_rejected(
+        decoded.command.command_id,
+        {{"audio_runtime_graph_change_requires_restart",
+          "Stop the audio runtime before changing the active graph."}}));
+  }
+  diagnostics::EngineDiagnostics diagnostics;
+  if (decoded.command.type == control::ControlCommandType::QueryDiagnostics &&
+      audio_runtime_) {
+    diagnostics = audio_runtime_->diagnostics();
+  }
+  return control::encode_control_response(
+      session_->handle(decoded.command, diagnostics));
 }
 
 void EngineControlService::process(

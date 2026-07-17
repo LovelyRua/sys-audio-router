@@ -126,6 +126,28 @@ ControlCommandValidationResult validate_command(const ControlCommand& command) {
   return ControlCommandValidationResult::success();
 }
 
+bool control_command_mutates_preset(ControlCommandType type) noexcept {
+  switch (type) {
+    case ControlCommandType::ConnectRoute:
+    case ControlCommandType::DisconnectRoute:
+    case ControlCommandType::SetGain:
+    case ControlCommandType::SetMute:
+    case ControlCommandType::LoadPreset:
+      return true;
+
+    case ControlCommandType::ListDevices:
+    case ControlCommandType::CreateVirtualEndpoint:
+    case ControlCommandType::RemoveVirtualEndpoint:
+    case ControlCommandType::SavePreset:
+    case ControlCommandType::QueryDiagnostics:
+    case ControlCommandType::QueryActiveGraph:
+    case ControlCommandType::QuerySessionState:
+      return false;
+  }
+
+  return false;
+}
+
 ControlApplyResult ControlApplyResult::success(PresetDocument document) {
   return {std::move(document), {}};
 }

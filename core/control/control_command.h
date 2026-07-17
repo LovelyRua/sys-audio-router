@@ -69,6 +69,8 @@ class ControlApplyResult {
 };
 
 [[nodiscard]] ControlCommandValidationResult validate_command(const ControlCommand& command);
+[[nodiscard]] bool control_command_mutates_preset(
+    ControlCommandType type) noexcept;
 [[nodiscard]] ControlApplyResult apply_command(const PresetDocument& current,
                                                const ControlCommand& command);
 

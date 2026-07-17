@@ -1,6 +1,7 @@
 #include "core/service/engine_control_service.h"
 
 #include <cassert>
+#include <memory>
 
 namespace {
 
@@ -14,6 +15,37 @@ sar::control::PresetDocument make_preset() {
   preset.matrix.routes.push_back({"input", "output", 1.0F, false});
   return preset;
 }
+
+class FakeAudioRuntime final : public sar::service::EngineAudioRuntime {
+ public:
+  sar::service::EngineAudioRuntimeResult start(std::uint32_t) override {
+    running_ = true;
+    ++start_calls;
+    return sar::service::EngineAudioRuntimeResult::success();
+  }
+
+  void stop() noexcept override {
+    running_ = false;
+    ++stop_calls;
+  }
+
+  bool running() const noexcept override { return running_; }
+
+  std::uint64_t graph_version() const noexcept override { return graph_version_; }
+
+  sar::diagnostics::EngineDiagnostics diagnostics() const override {
+    sar::diagnostics::EngineDiagnostics result;
+    result.graph_version = 10;
+    result.processed_blocks = 42;
+    result.xrun_count = 3;
+    return result;
+  }
+
+  bool running_ = false;
+  std::uint64_t graph_version_ = 10;
+  std::uint32_t start_calls = 0;
+  std::uint32_t stop_calls = 0;
+};
 
 sar::control::ControlResponse send(
     sar::service::EngineControlService& service,
@@ -44,14 +76,59 @@ int main() {
   assert(before.next_graph_version == 11);
   assert(before.preset.matrix.routes[0].gain == 1.0F);
 
+  const auto missing_runtime = service->start_audio_runtime();
+  assert(!missing_runtime.ok());
+  assert(missing_runtime.errors()[0].code == "audio_runtime_not_installed");
+
+  auto fake_runtime = std::make_unique<FakeAudioRuntime>();
+  auto* runtime_observer = fake_runtime.get();
+  const auto installed =
+      service->install_audio_runtime(std::move(fake_runtime));
+  assert(installed.ok());
+  assert(service->has_audio_runtime());
+  assert(!service->audio_runtime_running());
+
+  const auto started = service->start_audio_runtime(4);
+  assert(started.ok());
+  assert(service->audio_runtime_running());
+  assert(runtime_observer->start_calls == 1);
+
+  sar::control::ControlCommand diagnostics;
+  diagnostics.command_id = "diagnostics-1";
+  diagnostics.type = sar::control::ControlCommandType::QueryDiagnostics;
+  const auto diagnostic_response = send(*service, diagnostics);
+  assert(diagnostic_response.has_diagnostics);
+  assert(diagnostic_response.diagnostics.graph_version == 10);
+  assert(diagnostic_response.diagnostics.processed_blocks == 42);
+  assert(diagnostic_response.diagnostics.xrun_count == 3);
+
   sar::control::ControlCommand gain;
   gain.command_id = "gain-1";
   gain.type = sar::control::ControlCommandType::SetGain;
   gain.input_id = "input";
   gain.output_id = "output";
   gain.gain = 0.25F;
+  const auto blocked = send(*service, gain);
+  assert(blocked.status == sar::control::ControlResponseStatus::Rejected);
+  assert(blocked.errors[0].code ==
+         "audio_runtime_graph_change_requires_restart");
+
+  auto replacement = std::make_unique<FakeAudioRuntime>();
+  const auto replace_while_running =
+      service->install_audio_runtime(std::move(replacement));
+  assert(!replace_while_running.ok());
+  assert(replace_while_running.errors()[0].code == "audio_runtime_running");
+
+  service->stop_audio_runtime();
+  assert(!service->audio_runtime_running());
+  assert(runtime_observer->stop_calls == 1);
+
   const auto applied = send(*service, gain);
   assert(applied.status == sar::control::ControlResponseStatus::Accepted);
+
+  const auto stale_runtime = service->start_audio_runtime();
+  assert(!stale_runtime.ok());
+  assert(stale_runtime.errors()[0].code == "audio_runtime_graph_stale");
 
   state.command_id = "state-2";
   const auto after = send(*service, state);

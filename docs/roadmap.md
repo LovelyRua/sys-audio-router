@@ -172,7 +172,10 @@ Status: engine-side foundations are underway. A fixed-format, preallocated mock
 Virtual ASIO transport now provides lock-free client-to-engine and
 engine-to-client block queues with generation and discontinuity diagnostics. A
 bounded control wire protocol, named-pipe engine control service, and CLI also
-exist. No DAW-visible ASIO driver is implemented or registered yet.
+exist. The service now owns an injectable audio-runtime lifecycle and can run a
+real default-device WASAPI render loop while exposing live diagnostics; a
+physical HDA check processed 80 blocks with zero xruns through this path. No
+DAW-visible ASIO driver is implemented or registered yet.
 
 Deliverables:
 
