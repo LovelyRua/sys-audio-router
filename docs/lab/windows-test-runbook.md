@@ -170,6 +170,34 @@ build\sar_list_wasapi_devices.exe
 
 WinRM sessions may report zero active WASAPI endpoints even when an interactive desktop session has audio devices. Use the CLI output as a session-local inspection result, not as proof that the VM has no audio stack.
 
+## Engine Control Acceptance
+
+Run the service and CLI acceptance flow from an interactive Windows audio
+session after building `sar_engine_service` and `sar_control_cli`:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\windows-engine-control-acceptance.ps1 -BuildPath build
+```
+
+For a multi-configuration build or a pinned render endpoint:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\windows-engine-control-acceptance.ps1 -BuildPath build -Configuration Release -RenderDeviceId '<render-endpoint-id>'
+```
+
+The script starts a service on a GUID-suffixed named pipe, waits for it through
+the real CLI, then accepts `devices`, `runtime-configure-render`,
+`runtime-start`, `diagnostics`, and `runtime-stop` only when their
+machine-readable fields match the expected state. It requires at least one
+active WASAPI render endpoint and at least one processed audio block. A
+`finally` block attempts runtime stop and terminates the exact service PID on
+all paths. The final `engine_control_acceptance ...` line is the stable result
+for automation; per-command output and service stdout/stderr are retained in
+the reported output directory.
+
+Run this acceptance from an interactive desktop session. As with device
+inspection, WinRM may not expose the logged-in user's active audio endpoints.
+
 ## Better Future Remote Execution
 
 For non-interactive testing, enable one of:
