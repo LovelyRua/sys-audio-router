@@ -37,6 +37,8 @@ add_library(sar_core
   core/control/control_response.cpp
   core/control/control_session.cpp
   core/control/control_wire_protocol.cpp
+  core/control/session_document.cpp
+  core/control/session_file_codec.cpp
   core/platform/audio_device.cpp
   core/platform/audio_device_registry.cpp
   core/platform/mock_asio_transport.cpp
@@ -134,6 +136,12 @@ add_executable(sar_preset_file_codec_smoke
 )
 
 target_link_libraries(sar_preset_file_codec_smoke PRIVATE sar_core)
+
+add_executable(sar_session_file_codec_smoke
+  tests/realtime/session_file_codec_smoke.cpp
+)
+
+target_link_libraries(sar_session_file_codec_smoke PRIVATE sar_core)
 
 add_executable(sar_control_command_smoke
   tests/realtime/control_command_smoke.cpp
@@ -486,6 +494,7 @@ add_test(NAME graph_builder_smoke COMMAND sar_graph_builder_smoke)
 add_test(NAME route_matrix_smoke COMMAND sar_route_matrix_smoke)
 add_test(NAME preset_document_smoke COMMAND sar_preset_document_smoke)
 add_test(NAME preset_file_codec_smoke COMMAND sar_preset_file_codec_smoke)
+add_test(NAME session_file_codec_smoke COMMAND sar_session_file_codec_smoke)
 add_test(NAME control_command_smoke COMMAND sar_control_command_smoke)
 add_test(NAME control_response_smoke COMMAND sar_control_response_smoke)
 add_test(NAME control_session_smoke COMMAND sar_control_session_smoke)
