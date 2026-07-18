@@ -1,4 +1,5 @@
 #include "core/service/engine_control_service.h"
+#include "core/platform/mock_audio_device_provider.h"
 
 #include <cassert>
 #include <memory>
@@ -309,4 +310,91 @@ int main() {
   assert(render_configured.audio_runtime.configuration.mode ==
          sar::control::AudioRuntimeMode::WasapiRender);
   assert(render_configured.audio_runtime.configuration.render_device_id.empty());
+
+  auto devices_create =
+      sar::service::EngineControlService::create(make_preset(), 40);
+  assert(devices_create.ok());
+  auto devices_service = devices_create.take_service();
+  sar::platform::AudioDeviceDescriptor physical_device;
+  physical_device.id = "wasapi-render-1";
+  physical_device.label = "Physical Render";
+  physical_device.backend = sar::platform::AudioBackendKind::Wasapi;
+  physical_device.direction = sar::platform::AudioDeviceDirection::Output;
+  physical_device.formats.push_back({
+      48000,
+      2,
+      128,
+      32,
+      32,
+      sar::platform::AudioSampleFormat::IeeeFloat,
+  });
+  physical_device.is_default = true;
+  devices_service->add_audio_device_provider(
+      std::make_unique<sar::platform::MockAudioDeviceProvider>(
+          std::vector<sar::platform::AudioDeviceDescriptor>{physical_device}));
+
+  sar::control::ControlCommand devices;
+  devices.command_id = "devices-1";
+  devices.type = sar::control::ControlCommandType::ListDevices;
+  const auto physical_devices = send(*devices_service, devices);
+  assert(physical_devices.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  assert(physical_devices.has_devices);
+  assert(physical_devices.devices.size() == 1);
+  assert(physical_devices.devices[0].id == "wasapi-render-1");
+  assert(physical_devices.devices[0].is_default);
+
+  sar::control::ControlCommand create_endpoint;
+  create_endpoint.command_id = "virtual-device-1";
+  create_endpoint.type =
+      sar::control::ControlCommandType::CreateVirtualEndpoint;
+  create_endpoint.endpoint_id = "virtual-asio-1";
+  create_endpoint.endpoint_label = "Virtual ASIO 1";
+  const auto endpoint_created = send(*devices_service, create_endpoint);
+  assert(endpoint_created.status ==
+         sar::control::ControlResponseStatus::Accepted);
+
+  devices.command_id = "devices-2";
+  const auto merged_devices = send(*devices_service, devices);
+  assert(merged_devices.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  assert(merged_devices.devices.size() == 2);
+  assert(merged_devices.devices[0].id == "virtual-asio-1");
+  assert(merged_devices.devices[0].is_virtual);
+  assert(merged_devices.devices[1].id == "wasapi-render-1");
+
+  state.command_id = "state-with-platform-devices";
+  const auto state_devices = send(*devices_service, state);
+  assert(state_devices.has_session_state);
+  assert(state_devices.devices.size() == 2);
+
+  auto duplicate_device = physical_device;
+  duplicate_device.id = "virtual-asio-1";
+  devices_service->add_audio_device_provider(
+      std::make_unique<sar::platform::MockAudioDeviceProvider>(
+          std::vector<sar::platform::AudioDeviceDescriptor>{duplicate_device}));
+  devices.command_id = "devices-duplicate-id";
+  const auto duplicate_devices = send(*devices_service, devices);
+  assert(duplicate_devices.status ==
+         sar::control::ControlResponseStatus::Rejected);
+  assert(!duplicate_devices.has_devices);
+  assert(!duplicate_devices.errors.empty());
+  assert(duplicate_devices.errors[0].code == "duplicate_device_id");
+
+  auto invalid_devices_create =
+      sar::service::EngineControlService::create(make_preset(), 41);
+  assert(invalid_devices_create.ok());
+  auto invalid_devices_service = invalid_devices_create.take_service();
+  auto invalid_device = physical_device;
+  invalid_device.formats.clear();
+  invalid_devices_service->add_audio_device_provider(
+      std::make_unique<sar::platform::MockAudioDeviceProvider>(
+          std::vector<sar::platform::AudioDeviceDescriptor>{invalid_device}));
+  devices.command_id = "devices-provider-error";
+  const auto invalid_devices = send(*invalid_devices_service, devices);
+  assert(invalid_devices.status ==
+         sar::control::ControlResponseStatus::Rejected);
+  assert(!invalid_devices.has_devices);
+  assert(!invalid_devices.errors.empty());
+  assert(invalid_devices.errors[0].code == "empty_device_formats");
 }

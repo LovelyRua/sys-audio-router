@@ -75,8 +75,9 @@ and next graph version. It handles:
 
 `EngineControlService` now owns a `ControlSession` behind a versioned, bounded
 binary protocol. On Windows, `sar_engine_service` hosts that control surface on
-a named pipe and `sar_control_cli` can query state, graph, diagnostics, and
-audio-runtime state; start or stop an installed runtime; or apply gain and mute
+a named pipe and `sar_control_cli` can query state, the merged virtual and
+physical WASAPI device directory, graph, diagnostics, and audio-runtime state;
+start or stop an installed runtime; or apply gain and mute
 commands. Control wire version 3 carries installed/running/runtime graph-version
 state plus the active runtime mode and endpoint selection in lifecycle
 responses. A stopped service can configure default or pinned WASAPI render and
@@ -465,8 +466,11 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   select explicit duplex endpoint IDs. Its duplex mode now drives bounded
   supervisor recovery and follow-default endpoint notifications. It accepts
   runtime state/start/stop commands over the named pipe and lazily rebuilds a
-  stopped stale runtime on start. It does not yet persist sessions, install as a
-  Windows service, or define concurrent-client authorization and arbitration.
+  stopped stale runtime on start. Device-list and session-state requests merge
+  the control session's virtual endpoints with a fresh control-thread WASAPI
+  enumeration; the merged directory is rejected if IDs collide or descriptors
+  are invalid. It does not yet persist sessions, install as a Windows service,
+  or define concurrent-client authorization and arbitration.
 - Preset-to-graph build currently supports one route matrix node with matching
   matrix input/output counts.
 - Sample conversion does not yet cover unusual byte orders or non-PCM encoded

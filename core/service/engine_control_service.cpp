@@ -57,6 +57,12 @@ EngineAudioRuntimeResult EngineControlService::configure_audio_runtime(
   return configure_audio_runtime_locked(std::move(configuration));
 }
 
+void EngineControlService::add_audio_device_provider(
+    std::unique_ptr<platform::AudioDeviceProvider> provider) {
+  std::lock_guard lock(control_mutex_);
+  audio_device_registry_.add_provider(std::move(provider));
+}
+
 EngineAudioRuntimeResult EngineControlService::configure_audio_runtime_locked(
     control::AudioRuntimeConfiguration configuration) {
   if (audio_runtime_ && audio_runtime_->running()) {
@@ -275,8 +281,12 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
       audio_runtime_) {
     diagnostics = audio_runtime_->diagnostics();
   }
-  return control::encode_control_response(
-      session_->handle(decoded.command, diagnostics));
+  auto response = session_->handle(decoded.command, diagnostics);
+  if (decoded.command.type == control::ControlCommandType::ListDevices ||
+      decoded.command.type == control::ControlCommandType::QuerySessionState) {
+    response = append_platform_devices_locked(std::move(response));
+  }
+  return control::encode_control_response(response);
 }
 
 control::ControlResponse EngineControlService::audio_runtime_state_response_locked(
@@ -290,6 +300,40 @@ control::ControlResponse EngineControlService::audio_runtime_state_response_lock
     response.audio_runtime.configured = true;
     response.audio_runtime.configuration = *audio_runtime_configuration_;
   }
+  return response;
+}
+
+control::ControlResponse EngineControlService::append_platform_devices_locked(
+    control::ControlResponse response) const {
+  if (response.status == control::ControlResponseStatus::Rejected) {
+    return response;
+  }
+
+  const auto platform_devices = audio_device_registry_.list_devices();
+  if (!platform_devices.ok()) {
+    std::vector<control::PresetError> errors;
+    errors.reserve(platform_devices.errors().size());
+    for (const auto& error : platform_devices.errors()) {
+      errors.push_back({error.code, error.message});
+    }
+    return control::command_rejected(response.command_id, std::move(errors));
+  }
+
+  response.devices.reserve(response.devices.size() +
+                           platform_devices.devices().size());
+  for (const auto& device : platform_devices.devices()) {
+    response.devices.push_back(device);
+  }
+  const auto validation = platform::validate_audio_devices(response.devices);
+  if (!validation.empty()) {
+    std::vector<control::PresetError> errors;
+    errors.reserve(validation.size());
+    for (const auto& error : validation) {
+      errors.push_back({error.code, error.message});
+    }
+    return control::command_rejected(response.command_id, std::move(errors));
+  }
+  response.has_devices = true;
   return response;
 }
 

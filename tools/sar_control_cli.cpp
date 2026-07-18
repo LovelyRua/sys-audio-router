@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <iomanip>
 #include <iostream>
 #include <span>
 #include <string>
@@ -27,11 +28,53 @@ std::vector<std::uint8_t> as_u8(std::span<const std::byte> input) {
 }
 
 void usage() {
-  std::cerr << "Usage: sar_control_cli [--pipe NAME] state|diagnostics|graph|"
+  std::cerr << "Usage: sar_control_cli [--pipe NAME] state|devices|diagnostics|graph|"
                "runtime-state|runtime-start|runtime-stop|set-gain INPUT OUTPUT "
                "VALUE|set-mute INPUT OUTPUT true|false|"
                "runtime-configure-render [RENDER_ID]|"
                "runtime-configure-duplex [CAPTURE_ID RENDER_ID]\n";
+}
+
+const char* backend_name(sar::platform::AudioBackendKind backend) {
+  switch (backend) {
+    case sar::platform::AudioBackendKind::Wasapi:
+      return "wasapi";
+    case sar::platform::AudioBackendKind::WasapiLoopback:
+      return "wasapi-loopback";
+    case sar::platform::AudioBackendKind::Asio:
+      return "asio";
+    case sar::platform::AudioBackendKind::VirtualWasapi:
+      return "virtual-wasapi";
+    case sar::platform::AudioBackendKind::VirtualAsio:
+      return "virtual-asio";
+    case sar::platform::AudioBackendKind::Mock:
+      return "mock";
+  }
+  return "unknown";
+}
+
+const char* direction_name(sar::platform::AudioDeviceDirection direction) {
+  switch (direction) {
+    case sar::platform::AudioDeviceDirection::Input:
+      return "input";
+    case sar::platform::AudioDeviceDirection::Output:
+      return "output";
+    case sar::platform::AudioDeviceDirection::Duplex:
+      return "duplex";
+  }
+  return "unknown";
+}
+
+const char* sample_format_name(sar::platform::AudioSampleFormat format) {
+  switch (format) {
+    case sar::platform::AudioSampleFormat::Unknown:
+      return "unknown";
+    case sar::platform::AudioSampleFormat::PcmInt:
+      return "pcm-int";
+    case sar::platform::AudioSampleFormat::IeeeFloat:
+      return "float";
+  }
+  return "unknown";
 }
 
 const char* runtime_mode_name(sar::control::AudioRuntimeMode mode) {
@@ -66,6 +109,8 @@ int main(int argc, char** argv) {
   const std::string operation = argv[index++];
   if (operation == "state") {
     command.type = sar::control::ControlCommandType::QuerySessionState;
+  } else if (operation == "devices") {
+    command.type = sar::control::ControlCommandType::ListDevices;
   } else if (operation == "diagnostics") {
     command.type = sar::control::ControlCommandType::QueryDiagnostics;
   } else if (operation == "graph") {
@@ -162,6 +207,9 @@ int main(int argc, char** argv) {
               << response.response.next_graph_version
               << " routes=" << response.response.preset.matrix.routes.size();
   }
+  if (response.response.has_devices) {
+    std::cout << " devices=" << response.response.devices.size();
+  }
   if (response.response.has_diagnostics) {
     std::cout << " processed_blocks="
               << response.response.diagnostics.processed_blocks
@@ -205,5 +253,34 @@ int main(int argc, char** argv) {
     }
   }
   std::cout << '\n';
+  if (response.response.has_devices) {
+    for (std::size_t device_index = 0;
+         device_index < response.response.devices.size();
+         ++device_index) {
+      const auto& device = response.response.devices[device_index];
+      std::cout << "device index=" << device_index
+                << " id=" << std::quoted(device.id)
+                << " label=" << std::quoted(device.label)
+                << " backend=" << backend_name(device.backend)
+                << " direction=" << direction_name(device.direction)
+                << " default=" << (device.is_default ? "true" : "false")
+                << " virtual=" << (device.is_virtual ? "true" : "false")
+                << " formats=" << device.formats.size() << '\n';
+      for (std::size_t format_index = 0;
+           format_index < device.formats.size();
+           ++format_index) {
+        const auto& format = device.formats[format_index];
+        std::cout << "device_format device_index=" << device_index
+                  << " index=" << format_index
+                  << " sample_rate=" << format.sample_rate
+                  << " channels=" << format.channels
+                  << " frames=" << format.frames_per_block
+                  << " bits=" << format.bits_per_sample
+                  << " valid_bits=" << format.valid_bits_per_sample
+                  << " format=" << sample_format_name(format.sample_format)
+                  << '\n';
+      }
+    }
+  }
   return 0;
 }

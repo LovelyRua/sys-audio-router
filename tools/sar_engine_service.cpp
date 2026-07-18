@@ -1,6 +1,7 @@
 #include "core/service/engine_control_service.h"
 #include "core/service/windows_named_pipe_control.h"
 #include "core/service/windows_wasapi_engine_runtime.h"
+#include "core/platform/windows_wasapi_device_provider.h"
 
 #include <Windows.h>
 
@@ -9,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <span>
 #include <string>
 #include <thread>
@@ -157,6 +159,8 @@ int main(int argc, char** argv) {
     return 1;
   }
   auto service = service_result.take_service();
+  service->add_audio_device_provider(
+      std::make_unique<sar::platform::WindowsWasapiDeviceProvider>());
   service->set_audio_runtime_configurator(
       make_wasapi_runtime_configurator());
   if (wasapi_render || wasapi_duplex) {

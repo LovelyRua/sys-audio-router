@@ -56,8 +56,9 @@ Exit criteria:
 
 Purpose: connect the engine to real Windows audio devices.
 
-Status: underway. WASAPI endpoint enumeration, default and device-ID endpoint
-probing, render loopback probing, shared-mode event-driven stream handles,
+Status: underway. WASAPI endpoint enumeration, including service/CLI exposure
+of merged physical and virtual device descriptors, default and device-ID
+endpoint probing, render loopback probing, shared-mode event-driven stream handles,
 single-cycle render/capture pumping, graph runner orchestration, MMCSS scope,
 realtime worker, and render, duplex, and capture-only loopback wrappers and
 measurement tools exist. Fixed-capacity FIFOs preserve frame counts in the
@@ -81,7 +82,7 @@ stability result. Phase 2 is therefore not complete.
 Deliverables:
 
 - WASAPI input and output backend.
-- Hardware device enumeration.
+- Hardware device enumeration through the headless service and control CLI.
 - Loopback capture prototype.
 - Drift and xrun diagnostics.
 - Render-master duplex scheduling and FIFO waterline drift control.

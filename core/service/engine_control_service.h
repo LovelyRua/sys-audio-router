@@ -2,6 +2,7 @@
 
 #include "core/control/control_session.h"
 #include "core/control/control_wire_protocol.h"
+#include "core/platform/audio_device_registry.h"
 #include "core/service/engine_audio_runtime.h"
 
 #include <cstdint>
@@ -37,6 +38,8 @@ class EngineControlService {
       EngineAudioRuntimeConfigurator configurator);
   [[nodiscard]] EngineAudioRuntimeResult configure_audio_runtime(
       control::AudioRuntimeConfiguration configuration);
+  void add_audio_device_provider(
+      std::unique_ptr<platform::AudioDeviceProvider> provider);
   void stop_audio_runtime() noexcept;
   [[nodiscard]] bool has_audio_runtime() const noexcept;
   [[nodiscard]] bool audio_runtime_running() const noexcept;
@@ -62,6 +65,8 @@ class EngineControlService {
   void stop_audio_runtime_locked() noexcept;
   [[nodiscard]] control::ControlResponse audio_runtime_state_response_locked(
       std::string command_id) const;
+  [[nodiscard]] control::ControlResponse append_platform_devices_locked(
+      control::ControlResponse response) const;
 
   std::unique_ptr<control::ControlSession> session_;
   std::unique_ptr<EngineAudioRuntime> audio_runtime_;
@@ -69,6 +74,7 @@ class EngineControlService {
   EngineAudioRuntimeConfigurator audio_runtime_configurator_;
   std::optional<control::AudioRuntimeConfiguration>
       audio_runtime_configuration_;
+  platform::AudioDeviceRegistry audio_device_registry_;
   mutable std::mutex control_mutex_;
 };
 
