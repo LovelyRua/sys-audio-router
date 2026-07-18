@@ -35,3 +35,25 @@ value from the last accepted control command.
 `--session` cannot be combined with the legacy `--wasapi-render`,
 `--wasapi-duplex`, `--capture-id`, or `--render-id` startup options. `--pipe`
 and `--once` remain available.
+
+## Windows acceptance
+
+Run the persistence acceptance against an existing Windows build:
+
+```powershell
+scripts\windows-engine-session-acceptance.ps1 `
+  -BuildPath build `
+  -DiagnosticsDelayMilliseconds 1000
+```
+
+The script creates a new session, configures a default WASAPI render runtime,
+changes a route gain, starts the runtime, and force-terminates the first service
+process. It then starts a second process from the same file and requires the
+runtime to be installed, auto-started, and processing audio blocks. A final
+service invocation loads a deliberately malformed session and must keep the
+named pipe online without changing the malformed file's SHA-256 hash.
+
+The final `engine_session_acceptance` line is machine readable. A passing run
+reports `passed=1`, a positive `restored_processed_blocks` value,
+`corrupt_preserved=1`, and `cleanup_complete=1`. Per-process stdout and stderr
+logs remain in `output_directory` for diagnosis.
