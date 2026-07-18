@@ -82,6 +82,10 @@ stability result. Phase 2 is therefore not complete.
 The control CLI can now save the active route preset to a bounded, versioned
 binary file and load it back through the engine service. Writes use same-folder
 atomic replacement so an interrupted save does not publish a partial preset.
+The engine host can also own a versioned session file containing the preset,
+desired WASAPI runtime configuration, and auto-start intent. Session recovery
+keeps the control pipe available when a pinned endpoint is temporarily absent
+and never overwrites a corrupt source file.
 
 Deliverables:
 

@@ -473,10 +473,12 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   the control session's virtual endpoints with a fresh control-thread WASAPI
   enumeration; the merged directory is rejected if IDs collide or descriptors
   are invalid. The control CLI can explicitly save and load validated,
-  versioned binary preset files using atomic replacement, but the service does
-  not yet automatically restore a complete session or runtime configuration.
-  It also does not install as a Windows service or define concurrent-client
-  authorization and arbitration.
+  versioned binary preset files using atomic replacement. With `--session`,
+  the engine service also restores and atomically persists the preset, desired
+  runtime configuration, and auto-start intent. Corrupt files are preserved
+  and missing endpoint failures leave the control pipe online with the desired
+  configuration intact. The executable does not yet install as a Windows
+  service or define concurrent-client authorization and arbitration.
 - Preset-to-graph build currently supports one route matrix node with matching
   matrix input/output counts.
 - Sample conversion does not yet cover unusual byte orders or non-PCM encoded
