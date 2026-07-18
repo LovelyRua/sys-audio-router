@@ -1,3 +1,9 @@
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+
+#include <cassert>
+
 #include "core/control/control_wire_protocol.h"
 #include "core/platform/mock_audio_device_provider.h"
 #include "core/service/engine_control_service.h"
@@ -6,7 +12,6 @@
 #include <Windows.h>
 
 #include <algorithm>
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -132,7 +137,8 @@ int main() {
         return sar::service::NamedPipeControlResult::success(
             as_bytes(encoded.bytes));
       });
-  assert(server.start().ok());
+  const auto server_start = server.start();
+  assert(server_start.ok());
 
   sar::control::ControlCommand devices;
   devices.command_id = "devices";
