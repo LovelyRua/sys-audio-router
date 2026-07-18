@@ -213,6 +213,17 @@ diagnostics::EngineDiagnostics EngineControlService::audio_runtime_diagnostics()
                         : diagnostics::EngineDiagnostics{};
 }
 
+control::SessionDocument EngineControlService::session_document() const {
+  std::lock_guard lock(control_mutex_);
+  control::SessionDocument document;
+  document.preset = session_->current_preset();
+  if (audio_runtime_configuration_) {
+    document.audio_runtime = *audio_runtime_configuration_;
+    document.auto_start = audio_runtime_ && audio_runtime_->running();
+  }
+  return document;
+}
+
 control::ControlWireEncodeResult EngineControlService::handle_wire_request(
     std::span<const std::uint8_t> request) {
   const auto decoded = control::decode_control_command(request);

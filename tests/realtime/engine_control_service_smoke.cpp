@@ -281,6 +281,32 @@ int main() {
   assert(configure_calls == 1);
   assert(configured.audio_runtime.installed);
   assert(!configured.audio_runtime.running);
+  const auto configured_session = configure_service->session_document();
+  assert(configured_session.preset.sample_rate == 48000);
+  assert(configured_session.audio_runtime.mode ==
+         sar::control::AudioRuntimeMode::WasapiDuplex);
+  assert(configured_session.audio_runtime.capture_device_id ==
+         "capture-pinned");
+  assert(configured_session.audio_runtime.render_device_id ==
+         "render-pinned");
+  assert(!configured_session.auto_start);
+
+  sar::control::ControlCommand start_configured;
+  start_configured.command_id = "start-configured";
+  start_configured.type =
+      sar::control::ControlCommandType::StartAudioRuntime;
+  const auto configured_started = send(*configure_service, start_configured);
+  assert(configured_started.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  assert(configure_service->session_document().auto_start);
+
+  sar::control::ControlCommand stop_configured;
+  stop_configured.command_id = "stop-configured";
+  stop_configured.type = sar::control::ControlCommandType::StopAudioRuntime;
+  const auto configured_stopped = send(*configure_service, stop_configured);
+  assert(configured_stopped.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  assert(!configure_service->session_document().auto_start);
   assert(configured.audio_runtime.configured);
   assert(configured.audio_runtime.configuration.mode ==
          sar::control::AudioRuntimeMode::WasapiDuplex);

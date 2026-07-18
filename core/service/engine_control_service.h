@@ -2,6 +2,7 @@
 
 #include "core/control/control_session.h"
 #include "core/control/control_wire_protocol.h"
+#include "core/control/session_document.h"
 #include "core/platform/audio_device_registry.h"
 #include "core/service/engine_audio_runtime.h"
 
@@ -45,6 +46,7 @@ class EngineControlService {
   [[nodiscard]] bool audio_runtime_running() const noexcept;
   [[nodiscard]] diagnostics::EngineDiagnostics audio_runtime_diagnostics()
       const;
+  [[nodiscard]] control::SessionDocument session_document() const;
 
   [[nodiscard]] control::ControlWireEncodeResult handle_wire_request(
       std::span<const std::uint8_t> request);
