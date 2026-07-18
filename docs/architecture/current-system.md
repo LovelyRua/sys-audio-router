@@ -412,7 +412,10 @@ pairing, 24-hour soak, and physical unplug/replug evidence remain outstanding.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 90 smoke targets. Several tests are
+The Windows CTest suite currently has 91 smoke targets. The named-pipe coverage
+includes a full control-wire integration path through `EngineControlService`
+for device enumeration, session state, runtime configuration, lifecycle, and
+diagnostics. Several tests are
 synthetic because WinRM sessions may not expose interactive audio endpoints even
 when the VM has a desktop audio stack.
 

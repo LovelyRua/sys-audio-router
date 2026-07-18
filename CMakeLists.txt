@@ -225,6 +225,13 @@ if(WIN32)
 
   target_link_libraries(sar_windows_named_pipe_control_smoke PRIVATE sar_core)
 
+  add_executable(sar_windows_engine_control_pipe_integration_smoke
+    tests/realtime/windows_engine_control_pipe_integration_smoke.cpp
+  )
+
+  target_link_libraries(sar_windows_engine_control_pipe_integration_smoke
+    PRIVATE sar_core)
+
   add_executable(sar_windows_wasapi_engine_runtime_smoke
     tests/realtime/windows_wasapi_engine_runtime_smoke.cpp
   )
@@ -489,6 +496,10 @@ if(WIN32)
   add_test(NAME windows_named_pipe_control_smoke
            COMMAND sar_windows_named_pipe_control_smoke)
   set_tests_properties(windows_named_pipe_control_smoke PROPERTIES TIMEOUT 10)
+  add_test(NAME windows_engine_control_pipe_integration_smoke
+           COMMAND sar_windows_engine_control_pipe_integration_smoke)
+  set_tests_properties(windows_engine_control_pipe_integration_smoke
+                       PROPERTIES TIMEOUT 10)
   add_test(NAME windows_wasapi_engine_runtime_smoke
            COMMAND sar_windows_wasapi_engine_runtime_smoke)
   add_test(NAME windows_engine_service_runtime_conflict
