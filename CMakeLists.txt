@@ -32,6 +32,7 @@ target_compile_definitions(sar_libsamplerate PRIVATE
 
 add_library(sar_core
   core/control/control_command.cpp
+  core/control/preset_file_codec.cpp
   core/control/preset_document.cpp
   core/control/control_response.cpp
   core/control/control_session.cpp
@@ -127,6 +128,12 @@ add_executable(sar_preset_document_smoke
 )
 
 target_link_libraries(sar_preset_document_smoke PRIVATE sar_core)
+
+add_executable(sar_preset_file_codec_smoke
+  tests/realtime/preset_file_codec_smoke.cpp
+)
+
+target_link_libraries(sar_preset_file_codec_smoke PRIVATE sar_core)
 
 add_executable(sar_control_command_smoke
   tests/realtime/control_command_smoke.cpp
@@ -478,6 +485,7 @@ add_test(NAME graph_snapshot_smoke COMMAND sar_graph_snapshot_smoke)
 add_test(NAME graph_builder_smoke COMMAND sar_graph_builder_smoke)
 add_test(NAME route_matrix_smoke COMMAND sar_route_matrix_smoke)
 add_test(NAME preset_document_smoke COMMAND sar_preset_document_smoke)
+add_test(NAME preset_file_codec_smoke COMMAND sar_preset_file_codec_smoke)
 add_test(NAME control_command_smoke COMMAND sar_control_command_smoke)
 add_test(NAME control_response_smoke COMMAND sar_control_response_smoke)
 add_test(NAME control_session_smoke COMMAND sar_control_session_smoke)

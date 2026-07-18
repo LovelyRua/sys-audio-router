@@ -79,6 +79,10 @@ controller corrects residual fill error. Feed-forward remained valid in one
 30-second hardware run, but that is path validation rather than an alpha
 stability result. Phase 2 is therefore not complete.
 
+The control CLI can now save the active route preset to a bounded, versioned
+binary file and load it back through the engine service. Writes use same-folder
+atomic replacement so an interrupted save does not publish a partial preset.
+
 Deliverables:
 
 - WASAPI input and output backend.

@@ -412,7 +412,7 @@ pairing, 24-hour soak, and physical unplug/replug evidence remain outstanding.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 91 smoke targets. The named-pipe coverage
+The Windows CTest suite currently has 92 smoke targets. The named-pipe coverage
 includes a full control-wire integration path through `EngineControlService`
 for device enumeration, session state, runtime configuration, lifecycle, and
 diagnostics. Several tests are
@@ -472,8 +472,11 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   stopped stale runtime on start. Device-list and session-state requests merge
   the control session's virtual endpoints with a fresh control-thread WASAPI
   enumeration; the merged directory is rejected if IDs collide or descriptors
-  are invalid. It does not yet persist sessions, install as a Windows service,
-  or define concurrent-client authorization and arbitration.
+  are invalid. The control CLI can explicitly save and load validated,
+  versioned binary preset files using atomic replacement, but the service does
+  not yet automatically restore a complete session or runtime configuration.
+  It also does not install as a Windows service or define concurrent-client
+  authorization and arbitration.
 - Preset-to-graph build currently supports one route matrix node with matching
   matrix input/output counts.
 - Sample conversion does not yet cover unusual byte orders or non-PCM encoded

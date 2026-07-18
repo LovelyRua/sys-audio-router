@@ -1,12 +1,22 @@
 #include "core/control/control_wire_protocol.h"
+#include "core/control/preset_file_codec.h"
 #include "core/service/windows_named_pipe_control.h"
+
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <span>
 #include <string>
+#include <string_view>
+#include <system_error>
 #include <vector>
 
 namespace {
@@ -29,10 +39,92 @@ std::vector<std::uint8_t> as_u8(std::span<const std::byte> input) {
 
 void usage() {
   std::cerr << "Usage: sar_control_cli [--pipe NAME] state|devices|diagnostics|graph|"
+               "preset-save FILE|preset-load FILE|"
                "runtime-state|runtime-start|runtime-stop|set-gain INPUT OUTPUT "
                "VALUE|set-mute INPUT OUTPUT true|false|"
                "runtime-configure-render [RENDER_ID]|"
                "runtime-configure-duplex [CAPTURE_ID RENDER_ID]\n";
+}
+
+std::filesystem::path utf8_path(std::string_view value) {
+  const auto* first = reinterpret_cast<const char8_t*>(value.data());
+  return std::filesystem::path(std::u8string(first, first + value.size()));
+}
+
+bool read_preset_file(std::string_view file_name,
+                      sar::control::PresetDocument& preset) {
+  std::ifstream input(utf8_path(file_name), std::ios::binary | std::ios::ate);
+  if (!input) {
+    std::cerr << "preset_file_open_failed: Could not open preset file.\n";
+    return false;
+  }
+  const auto end = input.tellg();
+  if (end <= 0 ||
+      static_cast<std::uintmax_t>(end) >
+          sar::control::kControlWireMaxMessageBytes) {
+    std::cerr << "invalid_preset_file: Preset file size is invalid.\n";
+    return false;
+  }
+
+  std::vector<std::uint8_t> bytes(static_cast<std::size_t>(end));
+  input.seekg(0, std::ios::beg);
+  input.read(reinterpret_cast<char*>(bytes.data()),
+             static_cast<std::streamsize>(bytes.size()));
+  if (!input) {
+    std::cerr << "preset_file_read_failed: Could not read preset file.\n";
+    return false;
+  }
+
+  auto decoded = sar::control::decode_preset_file(bytes);
+  if (!decoded.ok()) {
+    std::cerr << decoded.error().code << ": " << decoded.error().message << '\n';
+    return false;
+  }
+  preset = decoded.take_preset();
+  return true;
+}
+
+bool write_preset_file_atomic(std::string_view file_name,
+                              const sar::control::PresetDocument& preset) {
+  auto encoded = sar::control::encode_preset_file(preset);
+  if (!encoded.ok()) {
+    std::cerr << encoded.error().code << ": " << encoded.error().message << '\n';
+    return false;
+  }
+
+  const auto target = utf8_path(file_name);
+  auto temporary = target;
+  temporary += L".tmp." + std::to_wstring(GetCurrentProcessId());
+  {
+    std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
+    if (!output) {
+      std::cerr << "preset_file_open_failed: Could not create temporary preset file.\n";
+      return false;
+    }
+    const auto& bytes = encoded.bytes();
+    output.write(reinterpret_cast<const char*>(bytes.data()),
+                 static_cast<std::streamsize>(bytes.size()));
+    output.flush();
+    if (!output) {
+      output.close();
+      std::error_code ignored;
+      std::filesystem::remove(temporary, ignored);
+      std::cerr << "preset_file_write_failed: Could not write preset file.\n";
+      return false;
+    }
+  }
+
+  if (!MoveFileExW(temporary.c_str(),
+                   target.c_str(),
+                   MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+    const auto native_error = GetLastError();
+    std::error_code ignored;
+    std::filesystem::remove(temporary, ignored);
+    std::cerr << "preset_file_replace_failed: Could not replace preset file (win32="
+              << native_error << ").\n";
+    return false;
+  }
+  return true;
 }
 
 const char* backend_name(sar::platform::AudioBackendKind backend) {
@@ -106,6 +198,7 @@ int main(int argc, char** argv) {
 
   sar::control::ControlCommand command;
   command.command_id = "cli-1";
+  std::string preset_file_name;
   const std::string operation = argv[index++];
   if (operation == "state") {
     command.type = sar::control::ControlCommandType::QuerySessionState;
@@ -115,6 +208,15 @@ int main(int argc, char** argv) {
     command.type = sar::control::ControlCommandType::QueryDiagnostics;
   } else if (operation == "graph") {
     command.type = sar::control::ControlCommandType::QueryActiveGraph;
+  } else if (operation == "preset-save" && index < argc) {
+    command.type = sar::control::ControlCommandType::SavePreset;
+    preset_file_name = argv[index++];
+  } else if (operation == "preset-load" && index < argc) {
+    command.type = sar::control::ControlCommandType::LoadPreset;
+    preset_file_name = argv[index++];
+    if (!read_preset_file(preset_file_name, command.preset)) {
+      return 1;
+    }
   } else if (operation == "runtime-state") {
     command.type = sar::control::ControlCommandType::QueryAudioRuntime;
   } else if (operation == "runtime-start") {
@@ -193,14 +295,30 @@ int main(int argc, char** argv) {
     }
     return 1;
   }
+  if (operation == "preset-save") {
+    if (!response.response.has_preset) {
+      std::cerr << "preset_missing: Engine response did not contain a preset.\n";
+      return 1;
+    }
+    if (!write_preset_file_atomic(preset_file_name, response.response.preset)) {
+      return 1;
+    }
+  }
 
   std::cout << "control_response status=accepted command_id="
             << response.response.command_id;
+  if (response.response.has_preset) {
+    std::cout << " preset_routes="
+              << response.response.preset.matrix.routes.size();
+  }
   if (response.response.has_active_graph) {
     std::cout << " graph_version=" << response.response.active_graph.version
               << " sample_rate=" << response.response.active_graph.sample_rate
               << " channels=" << response.response.active_graph.channels
               << " frames=" << response.response.active_graph.frames;
+  }
+  if (!preset_file_name.empty()) {
+    std::cout << " preset_file=" << std::quoted(preset_file_name);
   }
   if (response.response.has_session_state) {
     std::cout << " next_graph_version="
