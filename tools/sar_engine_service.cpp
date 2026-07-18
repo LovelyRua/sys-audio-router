@@ -4,6 +4,10 @@
 #include "core/service/windows_wasapi_engine_runtime.h"
 #include "core/platform/windows_wasapi_device_provider.h"
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 #include <Windows.h>
 
 #include <atomic>
