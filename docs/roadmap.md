@@ -67,7 +67,7 @@ capture opening plus internal adaptive resampling now enables a real shared-mode
 duplex path from a 44.1 kHz capture endpoint to a 48 kHz render endpoint without
 first routing capture through Windows Audio Engine SRC.
 
-The Windows suite currently contains 104 CTest targets. A strict-healthy two-second
+The Windows suite currently contains 105 CTest targets. A strict-healthy two-second
 render measurement submitted 96,000 frames with zero xruns, wait timeouts, or
 FIFO faults. A five-second duplex measurement processed approximately 240,000
 render-domain frames, but still exposed capture discontinuity and render
@@ -224,6 +224,10 @@ The transport host now manages the bounded registry and session collection,
 including random object identity, transactional connection rollback, stale
 disconnect protection, stop-all, and crashed-session reaping. A broker must
 still authenticate callers and build each session graph from the active preset.
+A bounded broker wire v1 now defines connect/disconnect request and response
+frames with fixed magic, version, type, payload length, and request identity.
+The client never supplies a process ID in this protocol; the future pipe server
+must obtain it from the authenticated pipe peer before calling the host.
 
 Stopped Windows runtimes now retain a backend builder. After a graph mutation,
 the next runtime-start command rebuilds the render or duplex runtime against the

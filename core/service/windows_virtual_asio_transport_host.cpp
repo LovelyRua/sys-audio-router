@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <new>
 #include <utility>
 
 namespace sar::service {
@@ -157,8 +158,19 @@ WindowsVirtualAsioHostConnectResult WindowsVirtualAsioTransportHost::connect(
       .server_nonce_low = server_nonce_low,
       .server_nonce_high = server_nonce_high,
   };
-  sessions_.push_back({connection, std::move(session)});
-  return WindowsVirtualAsioHostConnectResult::success(std::move(connection));
+  try {
+    auto response_connection = connection;
+    sessions_.push_back({std::move(connection), std::move(session)});
+    return WindowsVirtualAsioHostConnectResult::success(
+        std::move(response_connection));
+  } catch (const std::bad_alloc&) {
+    if (session != nullptr) {
+      session->stop();
+    }
+    rollback();
+    return failure("virtual_asio_host_allocation_failed",
+                   "Could not retain the Virtual ASIO host session.");
+  }
 }
 
 platform::VirtualAsioClientDisconnectResult

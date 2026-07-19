@@ -37,6 +37,7 @@ add_library(sar_core
   core/control/control_response.cpp
   core/control/control_session.cpp
   core/control/control_wire_protocol.cpp
+  core/control/virtual_asio_broker_protocol.cpp
   core/control/session_document.cpp
   core/control/session_file_codec.cpp
   core/platform/audio_device.cpp
@@ -175,6 +176,12 @@ add_executable(sar_control_wire_protocol_smoke
 )
 
 target_link_libraries(sar_control_wire_protocol_smoke PRIVATE sar_core)
+
+add_executable(sar_virtual_asio_broker_protocol_smoke
+  tests/realtime/virtual_asio_broker_protocol_smoke.cpp
+)
+
+target_link_libraries(sar_virtual_asio_broker_protocol_smoke PRIVATE sar_core)
 
 add_executable(sar_engine_control_service_smoke
   tests/realtime/engine_control_service_smoke.cpp
@@ -576,6 +583,8 @@ add_test(NAME control_command_smoke COMMAND sar_control_command_smoke)
 add_test(NAME control_response_smoke COMMAND sar_control_response_smoke)
 add_test(NAME control_session_smoke COMMAND sar_control_session_smoke)
 add_test(NAME control_wire_protocol_smoke COMMAND sar_control_wire_protocol_smoke)
+add_test(NAME virtual_asio_broker_protocol_smoke
+  COMMAND sar_virtual_asio_broker_protocol_smoke)
 add_test(NAME engine_control_service_smoke COMMAND sar_engine_control_service_smoke)
 add_test(NAME mock_asio_transport_smoke COMMAND sar_mock_asio_transport_smoke)
 add_test(NAME virtual_asio_client_registry_smoke
