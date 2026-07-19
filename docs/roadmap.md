@@ -67,7 +67,7 @@ capture opening plus internal adaptive resampling now enables a real shared-mode
 duplex path from a 44.1 kHz capture endpoint to a 48 kHz render endpoint without
 first routing capture through Windows Audio Engine SRC.
 
-The Windows suite currently contains 105 CTest targets. A strict-healthy two-second
+The Windows suite currently contains 106 CTest targets. A strict-healthy two-second
 render measurement submitted 96,000 frames with zero xruns, wait timeouts, or
 FIFO faults. A five-second duplex measurement processed approximately 240,000
 render-domain frames, but still exposed capture discontinuity and render
@@ -216,18 +216,19 @@ bounded wakeups, while explicit non-inheritable DACLs restrict mappings and
 events to the current user and LocalSystem. The first single-connection
 transport session now owns these primitives plus a dedicated graph and
 preallocated buffers, and its cancellable pump has an in-process synthetic DAW
-end-to-end smoke. Multi-client hosting, broker admission, and the host-facing
-DLL remain unimplemented. The session itself now
-monitors its admitted client process and exits on client death; broker-side peer
-identity verification is still required before that PID can be trusted.
+end-to-end smoke. Multi-client hosting and broker admission are implemented;
+the host-facing DLL remains unimplemented. The session itself monitors its
+admitted client process and exits on client death.
 The transport host now manages the bounded registry and session collection,
 including random object identity, transactional connection rollback, stale
-disconnect protection, stop-all, and crashed-session reaping. A broker must
-still authenticate callers and build each session graph from the active preset.
+disconnect protection, stop-all, and crashed-session reaping. The local broker
+obtains the caller PID from the pipe peer, rejects remote clients, builds each
+session graph through an injected factory, and binds disconnect to the admitted
+process. The graph factory still needs production wiring to the active preset.
 A bounded broker wire v1 now defines connect/disconnect request and response
 frames with fixed magic, version, type, payload length, and request identity.
-The client never supplies a process ID in this protocol; the future pipe server
-must obtain it from the authenticated pipe peer before calling the host.
+The client never supplies a process ID in this protocol; the pipe server obtains
+it from the authenticated pipe peer before calling the host.
 
 Stopped Windows runtimes now retain a backend builder. After a graph mutation,
 the next runtime-start command rebuilds the render or duplex runtime against the

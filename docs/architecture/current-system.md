@@ -161,6 +161,12 @@ sessions. It enforces one fixed clock domain, assigns connection generations,
 generates unpredictable object tokens and server nonces, rolls registry state
 back on partial construction failure, rejects stale disconnects, and reaps
 sessions whose monitored client process has exited.
+A bounded local named-pipe broker now decodes the versioned connect/disconnect
+protocol, obtains the caller PID from Windows instead of trusting request data,
+builds one graph per admitted client, and returns the randomized shared-memory
+and event names. Pipe and transport objects use current-user/System DACLs,
+remote pipe clients are rejected, and disconnect ownership is bound to the
+original client process.
 
 `core/diagnostics` tracks graph version, processed blocks, callback duration,
 peak callback duration, and xrun count. The worker mirrors per-run xrun totals
@@ -457,7 +463,7 @@ pairing, 24-hour soak, and physical unplug/replug evidence remain outstanding.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 105 smoke targets. The named-pipe coverage
+The Windows CTest suite currently has 106 smoke targets. The named-pipe coverage
 includes a full control-wire integration path through `EngineControlService`
 for device enumeration, session state, runtime configuration, lifecycle, and
 diagnostics. Several tests are

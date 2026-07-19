@@ -72,6 +72,7 @@ class WindowsVirtualAsioTransportHost {
 
   [[nodiscard]] std::vector<WindowsVirtualAsioHostConnection> connections() const;
   [[nodiscard]] std::size_t active_session_count() const noexcept;
+  [[nodiscard]] const WindowsVirtualAsioHostConfig& config() const noexcept;
 
  private:
   struct SessionRecord {

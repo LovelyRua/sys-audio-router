@@ -3,6 +3,7 @@
 #include <Windows.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <cstddef>
@@ -30,9 +31,12 @@ int main() {
                      std::to_wstring(GetCurrentProcessId());
   config.maximum_message_bytes = 256;
 
+  std::atomic<std::uint32_t> observed_process_id = 0;
   sar::service::WindowsNamedPipeControlServer server(
       config,
-      [](std::span<const std::byte> request) {
+      [&observed_process_id](const sar::service::NamedPipeControlPeer& peer,
+                             std::span<const std::byte> request) {
+        observed_process_id.store(peer.process_id);
         std::vector<std::byte> response(request.rbegin(), request.rend());
         return sar::service::NamedPipeControlResult::success(std::move(response));
       });
@@ -67,6 +71,7 @@ int main() {
   assert(stats.accepted_connections >= 32);
   assert(stats.protocol_errors == 0);
   assert(stats.handler_errors == 0);
+  assert(observed_process_id.load() == GetCurrentProcessId());
 
   const auto unavailable =
       sar::service::transact_named_pipe_control(config, bytes("after-stop"), 20);

@@ -228,6 +228,11 @@ std::size_t WindowsVirtualAsioTransportHost::active_session_count()
   return sessions_.size();
 }
 
+const WindowsVirtualAsioHostConfig& WindowsVirtualAsioTransportHost::config()
+    const noexcept {
+  return config_;
+}
+
 std::size_t WindowsVirtualAsioTransportHost::reap_stopped_sessions_locked() {
   std::size_t removed = 0;
   for (auto current = sessions_.begin(); current != sessions_.end();) {

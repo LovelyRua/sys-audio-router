@@ -1,5 +1,7 @@
 #include "core/service/windows_named_pipe_control.h"
 
+#include "core/platform/windows_virtual_asio_security.h"
+
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -258,6 +260,16 @@ WindowsNamedPipeControlServer::WindowsNamedPipeControlServer(
   }
 }
 
+WindowsNamedPipeControlServer::WindowsNamedPipeControlServer(
+    NamedPipeControlConfig config,
+    NamedPipeControlPeerHandler handler)
+    : config_(std::move(config)), peer_handler_(std::move(handler)) {
+  if (!peer_handler_) {
+    throw std::invalid_argument(
+        "Named pipe control server requires a peer handler");
+  }
+}
+
 WindowsNamedPipeControlServer::~WindowsNamedPipeControlServer() {
   stop();
   if (stop_event_ != nullptr) {
@@ -367,12 +379,34 @@ void WindowsNamedPipeControlServer::run() noexcept {
   const auto stop_event = static_cast<HANDLE>(stop_event_);
   bool startup_published = false;
 
+  auto security_result =
+      platform::WindowsVirtualAsioSecurityAttributes::create_for_current_user();
+  if (!security_result.ok()) {
+    while (error_lock_.test_and_set(std::memory_order_acquire)) {
+      std::this_thread::yield();
+    }
+    const auto& error = security_result.errors().front();
+    last_errors_.push_back(win32_error(
+        "pipe_security_create_failed",
+        "Could not create named-pipe security attributes.",
+        error.native_error));
+    error_lock_.clear(std::memory_order_release);
+    startup_succeeded_.store(false, std::memory_order_release);
+    startup_complete_.store(true, std::memory_order_release);
+    running_.store(false, std::memory_order_release);
+    return;
+  }
+  auto security = security_result.take_attributes();
+
   while (!stop_requested_.load(std::memory_order_acquire)) {
     HANDLE pipe = CreateNamedPipeW(
         path.c_str(), PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
-        PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1,
+        PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT |
+            PIPE_REJECT_REMOTE_CLIENTS,
+        1,
         config_.maximum_message_bytes + kFrameHeaderBytes,
-        config_.maximum_message_bytes + kFrameHeaderBytes, 0, nullptr);
+        config_.maximum_message_bytes + kFrameHeaderBytes, 0,
+        static_cast<SECURITY_ATTRIBUTES*>(security->native_attributes()));
     if (pipe == INVALID_HANDLE_VALUE) {
       const auto native = GetLastError();
       while (error_lock_.test_and_set(std::memory_order_acquire)) {
@@ -435,6 +469,15 @@ void WindowsNamedPipeControlServer::run() noexcept {
       break;
     }
 
+    ULONG client_process_id = 0;
+    if (!GetNamedPipeClientProcessId(pipe, &client_process_id) ||
+        client_process_id == 0) {
+      protocol_errors_.fetch_add(1, std::memory_order_relaxed);
+      CloseHandle(io_event);
+      close_pipe(pipe);
+      continue;
+    }
+
     std::array<std::byte, kFrameHeaderBytes> header{};
     DWORD native = ERROR_SUCCESS;
     const auto header_status =
@@ -472,7 +515,12 @@ void WindowsNamedPipeControlServer::run() noexcept {
     NamedPipeControlResult response = NamedPipeControlResult::failure(
         {"pipe_handler_failed", "Named pipe control handler failed.", 0});
     try {
-      response = handler_(request);
+      if (peer_handler_) {
+        response = peer_handler_(
+            {static_cast<std::uint32_t>(client_process_id)}, request);
+      } else {
+        response = handler_(request);
+      }
     } catch (const std::exception& error) {
       response = NamedPipeControlResult::failure(
           {"pipe_handler_exception", error.what(), 0});

@@ -29,6 +29,10 @@ struct NamedPipeControlStats {
   std::uint64_t handler_errors = 0;
 };
 
+struct NamedPipeControlPeer {
+  std::uint32_t process_id = 0;
+};
+
 class NamedPipeControlResult {
  public:
   static NamedPipeControlResult success(std::vector<std::byte> payload = {});
@@ -51,11 +55,15 @@ class NamedPipeControlResult {
 
 using NamedPipeControlHandler =
     std::function<NamedPipeControlResult(std::span<const std::byte>)>;
+using NamedPipeControlPeerHandler = std::function<NamedPipeControlResult(
+    const NamedPipeControlPeer&, std::span<const std::byte>)>;
 
 class WindowsNamedPipeControlServer {
  public:
   WindowsNamedPipeControlServer(NamedPipeControlConfig config,
                                 NamedPipeControlHandler handler);
+  WindowsNamedPipeControlServer(NamedPipeControlConfig config,
+                                NamedPipeControlPeerHandler handler);
   WindowsNamedPipeControlServer(const WindowsNamedPipeControlServer&) = delete;
   WindowsNamedPipeControlServer& operator=(const WindowsNamedPipeControlServer&) = delete;
   ~WindowsNamedPipeControlServer();
@@ -72,6 +80,7 @@ class WindowsNamedPipeControlServer {
 
   NamedPipeControlConfig config_;
   NamedPipeControlHandler handler_;
+  NamedPipeControlPeerHandler peer_handler_;
   std::thread thread_;
   std::atomic_bool running_ = false;
   std::atomic_bool stop_requested_ = false;
