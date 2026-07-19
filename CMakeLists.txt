@@ -44,6 +44,7 @@ add_library(sar_core
   core/platform/mock_asio_transport.cpp
   core/platform/mock_audio_device_provider.cpp
   core/platform/sample_converter.cpp
+  core/platform/virtual_asio_client_registry.cpp
   core/platform/virtual_endpoint.cpp
   core/platform/wasapi_endpoint_selection_policy.cpp
   core/platform/wasapi_recovery_policy.cpp
@@ -178,6 +179,12 @@ add_executable(sar_mock_asio_transport_smoke
 )
 
 target_link_libraries(sar_mock_asio_transport_smoke PRIVATE sar_core)
+
+add_executable(sar_virtual_asio_client_registry_smoke
+  tests/realtime/virtual_asio_client_registry_smoke.cpp
+)
+
+target_link_libraries(sar_virtual_asio_client_registry_smoke PRIVATE sar_core)
 
 add_executable(sar_audio_device_smoke
   tests/realtime/audio_device_smoke.cpp
@@ -501,6 +508,8 @@ add_test(NAME control_session_smoke COMMAND sar_control_session_smoke)
 add_test(NAME control_wire_protocol_smoke COMMAND sar_control_wire_protocol_smoke)
 add_test(NAME engine_control_service_smoke COMMAND sar_engine_control_service_smoke)
 add_test(NAME mock_asio_transport_smoke COMMAND sar_mock_asio_transport_smoke)
+add_test(NAME virtual_asio_client_registry_smoke
+         COMMAND sar_virtual_asio_client_registry_smoke)
 add_test(NAME audio_device_smoke COMMAND sar_audio_device_smoke)
 add_test(NAME audio_device_registry_smoke COMMAND sar_audio_device_registry_smoke)
 add_test(NAME virtual_endpoint_smoke COMMAND sar_virtual_endpoint_smoke)

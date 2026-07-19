@@ -117,6 +117,16 @@ keeps push/pop allocation-free and lock-free, tracks drops, underruns, sequence
 discontinuities, and connection generations, and has a two-thread stress smoke.
 It is not an ASIO driver and does not register a DAW-visible device.
 
+`VirtualAsioClientRegistry` defines the control-plane admission policy for
+future DAW host connections. The first client establishes the active sample
+rate, block size, and input/output channel layout; later clients must match that
+clock domain. Client IDs are unique, capacity is bounded, and a monotonically
+increasing connection generation prevents a stale disconnect from removing a
+new connection that reused the same ID. The active format is released only
+after the final client disconnects. Registry operations may allocate and must
+never be called from the ASIO audio callback; accepted descriptors are intended
+to configure a separate preallocated transport.
+
 `core/diagnostics` tracks graph version, processed blocks, callback duration,
 peak callback duration, and xrun count. The worker mirrors per-run xrun totals
 and last, peak, total, and average callback duration without cross-thread reads
@@ -412,7 +422,7 @@ pairing, 24-hour soak, and physical unplug/replug evidence remain outstanding.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 93 smoke targets. The named-pipe coverage
+The Windows CTest suite currently has 94 smoke targets. The named-pipe coverage
 includes a full control-wire integration path through `EngineControlService`
 for device enumeration, session state, runtime configuration, lifecycle, and
 diagnostics. Several tests are

@@ -67,7 +67,7 @@ capture opening plus internal adaptive resampling now enables a real shared-mode
 duplex path from a 44.1 kHz capture endpoint to a 48 kHz render endpoint without
 first routing capture through Windows Audio Engine SRC.
 
-The Windows suite currently contains 83 CTest targets. A strict-healthy two-second
+The Windows suite currently contains 94 CTest targets. A strict-healthy two-second
 render measurement submitted 96,000 frames with zero xruns, wait timeouts, or
 FIFO faults. A five-second duplex measurement processed approximately 240,000
 render-domain frames, but still exposed capture discontinuity and render
@@ -196,6 +196,12 @@ or paired pinned capture/render selection. A physical named-pipe
 stop/start check then processed 304 duplex blocks in three seconds with zero
 capture/render overflow and a 41.1-microsecond peak callback. A DAW-visible
 ASIO driver is not implemented or registered yet.
+
+A bounded control-plane client registry now admits multiple DAWs into one fixed
+session clock domain. It rejects duplicate IDs, capacity overflow, mismatched
+sample rates, block sizes, or channel layouts, and uses connection generations
+to reject stale disconnects. It is intentionally separate from the realtime
+transport and does not yet provide cross-process shared memory or an ASIO ABI.
 
 Stopped Windows runtimes now retain a backend builder. After a graph mutation,
 the next runtime-start command rebuilds the render or duplex runtime against the
