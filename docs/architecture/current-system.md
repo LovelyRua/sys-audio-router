@@ -139,9 +139,12 @@ accepts only bounded lowercase ASCII tokens and always produces per-session
 mapping owner/view now creates or opens the page-file mapping, zeroes new audio
 memory before publishing the header, rejects same-name ownership, validates the
 actual mapped region, and uses interlocked state publication across views. It
-also revalidates the local-session name at the mapping API boundary. Atomic
-queue operations, event signaling, and the service adapter remain the next
-implementation slice.
+also revalidates the local-session name at the mapping API boundary. Non-owning
+input and output queue views now exchange fixed planar-float blocks using only
+bounded copies and interlocked positions/counters. Full queues drop, empty
+queues return silence, stale generations and malformed slots are consumed
+without wedging the ring, and a 20,000-block two-thread smoke covers separate
+mapped views. Event signaling and the service adapter remain the next slice.
 
 `core/diagnostics` tracks graph version, processed blocks, callback duration,
 peak callback duration, and xrun count. The worker mirrors per-run xrun totals
@@ -438,7 +441,7 @@ pairing, 24-hour soak, and physical unplug/replug evidence remain outstanding.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 98 smoke targets. The named-pipe coverage
+The Windows CTest suite currently has 99 smoke targets. The named-pipe coverage
 includes a full control-wire integration path through `EngineControlService`
 for device enumeration, session state, runtime configuration, lifecycle, and
 diagnostics. Several tests are

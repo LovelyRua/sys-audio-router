@@ -74,6 +74,7 @@ if(WIN32)
   target_sources(sar_core PRIVATE
     core/platform/windows_wasapi_device_provider.cpp
     core/platform/windows_virtual_asio_object_names.cpp
+    core/platform/windows_virtual_asio_shared_queue.cpp
     core/platform/windows_virtual_asio_shared_memory.cpp
     core/platform/windows_wasapi_duplex_loop.cpp
     core/platform/windows_wasapi_duplex_supervisor.cpp
@@ -273,6 +274,12 @@ if(WIN32)
   )
 
   target_link_libraries(sar_windows_virtual_asio_shared_memory_smoke PRIVATE sar_core)
+
+  add_executable(sar_windows_virtual_asio_shared_queue_smoke
+    tests/realtime/windows_virtual_asio_shared_queue_smoke.cpp
+  )
+
+  target_link_libraries(sar_windows_virtual_asio_shared_queue_smoke PRIVATE sar_core)
 
   add_executable(sar_windows_engine_control_pipe_integration_smoke
     tests/realtime/windows_engine_control_pipe_integration_smoke.cpp
@@ -554,6 +561,8 @@ if(WIN32)
            COMMAND sar_windows_virtual_asio_object_names_smoke)
   add_test(NAME windows_virtual_asio_shared_memory_smoke
            COMMAND sar_windows_virtual_asio_shared_memory_smoke)
+  add_test(NAME windows_virtual_asio_shared_queue_smoke
+           COMMAND sar_windows_virtual_asio_shared_queue_smoke)
   add_test(NAME windows_named_pipe_control_smoke
            COMMAND sar_windows_named_pipe_control_smoke)
   set_tests_properties(windows_named_pipe_control_smoke PROPERTIES TIMEOUT 10)
