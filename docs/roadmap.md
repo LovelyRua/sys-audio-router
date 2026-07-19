@@ -216,8 +216,10 @@ bounded wakeups, while explicit non-inheritable DACLs restrict mappings and
 events to the current user and LocalSystem. The first single-connection
 transport session now owns these primitives plus a dedicated graph and
 preallocated buffers, and its cancellable pump has an in-process synthetic DAW
-end-to-end smoke. Multi-client hosting, peer-process death monitoring, broker
-admission, and the host-facing DLL remain unimplemented.
+end-to-end smoke. Multi-client hosting, broker admission, and the host-facing
+DLL remain unimplemented. The session itself now
+monitors its admitted client process and exits on client death; broker-side peer
+identity verification is still required before that PID can be trusted.
 
 Stopped Windows runtimes now retain a backend builder. After a graph mutation,
 the next runtime-start command rebuilds the render or duplex runtime against the

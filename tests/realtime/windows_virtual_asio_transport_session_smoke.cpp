@@ -142,4 +142,44 @@ int main() {
   assert(stats.wait_failures == 0);
   assert(stats.output_signal_failures == 0);
   assert(stats.last_sequence == kBlocks - 1);
+
+  STARTUPINFOW startup{};
+  startup.cb = sizeof(startup);
+  PROCESS_INFORMATION child{};
+  wchar_t command[] = L"cmd.exe /c exit 0";
+  assert(CreateProcessW(nullptr, command, nullptr, nullptr, FALSE,
+                        CREATE_SUSPENDED | CREATE_NO_WINDOW, nullptr, nullptr,
+                        &startup, &child));
+
+  const auto crash_name_result = make_windows_virtual_asio_object_names(
+      "transport-smoke", "crash-client", kGeneration + 1);
+  assert(crash_name_result.ok());
+  auto crash_identity = identity;
+  crash_identity.connection_generation = kGeneration + 1;
+  crash_identity.client_process_id = child.dwProcessId;
+  auto crash_graph =
+      std::make_unique<sar::graph::Graph>(3, kChannels, kFrames, 48000);
+  crash_graph->add_node(std::make_unique<sar::graph::PassthroughNode>());
+  auto crash_created = WindowsVirtualAsioTransportSession::create(
+      crash_name_result.names(), config, crash_identity,
+      std::move(crash_graph), 10);
+  assert(crash_created.ok());
+  auto crash_session = crash_created.take_session();
+  assert(crash_session->start());
+  assert(ResumeThread(child.hThread) != static_cast<DWORD>(-1));
+  assert(WaitForSingleObject(child.hProcess, 2000) == WAIT_OBJECT_0);
+
+  const auto exit_deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (crash_session->running() &&
+         std::chrono::steady_clock::now() < exit_deadline) {
+    Sleep(1);
+  }
+  assert(!crash_session->running());
+  crash_session->stop();
+  assert(crash_session->shared_state() ==
+         VirtualAsioSharedMemoryState::Stopping);
+  assert(crash_session->stats().client_process_exits == 1);
+  CloseHandle(child.hThread);
+  CloseHandle(child.hProcess);
 }

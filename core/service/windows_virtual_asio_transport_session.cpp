@@ -2,12 +2,39 @@
 
 #include "core/platform/windows_realtime_thread.h"
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
+#include <Windows.h>
+
 #include <new>
 #include <system_error>
 #include <utility>
 
 namespace sar::service {
 namespace {
+
+class HandleOwner {
+ public:
+  explicit HandleOwner(HANDLE handle) noexcept : handle_(handle) {}
+  HandleOwner(const HandleOwner&) = delete;
+  HandleOwner& operator=(const HandleOwner&) = delete;
+  ~HandleOwner() {
+    if (handle_ != nullptr) {
+      CloseHandle(handle_);
+    }
+  }
+
+  [[nodiscard]] HANDLE release() noexcept {
+    return std::exchange(handle_, nullptr);
+  }
+
+  [[nodiscard]] HANDLE get() const noexcept { return handle_; }
+
+ private:
+  HANDLE handle_ = nullptr;
+};
 
 WindowsVirtualAsioTransportSessionCreateResult failure(
     std::string code,
@@ -59,6 +86,9 @@ WindowsVirtualAsioTransportSessionCreateResult::
 
 WindowsVirtualAsioTransportSession::~WindowsVirtualAsioTransportSession() {
   stop();
+  if (client_process_handle_ != nullptr) {
+    CloseHandle(static_cast<HANDLE>(client_process_handle_));
+  }
 }
 
 WindowsVirtualAsioTransportSessionCreateResult
@@ -87,6 +117,14 @@ WindowsVirtualAsioTransportSession::create(
   }
 
   try {
+    HandleOwner client_process(OpenProcess(
+        SYNCHRONIZE, FALSE, identity.client_process_id));
+    if (client_process.get() == nullptr) {
+      return failure("virtual_asio_client_process_open_failed",
+                     "Could not monitor the Virtual ASIO client process.",
+                     GetLastError());
+    }
+
     auto mapping_result = platform::WindowsVirtualAsioSharedMemory::create(
         names.mapping, config, identity);
     if (!mapping_result.ok()) {
@@ -129,7 +167,7 @@ WindowsVirtualAsioTransportSession::create(
             new WindowsVirtualAsioTransportSession(
                 std::move(mapping), std::move(events),
                 input_result.take_queue(), output_result.take_queue(),
-                std::move(graph), wait_timeout_ms)));
+                std::move(graph), client_process.release(), wait_timeout_ms)));
   } catch (const std::bad_alloc&) {
     return failure("virtual_asio_session_allocation_failed",
                    "Could not allocate Virtual ASIO transport state.");
@@ -195,6 +233,7 @@ WindowsVirtualAsioTransportSession::stats() const noexcept {
       wait_failures_.load(std::memory_order_relaxed),
       output_signal_failures_.load(std::memory_order_relaxed),
       realtime_thread_failures_.load(std::memory_order_relaxed),
+      client_process_exits_.load(std::memory_order_relaxed),
       last_sequence_.load(std::memory_order_relaxed),
   };
 }
@@ -205,6 +244,7 @@ WindowsVirtualAsioTransportSession::WindowsVirtualAsioTransportSession(
     platform::WindowsVirtualAsioSharedQueue input_queue,
     platform::WindowsVirtualAsioSharedQueue output_queue,
     std::unique_ptr<graph::Graph> graph,
+    void* client_process_handle,
     std::uint32_t wait_timeout_ms)
     : mapping_(std::move(mapping)),
       events_(std::move(events)),
@@ -213,6 +253,7 @@ WindowsVirtualAsioTransportSession::WindowsVirtualAsioTransportSession(
       graph_(std::move(graph)),
       input_buffer_(graph_->channels(), graph_->frames()),
       output_buffer_(graph_->channels(), graph_->frames()),
+      client_process_handle_(client_process_handle),
       wait_timeout_ms_(wait_timeout_ms) {}
 
 void WindowsVirtualAsioTransportSession::run() noexcept {
@@ -224,6 +265,11 @@ void WindowsVirtualAsioTransportSession::run() noexcept {
   }
 
   while (running_.load(std::memory_order_acquire)) {
+    if (client_process_exited()) {
+      client_process_exits_.fetch_add(1, std::memory_order_relaxed);
+      mapping_->set_state(platform::VirtualAsioSharedMemoryState::Stopping);
+      break;
+    }
     const auto wait = events_->wait_input_or_shutdown(wait_timeout_ms_);
     if (wait.status == platform::WindowsVirtualAsioEventWaitStatus::Shutdown) {
       break;
@@ -239,6 +285,14 @@ void WindowsVirtualAsioTransportSession::run() noexcept {
     process_available_input();
   }
   running_.store(false, std::memory_order_release);
+}
+
+bool WindowsVirtualAsioTransportSession::client_process_exited() noexcept {
+  if (client_process_handle_ == nullptr) {
+    return false;
+  }
+  return WaitForSingleObject(static_cast<HANDLE>(client_process_handle_), 0) ==
+         WAIT_OBJECT_0;
 }
 
 void WindowsVirtualAsioTransportSession::process_available_input() noexcept {

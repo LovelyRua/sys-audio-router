@@ -30,6 +30,7 @@ struct WindowsVirtualAsioTransportStats {
   std::uint64_t wait_failures = 0;
   std::uint64_t output_signal_failures = 0;
   std::uint64_t realtime_thread_failures = 0;
+  std::uint64_t client_process_exits = 0;
   std::uint64_t last_sequence = 0;
 };
 
@@ -90,10 +91,12 @@ class WindowsVirtualAsioTransportSession {
       platform::WindowsVirtualAsioSharedQueue input_queue,
       platform::WindowsVirtualAsioSharedQueue output_queue,
       std::unique_ptr<graph::Graph> graph,
+      void* client_process_handle,
       std::uint32_t wait_timeout_ms);
 
   void run() noexcept;
   void process_available_input() noexcept;
+  [[nodiscard]] bool client_process_exited() noexcept;
 
   std::unique_ptr<platform::WindowsVirtualAsioSharedMemory> mapping_;
   std::unique_ptr<platform::WindowsVirtualAsioEvents> events_;
@@ -103,6 +106,7 @@ class WindowsVirtualAsioTransportSession {
   realtime::AudioBuffer input_buffer_;
   realtime::AudioBuffer output_buffer_;
   diagnostics::EngineDiagnostics graph_diagnostics_;
+  void* client_process_handle_ = nullptr;
   std::uint32_t wait_timeout_ms_ = 100;
   std::thread thread_;
   std::atomic_bool running_ = false;
@@ -115,6 +119,7 @@ class WindowsVirtualAsioTransportSession {
   std::atomic<std::uint64_t> wait_failures_ = 0;
   std::atomic<std::uint64_t> output_signal_failures_ = 0;
   std::atomic<std::uint64_t> realtime_thread_failures_ = 0;
+  std::atomic<std::uint64_t> client_process_exits_ = 0;
   std::atomic<std::uint64_t> last_sequence_ = 0;
 };
 

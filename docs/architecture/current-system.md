@@ -153,7 +153,9 @@ transport session now combines one mapping, event bundle, independent graph,
 preallocated input/output buffers, and a cancellable pump thread. It drains DAW
 input blocks, processes them through the session graph, publishes output blocks,
 and exposes atomic transport statistics without sharing the graph or mutable
-diagnostics with WASAPI.
+diagnostics with WASAPI. The session also holds a synchronization handle for
+the admitted client process and retires itself when that process exits, so a
+crashed DAW does not require a successful disconnect request.
 
 `core/diagnostics` tracks graph version, processed blocks, callback duration,
 peak callback duration, and xrun count. The worker mirrors per-run xrun totals
