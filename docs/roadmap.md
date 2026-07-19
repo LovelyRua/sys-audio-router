@@ -67,7 +67,7 @@ capture opening plus internal adaptive resampling now enables a real shared-mode
 duplex path from a 44.1 kHz capture endpoint to a 48 kHz render endpoint without
 first routing capture through Windows Audio Engine SRC.
 
-The Windows suite currently contains 99 CTest targets. A strict-healthy two-second
+The Windows suite currently contains 102 CTest targets. A strict-healthy two-second
 render measurement submitted 96,000 frames with zero xruns, wait timeouts, or
 FIFO faults. A five-second duplex measurement processed approximately 240,000
 render-domain frames, but still exposed capture discontinuity and render
@@ -211,8 +211,10 @@ The Windows mapping owner/view now creates, zeroes, opens, bounds-checks, and
 publishes lifecycle state through the named page-file mapping. Bounded
 interlocked SPSC views now exchange fixed planar-float blocks between mapped
 views and report full, empty, malformed, and stale-generation outcomes without
-allocation. Synchronization events, the service adapter, and host-facing DLL
-remain unimplemented.
+allocation. Auto-reset data events and a manual-reset shutdown event provide
+bounded wakeups, while explicit non-inheritable DACLs restrict mappings and
+events to the current user and LocalSystem. The service adapter and host-facing
+DLL remain unimplemented.
 
 Stopped Windows runtimes now retain a backend builder. After a graph mutation,
 the next runtime-start command rebuilds the render or duplex runtime against the

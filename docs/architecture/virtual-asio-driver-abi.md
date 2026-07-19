@@ -192,16 +192,17 @@ Recommended forms are:
 
 ```text
 \\.\pipe\LovelyRua.SystemAudioRoute.Engine.v1.<sid-hash>
-Local\LovelyRua.SystemAudioRoute.Asio.Map.v1.<sid-hash>.<instance>.<generation>.<nonce>
-Local\LovelyRua.SystemAudioRoute.Asio.DataReady.v1.<sid-hash>.<instance>.<generation>.<nonce>
-Local\LovelyRua.SystemAudioRoute.Asio.SpaceReady.v1.<sid-hash>.<instance>.<generation>.<nonce>
+Local\SAR.VirtualASIO.v1.endpoint.<endpoint>.client.<client>.generation.<generation>.mapping
+Local\SAR.VirtualASIO.v1.endpoint.<endpoint>.client.<client>.generation.<generation>.input-event
+Local\SAR.VirtualASIO.v1.endpoint.<endpoint>.client.<client>.generation.<generation>.output-event
+Local\SAR.VirtualASIO.v1.endpoint.<endpoint>.client.<client>.generation.<generation>.shutdown-event
 ```
 
-`<sid-hash>` is a stable non-secret digest used only for namespace separation.
-`<instance>` and `<nonce>` are cryptographically random values. Names are
-bounded ASCII and comparison is ordinal. Use the local session namespace for
-v1; `Global\` objects are prohibited unless a later Windows-service topology
-proves they are necessary.
+Endpoint and client tokens are bounded lowercase ASCII identifiers, and the
+generation is fixed-width hexadecimal. Both handshake nonces stay inside the
+validated shared header rather than being exposed as object names. Comparison
+is ordinal. Use the local session namespace for v1; `Global\` objects are
+prohibited unless a later Windows-service topology proves they are necessary.
 
 The broker pipe and kernel objects receive explicit DACLs granting the current
 interactive user, LocalSystem when required, and no broad `Everyone` or
@@ -282,9 +283,9 @@ This design does not claim completion of any of the following:
 - host-facing ASIO interface declarations or ABI conformance;
 - a driver DLL, class factory, exports, signing, installer, or registry writer;
 - legal approval for independently authored ASIO compatibility definitions;
-- event strategy, explicit object DACLs, or malformed-mapping fuzzing beyond
-  the implemented pointer-free layout, Windows mapping owner/view, and bounded
-  interlocked SPSC queue checks;
+- process-liveness waiting or malformed-mapping fuzzing beyond the implemented
+  pointer-free layout, Windows mapping/event owner/view, explicit current-user
+  DACL, and bounded interlocked SPSC queue checks;
 - service-side ASIO transport adapter and graph channel binding;
 - ASIO callback scheduling, buffer switching, sample-position, timestamp, reset,
   overload, or latency reporting behavior;

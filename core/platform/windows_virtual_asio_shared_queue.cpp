@@ -121,7 +121,11 @@ VirtualAsioSharedQueueStatus WindowsVirtualAsioSharedQueue::push(
   }
   const auto write = atomic_load(control_->write_position);
   const auto read = atomic_load(control_->read_position);
-  if (write - read >= capacity_) {
+  const auto fill = write - read;
+  if (fill > capacity_) {
+    return VirtualAsioSharedQueueStatus::CorruptControl;
+  }
+  if (fill == capacity_) {
     atomic_increment(control_->overrun_blocks);
     return VirtualAsioSharedQueueStatus::Full;
   }
@@ -162,7 +166,13 @@ VirtualAsioSharedQueueStatus WindowsVirtualAsioSharedQueue::pop(
     return VirtualAsioSharedQueueStatus::FormatMismatch;
   }
   const auto read = atomic_load(control_->read_position);
-  if (read == atomic_load(control_->write_position)) {
+  const auto write = atomic_load(control_->write_position);
+  const auto fill = write - read;
+  if (fill > capacity_) {
+    destination.clear();
+    return VirtualAsioSharedQueueStatus::CorruptControl;
+  }
+  if (fill == 0) {
     destination.clear();
     atomic_increment(control_->underrun_blocks);
     return VirtualAsioSharedQueueStatus::Empty;
@@ -279,6 +289,8 @@ const char* virtual_asio_shared_queue_status_name(
       return "stale-generation";
     case VirtualAsioSharedQueueStatus::CorruptSlot:
       return "corrupt-slot";
+    case VirtualAsioSharedQueueStatus::CorruptControl:
+      return "corrupt-control";
   }
   return "unknown";
 }

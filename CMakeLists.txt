@@ -73,7 +73,9 @@ target_link_libraries(sar_core PRIVATE sar_libsamplerate)
 if(WIN32)
   target_sources(sar_core PRIVATE
     core/platform/windows_wasapi_device_provider.cpp
+    core/platform/windows_virtual_asio_events.cpp
     core/platform/windows_virtual_asio_object_names.cpp
+    core/platform/windows_virtual_asio_security.cpp
     core/platform/windows_virtual_asio_shared_queue.cpp
     core/platform/windows_virtual_asio_shared_memory.cpp
     core/platform/windows_wasapi_duplex_loop.cpp
@@ -91,7 +93,7 @@ if(WIN32)
     core/service/windows_wasapi_engine_runtime.cpp
     core/service/windows_named_pipe_control.cpp
   )
-  target_link_libraries(sar_core PUBLIC avrt ole32 uuid)
+  target_link_libraries(sar_core PUBLIC advapi32 avrt ole32 uuid)
 endif()
 
 add_executable(sar_realtime_smoke
@@ -269,6 +271,18 @@ if(WIN32)
 
   target_link_libraries(sar_windows_virtual_asio_object_names_smoke PRIVATE sar_core)
 
+  add_executable(sar_windows_virtual_asio_events_smoke
+    tests/realtime/windows_virtual_asio_events_smoke.cpp
+  )
+
+  target_link_libraries(sar_windows_virtual_asio_events_smoke PRIVATE sar_core)
+
+  add_executable(sar_windows_virtual_asio_security_smoke
+    tests/realtime/windows_virtual_asio_security_smoke.cpp
+  )
+
+  target_link_libraries(sar_windows_virtual_asio_security_smoke PRIVATE sar_core)
+
   add_executable(sar_windows_virtual_asio_shared_memory_smoke
     tests/realtime/windows_virtual_asio_shared_memory_smoke.cpp
   )
@@ -280,6 +294,13 @@ if(WIN32)
   )
 
   target_link_libraries(sar_windows_virtual_asio_shared_queue_smoke PRIVATE sar_core)
+
+  add_executable(sar_windows_virtual_asio_shared_queue_adversarial_smoke
+    tests/realtime/windows_virtual_asio_shared_queue_adversarial_smoke.cpp
+  )
+
+  target_link_libraries(sar_windows_virtual_asio_shared_queue_adversarial_smoke
+    PRIVATE sar_core)
 
   add_executable(sar_windows_engine_control_pipe_integration_smoke
     tests/realtime/windows_engine_control_pipe_integration_smoke.cpp
@@ -559,10 +580,16 @@ add_test(NAME wasapi_realtime_error_smoke COMMAND sar_wasapi_realtime_error_smok
 if(WIN32)
   add_test(NAME windows_virtual_asio_object_names_smoke
            COMMAND sar_windows_virtual_asio_object_names_smoke)
+  add_test(NAME windows_virtual_asio_events_smoke
+           COMMAND sar_windows_virtual_asio_events_smoke)
+  add_test(NAME windows_virtual_asio_security_smoke
+           COMMAND sar_windows_virtual_asio_security_smoke)
   add_test(NAME windows_virtual_asio_shared_memory_smoke
            COMMAND sar_windows_virtual_asio_shared_memory_smoke)
   add_test(NAME windows_virtual_asio_shared_queue_smoke
            COMMAND sar_windows_virtual_asio_shared_queue_smoke)
+  add_test(NAME windows_virtual_asio_shared_queue_adversarial_smoke
+           COMMAND sar_windows_virtual_asio_shared_queue_adversarial_smoke)
   add_test(NAME windows_named_pipe_control_smoke
            COMMAND sar_windows_named_pipe_control_smoke)
   set_tests_properties(windows_named_pipe_control_smoke PROPERTIES TIMEOUT 10)

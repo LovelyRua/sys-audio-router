@@ -21,6 +21,7 @@ enum class VirtualAsioSharedQueueStatus {
   Empty,
   StaleGeneration,
   CorruptSlot,
+  CorruptControl,
 };
 
 struct VirtualAsioSharedBlockMetadata {

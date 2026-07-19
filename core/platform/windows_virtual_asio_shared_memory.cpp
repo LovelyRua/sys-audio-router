@@ -1,4 +1,5 @@
 #include "core/platform/windows_virtual_asio_shared_memory.h"
+#include "core/platform/windows_virtual_asio_security.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -144,8 +145,18 @@ WindowsVirtualAsioSharedMemory::create(
   const auto bytes = calculated.layout().header.total_bytes;
   const DWORD high = static_cast<DWORD>(bytes >> 32U);
   const DWORD low = static_cast<DWORD>(bytes & 0xFFFFFFFFULL);
+  auto security_result =
+      WindowsVirtualAsioSecurityAttributes::create_for_current_user();
+  if (!security_result.ok()) {
+    const auto& error = security_result.errors().front();
+    return WindowsVirtualAsioSharedMemoryOpenResult::failure({
+        {error.code, error.message, error.native_error},
+    });
+  }
+  auto security = security_result.take_attributes();
   HANDLE mapping = CreateFileMappingW(INVALID_HANDLE_VALUE,
-                                      nullptr,
+                                      static_cast<SECURITY_ATTRIBUTES*>(
+                                          security->native_attributes()),
                                       PAGE_READWRITE,
                                       high,
                                       low,

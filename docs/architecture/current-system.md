@@ -144,7 +144,12 @@ input and output queue views now exchange fixed planar-float blocks using only
 bounded copies and interlocked positions/counters. Full queues drop, empty
 queues return silence, stale generations and malformed slots are consumed
 without wedging the ring, and a 20,000-block two-thread smoke covers separate
-mapped views. Event signaling and the service adapter remain the next slice.
+mapped views. Control-position spans beyond capacity are rejected as corrupt
+instead of exposing unpublished audio. Input/output auto-reset events and a
+manual-reset shutdown event now provide bounded wakeups over the same object
+identity. Mapping and event creation use a non-inheritable explicit DACL that
+grants only the current user SID and LocalSystem. The service adapter remains
+the next slice.
 
 `core/diagnostics` tracks graph version, processed blocks, callback duration,
 peak callback duration, and xrun count. The worker mirrors per-run xrun totals
@@ -441,7 +446,7 @@ pairing, 24-hour soak, and physical unplug/replug evidence remain outstanding.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 99 smoke targets. The named-pipe coverage
+The Windows CTest suite currently has 102 smoke targets. The named-pipe coverage
 includes a full control-wire integration path through `EngineControlService`
 for device enumeration, session state, runtime configuration, lifecycle, and
 diagnostics. Several tests are
