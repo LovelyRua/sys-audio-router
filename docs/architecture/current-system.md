@@ -127,6 +127,18 @@ after the final client disconnects. Registry operations may allocate and must
 never be called from the ASIO audio callback; accepted descriptors are intended
 to configure a separate preallocated transport.
 
+`VirtualAsioSharedMemoryHeader` now fixes the pointer-free v1 cross-process ABI
+at 256 bytes. It carries protocol major/minor, endian marker, state, feature
+bits, process IDs, connection generation, two 128-bit handshake nonces, fixed
+format, bounded queue dimensions, and checked 64-bit offsets. Independent input
+and output SPSC regions use 128-byte controls and 64-byte-aligned block slots;
+layout calculation rejects overflow and mappings above 256 MiB, while consumer
+validation recalculates every offset before use. Windows object-name generation
+accepts only bounded lowercase ASCII tokens and always produces per-session
+`Local\\` names containing the connection generation. The actual Windows file
+mapping, atomic queue operations, event signaling, and service adapter remain
+the next implementation slice.
+
 `core/diagnostics` tracks graph version, processed blocks, callback duration,
 peak callback duration, and xrun count. The worker mirrors per-run xrun totals
 and last, peak, total, and average callback duration without cross-thread reads
@@ -422,7 +434,7 @@ pairing, 24-hour soak, and physical unplug/replug evidence remain outstanding.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 94 smoke targets. The named-pipe coverage
+The Windows CTest suite currently has 97 smoke targets. The named-pipe coverage
 includes a full control-wire integration path through `EngineControlService`
 for device enumeration, session state, runtime configuration, lifecycle, and
 diagnostics. Several tests are

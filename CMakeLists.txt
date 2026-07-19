@@ -45,6 +45,7 @@ add_library(sar_core
   core/platform/mock_audio_device_provider.cpp
   core/platform/sample_converter.cpp
   core/platform/virtual_asio_client_registry.cpp
+  core/platform/virtual_asio_shared_memory_layout.cpp
   core/platform/virtual_endpoint.cpp
   core/platform/wasapi_endpoint_selection_policy.cpp
   core/platform/wasapi_recovery_policy.cpp
@@ -72,6 +73,7 @@ target_link_libraries(sar_core PRIVATE sar_libsamplerate)
 if(WIN32)
   target_sources(sar_core PRIVATE
     core/platform/windows_wasapi_device_provider.cpp
+    core/platform/windows_virtual_asio_object_names.cpp
     core/platform/windows_wasapi_duplex_loop.cpp
     core/platform/windows_wasapi_duplex_supervisor.cpp
     core/platform/windows_wasapi_endpoint_notification.cpp
@@ -186,6 +188,18 @@ add_executable(sar_virtual_asio_client_registry_smoke
 
 target_link_libraries(sar_virtual_asio_client_registry_smoke PRIVATE sar_core)
 
+add_executable(sar_virtual_asio_client_registry_stress_smoke
+  tests/realtime/virtual_asio_client_registry_stress_smoke.cpp
+)
+
+target_link_libraries(sar_virtual_asio_client_registry_stress_smoke PRIVATE sar_core)
+
+add_executable(sar_virtual_asio_shared_memory_layout_smoke
+  tests/realtime/virtual_asio_shared_memory_layout_smoke.cpp
+)
+
+target_link_libraries(sar_virtual_asio_shared_memory_layout_smoke PRIVATE sar_core)
+
 add_executable(sar_audio_device_smoke
   tests/realtime/audio_device_smoke.cpp
 )
@@ -246,6 +260,12 @@ if(WIN32)
   )
 
   target_link_libraries(sar_windows_named_pipe_control_smoke PRIVATE sar_core)
+
+  add_executable(sar_windows_virtual_asio_object_names_smoke
+    tests/realtime/windows_virtual_asio_object_names_smoke.cpp
+  )
+
+  target_link_libraries(sar_windows_virtual_asio_object_names_smoke PRIVATE sar_core)
 
   add_executable(sar_windows_engine_control_pipe_integration_smoke
     tests/realtime/windows_engine_control_pipe_integration_smoke.cpp
@@ -510,6 +530,10 @@ add_test(NAME engine_control_service_smoke COMMAND sar_engine_control_service_sm
 add_test(NAME mock_asio_transport_smoke COMMAND sar_mock_asio_transport_smoke)
 add_test(NAME virtual_asio_client_registry_smoke
          COMMAND sar_virtual_asio_client_registry_smoke)
+add_test(NAME virtual_asio_client_registry_stress_smoke
+         COMMAND sar_virtual_asio_client_registry_stress_smoke)
+add_test(NAME virtual_asio_shared_memory_layout_smoke
+         COMMAND sar_virtual_asio_shared_memory_layout_smoke)
 add_test(NAME audio_device_smoke COMMAND sar_audio_device_smoke)
 add_test(NAME audio_device_registry_smoke COMMAND sar_audio_device_registry_smoke)
 add_test(NAME virtual_endpoint_smoke COMMAND sar_virtual_endpoint_smoke)
@@ -519,6 +543,8 @@ add_test(NAME wasapi_endpoint_selection_policy_smoke
 add_test(NAME wasapi_recovery_policy_smoke COMMAND sar_wasapi_recovery_policy_smoke)
 add_test(NAME wasapi_realtime_error_smoke COMMAND sar_wasapi_realtime_error_smoke)
 if(WIN32)
+  add_test(NAME windows_virtual_asio_object_names_smoke
+           COMMAND sar_windows_virtual_asio_object_names_smoke)
   add_test(NAME windows_named_pipe_control_smoke
            COMMAND sar_windows_named_pipe_control_smoke)
   set_tests_properties(windows_named_pipe_control_smoke PROPERTIES TIMEOUT 10)

@@ -67,7 +67,7 @@ capture opening plus internal adaptive resampling now enables a real shared-mode
 duplex path from a 44.1 kHz capture endpoint to a 48 kHz render endpoint without
 first routing capture through Windows Audio Engine SRC.
 
-The Windows suite currently contains 94 CTest targets. A strict-healthy two-second
+The Windows suite currently contains 97 CTest targets. A strict-healthy two-second
 render measurement submitted 96,000 frames with zero xruns, wait timeouts, or
 FIFO faults. A five-second duplex measurement processed approximately 240,000
 render-domain frames, but still exposed capture discontinuity and render
@@ -202,6 +202,13 @@ session clock domain. It rejects duplicate IDs, capacity overflow, mismatched
 sample rates, block sizes, or channel layouts, and uses connection generations
 to reject stale disconnects. It is intentionally separate from the realtime
 transport and does not yet provide cross-process shared memory or an ASIO ABI.
+
+The pointer-free shared-memory v1 layout is now fixed and defensively validated,
+including independent bounded SPSC regions, process/generation identity, state,
+feature bits, endian marker, and two handshake nonces. Windows mapping/event
+names are generated under the local-session namespace from restricted tokens.
+The OS mapping owner, cross-process atomic queue pump, service adapter, and
+host-facing DLL remain unimplemented.
 
 Stopped Windows runtimes now retain a backend builder. After a graph mutation,
 the next runtime-start command rebuilds the render or duplex runtime against the
