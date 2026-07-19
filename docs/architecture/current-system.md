@@ -135,9 +135,13 @@ and output SPSC regions use 128-byte controls and 64-byte-aligned block slots;
 layout calculation rejects overflow and mappings above 256 MiB, while consumer
 validation recalculates every offset before use. Windows object-name generation
 accepts only bounded lowercase ASCII tokens and always produces per-session
-`Local\\` names containing the connection generation. The actual Windows file
-mapping, atomic queue operations, event signaling, and service adapter remain
-the next implementation slice.
+`Local\\` names containing the connection generation. A move-only Windows
+mapping owner/view now creates or opens the page-file mapping, zeroes new audio
+memory before publishing the header, rejects same-name ownership, validates the
+actual mapped region, and uses interlocked state publication across views. It
+also revalidates the local-session name at the mapping API boundary. Atomic
+queue operations, event signaling, and the service adapter remain the next
+implementation slice.
 
 `core/diagnostics` tracks graph version, processed blocks, callback duration,
 peak callback duration, and xrun count. The worker mirrors per-run xrun totals
@@ -434,7 +438,7 @@ pairing, 24-hour soak, and physical unplug/replug evidence remain outstanding.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 97 smoke targets. The named-pipe coverage
+The Windows CTest suite currently has 98 smoke targets. The named-pipe coverage
 includes a full control-wire integration path through `EngineControlService`
 for device enumeration, session state, runtime configuration, lifecycle, and
 diagnostics. Several tests are

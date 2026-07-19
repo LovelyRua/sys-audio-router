@@ -282,8 +282,9 @@ This design does not claim completion of any of the following:
 - host-facing ASIO interface declarations or ABI conformance;
 - a driver DLL, class factory, exports, signing, installer, or registry writer;
 - legal approval for independently authored ASIO compatibility definitions;
-- cross-process mapping ownership, atomic queue operations, event strategy, or
-  malformed-mapping fuzzing beyond the implemented pointer-free layout checks;
+- cross-process atomic queue operations, event strategy, explicit object DACLs,
+  or malformed-mapping fuzzing beyond the implemented pointer-free layout and
+  Windows mapping owner/view checks;
 - service-side ASIO transport adapter and graph channel binding;
 - ASIO callback scheduling, buffer switching, sample-position, timestamp, reset,
   overload, or latency reporting behavior;
