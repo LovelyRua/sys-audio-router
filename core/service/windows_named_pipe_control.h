@@ -83,6 +83,7 @@ class WindowsNamedPipeControlServer {
   std::atomic<std::uint64_t> handler_errors_ = 0;
   mutable std::atomic_flag error_lock_ = ATOMIC_FLAG_INIT;
   std::vector<NamedPipeControlError> last_errors_;
+  void* stop_event_ = nullptr;
 };
 
 [[nodiscard]] NamedPipeControlResult transact_named_pipe_control(

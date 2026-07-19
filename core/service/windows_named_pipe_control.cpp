@@ -51,13 +51,127 @@ std::uint32_t decode_length(
          (std::to_integer<std::uint32_t>(header[3]) << 24U);
 }
 
-bool read_exact(HANDLE pipe, std::span<std::byte> destination, DWORD& error) noexcept {
+enum class PipeIoStatus {
+  Completed,
+  Cancelled,
+  Failed,
+};
+
+PipeIoStatus wait_for_pipe_io(HANDLE pipe,
+                              OVERLAPPED& overlapped,
+                              HANDLE stop_event,
+                              DWORD& transferred,
+                              DWORD& error) noexcept {
+  const std::array handles{overlapped.hEvent, stop_event};
+  const auto wait = WaitForMultipleObjects(
+      static_cast<DWORD>(handles.size()), handles.data(), FALSE, INFINITE);
+  if (wait == WAIT_OBJECT_0) {
+    if (GetOverlappedResult(pipe, &overlapped, &transferred, FALSE)) {
+      error = ERROR_SUCCESS;
+      return PipeIoStatus::Completed;
+    }
+    error = GetLastError();
+    return error == ERROR_OPERATION_ABORTED ? PipeIoStatus::Cancelled
+                                            : PipeIoStatus::Failed;
+  }
+  if (wait == WAIT_OBJECT_0 + 1) {
+    CancelIoEx(pipe, &overlapped);
+    GetOverlappedResult(pipe, &overlapped, &transferred, TRUE);
+    error = ERROR_OPERATION_ABORTED;
+    return PipeIoStatus::Cancelled;
+  }
+  error = GetLastError();
+  return PipeIoStatus::Failed;
+}
+
+PipeIoStatus transfer_pipe(HANDLE pipe,
+                           void* buffer,
+                           DWORD bytes,
+                           bool write,
+                           HANDLE io_event,
+                           HANDLE stop_event,
+                           DWORD& transferred,
+                           DWORD& error) noexcept {
+  ResetEvent(io_event);
+  OVERLAPPED overlapped{};
+  overlapped.hEvent = io_event;
+  const BOOL started = write
+                           ? WriteFile(pipe, buffer, bytes, &transferred, &overlapped)
+                           : ReadFile(pipe, buffer, bytes, &transferred, &overlapped);
+  if (started) {
+    error = ERROR_SUCCESS;
+    return PipeIoStatus::Completed;
+  }
+  error = GetLastError();
+  if (error != ERROR_IO_PENDING) {
+    return error == ERROR_OPERATION_ABORTED ? PipeIoStatus::Cancelled
+                                            : PipeIoStatus::Failed;
+  }
+  return wait_for_pipe_io(
+      pipe, overlapped, stop_event, transferred, error);
+}
+
+PipeIoStatus read_exact(HANDLE pipe,
+                        std::span<std::byte> destination,
+                        HANDLE io_event,
+                        HANDLE stop_event,
+                        DWORD& error) noexcept {
   std::size_t offset = 0;
   while (offset < destination.size()) {
     DWORD transferred = 0;
     const auto remaining = destination.size() - offset;
     const auto chunk = static_cast<DWORD>(std::min<std::size_t>(
         remaining, std::numeric_limits<DWORD>::max()));
+    const auto status = transfer_pipe(pipe, destination.data() + offset, chunk,
+                                      false, io_event, stop_event, transferred, error);
+    if (status != PipeIoStatus::Completed) {
+      return status;
+    }
+    if (transferred == 0) {
+      error = ERROR_BROKEN_PIPE;
+      return PipeIoStatus::Failed;
+    }
+    offset += transferred;
+  }
+  error = ERROR_SUCCESS;
+  return PipeIoStatus::Completed;
+}
+
+PipeIoStatus write_exact(HANDLE pipe,
+                         std::span<const std::byte> source,
+                         HANDLE io_event,
+                         HANDLE stop_event,
+                         DWORD& error) noexcept {
+  std::size_t offset = 0;
+  while (offset < source.size()) {
+    DWORD transferred = 0;
+    const auto remaining = source.size() - offset;
+    const auto chunk = static_cast<DWORD>(std::min<std::size_t>(
+        remaining, std::numeric_limits<DWORD>::max()));
+    const auto status = transfer_pipe(
+        pipe, const_cast<std::byte*>(source.data() + offset), chunk, true,
+        io_event, stop_event, transferred, error);
+    if (status != PipeIoStatus::Completed) {
+      return status;
+    }
+    if (transferred == 0) {
+      error = ERROR_BROKEN_PIPE;
+      return PipeIoStatus::Failed;
+    }
+    offset += transferred;
+  }
+  error = ERROR_SUCCESS;
+  return PipeIoStatus::Completed;
+}
+
+bool read_exact_sync(HANDLE pipe,
+                     std::span<std::byte> destination,
+                     DWORD& error) noexcept {
+  std::size_t offset = 0;
+  while (offset < destination.size()) {
+    DWORD transferred = 0;
+    const auto chunk = static_cast<DWORD>(std::min<std::size_t>(
+        destination.size() - offset, std::numeric_limits<DWORD>::max()));
     if (!ReadFile(pipe, destination.data() + offset, chunk, &transferred, nullptr)) {
       error = GetLastError();
       return false;
@@ -72,15 +186,14 @@ bool read_exact(HANDLE pipe, std::span<std::byte> destination, DWORD& error) noe
   return true;
 }
 
-bool write_exact(HANDLE pipe,
-                 std::span<const std::byte> source,
-                 DWORD& error) noexcept {
+bool write_exact_sync(HANDLE pipe,
+                      std::span<const std::byte> source,
+                      DWORD& error) noexcept {
   std::size_t offset = 0;
   while (offset < source.size()) {
     DWORD transferred = 0;
-    const auto remaining = source.size() - offset;
     const auto chunk = static_cast<DWORD>(std::min<std::size_t>(
-        remaining, std::numeric_limits<DWORD>::max()));
+        source.size() - offset, std::numeric_limits<DWORD>::max()));
     if (!WriteFile(pipe, source.data() + offset, chunk, &transferred, nullptr)) {
       error = GetLastError();
       return false;
@@ -101,8 +214,6 @@ bool valid_config(const NamedPipeControlConfig& config) noexcept {
 
 void close_pipe(HANDLE pipe) noexcept {
   if (pipe != INVALID_HANDLE_VALUE) {
-    FlushFileBuffers(pipe);
-    DisconnectNamedPipe(pipe);
     CloseHandle(pipe);
   }
 }
@@ -147,7 +258,12 @@ WindowsNamedPipeControlServer::WindowsNamedPipeControlServer(
   }
 }
 
-WindowsNamedPipeControlServer::~WindowsNamedPipeControlServer() { stop(); }
+WindowsNamedPipeControlServer::~WindowsNamedPipeControlServer() {
+  stop();
+  if (stop_event_ != nullptr) {
+    CloseHandle(static_cast<HANDLE>(stop_event_));
+  }
+}
 
 NamedPipeControlResult WindowsNamedPipeControlServer::start() {
   if (!valid_config(config_)) {
@@ -160,6 +276,17 @@ NamedPipeControlResult WindowsNamedPipeControlServer::start() {
   }
   if (thread_.joinable()) {
     thread_.join();
+  }
+
+  if (stop_event_ == nullptr) {
+    stop_event_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (stop_event_ == nullptr) {
+      return NamedPipeControlResult::failure(win32_error(
+          "pipe_stop_event_failed", "Creating the pipe stop event failed.",
+          GetLastError()));
+    }
+  } else {
+    ResetEvent(static_cast<HANDLE>(stop_event_));
   }
 
   stop_requested_.store(false, std::memory_order_release);
@@ -204,13 +331,10 @@ NamedPipeControlResult WindowsNamedPipeControlServer::start() {
 
 void WindowsNamedPipeControlServer::stop() noexcept {
   stop_requested_.store(true, std::memory_order_release);
+  if (stop_event_ != nullptr) {
+    SetEvent(static_cast<HANDLE>(stop_event_));
+  }
   if (thread_.joinable()) {
-    const auto path = full_pipe_name(config_.pipe_name);
-    HANDLE wake = CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
-                              OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (wake != INVALID_HANDLE_VALUE) {
-      CloseHandle(wake);
-    }
     thread_.join();
   }
   running_.store(false, std::memory_order_release);
@@ -240,11 +364,12 @@ std::vector<NamedPipeControlError> WindowsNamedPipeControlServer::last_errors() 
 
 void WindowsNamedPipeControlServer::run() noexcept {
   const auto path = full_pipe_name(config_.pipe_name);
+  const auto stop_event = static_cast<HANDLE>(stop_event_);
   bool startup_published = false;
 
   while (!stop_requested_.load(std::memory_order_acquire)) {
     HANDLE pipe = CreateNamedPipeW(
-        path.c_str(), PIPE_ACCESS_DUPLEX,
+        path.c_str(), PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
         PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1,
         config_.maximum_message_bytes + kFrameHeaderBytes,
         config_.maximum_message_bytes + kFrameHeaderBytes, 0, nullptr);
@@ -268,10 +393,35 @@ void WindowsNamedPipeControlServer::run() noexcept {
       startup_published = true;
     }
 
-    const BOOL connected = ConnectNamedPipe(pipe, nullptr)
-                               ? TRUE
-                               : GetLastError() == ERROR_PIPE_CONNECTED;
+    HANDLE io_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (io_event == nullptr) {
+      const auto native = GetLastError();
+      CloseHandle(pipe);
+      while (error_lock_.test_and_set(std::memory_order_acquire)) {
+        std::this_thread::yield();
+      }
+      last_errors_.push_back(win32_error(
+          "pipe_io_event_failed", "Creating a pipe I/O event failed.", native));
+      error_lock_.clear(std::memory_order_release);
+      break;
+    }
+
+    OVERLAPPED connect_overlapped{};
+    connect_overlapped.hEvent = io_event;
+    BOOL connected = ConnectNamedPipe(pipe, &connect_overlapped);
     if (!connected) {
+      const auto connect_error = GetLastError();
+      if (connect_error == ERROR_PIPE_CONNECTED) {
+        connected = TRUE;
+      } else if (connect_error == ERROR_IO_PENDING) {
+        DWORD ignored = 0;
+        DWORD native = ERROR_SUCCESS;
+        connected = wait_for_pipe_io(pipe, connect_overlapped, stop_event,
+                                     ignored, native) == PipeIoStatus::Completed;
+      }
+    }
+    if (!connected) {
+      CloseHandle(io_event);
       CloseHandle(pipe);
       if (!stop_requested_.load(std::memory_order_acquire)) {
         protocol_errors_.fetch_add(1, std::memory_order_relaxed);
@@ -280,29 +430,41 @@ void WindowsNamedPipeControlServer::run() noexcept {
     }
     accepted_connections_.fetch_add(1, std::memory_order_relaxed);
     if (stop_requested_.load(std::memory_order_acquire)) {
+      CloseHandle(io_event);
       close_pipe(pipe);
       break;
     }
 
     std::array<std::byte, kFrameHeaderBytes> header{};
     DWORD native = ERROR_SUCCESS;
-    if (!read_exact(pipe, header, native)) {
+    const auto header_status =
+        read_exact(pipe, header, io_event, stop_event, native);
+    if (header_status != PipeIoStatus::Completed) {
       if (native != ERROR_BROKEN_PIPE && native != ERROR_NO_DATA) {
-        protocol_errors_.fetch_add(1, std::memory_order_relaxed);
+        if (header_status != PipeIoStatus::Cancelled) {
+          protocol_errors_.fetch_add(1, std::memory_order_relaxed);
+        }
       }
+      CloseHandle(io_event);
       close_pipe(pipe);
       continue;
     }
     const auto request_length = decode_length(header);
     if (request_length > config_.maximum_message_bytes) {
       protocol_errors_.fetch_add(1, std::memory_order_relaxed);
+      CloseHandle(io_event);
       close_pipe(pipe);
       continue;
     }
 
     std::vector<std::byte> request(request_length);
-    if (!read_exact(pipe, request, native)) {
-      protocol_errors_.fetch_add(1, std::memory_order_relaxed);
+    const auto request_status =
+        read_exact(pipe, request, io_event, stop_event, native);
+    if (request_status != PipeIoStatus::Completed) {
+      if (request_status != PipeIoStatus::Cancelled) {
+        protocol_errors_.fetch_add(1, std::memory_order_relaxed);
+      }
+      CloseHandle(io_event);
       close_pipe(pipe);
       continue;
     }
@@ -320,24 +482,35 @@ void WindowsNamedPipeControlServer::run() noexcept {
     }
     if (!response.ok()) {
       handler_errors_.fetch_add(1, std::memory_order_relaxed);
+      CloseHandle(io_event);
       close_pipe(pipe);
       continue;
     }
     if (response.payload().size() > config_.maximum_message_bytes) {
       handler_errors_.fetch_add(1, std::memory_order_relaxed);
+      CloseHandle(io_event);
       close_pipe(pipe);
       continue;
     }
 
     const auto response_header =
         encode_length(static_cast<std::uint32_t>(response.payload().size()));
-    if (!write_exact(pipe, response_header, native) ||
-        !write_exact(pipe, response.payload(), native)) {
-      protocol_errors_.fetch_add(1, std::memory_order_relaxed);
+    const auto header_write_status =
+        write_exact(pipe, response_header, io_event, stop_event, native);
+    const auto payload_write_status =
+        header_write_status == PipeIoStatus::Completed
+            ? write_exact(pipe, response.payload(), io_event, stop_event, native)
+            : header_write_status;
+    if (payload_write_status != PipeIoStatus::Completed) {
+      if (payload_write_status != PipeIoStatus::Cancelled) {
+        protocol_errors_.fetch_add(1, std::memory_order_relaxed);
+      }
+      CloseHandle(io_event);
       close_pipe(pipe);
       continue;
     }
     completed_requests_.fetch_add(1, std::memory_order_relaxed);
+    CloseHandle(io_event);
     close_pipe(pipe);
   }
 
@@ -387,15 +560,15 @@ NamedPipeControlResult transact_named_pipe_control(
   DWORD native = ERROR_SUCCESS;
   const auto request_header =
       encode_length(static_cast<std::uint32_t>(request.size()));
-  if (!write_exact(pipe, request_header, native) ||
-      !write_exact(pipe, request, native)) {
+  if (!write_exact_sync(pipe, request_header, native) ||
+      !write_exact_sync(pipe, request, native)) {
     CloseHandle(pipe);
     return NamedPipeControlResult::failure(win32_error(
         "pipe_write_failed", "Writing the named pipe request failed.", native));
   }
 
   std::array<std::byte, kFrameHeaderBytes> response_header{};
-  if (!read_exact(pipe, response_header, native)) {
+  if (!read_exact_sync(pipe, response_header, native)) {
     CloseHandle(pipe);
     return NamedPipeControlResult::failure(win32_error(
         "pipe_read_failed", "Reading the named pipe response header failed.", native));
@@ -407,7 +580,7 @@ NamedPipeControlResult transact_named_pipe_control(
         {"pipe_response_too_large", "Named pipe response exceeds the configured limit.", 0});
   }
   std::vector<std::byte> response(response_length);
-  if (!read_exact(pipe, response, native)) {
+  if (!read_exact_sync(pipe, response, native)) {
     CloseHandle(pipe);
     return NamedPipeControlResult::failure(win32_error(
         "pipe_read_failed", "Reading the named pipe response failed.", native));

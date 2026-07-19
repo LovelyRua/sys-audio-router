@@ -71,4 +71,26 @@ int main() {
   const auto unavailable =
       sar::service::transact_named_pipe_control(config, bytes("after-stop"), 20);
   assert(!unavailable.ok());
+
+  for (std::uint32_t iteration = 0; iteration < 128; ++iteration) {
+    const auto restart = server.start();
+    assert(restart.ok());
+    const auto restart_stop_begin = std::chrono::steady_clock::now();
+    server.stop();
+    assert(std::chrono::steady_clock::now() - restart_stop_begin <
+           std::chrono::seconds(2));
+  }
+
+  const auto stalled_start = server.start();
+  assert(stalled_start.ok());
+  const auto full_pipe_name = L"\\\\.\\pipe\\" + config.pipe_name;
+  HANDLE stalled_client =
+      CreateFileW(full_pipe_name.c_str(), GENERIC_READ | GENERIC_WRITE, 0,
+                  nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+  assert(stalled_client != INVALID_HANDLE_VALUE);
+  const auto stalled_stop_begin = std::chrono::steady_clock::now();
+  server.stop();
+  assert(std::chrono::steady_clock::now() - stalled_stop_begin <
+         std::chrono::seconds(2));
+  CloseHandle(stalled_client);
 }
