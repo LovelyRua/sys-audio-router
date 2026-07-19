@@ -258,6 +258,14 @@ add_executable(sar_wasapi_realtime_error_smoke
 target_link_libraries(sar_wasapi_realtime_error_smoke PRIVATE sar_core)
 
 if(WIN32)
+  add_library(sar_virtual_asio_registration STATIC
+    driver/windows_virtual_asio_registration.cpp
+  )
+  target_include_directories(sar_virtual_asio_registration
+    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+  target_compile_features(sar_virtual_asio_registration PUBLIC cxx_std_20)
+  target_link_libraries(sar_virtual_asio_registration PUBLIC advapi32)
+
   add_library(sar_virtual_asio_driver SHARED
     driver/windows_virtual_asio_driver.cpp
     driver/windows_virtual_asio_driver.def
@@ -269,6 +277,12 @@ if(WIN32)
     OUTPUT_NAME "SystemAudioRouteVirtualASIO"
     PREFIX ""
   )
+
+  add_executable(sar_virtual_asio_register
+    tools/sar_virtual_asio_register.cpp
+  )
+  target_link_libraries(sar_virtual_asio_register
+    PRIVATE sar_virtual_asio_registration)
 
   add_executable(sar_engine_service
     tools/sar_engine_service.cpp
@@ -294,6 +308,12 @@ if(WIN32)
   target_include_directories(sar_windows_virtual_asio_com_smoke
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_link_libraries(sar_windows_virtual_asio_com_smoke PRIVATE ole32)
+
+  add_executable(sar_windows_virtual_asio_registration_smoke
+    tests/realtime/windows_virtual_asio_registration_smoke.cpp
+  )
+  target_link_libraries(sar_windows_virtual_asio_registration_smoke
+    PRIVATE sar_virtual_asio_registration)
 
   add_executable(sar_windows_virtual_asio_object_names_smoke
     tests/realtime/windows_virtual_asio_object_names_smoke.cpp
@@ -643,6 +663,9 @@ add_test(NAME wasapi_realtime_error_smoke COMMAND sar_wasapi_realtime_error_smok
 if(WIN32)
   add_test(NAME windows_virtual_asio_com_smoke
            COMMAND sar_windows_virtual_asio_com_smoke
+                   $<TARGET_FILE:sar_virtual_asio_driver>)
+  add_test(NAME windows_virtual_asio_registration_smoke
+           COMMAND sar_windows_virtual_asio_registration_smoke
                    $<TARGET_FILE:sar_virtual_asio_driver>)
   add_test(NAME windows_virtual_asio_object_names_smoke
            COMMAND sar_windows_virtual_asio_object_names_smoke)

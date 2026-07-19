@@ -88,6 +88,12 @@ hosts conventionally enumerate ASIO drivers from the machine registry. Runtime
 objects and user configuration remain per-user. The installer, not the running
 engine or driver DLL, requires elevation.
 
+The x64 registration utility now writes and removes the machine-view COM and
+ASIO discovery keys for the stable CLSID. Its smoke redirects HKLM into an
+ephemeral per-user hive, verifies every value, performs idempotent uninstall,
+and leaves the real machine registry untouched. Transactional upgrade and
+installer rollback remain installer responsibilities.
+
 COM registration does not imply that the engine service is a COM server. The
 driver-to-service control channel is a private, versioned IPC protocol. No
 service implementation object is exposed to arbitrary COM clients.
