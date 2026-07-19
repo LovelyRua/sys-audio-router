@@ -47,6 +47,11 @@ class EngineControlService {
   [[nodiscard]] diagnostics::EngineDiagnostics audio_runtime_diagnostics()
       const;
   [[nodiscard]] control::SessionDocument session_document() const;
+  [[nodiscard]] std::unique_ptr<graph::Graph> build_client_graph(
+      std::uint32_t sample_rate,
+      std::uint32_t frames_per_block,
+      std::uint32_t input_channels,
+      std::uint32_t output_channels) const;
 
   [[nodiscard]] control::ControlWireEncodeResult handle_wire_request(
       std::span<const std::uint8_t> request);

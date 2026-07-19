@@ -224,6 +224,26 @@ control::SessionDocument EngineControlService::session_document() const {
   return document;
 }
 
+std::unique_ptr<graph::Graph> EngineControlService::build_client_graph(
+    std::uint32_t sample_rate,
+    std::uint32_t frames_per_block,
+    std::uint32_t input_channels,
+    std::uint32_t output_channels) const {
+  std::lock_guard lock(control_mutex_);
+  const auto& preset = session_->current_preset();
+  if (sample_rate != preset.sample_rate ||
+      frames_per_block != preset.frames_per_block ||
+      input_channels != output_channels ||
+      input_channels != preset.matrix.inputs.size() ||
+      output_channels != preset.matrix.outputs.size()) {
+    return nullptr;
+  }
+  const auto current = session_->current_graph();
+  const auto version = current ? current->version() : 1;
+  auto built = control::build_preset_graph(preset, version);
+  return built.ok() ? built.take_graph() : nullptr;
+}
+
 control::ControlWireEncodeResult EngineControlService::handle_wire_request(
     std::span<const std::uint8_t> request) {
   const auto decoded = control::decode_control_command(request);

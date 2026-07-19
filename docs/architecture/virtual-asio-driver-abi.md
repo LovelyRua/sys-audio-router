@@ -283,10 +283,11 @@ This design does not claim completion of any of the following:
 - host-facing ASIO interface declarations or ABI conformance;
 - a driver DLL, class factory, exports, signing, installer, or registry writer;
 - legal approval for independently authored ASIO compatibility definitions;
-- process-liveness waiting or malformed-mapping fuzzing beyond the implemented
-  pointer-free layout, Windows mapping/event owner/view, explicit current-user
-  DACL, and bounded interlocked SPSC queue checks;
-- service-side ASIO transport adapter and graph channel binding;
+- malformed-mapping fuzzing beyond the implemented pointer-free layout,
+  Windows mapping/event owner/view, explicit current-user DACL, bounded
+  interlocked SPSC queue checks, and process-liveness waiting;
+- production channel assignment beyond the implemented service-owned broker,
+  exact-format graph snapshot factory, and per-client route-matrix graph;
 - ASIO callback scheduling, buffer switching, sample-position, timestamp, reset,
   overload, or latency reporting behavior;
 - x86 binaries, ARM64 binaries, or WOW64 installation tests;

@@ -1,6 +1,8 @@
 #include "core/control/session_file_codec.h"
 #include "core/service/engine_control_service.h"
 #include "core/service/windows_named_pipe_control.h"
+#include "core/service/windows_virtual_asio_broker_server.h"
+#include "core/service/windows_virtual_asio_transport_host.h"
 #include "core/service/windows_wasapi_engine_runtime.h"
 #include "core/platform/windows_wasapi_device_provider.h"
 
@@ -451,6 +453,29 @@ int main(int argc, char** argv) {
     save_session_file_atomic(session_path, desired_session);
   }
 
+  const std::wstring asio_pipe_name =
+      pipe_config.pipe_name + L"-virtual-asio";
+  sar::service::WindowsVirtualAsioTransportHost asio_host({
+      .endpoint_token = "engine",
+      .maximum_clients = 8,
+      .queue_capacity_blocks = 8,
+      .wait_timeout_ms = 20,
+  });
+  sar::service::WindowsVirtualAsioBrokerServer asio_broker(
+      asio_pipe_name, asio_host,
+      [&service](const sar::platform::VirtualAsioFormat& format) {
+        return service->build_client_graph(
+            format.sample_rate, format.frames_per_block,
+            format.input_channels, format.output_channels);
+      });
+  const auto asio_started = asio_broker.start();
+  if (!asio_started.ok()) {
+    std::cerr << asio_started.error().code << ": "
+              << asio_started.error().message << '\n';
+    service->stop_audio_runtime();
+    return 1;
+  }
+
   std::mutex request_mutex;
   sar::service::WindowsNamedPipeControlServer pipe_server(
       pipe_config,
@@ -485,12 +510,16 @@ int main(int argc, char** argv) {
       });
   const auto started = pipe_server.start();
   if (!started.ok()) {
+    asio_broker.stop();
+    asio_host.stop_all();
+    service->stop_audio_runtime();
     std::cerr << started.error().code << ": " << started.error().message << '\n';
     return 1;
   }
 
   SetConsoleCtrlHandler(console_handler, TRUE);
-  std::cout << "engine_service_state=running pipe=" << pipe_display_name << '\n';
+  std::cout << "engine_service_state=running pipe=" << pipe_display_name
+            << " asio_pipe=" << pipe_display_name << "-virtual-asio\n";
   while (!stop_requested.load()) {
     if (once && pipe_server.stats().completed_requests >= 1) {
       break;
@@ -498,6 +527,8 @@ int main(int argc, char** argv) {
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
   pipe_server.stop();
+  asio_broker.stop();
+  asio_host.stop_all();
   service->stop_audio_runtime();
   if (session_writes_allowed) {
     save_session_file_atomic(session_path, desired_session);
@@ -506,6 +537,7 @@ int main(int argc, char** argv) {
   std::cout << "engine_service_state=stopped requests="
             << stats.completed_requests << " protocol_errors="
             << stats.protocol_errors << " handler_errors="
-            << stats.handler_errors << '\n';
+            << stats.handler_errors << " asio_requests="
+            << asio_broker.stats().completed_requests << '\n';
   return 0;
 }

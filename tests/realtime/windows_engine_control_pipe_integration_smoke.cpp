@@ -95,6 +95,12 @@ int main() {
   auto created = sar::service::EngineControlService::create(make_preset(), 50);
   assert(created.ok());
   auto service = created.take_service();
+  auto client_graph = service->build_client_graph(48000, 64, 1, 1);
+  assert(client_graph != nullptr);
+  assert(client_graph->version() == 50);
+  assert(service->build_client_graph(44100, 64, 1, 1) == nullptr);
+  assert(service->build_client_graph(48000, 128, 1, 1) == nullptr);
+  assert(service->build_client_graph(48000, 64, 2, 2) == nullptr);
 
   sar::platform::AudioDeviceDescriptor render_device;
   render_device.id = "render-1";

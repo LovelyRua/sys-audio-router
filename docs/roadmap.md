@@ -67,7 +67,7 @@ capture opening plus internal adaptive resampling now enables a real shared-mode
 duplex path from a 44.1 kHz capture endpoint to a 48 kHz render endpoint without
 first routing capture through Windows Audio Engine SRC.
 
-The Windows suite currently contains 107 CTest targets. A strict-healthy two-second
+The Windows suite currently contains 108 CTest targets. A strict-healthy two-second
 render measurement submitted 96,000 frames with zero xruns, wait timeouts, or
 FIFO faults. A five-second duplex measurement processed approximately 240,000
 render-domain frames, but still exposed capture discontinuity and render
@@ -233,6 +233,11 @@ A DLL-facing broker client now owns connect/disconnect transactions, validates
 the mapped identity and both nonce pairs, opens the admitted events, and binds
 the input/output queues. Its smoke sends one block through the broker-created
 graph and receives the processed block through the mapped output queue.
+The engine service now owns the transport host and broker for its full process
+lifetime. Each admitted client receives an independent graph rebuilt from the
+current preset after an exact format check. A process-level smoke starts the
+real service executable, exchanges one stereo block, disconnects, and verifies
+bounded clean shutdown through the control pipe.
 
 Stopped Windows runtimes now retain a backend builder. After a graph mutation,
 the next runtime-start command rebuilds the render or duplex runtime against the
