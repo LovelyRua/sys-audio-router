@@ -3,9 +3,10 @@
 ## Status
 
 This document defines the first Windows deployment contract for the System
-Audio Route Virtual ASIO driver. It is a design boundary, not evidence that an
-ASIO-compatible DLL, cross-process transport, installer, or DAW integration is
-already implemented.
+Audio Route Virtual ASIO driver. The x64 build now emits a loadable COM shell
+with a tested class factory and unload contract, but this remains a design
+boundary rather than evidence of an ASIO-compatible interface, installer, or
+DAW integration.
 
 The repository must not copy or redistribute Steinberg ASIO SDK source code,
 headers, samples, or documentation text. Any implementation of the host-facing
@@ -72,10 +73,10 @@ registry views:
 
 ```text
 HKLM\Software\ASIO\System Audio Route
-  CLSID       = {stable-driver-clsid}
+  CLSID       = {7F16C8A9-4A0C-4D31-9A5B-2C6E7F8D1042}
   Description = System Audio Route Virtual ASIO
 
-HKLM\Software\Classes\CLSID\{stable-driver-clsid}
+HKLM\Software\Classes\CLSID\{7F16C8A9-4A0C-4D31-9A5B-2C6E7F8D1042}
   (Default) = System Audio Route Virtual ASIO
   InprocServer32\(Default) = <bitness-specific absolute DLL path>
   InprocServer32\ThreadingModel = Both
@@ -281,7 +282,8 @@ verification. A screenshot alone is not acceptance evidence.
 This design does not claim completion of any of the following:
 
 - host-facing ASIO interface declarations or ABI conformance;
-- a driver DLL, class factory, exports, signing, installer, or registry writer;
+- signing, installer, registry writer, or DAW-compatible behavior beyond the
+  implemented loadable x64 COM DLL shell, class factory, and exports;
 - legal approval for independently authored ASIO compatibility definitions;
 - malformed-mapping fuzzing beyond the implemented pointer-free layout,
   Windows mapping/event owner/view, explicit current-user DACL, bounded

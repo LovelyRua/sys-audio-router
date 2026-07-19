@@ -1,0 +1,4 @@
+LIBRARY "SystemAudioRouteVirtualASIO"
+EXPORTS
+  DllCanUnloadNow PRIVATE
+  DllGetClassObject PRIVATE
