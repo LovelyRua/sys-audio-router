@@ -31,8 +31,17 @@ $safeSlot = ($Slot -replace '[^A-Za-z0-9_.-]', '-').Trim('.-_')
 if ([string]::IsNullOrWhiteSpace($safeSlot)) {
   throw "Slot '$Slot' does not contain any valid path characters."
 }
+$slotHasher = [Security.Cryptography.SHA256]::Create()
+try {
+  $slotHash = [BitConverter]::ToString(
+      $slotHasher.ComputeHash([Text.Encoding]::UTF8.GetBytes($safeSlot))) `
+      -replace '-', ''
+  $slotPathId = $slotHash.Substring(0, 12).ToLowerInvariant()
+} finally {
+  $slotHasher.Dispose()
+}
 
-$archive = Join-Path $env:TEMP "sar-local-$safeSlot.zip"
+$archive = Join-Path $env:TEMP "sar-local-$slotPathId.zip"
 if (Test-Path $archive) {
   Remove-Item -LiteralPath $archive -Force
 }
@@ -77,16 +86,17 @@ $cleanupEnabled = $cleanupRequested -or $cleanupDryRunRequested
 
 try {
   $session = New-PSSession -ComputerName $HostName -Credential $credential
-  $remoteArchive = "C:\Windows\Temp\sar-local-$safeSlot.zip"
+  $remoteArchive = "C:\Windows\Temp\sar-local-$slotPathId.zip"
   Write-Host "Uploading archive to $HostName"
   Copy-Item -LiteralPath $archive -Destination $remoteArchive -ToSession $session -Force
 
   Invoke-Command -Session $session -ArgumentList `
-      $safeSlot, $remoteArchive, $cleanupEnabled, $cleanupDryRunRequested, `
+      $safeSlot, $slotPathId, $remoteArchive, $cleanupEnabled, $cleanupDryRunRequested, `
       $RetentionDays, $RetentionCount, $CleanupLimit, $StaleActiveHours `
       -ScriptBlock {
     param(
       [string]$SafeSlot,
+      [string]$PathSlot,
       [string]$RemoteArchive,
       [bool]$CleanupEnabled,
       [bool]$CleanupDryRun,
@@ -98,10 +108,10 @@ try {
 
     $ErrorActionPreference = "Stop"
     $slotRoot = Join-Path $env:USERPROFILE "src"
-    $slotKey = "local-test-$SafeSlot"
+    $slotKey = "lt-$PathSlot"
     $repoDir = Join-Path $slotRoot "sys-audio-router-$slotKey"
-    $buildDir = "build-$slotKey"
-    $cmdFile = "C:\Windows\Temp\sar-local-build-$SafeSlot.cmd"
+    $buildDir = "b-$PathSlot"
+    $cmdFile = "C:\Windows\Temp\sar-local-build-$PathSlot.cmd"
     $activeTokenDir = Join-Path $slotRoot ".sar-slot-active\$slotKey"
     $activeToken = Join-Path $activeTokenDir "$([guid]::NewGuid().ToString('N')).active"
     $finishedMarker = Join-Path $repoDir ".sar-slot-finished.json"
@@ -287,6 +297,7 @@ try {
       Invoke-WithSlotRetentionLock {
         New-Item -ItemType Directory -Path $activeTokenDir -Force | Out-Null
         $activeRecord = [ordered]@{
+          slot = $SafeSlot
           started_utc = [datetime]::UtcNow.ToString('o')
           process_id = $PID
           repo_path = $repoDir
@@ -349,6 +360,7 @@ try {
         try {
           New-Item -ItemType Directory -Path $repoDir -Force | Out-Null
           $finishedRecord = [ordered]@{
+            slot = $SafeSlot
             outcome = $slotOutcome
             finished_utc = [datetime]::UtcNow.ToString('o')
           }
