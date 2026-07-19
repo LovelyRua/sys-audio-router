@@ -167,6 +167,10 @@ builds one graph per admitted client, and returns the randomized shared-memory
 and event names. Pipe and transport objects use current-user/System DACLs,
 remote pipe clients are rejected, and disconnect ownership is bound to the
 original client process.
+A DLL-facing broker client owns the inverse path: protocol transactions,
+response correlation, shared-header identity and nonce validation, event
+opening, queue binding, retryable disconnect, and local handle cleanup. Its
+audio block operations remain bounded wrappers over the mapped SPSC queues.
 
 `core/diagnostics` tracks graph version, processed blocks, callback duration,
 peak callback duration, and xrun count. The worker mirrors per-run xrun totals
@@ -463,7 +467,7 @@ pairing, 24-hour soak, and physical unplug/replug evidence remain outstanding.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 106 smoke targets. The named-pipe coverage
+The Windows CTest suite currently has 107 smoke targets. The named-pipe coverage
 includes a full control-wire integration path through `EngineControlService`
 for device enumeration, session state, runtime configuration, lifecycle, and
 diagnostics. Several tests are

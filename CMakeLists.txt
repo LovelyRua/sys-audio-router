@@ -93,6 +93,7 @@ if(WIN32)
     core/platform/windows_wasapi_stream_probe.cpp
     core/service/windows_wasapi_engine_runtime.cpp
     core/service/windows_named_pipe_control.cpp
+    core/service/windows_virtual_asio_broker_client.cpp
     core/service/windows_virtual_asio_broker_server.cpp
     core/service/windows_virtual_asio_transport_session.cpp
     core/service/windows_virtual_asio_transport_host.cpp
@@ -329,6 +330,12 @@ if(WIN32)
     tests/realtime/windows_virtual_asio_broker_server_smoke.cpp
   )
   target_link_libraries(sar_windows_virtual_asio_broker_server_smoke
+    PRIVATE sar_core)
+
+  add_executable(sar_windows_virtual_asio_broker_client_smoke
+    tests/realtime/windows_virtual_asio_broker_client_smoke.cpp
+  )
+  target_link_libraries(sar_windows_virtual_asio_broker_client_smoke
     PRIVATE sar_core)
 
   add_executable(sar_windows_engine_control_pipe_integration_smoke
@@ -628,6 +635,10 @@ if(WIN32)
   add_test(NAME windows_virtual_asio_broker_server_smoke
            COMMAND sar_windows_virtual_asio_broker_server_smoke)
   set_tests_properties(windows_virtual_asio_broker_server_smoke
+                       PROPERTIES TIMEOUT 10)
+  add_test(NAME windows_virtual_asio_broker_client_smoke
+           COMMAND sar_windows_virtual_asio_broker_client_smoke)
+  set_tests_properties(windows_virtual_asio_broker_client_smoke
                        PROPERTIES TIMEOUT 10)
   add_test(NAME windows_named_pipe_control_smoke
            COMMAND sar_windows_named_pipe_control_smoke)
