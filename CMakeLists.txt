@@ -771,3 +771,16 @@ add_test(NAME adaptive_resampler_streaming_smoke
   COMMAND sar_adaptive_resampler_streaming_smoke)
 add_test(NAME xrun_detection_smoke COMMAND sar_xrun_detection_smoke)
 add_test(NAME spsc_ring_buffer_threaded_smoke COMMAND sar_spsc_ring_buffer_threaded_smoke)
+
+# Smoke tests use assert for executable checks. Keep those checks enabled in
+# Release CI without changing assertion behavior in sar_core or shipping tools.
+get_property(sar_directory_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+foreach(sar_target IN LISTS sar_directory_targets)
+  if(sar_target MATCHES "^sar_.*_smoke$")
+    if(MSVC)
+      target_compile_options(${sar_target} PRIVATE /UNDEBUG)
+    else()
+      target_compile_options(${sar_target} PRIVATE -UNDEBUG)
+    endif()
+  endif()
+endforeach()
