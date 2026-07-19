@@ -156,6 +156,11 @@ and exposes atomic transport statistics without sharing the graph or mutable
 diagnostics with WASAPI. The session also holds a synchronization handle for
 the admitted client process and retires itself when that process exits, so a
 crashed DAW does not require a successful disconnect request.
+An owning transport host now combines the bounded client registry with these
+sessions. It enforces one fixed clock domain, assigns connection generations,
+generates unpredictable object tokens and server nonces, rolls registry state
+back on partial construction failure, rejects stale disconnects, and reaps
+sessions whose monitored client process has exited.
 
 `core/diagnostics` tracks graph version, processed blocks, callback duration,
 peak callback duration, and xrun count. The worker mirrors per-run xrun totals
@@ -452,7 +457,7 @@ pairing, 24-hour soak, and physical unplug/replug evidence remain outstanding.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 103 smoke targets. The named-pipe coverage
+The Windows CTest suite currently has 104 smoke targets. The named-pipe coverage
 includes a full control-wire integration path through `EngineControlService`
 for device enumeration, session state, runtime configuration, lifecycle, and
 diagnostics. Several tests are

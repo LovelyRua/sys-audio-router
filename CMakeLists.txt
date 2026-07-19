@@ -93,8 +93,9 @@ if(WIN32)
     core/service/windows_wasapi_engine_runtime.cpp
     core/service/windows_named_pipe_control.cpp
     core/service/windows_virtual_asio_transport_session.cpp
+    core/service/windows_virtual_asio_transport_host.cpp
   )
-  target_link_libraries(sar_core PUBLIC advapi32 avrt ole32 uuid)
+  target_link_libraries(sar_core PUBLIC advapi32 avrt bcrypt ole32 uuid)
 endif()
 
 add_executable(sar_realtime_smoke
@@ -308,6 +309,12 @@ if(WIN32)
   )
 
   target_link_libraries(sar_windows_virtual_asio_transport_session_smoke
+    PRIVATE sar_core)
+
+  add_executable(sar_windows_virtual_asio_transport_host_smoke
+    tests/realtime/windows_virtual_asio_transport_host_smoke.cpp
+  )
+  target_link_libraries(sar_windows_virtual_asio_transport_host_smoke
     PRIVATE sar_core)
 
   add_executable(sar_windows_engine_control_pipe_integration_smoke
@@ -600,6 +607,8 @@ if(WIN32)
            COMMAND sar_windows_virtual_asio_shared_queue_adversarial_smoke)
   add_test(NAME windows_virtual_asio_transport_session_smoke
            COMMAND sar_windows_virtual_asio_transport_session_smoke)
+  add_test(NAME windows_virtual_asio_transport_host_smoke
+           COMMAND sar_windows_virtual_asio_transport_host_smoke)
   add_test(NAME windows_named_pipe_control_smoke
            COMMAND sar_windows_named_pipe_control_smoke)
   set_tests_properties(windows_named_pipe_control_smoke PROPERTIES TIMEOUT 10)
