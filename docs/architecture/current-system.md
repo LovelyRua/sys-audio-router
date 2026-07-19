@@ -148,8 +148,12 @@ mapped views. Control-position spans beyond capacity are rejected as corrupt
 instead of exposing unpublished audio. Input/output auto-reset events and a
 manual-reset shutdown event now provide bounded wakeups over the same object
 identity. Mapping and event creation use a non-inheritable explicit DACL that
-grants only the current user SID and LocalSystem. The service adapter remains
-the next slice.
+grants only the current user SID and LocalSystem. A first owning Windows
+transport session now combines one mapping, event bundle, independent graph,
+preallocated input/output buffers, and a cancellable pump thread. It drains DAW
+input blocks, processes them through the session graph, publishes output blocks,
+and exposes atomic transport statistics without sharing the graph or mutable
+diagnostics with WASAPI.
 
 `core/diagnostics` tracks graph version, processed blocks, callback duration,
 peak callback duration, and xrun count. The worker mirrors per-run xrun totals
@@ -446,7 +450,7 @@ pairing, 24-hour soak, and physical unplug/replug evidence remain outstanding.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 102 smoke targets. The named-pipe coverage
+The Windows CTest suite currently has 103 smoke targets. The named-pipe coverage
 includes a full control-wire integration path through `EngineControlService`
 for device enumeration, session state, runtime configuration, lifecycle, and
 diagnostics. Several tests are

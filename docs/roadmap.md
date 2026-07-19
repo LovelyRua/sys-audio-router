@@ -67,7 +67,7 @@ capture opening plus internal adaptive resampling now enables a real shared-mode
 duplex path from a 44.1 kHz capture endpoint to a 48 kHz render endpoint without
 first routing capture through Windows Audio Engine SRC.
 
-The Windows suite currently contains 102 CTest targets. A strict-healthy two-second
+The Windows suite currently contains 103 CTest targets. A strict-healthy two-second
 render measurement submitted 96,000 frames with zero xruns, wait timeouts, or
 FIFO faults. A five-second duplex measurement processed approximately 240,000
 render-domain frames, but still exposed capture discontinuity and render
@@ -213,8 +213,11 @@ interlocked SPSC views now exchange fixed planar-float blocks between mapped
 views and report full, empty, malformed, and stale-generation outcomes without
 allocation. Auto-reset data events and a manual-reset shutdown event provide
 bounded wakeups, while explicit non-inheritable DACLs restrict mappings and
-events to the current user and LocalSystem. The service adapter and host-facing
-DLL remain unimplemented.
+events to the current user and LocalSystem. The first single-connection
+transport session now owns these primitives plus a dedicated graph and
+preallocated buffers, and its cancellable pump has an in-process synthetic DAW
+end-to-end smoke. Multi-client hosting, peer-process death monitoring, broker
+admission, and the host-facing DLL remain unimplemented.
 
 Stopped Windows runtimes now retain a backend builder. After a graph mutation,
 the next runtime-start command rebuilds the render or duplex runtime against the
