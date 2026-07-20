@@ -194,8 +194,10 @@ stop, and WASAPI runtime configuration without restarting the service process.
 Render mode accepts default or pinned output selection; duplex accepts default
 or paired pinned capture/render selection. A physical named-pipe
 stop/start check then processed 304 duplex blocks in three seconds with zero
-capture/render overflow and a 41.1-microsecond peak callback. A DAW-visible
-ASIO driver is not implemented or registered yet.
+capture/render overflow and a 41.1-microsecond peak callback. The first x64
+DAW-facing DLL now implements the `IASIO` discovery and buffer-lifecycle surface
+and has an architecture-aware registration utility; real-host evidence remains
+outstanding.
 
 A bounded control-plane client registry now admits multiple DAWs into one fixed
 session clock domain. It rejects duplicate IDs, capacity overflow, mismatched
@@ -216,8 +218,10 @@ bounded wakeups, while explicit non-inheritable DACLs restrict mappings and
 events to the current user and LocalSystem. The first single-connection
 transport session now owns these primitives plus a dedicated graph and
 preallocated buffers, and its cancellable pump has an in-process synthetic DAW
-end-to-end smoke. Multi-client hosting and broker admission are implemented;
-the host-facing DLL remains unimplemented. The session itself monitors its
+end-to-end smoke. Multi-client hosting and broker admission are implemented.
+The host-facing DLL now exposes the first fixed stereo `IASIO` control/buffer
+surface but does not yet schedule callbacks or bind those buffers to the broker.
+The session itself monitors its
 admitted client process and exits on client death.
 The transport host now manages the bounded registry and session collection,
 including random object identity, transactional connection rollback, stale

@@ -2,15 +2,69 @@
 
 #include <Unknwn.h>
 
+#include "third_party/asio_sdk_2.3.4/common/iasiodrv.h"
+
 #include <atomic>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <limits>
+#include <mutex>
 #include <new>
+#include <string>
+#include <vector>
 
 namespace {
 
 std::atomic_ulong module_objects = 0;
 std::atomic_ulong server_locks = 0;
 
-class VirtualAsioDriver final : public IUnknown {
+constexpr long kInputChannels = 2;
+constexpr long kOutputChannels = 2;
+constexpr long kMinimumBufferFrames = 64;
+constexpr long kMaximumBufferFrames = 2048;
+constexpr long kPreferredBufferFrames = 256;
+constexpr double kDefaultSampleRate = 48000.0;
+
+bool supported_sample_rate(ASIOSampleRate sample_rate) noexcept {
+  constexpr double rates[] = {44100.0, 48000.0, 88200.0, 96000.0,
+                              176400.0, 192000.0};
+  for (const auto rate : rates) {
+    if (std::abs(sample_rate - rate) < 0.5) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool supported_buffer_size(long frames) noexcept {
+  if (frames < kMinimumBufferFrames || frames > kMaximumBufferFrames) {
+    return false;
+  }
+  return (frames & (frames - 1)) == 0;
+}
+
+void write_u64(std::uint64_t value, ASIOSamples* output) noexcept {
+  output->hi = static_cast<unsigned long>(value >> 32U);
+  output->lo = static_cast<unsigned long>(value & 0xffffffffULL);
+}
+
+void write_u64(std::uint64_t value, ASIOTimeStamp* output) noexcept {
+  output->hi = static_cast<unsigned long>(value >> 32U);
+  output->lo = static_cast<unsigned long>(value & 0xffffffffULL);
+}
+
+void copy_asio_string(char* destination,
+                      std::size_t capacity,
+                      const char* source) noexcept {
+  if (destination == nullptr || capacity == 0) {
+    return;
+  }
+  std::strncpy(destination, source, capacity - 1);
+  destination[capacity - 1] = '\0';
+}
+
+class VirtualAsioDriver final : public IASIO {
  public:
   VirtualAsioDriver() noexcept { module_objects.fetch_add(1); }
 
@@ -23,7 +77,7 @@ class VirtualAsioDriver final : public IUnknown {
     if (!IsEqualIID(iid, IID_IUnknown)) {
       return E_NOINTERFACE;
     }
-    *object = static_cast<IUnknown*>(this);
+    *object = static_cast<IASIO*>(this);
     AddRef();
     return S_OK;
   }
@@ -40,10 +94,312 @@ class VirtualAsioDriver final : public IUnknown {
     return remaining;
   }
 
+  ASIOBool init(void* system_handle) override {
+    std::scoped_lock lock(control_mutex_);
+    system_handle_ = system_handle;
+    initialized_ = true;
+    last_error_.clear();
+    return ASIOTrue;
+  }
+
+  void getDriverName(char* name) override {
+    copy_asio_string(name, 32, "System Audio Route");
+  }
+
+  long getDriverVersion() override {
+    return 1;
+  }
+
+  void getErrorMessage(char* message) override {
+    std::scoped_lock lock(control_mutex_);
+    copy_asio_string(message, 124,
+                     last_error_.empty() ? "No error" : last_error_.c_str());
+  }
+
+  ASIOError start() override {
+    std::scoped_lock lock(control_mutex_);
+    if (!initialized_ || !buffers_created_) {
+      return fail(ASE_InvalidMode,
+                  "The driver must be initialized and buffers created before start.");
+    }
+    running_ = true;
+    sample_position_ = 0;
+    last_error_.clear();
+    return ASE_OK;
+  }
+
+  ASIOError stop() override {
+    std::scoped_lock lock(control_mutex_);
+    running_ = false;
+    return ASE_OK;
+  }
+
+  ASIOError getChannels(long* input_channels,
+                        long* output_channels) override {
+    if (input_channels == nullptr || output_channels == nullptr) {
+      return fail_thread_safe(ASE_InvalidParameter,
+                              "Channel count output pointers must not be null.");
+    }
+    *input_channels = kInputChannels;
+    *output_channels = kOutputChannels;
+    return ASE_OK;
+  }
+
+  ASIOError getLatencies(long* input_latency, long* output_latency) override {
+    if (input_latency == nullptr || output_latency == nullptr) {
+      return fail_thread_safe(ASE_InvalidParameter,
+                              "Latency output pointers must not be null.");
+    }
+    std::scoped_lock lock(control_mutex_);
+    const auto frames = buffer_frames_ == 0 ? kPreferredBufferFrames
+                                            : buffer_frames_;
+    *input_latency = frames;
+    *output_latency = frames;
+    return ASE_OK;
+  }
+
+  ASIOError getBufferSize(long* minimum,
+                          long* maximum,
+                          long* preferred,
+                          long* granularity) override {
+    if (minimum == nullptr || maximum == nullptr || preferred == nullptr ||
+        granularity == nullptr) {
+      return fail_thread_safe(ASE_InvalidParameter,
+                              "Buffer size output pointers must not be null.");
+    }
+    *minimum = kMinimumBufferFrames;
+    *maximum = kMaximumBufferFrames;
+    *preferred = kPreferredBufferFrames;
+    *granularity = -1;
+    return ASE_OK;
+  }
+
+  ASIOError canSampleRate(ASIOSampleRate sample_rate) override {
+    return supported_sample_rate(sample_rate) ? ASE_OK : ASE_NoClock;
+  }
+
+  ASIOError getSampleRate(ASIOSampleRate* sample_rate) override {
+    if (sample_rate == nullptr) {
+      return fail_thread_safe(ASE_InvalidParameter,
+                              "Sample rate output pointer must not be null.");
+    }
+    std::scoped_lock lock(control_mutex_);
+    *sample_rate = sample_rate_;
+    return ASE_OK;
+  }
+
+  ASIOError setSampleRate(ASIOSampleRate sample_rate) override {
+    std::scoped_lock lock(control_mutex_);
+    if (!supported_sample_rate(sample_rate)) {
+      return fail(ASE_NoClock, "The requested sample rate is not supported.");
+    }
+    if (running_) {
+      return fail(ASE_InvalidMode,
+                  "The sample rate cannot be changed while streaming.");
+    }
+    sample_rate_ = sample_rate;
+    last_error_.clear();
+    return ASE_OK;
+  }
+
+  ASIOError getClockSources(ASIOClockSource* clocks,
+                            long* source_count) override {
+    if (source_count == nullptr || *source_count < 1 || clocks == nullptr) {
+      return fail_thread_safe(ASE_InvalidParameter,
+                              "One clock source entry is required.");
+    }
+    clocks[0] = {};
+    clocks[0].index = 0;
+    clocks[0].associatedChannel = -1;
+    clocks[0].associatedGroup = -1;
+    clocks[0].isCurrentSource = ASIOTrue;
+    copy_asio_string(clocks[0].name, sizeof(clocks[0].name), "Internal");
+    *source_count = 1;
+    return ASE_OK;
+  }
+
+  ASIOError setClockSource(long reference) override {
+    return reference == 0
+               ? ASE_OK
+               : fail_thread_safe(ASE_InvalidParameter,
+                                  "Only the internal clock source is supported.");
+  }
+
+  ASIOError getSamplePosition(ASIOSamples* sample_position,
+                              ASIOTimeStamp* timestamp) override {
+    if (sample_position == nullptr || timestamp == nullptr) {
+      return fail_thread_safe(ASE_InvalidParameter,
+                              "Sample position output pointers must not be null.");
+    }
+    std::scoped_lock lock(control_mutex_);
+    write_u64(sample_position_, sample_position);
+    write_u64(GetTickCount64() * 1000000ULL, timestamp);
+    return running_ ? ASE_OK : ASE_SPNotAdvancing;
+  }
+
+  ASIOError getChannelInfo(ASIOChannelInfo* info) override {
+    if (info == nullptr) {
+      return fail_thread_safe(ASE_InvalidParameter,
+                              "Channel information pointer must not be null.");
+    }
+    const auto channel_count = info->isInput == ASIOTrue ? kInputChannels
+                                                         : kOutputChannels;
+    if (info->channel < 0 || info->channel >= channel_count) {
+      return fail_thread_safe(ASE_InvalidParameter,
+                              "The requested channel does not exist.");
+    }
+    std::scoped_lock lock(control_mutex_);
+    info->isActive = channel_active(info->isInput, info->channel) ? ASIOTrue
+                                                                  : ASIOFalse;
+    info->channelGroup = 0;
+    info->type = ASIOSTFloat32LSB;
+    const std::string name =
+        std::string(info->isInput == ASIOTrue ? "Input " : "Output ") +
+        std::to_string(info->channel + 1);
+    copy_asio_string(info->name, sizeof(info->name), name.c_str());
+    return ASE_OK;
+  }
+
+  ASIOError createBuffers(ASIOBufferInfo* buffer_infos,
+                          long channel_count,
+                          long buffer_frames,
+                          ASIOCallbacks* callbacks) override {
+    if (buffer_infos == nullptr || callbacks == nullptr || channel_count <= 0) {
+      return fail_thread_safe(ASE_InvalidParameter,
+                              "Buffer descriptors and callbacks are required.");
+    }
+    if (channel_count > kInputChannels + kOutputChannels) {
+      return fail_thread_safe(ASE_InvalidParameter,
+                              "The requested active channel count is too large.");
+    }
+    if (!supported_buffer_size(buffer_frames)) {
+      return fail_thread_safe(ASE_InvalidMode,
+                              "The requested buffer size is not supported.");
+    }
+
+    std::scoped_lock lock(control_mutex_);
+    if (!initialized_ || running_ || buffers_created_) {
+      return fail(ASE_InvalidMode,
+                  "Buffers require an initialized, stopped, unprepared driver.");
+    }
+
+    try {
+      buffers_.assign(static_cast<std::size_t>(channel_count) * 2U, {});
+      active_channels_.clear();
+      active_channels_.reserve(static_cast<std::size_t>(channel_count));
+      for (long index = 0; index < channel_count; ++index) {
+        const auto& descriptor = buffer_infos[index];
+        const auto available = descriptor.isInput == ASIOTrue
+                                   ? kInputChannels
+                                   : kOutputChannels;
+        if (descriptor.channelNum < 0 || descriptor.channelNum >= available ||
+            channel_active(descriptor.isInput, descriptor.channelNum)) {
+          reset_buffers();
+          return fail(ASE_InvalidParameter,
+                      "A buffer descriptor contains an invalid or duplicate channel.");
+        }
+        active_channels_.push_back(
+            {descriptor.isInput == ASIOTrue, descriptor.channelNum});
+        for (std::size_t half = 0; half < 2; ++half) {
+          auto& storage = buffers_[static_cast<std::size_t>(index) * 2U + half];
+          storage.assign(static_cast<std::size_t>(buffer_frames), 0.0F);
+          buffer_infos[index].buffers[half] = storage.data();
+        }
+      }
+    } catch (const std::bad_alloc&) {
+      reset_buffers();
+      return fail(ASE_NoMemory, "ASIO buffer allocation failed.");
+    }
+
+    callbacks_ = callbacks;
+    buffer_frames_ = buffer_frames;
+    buffers_created_ = true;
+    last_error_.clear();
+    return ASE_OK;
+  }
+
+  ASIOError disposeBuffers() override {
+    std::scoped_lock lock(control_mutex_);
+    if (running_) {
+      return fail(ASE_InvalidMode,
+                  "Streaming must be stopped before buffers are disposed.");
+    }
+    if (!buffers_created_) {
+      return ASE_InvalidMode;
+    }
+    reset_buffers();
+    return ASE_OK;
+  }
+
+  ASIOError controlPanel() override {
+    return ASE_NotPresent;
+  }
+
+  ASIOError future(long selector, void*) override {
+    switch (selector) {
+      case kAsioCanTimeInfo:
+      case kAsioCanTimeCode:
+      case kAsioCanReportOverload:
+        return ASE_NotPresent;
+      default:
+        return ASE_InvalidParameter;
+    }
+  }
+
+  ASIOError outputReady() override {
+    return ASE_NotPresent;
+  }
+
  private:
-  ~VirtualAsioDriver() { module_objects.fetch_sub(1); }
+  struct ActiveChannel {
+    bool input = false;
+    long index = 0;
+  };
+
+  ~VirtualAsioDriver() {
+    module_objects.fetch_sub(1);
+  }
+
+  ASIOError fail(ASIOError error, const char* message) {
+    last_error_ = message;
+    return error;
+  }
+
+  ASIOError fail_thread_safe(ASIOError error, const char* message) {
+    std::scoped_lock lock(control_mutex_);
+    return fail(error, message);
+  }
+
+  bool channel_active(ASIOBool input, long index) const noexcept {
+    for (const auto& channel : active_channels_) {
+      if (channel.input == (input == ASIOTrue) && channel.index == index) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void reset_buffers() noexcept {
+    buffers_.clear();
+    active_channels_.clear();
+    callbacks_ = nullptr;
+    buffer_frames_ = 0;
+    buffers_created_ = false;
+  }
 
   std::atomic_ulong references_ = 1;
+  std::mutex control_mutex_;
+  void* system_handle_ = nullptr;
+  ASIOCallbacks* callbacks_ = nullptr;
+  std::vector<std::vector<float>> buffers_;
+  std::vector<ActiveChannel> active_channels_;
+  std::string last_error_;
+  ASIOSampleRate sample_rate_ = kDefaultSampleRate;
+  std::uint64_t sample_position_ = 0;
+  long buffer_frames_ = 0;
+  bool initialized_ = false;
+  bool buffers_created_ = false;
+  bool running_ = false;
 };
 
 class VirtualAsioClassFactory final : public IClassFactory {

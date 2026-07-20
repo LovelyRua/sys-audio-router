@@ -6,6 +6,13 @@ The first target is Windows, with high-performance virtual ASIO, multi-DAW routi
 
 The long-term architecture is cross-platform-ready, but not cross-platform-first. The shared core should stay portable while the first backend focuses deeply on Windows audio.
 
+## License
+
+System Audio Route is free software licensed under GNU GPL version 3. The
+Windows driver ABI uses selected unmodified headers from Steinberg ASIO SDK
+2.3.4 under its GPLv3 option; see [NOTICE.md](NOTICE.md) and the vendored SDK
+license for attribution and source verification.
+
 ## Current Status
 
 The project is in architecture and technical validation.

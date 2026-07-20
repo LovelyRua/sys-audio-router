@@ -115,7 +115,11 @@ a 39.3-microsecond peak callback.
 It preallocates fixed-format client-to-engine and engine-to-client block queues,
 keeps push/pop allocation-free and lock-free, tracks drops, underruns, sequence
 discontinuities, and connection generations, and has a two-thread stress smoke.
-It is not an ASIO driver and does not register a DAW-visible device.
+It is not itself a driver. A separate x64 DLL now supplies the initial official
+SDK `IASIO` interface, COM activation, fixed stereo channel and format queries,
+double-buffer allocation, and start/stop/dispose lifecycle. Its registration
+utility writes matching COM and ASIO discovery entries. Host callback scheduling
+and broker audio transfer are the next driver boundary.
 
 `VirtualAsioClientRegistry` defines the control-plane admission policy for
 future DAW host connections. The first client establishes the active sample
@@ -515,7 +519,8 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   eight-hour pairing and the 24-hour backend alpha soak remain outstanding.
 - Loopback capture is not yet connected to a selectable render destination or
   virtual endpoint.
-- No virtual ASIO driver implementation exists yet.
+- The virtual ASIO DLL has a real control/buffer ABI but does not yet schedule
+  DAW callbacks or transfer audio through the broker.
 - No virtual WDM/WASAPI driver implementation exists yet.
 - No UI exists yet.
 - No plugin hosting exists yet.

@@ -3,19 +3,20 @@
 ## Status
 
 This document defines the first Windows deployment contract for the System
-Audio Route Virtual ASIO driver. The x64 build now emits a loadable COM shell
-with a tested class factory and unload contract, but this remains a design
-boundary rather than evidence of an ASIO-compatible interface, installer, or
-DAW integration.
+Audio Route Virtual ASIO driver. The x64 build emits a loadable COM DLL with a
+tested class factory, unload contract, and initial host-facing `IASIO`
+implementation. The interface supports identity, initialization, fixed stereo
+input/output, clock and sample-rate queries, channel information, buffer
+negotiation, preallocated double buffers, and start/stop/dispose lifecycle. It
+does not yet schedule host callbacks or transfer audio through the engine
+broker.
 
-The repository must not copy or redistribute Steinberg ASIO SDK source code,
-headers, samples, or documentation text. Any implementation of the host-facing
-ABI requires a separate legal and technical review. The preferred approach is
-an independently authored, minimal compatibility boundary based on behavior
-observed from public host/driver contracts and clean-room tests. If that cannot
-be established with acceptable licensing confidence, the driver target remains
-disabled until an approved SDK acquisition and build process exists outside the
-redistributed source tree.
+The project owner approved GNU GPL version 3 for the repository. The driver ABI
+uses the minimum unmodified interface headers from official Steinberg ASIO SDK
+2.3.4 under its GPLv3 option. The archive URL and SHA-256, selected files, and
+upstream license are retained under `third_party/asio_sdk_2.3.4`; the repository
+does not redistribute SDK samples, manuals, or logo artwork. ASIO trademark
+attribution is recorded in `NOTICE.md`.
 
 ## Architectural Decision
 
@@ -53,8 +54,7 @@ surface required by ASIO hosts:
   `DllRegisterServer` and `DllUnregisterServer` are optional wrappers, not the
   source of installation policy
 - one class factory for one stable Virtual ASIO driver CLSID
-- one independently implemented host-facing ASIO interface object per COM
-  activation
+- one host-facing `IASIO` interface object per COM activation
 
 The COM object and class factory must use explicit reference counting and must
 not unload while an interface, callback thread, or transport connection is
@@ -263,7 +263,7 @@ machine:
 1. A clean x64 install writes the expected 64-bit ASIO and CLSID entries, with
    no x86 requirement for this milestone.
 2. Current x64 REAPER starts without a loader error and lists exactly one
-   `System Audio Route Virtual ASIO` device.
+   System Audio Route device.
 3. Selecting the device causes COM activation and one bounded driver
    initialization attempt, proven by an external test counter or ETW/debug
    evidence rather than callback logging.
@@ -287,17 +287,18 @@ verification. A screenshot alone is not acceptance evidence.
 
 This design does not claim completion of any of the following:
 
-- host-facing ASIO interface declarations or ABI conformance;
-- signing, installer, registry writer, or DAW-compatible behavior beyond the
-  implemented loadable x64 COM DLL shell, class factory, and exports;
-- legal approval for independently authored ASIO compatibility definitions;
+- verified ABI conformance in a real DAW beyond the current synthetic load and
+  lifecycle smoke;
+- signing, production installer, or DAW-compatible behavior beyond the
+  implemented x64 DLL, registration utility, and synthetic tests;
 - malformed-mapping fuzzing beyond the implemented pointer-free layout,
   Windows mapping/event owner/view, explicit current-user DACL, bounded
   interlocked SPSC queue checks, and process-liveness waiting;
 - production channel assignment beyond the implemented service-owned broker,
   exact-format graph snapshot factory, and per-client route-matrix graph;
-- ASIO callback scheduling, buffer switching, sample-position, timestamp, reset,
-  overload, or latency reporting behavior;
+- ASIO callback scheduling and live buffer switching; sample-position and
+  timestamp values currently expose only a non-advancing lifecycle baseline;
+- host reset, overload, or dynamic latency-change notification behavior;
 - x86 binaries, ARM64 binaries, or WOW64 installation tests;
 - automatic per-user service activation and crash restart;
 - sample-rate or block-size conversion between ASIO clients;
