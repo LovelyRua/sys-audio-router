@@ -224,7 +224,15 @@ surface and a stoppable MMCSS callback worker. The worker exchanges preallocated
 planar blocks through the broker's lock-free queues, never waits for an engine
 response, and returns deterministic silence when output is not ready. A DLL to
 broker to gain graph to DLL integration smoke validates the first closed loop.
-Real DAW cadence and audio evidence remain outstanding.
+REAPER 7.78 x64 now enumerates and loads the machine-registered driver on the
+Windows test desktop at 48 kHz, two inputs, two outputs, and 128-sample buffers.
+The first attempt exposed an ASIO COM compatibility gap: REAPER requests the
+driver CLSID as the interface identifier, while the DLL initially accepted only
+`IID_IUnknown`. The driver and COM smoke now cover both conventions, and a
+standalone host probe exercises activation, enumeration, buffer creation,
+streaming callbacks, and shutdown against the real engine broker. Automatic
+host/preset format negotiation, real DAW cadence capture, and non-silent audio
+evidence remain outstanding.
 The session itself monitors its
 admitted client process and exits on client death.
 The transport host now manages the bounded registry and session collection,

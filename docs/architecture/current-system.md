@@ -524,9 +524,16 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   eight-hour pairing and the 24-hour backend alpha soak remain outstanding.
 - Loopback capture is not yet connected to a selectable render destination or
   virtual endpoint.
-- The virtual ASIO DLL has a real control/buffer ABI and synthetic broker-backed
-  callback loop, but REAPER enumeration, cadence, and audible output have not
-  yet been captured on the physical test desktop.
+- The virtual ASIO DLL has a real control/buffer ABI and broker-backed callback
+  loop. REAPER 7.78 x64 now enumerates and loads the machine-registered driver
+  on the Windows test desktop. The validated session exposes two inputs and two
+  outputs at 48 kHz with 128-sample buffers; REAPER reports ASIO active at about
+  2.6/2.6 ms, and process-module inspection resolves the loaded DLL to the Alpha
+  installation directory. A host probe using the ASIO CLSID-as-IID activation
+  convention also completed buffer creation, streaming, and clean shutdown.
+  Real-host callback-cadence capture, non-silent audio evidence, and automatic
+  negotiation when a host requests a format different from the active preset
+  remain outstanding.
 - No virtual WDM/WASAPI driver implementation exists yet.
 - No UI exists yet.
 - No plugin hosting exists yet.

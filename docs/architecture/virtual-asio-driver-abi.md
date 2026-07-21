@@ -305,8 +305,9 @@ This design does not claim completion of any of the following:
   interlocked SPSC queue checks, and process-liveness waiting;
 - production channel assignment beyond the implemented service-owned broker,
   exact-format graph snapshot factory, and per-client route-matrix graph;
-- real-host validation of callback cadence, sample-position accuracy, and
-  timestamp quality beyond the synthetic broker round-trip smoke;
+- real-host validation of callback cadence, sample-position accuracy, timestamp
+  quality, and non-silent audio beyond the completed REAPER 7.78 x64
+  enumeration and load check;
 - host reset, overload, or dynamic latency-change notification behavior;
 - x86 binaries, ARM64 binaries, or WOW64 installation tests;
 - automatic per-user service activation and crash restart;
@@ -315,8 +316,9 @@ This design does not claim completion of any of the following:
 - multi-DAW streaming, DAW-to-DAW routing, or stalled-client eviction;
 - code signing, release certificate protection, update rollback, and production
   installer recovery;
-- REAPER detection evidence or compatibility results for Cubase, Live, FL
-  Studio, or Studio One.
+- complete REAPER detection evidence for engine-absent, deselection, uninstall,
+  and cleanup cases, or compatibility results for Cubase, Live, FL Studio, or
+  Studio One.
 
 The existing `MockAsioTransport` and `VirtualAsioClientRegistry` validate only
 in-process transport behavior and control-plane format arbitration. They are
