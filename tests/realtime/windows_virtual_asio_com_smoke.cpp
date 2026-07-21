@@ -1,4 +1,6 @@
 #include "driver/windows_virtual_asio_com.h"
+#include "core/graph/graph.h"
+#include "core/service/windows_virtual_asio_broker_server.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -9,9 +11,14 @@
 #include "third_party/asio_sdk_2.3.4/common/iasiodrv.h"
 
 #include <array>
+#include <atomic>
 #include <cassert>
+#include <chrono>
+#include <cmath>
 #include <cstring>
+#include <memory>
 #include <string>
+#include <thread>
 
 namespace {
 
@@ -19,7 +26,35 @@ using DllCanUnloadNowFunction = HRESULT(STDAPICALLTYPE*)();
 using DllGetClassObjectFunction = HRESULT(STDAPICALLTYPE*)(REFCLSID, REFIID,
                                                           void**);
 
-void buffer_switch(long, ASIOBool) {}
+std::array<ASIOBufferInfo, 4>* active_buffers = nullptr;
+std::atomic_uint32_t callback_count = 0;
+std::atomic_bool round_trip_observed = false;
+
+std::unique_ptr<sar::graph::Graph> make_graph(
+    const sar::platform::VirtualAsioFormat& format) {
+  auto graph = std::make_unique<sar::graph::Graph>(
+      1, format.input_channels, format.frames_per_block, format.sample_rate);
+  graph->add_node(std::make_unique<sar::graph::GainNode>(0.25F));
+  return graph;
+}
+
+void buffer_switch(long buffer_index, ASIOBool) {
+  assert(active_buffers != nullptr);
+  const auto half = static_cast<std::size_t>(buffer_index);
+  const auto* input_left = static_cast<const float*>((*active_buffers)[0].buffers[half]);
+  const auto* input_right = static_cast<const float*>((*active_buffers)[1].buffers[half]);
+  if (std::fabs(input_left[0] - 0.2F) < 0.000001F &&
+      std::fabs(input_right[0] - 0.21F) < 0.000001F) {
+    round_trip_observed.store(true, std::memory_order_release);
+  }
+  auto* output_left = static_cast<float*>((*active_buffers)[2].buffers[half]);
+  auto* output_right = static_cast<float*>((*active_buffers)[3].buffers[half]);
+  for (std::size_t frame = 0; frame < 256; ++frame) {
+    output_left[frame] = 0.8F;
+    output_right[frame] = 0.84F;
+  }
+  callback_count.fetch_add(1, std::memory_order_release);
+}
 void sample_rate_changed(ASIOSampleRate) {}
 long asio_message(long, long, void*, double*) { return 0; }
 ASIOTime* buffer_switch_time_info(ASIOTime* time, long, ASIOBool) {
@@ -30,6 +65,21 @@ ASIOTime* buffer_switch_time_info(ASIOTime* time, long, ASIOBool) {
 
 int wmain(int argc, wchar_t** argv) {
   assert(argc == 2);
+  const std::wstring pipe_name =
+      L"sys-audio-route-asio-com-smoke-" +
+      std::to_wstring(GetCurrentProcessId());
+  sar::service::WindowsVirtualAsioTransportHost transport_host({
+      .endpoint_token = "asio-com-smoke",
+      .maximum_clients = 2,
+      .queue_capacity_blocks = 8,
+      .wait_timeout_ms = 10,
+  });
+  sar::service::WindowsVirtualAsioBrokerServer broker_server(
+      pipe_name, transport_host, make_graph);
+  assert(broker_server.start().ok());
+  assert(SetEnvironmentVariableW(L"SAR_VIRTUAL_ASIO_PIPE",
+                                 pipe_name.c_str()));
+
   HMODULE module = LoadLibraryW(argv[1]);
   assert(module != nullptr);
   const auto can_unload = reinterpret_cast<DllCanUnloadNowFunction>(
@@ -115,6 +165,7 @@ int wmain(int argc, wchar_t** argv) {
       &asio_message,
       &buffer_switch_time_info,
   };
+  active_buffers = &buffer_infos;
   assert(asio->createBuffers(buffer_infos.data(),
                              static_cast<long>(buffer_infos.size()),
                              preferred, &callbacks) == ASE_OK);
@@ -129,12 +180,23 @@ int wmain(int argc, wchar_t** argv) {
   assert(asio->getChannelInfo(&channel_info) == ASE_OK);
   assert(channel_info.isActive == ASIOTrue);
   assert(asio->start() == ASE_OK);
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (!round_trip_observed.load(std::memory_order_acquire) &&
+         std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  assert(callback_count.load(std::memory_order_acquire) >= 2);
+  assert(round_trip_observed.load(std::memory_order_acquire));
   assert(asio->setSampleRate(48000.0) == ASE_InvalidMode);
   ASIOSamples sample_position{};
   ASIOTimeStamp timestamp{};
   assert(asio->getSamplePosition(&sample_position, &timestamp) == ASE_OK);
   assert(asio->disposeBuffers() == ASE_InvalidMode);
   assert(asio->stop() == ASE_OK);
+  const auto callbacks_after_stop = callback_count.load(std::memory_order_acquire);
+  std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  assert(callback_count.load(std::memory_order_acquire) == callbacks_after_stop);
   assert(asio->disposeBuffers() == ASE_OK);
   assert(asio->disposeBuffers() == ASE_InvalidMode);
 
@@ -159,4 +221,7 @@ int wmain(int argc, wchar_t** argv) {
   assert(can_unload() == S_OK);
 
   assert(FreeLibrary(module));
+  active_buffers = nullptr;
+  assert(SetEnvironmentVariableW(L"SAR_VIRTUAL_ASIO_PIPE", nullptr));
+  broker_server.stop();
 }

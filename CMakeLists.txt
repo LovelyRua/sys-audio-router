@@ -268,11 +268,12 @@ if(WIN32)
 
   add_library(sar_virtual_asio_driver SHARED
     driver/windows_virtual_asio_driver.cpp
+    driver/windows_virtual_asio_runtime.cpp
     driver/windows_virtual_asio_driver.def
   )
   target_include_directories(sar_virtual_asio_driver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_compile_features(sar_virtual_asio_driver PRIVATE cxx_std_20)
-  target_link_libraries(sar_virtual_asio_driver PRIVATE ole32)
+  target_link_libraries(sar_virtual_asio_driver PRIVATE sar_core ole32 bcrypt)
   set_target_properties(sar_virtual_asio_driver PROPERTIES
     OUTPUT_NAME "SystemAudioRouteVirtualASIO"
     PREFIX ""
@@ -307,7 +308,7 @@ if(WIN32)
   )
   target_include_directories(sar_windows_virtual_asio_com_smoke
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-  target_link_libraries(sar_windows_virtual_asio_com_smoke PRIVATE ole32)
+  target_link_libraries(sar_windows_virtual_asio_com_smoke PRIVATE sar_core ole32)
 
   add_executable(sar_windows_virtual_asio_registration_smoke
     tests/realtime/windows_virtual_asio_registration_smoke.cpp

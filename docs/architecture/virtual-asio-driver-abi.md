@@ -7,9 +7,11 @@ Audio Route Virtual ASIO driver. The x64 build emits a loadable COM DLL with a
 tested class factory, unload contract, and initial host-facing `IASIO`
 implementation. The interface supports identity, initialization, fixed stereo
 input/output, clock and sample-rate queries, channel information, buffer
-negotiation, preallocated double buffers, and start/stop/dispose lifecycle. It
-does not yet schedule host callbacks or transfer audio through the engine
-broker.
+negotiation, preallocated double buffers, and start/stop/dispose lifecycle. A
+dedicated MMCSS worker now schedules bounded double-buffer callbacks, moves
+planar float blocks through the engine broker without waiting for its response,
+returns silence on an empty output queue, and stops before buffers or the DLL
+can be released.
 
 The project owner approved GNU GPL version 3 for the repository. The driver ABI
 uses the minimum unmodified interface headers from official Steinberg ASIO SDK
@@ -296,8 +298,8 @@ This design does not claim completion of any of the following:
   interlocked SPSC queue checks, and process-liveness waiting;
 - production channel assignment beyond the implemented service-owned broker,
   exact-format graph snapshot factory, and per-client route-matrix graph;
-- ASIO callback scheduling and live buffer switching; sample-position and
-  timestamp values currently expose only a non-advancing lifecycle baseline;
+- real-host validation of callback cadence, sample-position accuracy, and
+  timestamp quality beyond the synthetic broker round-trip smoke;
 - host reset, overload, or dynamic latency-change notification behavior;
 - x86 binaries, ARM64 binaries, or WOW64 installation tests;
 - automatic per-user service activation and crash restart;

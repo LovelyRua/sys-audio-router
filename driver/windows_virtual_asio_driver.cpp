@@ -1,4 +1,5 @@
 #include "driver/windows_virtual_asio_com.h"
+#include "driver/windows_virtual_asio_runtime.h"
 
 #include <Unknwn.h>
 
@@ -9,12 +10,17 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <new>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
+
+using sar::driver::WindowsVirtualAsioRuntime;
+using sar::driver::WindowsVirtualAsioRuntimeConfig;
 
 std::atomic_ulong module_objects = 0;
 std::atomic_ulong server_locks = 0;
@@ -118,19 +124,29 @@ class VirtualAsioDriver final : public IASIO {
 
   ASIOError start() override {
     std::scoped_lock lock(control_mutex_);
-    if (!initialized_ || !buffers_created_) {
+    if (!initialized_ || !buffers_created_ || runtime_ == nullptr) {
       return fail(ASE_InvalidMode,
                   "The driver must be initialized and buffers created before start.");
     }
-    running_ = true;
-    sample_position_ = 0;
+    std::string error;
+    if (!runtime_->start(error)) {
+      return fail(ASE_HWMalfunction, error.c_str());
+    }
+    running_.store(true, std::memory_order_release);
     last_error_.clear();
     return ASE_OK;
   }
 
   ASIOError stop() override {
-    std::scoped_lock lock(control_mutex_);
-    running_ = false;
+    WindowsVirtualAsioRuntime* runtime = nullptr;
+    {
+      std::scoped_lock lock(control_mutex_);
+      runtime = runtime_.get();
+    }
+    if (runtime != nullptr) {
+      runtime->stop();
+    }
+    running_.store(false, std::memory_order_release);
     return ASE_OK;
   }
 
@@ -193,7 +209,7 @@ class VirtualAsioDriver final : public IASIO {
     if (!supported_sample_rate(sample_rate)) {
       return fail(ASE_NoClock, "The requested sample rate is not supported.");
     }
-    if (running_) {
+    if (running_.load(std::memory_order_acquire)) {
       return fail(ASE_InvalidMode,
                   "The sample rate cannot be changed while streaming.");
     }
@@ -231,10 +247,12 @@ class VirtualAsioDriver final : public IASIO {
       return fail_thread_safe(ASE_InvalidParameter,
                               "Sample position output pointers must not be null.");
     }
-    std::scoped_lock lock(control_mutex_);
-    write_u64(sample_position_, sample_position);
+    auto* runtime = runtime_.get();
+    write_u64(runtime == nullptr ? 0 : runtime->sample_position(),
+              sample_position);
     write_u64(GetTickCount64() * 1000000ULL, timestamp);
-    return running_ ? ASE_OK : ASE_SPNotAdvancing;
+    return running_.load(std::memory_order_acquire) ? ASE_OK
+                                                    : ASE_SPNotAdvancing;
   }
 
   ASIOError getChannelInfo(ASIOChannelInfo* info) override {
@@ -278,7 +296,8 @@ class VirtualAsioDriver final : public IASIO {
     }
 
     std::scoped_lock lock(control_mutex_);
-    if (!initialized_ || running_ || buffers_created_) {
+    if (!initialized_ || running_.load(std::memory_order_acquire) ||
+        buffers_created_) {
       return fail(ASE_InvalidMode,
                   "Buffers require an initialized, stopped, unprepared driver.");
     }
@@ -313,6 +332,32 @@ class VirtualAsioDriver final : public IASIO {
 
     callbacks_ = callbacks;
     buffer_frames_ = buffer_frames;
+    WindowsVirtualAsioRuntimeConfig runtime_config{
+        .sample_rate = static_cast<std::uint32_t>(sample_rate_),
+        .frames_per_block = static_cast<std::uint32_t>(buffer_frames),
+        .input_channels = static_cast<std::uint32_t>(kOutputChannels),
+        .output_channels = static_cast<std::uint32_t>(kInputChannels),
+        .callbacks = callbacks,
+        .use_time_info = false,
+    };
+    runtime_config.bindings.reserve(active_channels_.size());
+    for (std::size_t index = 0; index < active_channels_.size(); ++index) {
+      const auto& channel = active_channels_[index];
+      runtime_config.bindings.push_back({
+          .host_input = channel.input,
+          .channel = static_cast<std::uint32_t>(channel.index),
+          .halves = {
+              buffers_[index * 2U].data(),
+              buffers_[index * 2U + 1U].data(),
+          },
+      });
+    }
+    auto opened = WindowsVirtualAsioRuntime::open(std::move(runtime_config));
+    if (!opened.ok()) {
+      reset_buffers();
+      return fail(ASE_NotPresent, opened.error.c_str());
+    }
+    runtime_ = std::move(opened.runtime);
     buffers_created_ = true;
     last_error_.clear();
     return ASE_OK;
@@ -320,7 +365,7 @@ class VirtualAsioDriver final : public IASIO {
 
   ASIOError disposeBuffers() override {
     std::scoped_lock lock(control_mutex_);
-    if (running_) {
+    if (running_.load(std::memory_order_acquire)) {
       return fail(ASE_InvalidMode,
                   "Streaming must be stopped before buffers are disposed.");
     }
@@ -357,6 +402,10 @@ class VirtualAsioDriver final : public IASIO {
   };
 
   ~VirtualAsioDriver() {
+    if (runtime_ != nullptr) {
+      runtime_->stop();
+      runtime_->disconnect();
+    }
     module_objects.fetch_sub(1);
   }
 
@@ -380,6 +429,10 @@ class VirtualAsioDriver final : public IASIO {
   }
 
   void reset_buffers() noexcept {
+    if (runtime_ != nullptr) {
+      runtime_->disconnect();
+      runtime_.reset();
+    }
     buffers_.clear();
     active_channels_.clear();
     callbacks_ = nullptr;
@@ -393,13 +446,13 @@ class VirtualAsioDriver final : public IASIO {
   ASIOCallbacks* callbacks_ = nullptr;
   std::vector<std::vector<float>> buffers_;
   std::vector<ActiveChannel> active_channels_;
+  std::unique_ptr<WindowsVirtualAsioRuntime> runtime_;
   std::string last_error_;
   ASIOSampleRate sample_rate_ = kDefaultSampleRate;
-  std::uint64_t sample_position_ = 0;
   long buffer_frames_ = 0;
   bool initialized_ = false;
   bool buffers_created_ = false;
-  bool running_ = false;
+  std::atomic_bool running_ = false;
 };
 
 class VirtualAsioClassFactory final : public IClassFactory {

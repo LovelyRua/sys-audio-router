@@ -220,7 +220,11 @@ transport session now owns these primitives plus a dedicated graph and
 preallocated buffers, and its cancellable pump has an in-process synthetic DAW
 end-to-end smoke. Multi-client hosting and broker admission are implemented.
 The host-facing DLL now exposes the first fixed stereo `IASIO` control/buffer
-surface but does not yet schedule callbacks or bind those buffers to the broker.
+surface and a stoppable MMCSS callback worker. The worker exchanges preallocated
+planar blocks through the broker's lock-free queues, never waits for an engine
+response, and returns deterministic silence when output is not ready. A DLL to
+broker to gain graph to DLL integration smoke validates the first closed loop.
+Real DAW cadence and audio evidence remain outstanding.
 The session itself monitors its
 admitted client process and exits on client death.
 The transport host now manages the bounded registry and session collection,

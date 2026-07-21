@@ -118,8 +118,13 @@ discontinuities, and connection generations, and has a two-thread stress smoke.
 It is not itself a driver. A separate x64 DLL now supplies the initial official
 SDK `IASIO` interface, COM activation, fixed stereo channel and format queries,
 double-buffer allocation, and start/stop/dispose lifecycle. Its registration
-utility writes matching COM and ASIO discovery entries. Host callback scheduling
-and broker audio transfer are the next driver boundary.
+utility writes matching COM and ASIO discovery entries. A dedicated MMCSS worker
+now schedules the negotiated double buffers and exchanges planar float blocks
+with the service broker through the existing bounded shared queues. The worker
+does not wait for engine output; an empty queue produces deterministic silence.
+The COM smoke runs the real DLL against an in-process broker and gain graph,
+observes processed audio in a host input buffer, then verifies callback quiescence
+before buffer disposal and DLL unload.
 
 `VirtualAsioClientRegistry` defines the control-plane admission policy for
 future DAW host connections. The first client establishes the active sample
@@ -519,8 +524,9 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   eight-hour pairing and the 24-hour backend alpha soak remain outstanding.
 - Loopback capture is not yet connected to a selectable render destination or
   virtual endpoint.
-- The virtual ASIO DLL has a real control/buffer ABI but does not yet schedule
-  DAW callbacks or transfer audio through the broker.
+- The virtual ASIO DLL has a real control/buffer ABI and synthetic broker-backed
+  callback loop, but REAPER enumeration, cadence, and audible output have not
+  yet been captured on the physical test desktop.
 - No virtual WDM/WASAPI driver implementation exists yet.
 - No UI exists yet.
 - No plugin hosting exists yet.
