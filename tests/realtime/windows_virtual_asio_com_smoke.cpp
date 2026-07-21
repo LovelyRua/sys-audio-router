@@ -132,7 +132,8 @@ int wmain(int argc, wchar_t** argv) {
   assert(object == nullptr);
 
   IUnknown* driver = nullptr;
-  assert(factory->CreateInstance(nullptr, IID_IUnknown,
+  assert(factory->CreateInstance(nullptr,
+                                 sar::driver::kWindowsVirtualAsioClsid,
                                  reinterpret_cast<void**>(&driver)) == S_OK);
   assert(driver != nullptr);
   assert(can_unload() == S_FALSE);

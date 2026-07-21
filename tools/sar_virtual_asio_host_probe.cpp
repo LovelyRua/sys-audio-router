@@ -83,7 +83,8 @@ int main(int argc, char** argv) {
   IUnknown* unknown = nullptr;
   const auto created = CoCreateInstance(
       sar::driver::kWindowsVirtualAsioClsid, nullptr, CLSCTX_INPROC_SERVER,
-      IID_IUnknown, reinterpret_cast<void**>(&unknown));
+      sar::driver::kWindowsVirtualAsioClsid,
+      reinterpret_cast<void**>(&unknown));
   if (FAILED(created) || unknown == nullptr) {
     std::cerr << "asio_probe=create_instance hresult=0x" << std::hex
               << static_cast<unsigned long>(created) << std::dec << '\n';

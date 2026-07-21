@@ -80,7 +80,10 @@ class VirtualAsioDriver final : public IASIO {
       return E_POINTER;
     }
     *object = nullptr;
-    if (!IsEqualIID(iid, IID_IUnknown)) {
+    // ASIO hosts conventionally request the driver's CLSID as its interface
+    // identifier because IASIO does not define a separate COM IID.
+    if (!IsEqualIID(iid, IID_IUnknown) &&
+        !IsEqualIID(iid, sar::driver::kWindowsVirtualAsioClsid)) {
       return E_NOINTERFACE;
     }
     *object = static_cast<IASIO*>(this);
