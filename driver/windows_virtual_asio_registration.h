@@ -12,6 +12,11 @@ enum class WindowsVirtualAsioRegistryView {
   ProcessDefault,
 };
 
+enum class WindowsVirtualAsioRegistrationScope {
+  CurrentUser,
+  LocalMachine,
+};
+
 struct WindowsVirtualAsioRegistrationError {
   std::string code;
   std::string message;
@@ -38,10 +43,21 @@ class WindowsVirtualAsioRegistrationResult {
 [[nodiscard]] WindowsVirtualAsioRegistrationResult
 register_windows_virtual_asio_driver(
     std::wstring dll_path,
-    WindowsVirtualAsioRegistryView view = WindowsVirtualAsioRegistryView::X64);
+    WindowsVirtualAsioRegistryView view = WindowsVirtualAsioRegistryView::X64,
+    WindowsVirtualAsioRegistrationScope scope =
+        WindowsVirtualAsioRegistrationScope::LocalMachine);
+
+[[nodiscard]] WindowsVirtualAsioRegistrationResult
+verify_windows_virtual_asio_driver_registration(
+    std::wstring dll_path,
+    WindowsVirtualAsioRegistryView view = WindowsVirtualAsioRegistryView::X64,
+    WindowsVirtualAsioRegistrationScope scope =
+        WindowsVirtualAsioRegistrationScope::LocalMachine);
 
 [[nodiscard]] WindowsVirtualAsioRegistrationResult
 unregister_windows_virtual_asio_driver(
-    WindowsVirtualAsioRegistryView view = WindowsVirtualAsioRegistryView::X64);
+    WindowsVirtualAsioRegistryView view = WindowsVirtualAsioRegistryView::X64,
+    WindowsVirtualAsioRegistrationScope scope =
+        WindowsVirtualAsioRegistrationScope::LocalMachine);
 
 }  // namespace sar::driver

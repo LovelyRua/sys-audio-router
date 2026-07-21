@@ -668,6 +668,12 @@ if(WIN32)
   add_test(NAME windows_virtual_asio_registration_smoke
            COMMAND sar_windows_virtual_asio_registration_smoke
                    $<TARGET_FILE:sar_virtual_asio_driver>)
+  add_test(NAME windows_virtual_asio_registration_help
+           COMMAND sar_virtual_asio_register --help)
+  add_test(NAME windows_virtual_asio_registration_missing_action
+           COMMAND sar_virtual_asio_register)
+  set_tests_properties(windows_virtual_asio_registration_missing_action
+                       PROPERTIES WILL_FAIL TRUE)
   add_test(NAME windows_virtual_asio_object_names_smoke
            COMMAND sar_windows_virtual_asio_object_names_smoke)
   add_test(NAME windows_virtual_asio_events_smoke

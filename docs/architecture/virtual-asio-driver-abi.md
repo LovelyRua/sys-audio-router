@@ -90,10 +90,12 @@ hosts conventionally enumerate ASIO drivers from the machine registry. Runtime
 objects and user configuration remain per-user. The installer, not the running
 engine or driver DLL, requires elevation.
 
-The x64 registration utility now writes and removes the machine-view COM and
-ASIO discovery keys for the stable CLSID. Its smoke redirects HKLM into an
-ephemeral per-user hive, verifies every value, performs idempotent uninstall,
-and leaves the real machine registry untouched. Transactional upgrade and
+The x64 registration utility defaults to the machine-wide registry view for
+maximum host compatibility. `--user` provides an explicit non-administrator
+scope, while `--verify` checks every COM and ASIO discovery value against the
+selected DLL before a DAW is launched. Its smoke redirects both HKLM and HKCU
+into ephemeral per-user hives, detects a damaged value, performs idempotent
+uninstall, and leaves the real registry untouched. Transactional upgrade and
 installer rollback remain installer responsibilities.
 
 COM registration does not imply that the engine service is a COM server. The
