@@ -28,7 +28,10 @@ using DllGetClassObjectFunction = HRESULT(STDAPICALLTYPE*)(REFCLSID, REFIID,
 
 std::array<ASIOBufferInfo, 4>* active_buffers = nullptr;
 std::atomic_uint32_t callback_count = 0;
+std::atomic_uint32_t time_info_callback_count = 0;
+std::atomic_uint32_t time_info_query_count = 0;
 std::atomic_bool round_trip_observed = false;
+std::atomic_bool valid_time_info_observed = false;
 
 std::unique_ptr<sar::graph::Graph> make_graph(
     const sar::platform::VirtualAsioFormat& format) {
@@ -56,8 +59,27 @@ void buffer_switch(long buffer_index, ASIOBool) {
   callback_count.fetch_add(1, std::memory_order_release);
 }
 void sample_rate_changed(ASIOSampleRate) {}
-long asio_message(long, long, void*, double*) { return 0; }
-ASIOTime* buffer_switch_time_info(ASIOTime* time, long, ASIOBool) {
+long asio_message(long selector, long, void*, double*) {
+  if (selector == kAsioSupportsTimeInfo) {
+    time_info_query_count.fetch_add(1, std::memory_order_release);
+    return 1;
+  }
+  return 0;
+}
+ASIOTime* buffer_switch_time_info(ASIOTime* time,
+                                  long buffer_index,
+                                  ASIOBool direct_process) {
+  assert(time != nullptr);
+  assert(direct_process == ASIOFalse);
+  const auto required_flags =
+      kSystemTimeValid | kSamplePositionValid | kSampleRateValid | kSpeedValid;
+  if ((time->timeInfo.flags & required_flags) == required_flags &&
+      time->timeInfo.sampleRate == 96000.0 &&
+      time->timeInfo.speed == 1.0) {
+    valid_time_info_observed.store(true, std::memory_order_release);
+  }
+  time_info_callback_count.fetch_add(1, std::memory_order_release);
+  buffer_switch(buffer_index, direct_process);
   return time;
 }
 
@@ -143,6 +165,8 @@ int wmain(int argc, wchar_t** argv) {
   ASIOSampleRate sample_rate = 0;
   assert(asio->getSampleRate(&sample_rate) == ASE_OK);
   assert(sample_rate == 96000.0);
+  assert(asio->future(kAsioCanTimeInfo, nullptr) == ASE_SUCCESS);
+  assert(asio->future(kAsioCanTimeCode, nullptr) == ASE_NotPresent);
 
   ASIOChannelInfo channel_info{};
   channel_info.channel = 1;
@@ -169,6 +193,7 @@ int wmain(int argc, wchar_t** argv) {
   assert(asio->createBuffers(buffer_infos.data(),
                              static_cast<long>(buffer_infos.size()),
                              preferred, &callbacks) == ASE_OK);
+  assert(time_info_query_count.load(std::memory_order_acquire) == 1);
   for (const auto& buffer : buffer_infos) {
     assert(buffer.buffers[0] != nullptr);
     assert(buffer.buffers[1] != nullptr);
@@ -187,6 +212,8 @@ int wmain(int argc, wchar_t** argv) {
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
   }
   assert(callback_count.load(std::memory_order_acquire) >= 2);
+  assert(time_info_callback_count.load(std::memory_order_acquire) >= 2);
+  assert(valid_time_info_observed.load(std::memory_order_acquire));
   assert(round_trip_observed.load(std::memory_order_acquire));
   assert(asio->setSampleRate(48000.0) == ASE_InvalidMode);
   ASIOSamples sample_position{};

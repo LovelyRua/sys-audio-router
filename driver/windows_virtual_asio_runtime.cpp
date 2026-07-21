@@ -98,7 +98,10 @@ WindowsVirtualAsioRuntimeOpenResult WindowsVirtualAsioRuntime::open(
     WindowsVirtualAsioRuntimeConfig config) {
   if (config.sample_rate == 0 || config.frames_per_block == 0 ||
       config.input_channels == 0 || config.output_channels == 0 ||
-      config.callbacks == nullptr || config.callbacks->bufferSwitch == nullptr) {
+      config.callbacks == nullptr ||
+      (config.use_time_info
+           ? config.callbacks->bufferSwitchTimeInfo == nullptr
+           : config.callbacks->bufferSwitch == nullptr)) {
     return {nullptr, "The negotiated ASIO runtime configuration is incomplete."};
   }
 

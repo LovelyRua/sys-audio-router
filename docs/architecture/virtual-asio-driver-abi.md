@@ -166,6 +166,11 @@ returns deterministic silence and records an underrun. Stale generations are
 ignored. Event signaling is an optimization for the receiving non-callback
 worker and is not a correctness dependency for queue ownership.
 
+During `createBuffers`, the driver negotiates ASIO 2 time-info callbacks with
+the host. Hosts that accept `kAsioSupportsTimeInfo` receive monotonic sample
+position, system time, sample rate, and speed in `bufferSwitchTimeInfo`; older
+hosts continue to receive the classic `bufferSwitch` callback.
+
 The service owns clock-domain and multi-client policy. The current registry
 requires all active clients to match one sample rate, block size, and channel
 shape. A future resampling mode must be an explicit protocol capability and

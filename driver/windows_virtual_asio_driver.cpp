@@ -332,13 +332,17 @@ class VirtualAsioDriver final : public IASIO {
 
     callbacks_ = callbacks;
     buffer_frames_ = buffer_frames;
+    const bool use_time_info =
+        callbacks->asioMessage != nullptr &&
+        callbacks->bufferSwitchTimeInfo != nullptr &&
+        callbacks->asioMessage(kAsioSupportsTimeInfo, 0, nullptr, nullptr) == 1;
     WindowsVirtualAsioRuntimeConfig runtime_config{
         .sample_rate = static_cast<std::uint32_t>(sample_rate_),
         .frames_per_block = static_cast<std::uint32_t>(buffer_frames),
         .input_channels = static_cast<std::uint32_t>(kOutputChannels),
         .output_channels = static_cast<std::uint32_t>(kInputChannels),
         .callbacks = callbacks,
-        .use_time_info = false,
+        .use_time_info = use_time_info,
     };
     runtime_config.bindings.reserve(active_channels_.size());
     for (std::size_t index = 0; index < active_channels_.size(); ++index) {
@@ -383,6 +387,7 @@ class VirtualAsioDriver final : public IASIO {
   ASIOError future(long selector, void*) override {
     switch (selector) {
       case kAsioCanTimeInfo:
+        return ASE_SUCCESS;
       case kAsioCanTimeCode:
       case kAsioCanReportOverload:
         return ASE_NotPresent;
