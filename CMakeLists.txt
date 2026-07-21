@@ -285,6 +285,13 @@ if(WIN32)
   target_link_libraries(sar_virtual_asio_register
     PRIVATE sar_virtual_asio_registration)
 
+  add_executable(sar_virtual_asio_host_probe
+    tools/sar_virtual_asio_host_probe.cpp
+  )
+  target_include_directories(sar_virtual_asio_host_probe
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_link_libraries(sar_virtual_asio_host_probe PRIVATE ole32)
+
   add_executable(sar_engine_service
     tools/sar_engine_service.cpp
   )
