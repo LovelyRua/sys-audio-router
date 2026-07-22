@@ -30,10 +30,12 @@ class WindowsWasapiEngineRuntime final : public EngineAudioRuntime {
   ~WindowsWasapiEngineRuntime() override;
 
   [[nodiscard]] static WindowsWasapiEngineRuntimeOpenResult open_default_render(
-      std::shared_ptr<graph::Graph> graph);
+      std::shared_ptr<graph::Graph> graph,
+      platform::RealtimeAudioSource* external_input = nullptr);
   [[nodiscard]] static WindowsWasapiEngineRuntimeOpenResult open_render(
       std::string render_device_id,
-      std::shared_ptr<graph::Graph> graph);
+      std::shared_ptr<graph::Graph> graph,
+      platform::RealtimeAudioSource* external_input = nullptr);
   [[nodiscard]] static WindowsWasapiEngineRuntimeOpenResult open_default_duplex(
       std::shared_ptr<graph::Graph> graph);
   [[nodiscard]] static WindowsWasapiEngineRuntimeOpenResult open_duplex(

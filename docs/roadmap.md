@@ -233,6 +233,16 @@ standalone host probe exercises activation, enumeration, buffer creation,
 streaming callbacks, and shutdown against the real engine broker. Automatic
 host/preset format negotiation, real DAW cadence capture, and non-silent audio
 evidence remain outstanding.
+The first physical-render bridge is now implemented. A fixed eight-client bus
+gives each ASIO session an independent preallocated SPSC producer and mixes the
+available client blocks on the WASAPI render thread through a generic realtime
+source interface. The ASIO worker now samples host output after callback return
+and advances an absolute QPC deadline instead of accumulating callback duration.
+The 114-test Windows suite passes, including production-bus concurrency and
+WASAPI external-input coverage. REAPER and a pinned hardware render runtime ran
+together for 11,301 graph blocks with zero reported xrun, FIFO overflow, or FIFO
+underflow; externally captured non-silent output and independent client-clock
+adaptation remain before the Phase 3 exit criteria are met.
 The session itself monitors its
 admitted client process and exits on client death.
 The transport host now manages the bounded registry and session collection,

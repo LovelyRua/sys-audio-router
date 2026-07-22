@@ -2,6 +2,7 @@
 
 #include "core/diagnostics/engine_diagnostics.h"
 #include "core/graph/graph.h"
+#include "core/platform/realtime_audio_source.h"
 #include "core/platform/windows_wasapi_stream.h"
 #include "core/realtime/adaptive_resampler.h"
 #include "core/realtime/audio_buffer.h"
@@ -90,7 +91,8 @@ class WindowsWasapiGraphRunner {
                            std::size_t render_packet_capacity_frames,
                            std::size_t fifo_capacity_frames,
                            bool prime_render_silence = false,
-                           bool adapt_capture_rate = false);
+                           bool adapt_capture_rate = false,
+                           RealtimeAudioSource* external_input = nullptr);
 
   [[nodiscard]] realtime::AudioBuffer& input_buffer() noexcept;
   [[nodiscard]] const realtime::AudioBuffer& input_buffer() const noexcept;
@@ -156,6 +158,7 @@ class WindowsWasapiGraphRunner {
   std::optional<BufferedPath> capture_path_;
   std::optional<BufferedPath> render_path_;
   std::optional<CaptureRateAdapter> capture_rate_adapter_;
+  RealtimeAudioSource* external_input_ = nullptr;
   std::atomic<double> capture_clock_feed_forward_ppm_ = 0.0;
 };
 

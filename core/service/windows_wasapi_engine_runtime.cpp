@@ -57,7 +57,8 @@ WindowsWasapiEngineRuntime::~WindowsWasapiEngineRuntime() {
 
 WindowsWasapiEngineRuntimeOpenResult
 WindowsWasapiEngineRuntime::open_default_render(
-    std::shared_ptr<graph::Graph> graph) {
+    std::shared_ptr<graph::Graph> graph,
+    platform::RealtimeAudioSource* external_input) {
   if (!graph) {
     return WindowsWasapiEngineRuntimeOpenResult::failure({
         {"null_runtime_graph", "WASAPI engine runtime requires a graph."},
@@ -67,7 +68,7 @@ WindowsWasapiEngineRuntime::open_default_render(
   auto runtime = std::unique_ptr<WindowsWasapiEngineRuntime>(
       new WindowsWasapiEngineRuntime(std::move(graph)));
   auto loop = platform::open_default_wasapi_render_loop(
-      *runtime->graph_, runtime->realtime_diagnostics_);
+      *runtime->graph_, runtime->realtime_diagnostics_, external_input);
   if (!loop.ok()) {
     return WindowsWasapiEngineRuntimeOpenResult::failure(
         convert_errors(loop.errors()));
@@ -78,7 +79,8 @@ WindowsWasapiEngineRuntime::open_default_render(
 
 WindowsWasapiEngineRuntimeOpenResult WindowsWasapiEngineRuntime::open_render(
     std::string render_device_id,
-    std::shared_ptr<graph::Graph> graph) {
+    std::shared_ptr<graph::Graph> graph,
+    platform::RealtimeAudioSource* external_input) {
   if (!graph) {
     return WindowsWasapiEngineRuntimeOpenResult::failure({
         {"null_runtime_graph", "WASAPI engine runtime requires a graph."},
@@ -94,7 +96,8 @@ WindowsWasapiEngineRuntimeOpenResult WindowsWasapiEngineRuntime::open_render(
   auto runtime = std::unique_ptr<WindowsWasapiEngineRuntime>(
       new WindowsWasapiEngineRuntime(std::move(graph)));
   auto loop = platform::open_wasapi_render_loop(
-      render_device_id, *runtime->graph_, runtime->realtime_diagnostics_);
+      render_device_id, *runtime->graph_, runtime->realtime_diagnostics_,
+      external_input);
   if (!loop.ok()) {
     return WindowsWasapiEngineRuntimeOpenResult::failure(
         convert_errors(loop.errors()));

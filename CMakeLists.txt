@@ -46,6 +46,7 @@ add_library(sar_core
   core/platform/mock_audio_device_provider.cpp
   core/platform/sample_converter.cpp
   core/platform/virtual_asio_client_registry.cpp
+  core/platform/virtual_asio_render_bus.cpp
   core/platform/virtual_asio_shared_memory_layout.cpp
   core/platform/virtual_endpoint.cpp
   core/platform/wasapi_endpoint_selection_policy.cpp
@@ -214,6 +215,12 @@ add_executable(sar_virtual_asio_shared_memory_layout_smoke
 )
 
 target_link_libraries(sar_virtual_asio_shared_memory_layout_smoke PRIVATE sar_core)
+
+add_executable(sar_virtual_asio_render_bus_smoke
+  tests/realtime/virtual_asio_render_bus_smoke.cpp
+)
+
+target_link_libraries(sar_virtual_asio_render_bus_smoke PRIVATE sar_core)
 
 add_executable(sar_audio_device_smoke
   tests/realtime/audio_device_smoke.cpp
@@ -433,6 +440,12 @@ if(WIN32)
   )
 
   target_link_libraries(sar_windows_wasapi_graph_runner_smoke PRIVATE sar_core)
+
+  add_executable(sar_windows_wasapi_external_input_smoke
+    tests/realtime/windows_wasapi_external_input_smoke.cpp
+  )
+
+  target_link_libraries(sar_windows_wasapi_external_input_smoke PRIVATE sar_core)
 
   add_executable(sar_scripted_wasapi_stream_smoke
     tests/realtime/scripted_wasapi_stream_smoke.cpp
@@ -660,6 +673,8 @@ add_test(NAME virtual_asio_client_registry_stress_smoke
          COMMAND sar_virtual_asio_client_registry_stress_smoke)
 add_test(NAME virtual_asio_shared_memory_layout_smoke
          COMMAND sar_virtual_asio_shared_memory_layout_smoke)
+add_test(NAME virtual_asio_render_bus_smoke
+         COMMAND sar_virtual_asio_render_bus_smoke)
 add_test(NAME audio_device_smoke COMMAND sar_audio_device_smoke)
 add_test(NAME audio_device_registry_smoke COMMAND sar_audio_device_registry_smoke)
 add_test(NAME virtual_endpoint_smoke COMMAND sar_virtual_endpoint_smoke)
@@ -735,6 +750,8 @@ if(WIN32)
   add_test(NAME windows_wasapi_stream_smoke COMMAND sar_windows_wasapi_stream_smoke)
   add_test(NAME windows_wasapi_graph_runner_smoke
            COMMAND sar_windows_wasapi_graph_runner_smoke)
+  add_test(NAME windows_wasapi_external_input_smoke
+           COMMAND sar_windows_wasapi_external_input_smoke)
   add_test(NAME scripted_wasapi_stream_smoke
            COMMAND sar_scripted_wasapi_stream_smoke)
   add_test(NAME windows_wasapi_fifo_runner_smoke

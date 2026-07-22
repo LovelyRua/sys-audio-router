@@ -1,0 +1,107 @@
+#include "core/platform/virtual_asio_render_bus.h"
+#include "tests/realtime/test_helpers.h"
+
+#include <atomic>
+#include <cassert>
+#include <iostream>
+#include <thread>
+
+namespace {
+
+void fill(sar::realtime::AudioBuffer& buffer, float left, float right) {
+  for (std::size_t frame = 0; frame < buffer.frames(); ++frame) {
+    buffer.channel(0)[frame] = left;
+    buffer.channel(1)[frame] = right;
+  }
+}
+
+void expect(const sar::realtime::AudioBuffer& buffer,
+            float left,
+            float right) {
+  for (std::size_t frame = 0; frame < buffer.frames(); ++frame) {
+    assert(sar::tests::nearly_equal(buffer.channel(0)[frame], left));
+    assert(sar::tests::nearly_equal(buffer.channel(1)[frame], right));
+  }
+}
+
+}  // namespace
+
+int main() {
+  sar::platform::VirtualAsioRenderBus bus(2, 16, 2, 2);
+  assert(bus.channels() == 2);
+  assert(bus.frames() == 16);
+
+  auto first = bus.attach();
+  auto second = bus.attach();
+  auto rejected = bus.attach();
+  assert(first.valid());
+  assert(second.valid());
+  assert(!rejected.valid());
+
+  sar::realtime::AudioBuffer first_block(2, 16);
+  sar::realtime::AudioBuffer second_block(2, 16);
+  sar::realtime::AudioBuffer mixed(2, 16);
+  fill(first_block, 0.25F, -0.5F);
+  fill(second_block, 0.5F, 0.25F);
+  assert(first.push(first_block));
+  assert(second.push(second_block));
+  assert(bus.read(mixed));
+  expect(mixed, 0.75F, -0.25F);
+
+  mixed.channel(0)[0] = 99.0F;
+  assert(!bus.read(mixed));
+  expect(mixed, 0.0F, 0.0F);
+
+  assert(first.push(first_block));
+  assert(first.push(first_block));
+  assert(!first.push(first_block));
+  assert(bus.read(mixed));
+  expect(mixed, 0.25F, -0.5F);
+  assert(bus.read(mixed));
+  expect(mixed, 0.25F, -0.5F);
+
+  first.reset();
+  auto replacement = bus.attach();
+  assert(replacement.valid());
+  assert(!first.valid());
+
+  std::atomic_bool producer_done = false;
+  std::atomic_bool failed = false;
+  std::thread producer([&] {
+    for (std::size_t block = 0; block < 10'000; ++block) {
+      while (!replacement.push(first_block)) {
+        std::this_thread::yield();
+      }
+    }
+    producer_done.store(true, std::memory_order_release);
+  });
+  std::thread consumer([&] {
+    std::size_t consumed = 0;
+    while (consumed < 10'000) {
+      if (!bus.read(mixed)) {
+        if (producer_done.load(std::memory_order_acquire) &&
+            consumed < 10'000) {
+          failed.store(true, std::memory_order_release);
+          return;
+        }
+        std::this_thread::yield();
+        continue;
+      }
+      expect(mixed, 0.25F, -0.5F);
+      ++consumed;
+    }
+  });
+  producer.join();
+  consumer.join();
+  assert(!failed.load(std::memory_order_acquire));
+
+  const auto stats = bus.stats();
+  assert(stats.pushed_blocks >= 10'004);
+  assert(stats.dropped_blocks >= 1);
+  assert(stats.mixed_blocks >= 10'003);
+  assert(stats.silent_reads >= 1);
+  assert(stats.active_producers == 2);
+
+  std::cout << "Virtual ASIO render bus smoke test passed\n";
+  return 0;
+}

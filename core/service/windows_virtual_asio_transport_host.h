@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/platform/virtual_asio_client_registry.h"
+#include "core/platform/virtual_asio_render_bus.h"
 #include "core/service/windows_virtual_asio_transport_session.h"
 
 #include <cstddef>
@@ -55,7 +56,9 @@ class WindowsVirtualAsioHostConnectResult {
 
 class WindowsVirtualAsioTransportHost {
  public:
-  explicit WindowsVirtualAsioTransportHost(WindowsVirtualAsioHostConfig config);
+  explicit WindowsVirtualAsioTransportHost(
+      WindowsVirtualAsioHostConfig config,
+      platform::VirtualAsioRenderBus* render_bus = nullptr);
   WindowsVirtualAsioTransportHost(const WindowsVirtualAsioTransportHost&) = delete;
   WindowsVirtualAsioTransportHost& operator=(
       const WindowsVirtualAsioTransportHost&) = delete;
@@ -84,6 +87,7 @@ class WindowsVirtualAsioTransportHost {
 
   WindowsVirtualAsioHostConfig config_;
   platform::VirtualAsioClientRegistry registry_;
+  platform::VirtualAsioRenderBus* render_bus_ = nullptr;
   mutable std::mutex mutex_;
   std::vector<SessionRecord> sessions_;
 };

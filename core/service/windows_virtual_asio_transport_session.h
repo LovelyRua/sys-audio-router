@@ -2,6 +2,7 @@
 
 #include "core/graph/graph.h"
 #include "core/platform/virtual_asio_shared_memory_layout.h"
+#include "core/platform/virtual_asio_render_bus.h"
 #include "core/platform/windows_virtual_asio_events.h"
 #include "core/platform/windows_virtual_asio_shared_queue.h"
 
@@ -32,6 +33,7 @@ struct WindowsVirtualAsioTransportStats {
   std::uint64_t realtime_thread_failures = 0;
   std::uint64_t client_process_exits = 0;
   std::uint64_t last_sequence = 0;
+  std::uint64_t dropped_render_bus_blocks = 0;
 };
 
 class WindowsVirtualAsioTransportSession;
@@ -72,7 +74,8 @@ class WindowsVirtualAsioTransportSession {
       const platform::VirtualAsioSharedMemoryConfig& config,
       const platform::VirtualAsioSharedMemoryIdentity& identity,
       std::unique_ptr<graph::Graph> graph,
-      std::uint32_t wait_timeout_ms = 100);
+      std::uint32_t wait_timeout_ms = 100,
+      platform::VirtualAsioRenderProducer render_producer = {});
 
   [[nodiscard]] bool start() noexcept;
   void stop() noexcept;
@@ -91,6 +94,7 @@ class WindowsVirtualAsioTransportSession {
       platform::WindowsVirtualAsioSharedQueue input_queue,
       platform::WindowsVirtualAsioSharedQueue output_queue,
       std::unique_ptr<graph::Graph> graph,
+      platform::VirtualAsioRenderProducer render_producer,
       void* client_process_handle,
       std::uint32_t wait_timeout_ms);
 
@@ -103,6 +107,7 @@ class WindowsVirtualAsioTransportSession {
   platform::WindowsVirtualAsioSharedQueue input_queue_;
   platform::WindowsVirtualAsioSharedQueue output_queue_;
   std::unique_ptr<graph::Graph> graph_;
+  platform::VirtualAsioRenderProducer render_producer_;
   realtime::AudioBuffer input_buffer_;
   realtime::AudioBuffer output_buffer_;
   diagnostics::EngineDiagnostics graph_diagnostics_;
@@ -121,6 +126,7 @@ class WindowsVirtualAsioTransportSession {
   std::atomic<std::uint64_t> realtime_thread_failures_ = 0;
   std::atomic<std::uint64_t> client_process_exits_ = 0;
   std::atomic<std::uint64_t> last_sequence_ = 0;
+  std::atomic<std::uint64_t> dropped_render_bus_blocks_ = 0;
 };
 
 }  // namespace sar::service

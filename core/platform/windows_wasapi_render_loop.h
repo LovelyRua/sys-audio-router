@@ -2,6 +2,7 @@
 
 #include "core/diagnostics/engine_diagnostics.h"
 #include "core/graph/graph.h"
+#include "core/platform/realtime_audio_source.h"
 #include "core/platform/windows_wasapi_realtime_worker.h"
 #include "core/platform/windows_wasapi_runtime_summary.h"
 #include "core/platform/windows_wasapi_stream.h"
@@ -26,11 +27,13 @@ struct WasapiRenderLoopSummary {
 
 [[nodiscard]] WasapiRenderLoopOpenResult open_default_wasapi_render_loop(
     graph::Graph& graph,
-    diagnostics::EngineDiagnostics& diagnostics);
+    diagnostics::EngineDiagnostics& diagnostics,
+    RealtimeAudioSource* external_input = nullptr);
 [[nodiscard]] WasapiRenderLoopOpenResult open_wasapi_render_loop(
     const std::string& render_device_id,
     graph::Graph& graph,
-    diagnostics::EngineDiagnostics& diagnostics);
+    diagnostics::EngineDiagnostics& diagnostics,
+    RealtimeAudioSource* external_input = nullptr);
 
 class WindowsWasapiRenderLoop {
  public:
@@ -54,19 +57,23 @@ class WindowsWasapiRenderLoop {
   friend class WasapiRenderLoopOpenResult;
   friend WasapiRenderLoopOpenResult open_default_wasapi_render_loop(
       graph::Graph& graph,
-      diagnostics::EngineDiagnostics& diagnostics);
+      diagnostics::EngineDiagnostics& diagnostics,
+      RealtimeAudioSource* external_input);
   friend WasapiRenderLoopOpenResult open_wasapi_render_loop(
       const std::string& render_device_id,
       graph::Graph& graph,
-      diagnostics::EngineDiagnostics& diagnostics);
+      diagnostics::EngineDiagnostics& diagnostics,
+      RealtimeAudioSource* external_input);
 
   WindowsWasapiRenderLoop(WindowsWasapiStream render_stream,
                           graph::Graph& graph,
-                          diagnostics::EngineDiagnostics& diagnostics);
+                          diagnostics::EngineDiagnostics& diagnostics,
+                          RealtimeAudioSource* external_input);
   [[nodiscard]] static WasapiRenderLoopOpenResult open_from_stream(
       WasapiStreamOpenResult stream_result,
       graph::Graph& graph,
-      diagnostics::EngineDiagnostics& diagnostics);
+      diagnostics::EngineDiagnostics& diagnostics,
+      RealtimeAudioSource* external_input);
 
   WindowsWasapiStream render_stream_;
   WindowsWasapiGraphRunner runner_;
@@ -94,6 +101,7 @@ class WasapiRenderLoopOpenResult {
 
 [[nodiscard]] WasapiRenderLoopOpenResult open_default_wasapi_render_loop(
     graph::Graph& graph,
-    diagnostics::EngineDiagnostics& diagnostics);
+    diagnostics::EngineDiagnostics& diagnostics,
+    RealtimeAudioSource* external_input);
 
 }  // namespace sar::platform

@@ -179,7 +179,8 @@ WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(
     std::size_t render_packet_capacity_frames,
     std::size_t fifo_capacity_frames,
     bool prime_render_silence,
-    bool adapt_capture_rate)
+    bool adapt_capture_rate,
+    RealtimeAudioSource* external_input)
     : capture_stream_(capture_stream),
       render_stream_(render_stream),
       native_capture_stream_(dynamic_cast<WindowsWasapiStream*>(capture_stream)),
@@ -187,7 +188,8 @@ WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(
       input_(input_channels, graph_block_frames),
       output_(output_channels, graph_block_frames),
       graph_block_frames_(graph_block_frames),
-      render_master_(prime_render_silence) {
+      render_master_(prime_render_silence),
+      external_input_(external_input) {
   if (fifo_capacity_frames < graph_block_frames ||
       (capture_stream != nullptr && capture_packet_capacity_frames == 0) ||
       (render_stream != nullptr && render_packet_capacity_frames == 0)) {
@@ -390,6 +392,8 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
       stats.capture_wait_timed_out = capture_result.timed_out();
       return WasapiGraphRunnerResult::success(stats);
     }
+  } else if (external_input_ != nullptr) {
+    static_cast<void>(external_input_->read(input_));
   }
 
   auto shape_errors = validate_graph_shape(graph, input_, output_);
@@ -753,6 +757,8 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
         }
         static_cast<void>(capture_path_->fifo.pop(input_, graph_block_frames_));
       }
+    } else if (external_input_ != nullptr) {
+      static_cast<void>(external_input_->read(input_));
     }
     auto shape_errors = validate_graph_shape(graph, input_, output_);
     if (!shape_errors.empty()) {

@@ -126,6 +126,19 @@ The COM smoke runs the real DLL against an in-process broker and gain graph,
 observes processed audio in a host input buffer, then verifies callback quiescence
 before buffer disposal and DLL unload.
 
+The service now also owns a fixed-format `VirtualAsioRenderBus`. Each admitted
+ASIO session receives one generation-checked producer slot with a preallocated
+bounded SPSC queue. The WASAPI render thread is the sole consumer: it clears its
+destination, mixes at most one queued block from each active client, and feeds
+the existing engine graph through the generic `RealtimeAudioSource` interface.
+Queue-full producers drop without waiting, empty reads produce silence, and
+slot attachment and retirement remain on the control side. Client output is
+published before its private return graph, so the central physical-output graph
+is applied exactly once. The ASIO callback worker now prepares host input before
+the callback, reads newly produced host output only after callback return, and
+uses QPC absolute deadlines so callback execution time does not accumulate into
+clock drift.
+
 `VirtualAsioClientRegistry` defines the control-plane admission policy for
 future DAW host connections. The first client establishes the active sample
 rate, block size, and input/output channel layout; later clients must match that
@@ -476,7 +489,7 @@ pairing, 24-hour soak, and physical unplug/replug evidence remain outstanding.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 110 smoke targets. The named-pipe coverage
+The Windows CTest suite currently has 114 smoke targets. The named-pipe coverage
 includes a full control-wire integration path through `EngineControlService`
 for device enumeration, session state, runtime configuration, lifecycle, and
 diagnostics. Several tests are
@@ -534,6 +547,14 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   Real-host callback-cadence capture, non-silent audio evidence, and automatic
   negotiation when a host requests a format different from the active preset
   remain outstanding.
+- The first ASIO-to-physical-render bridge is wired for exact-format clients.
+  On 2026-07-22, REAPER 7.78 loaded the deployed driver while the service ran a
+  pinned 48 kHz hardware render endpoint; after 11,301 graph blocks the runtime
+  reported zero xruns, FIFO overflow, or FIFO underflow and a 754-microsecond
+  callback peak. Production-bus concurrency and WASAPI source injection are
+  covered by dedicated smoke tests. Per-client clock adaptation, bridge waterline
+  diagnostics, clipping telemetry, and externally captured non-silent hardware
+  output remain outstanding.
 - No virtual WDM/WASAPI driver implementation exists yet.
 - No UI exists yet.
 - No plugin hosting exists yet.

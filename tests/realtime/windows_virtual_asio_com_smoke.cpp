@@ -1,4 +1,5 @@
 #include "driver/windows_virtual_asio_com.h"
+#include "driver/windows_virtual_asio_runtime.h"
 #include "core/graph/graph.h"
 #include "core/service/windows_virtual_asio_broker_server.h"
 
@@ -32,6 +33,7 @@ std::atomic_uint32_t time_info_callback_count = 0;
 std::atomic_uint32_t time_info_query_count = 0;
 std::atomic_bool round_trip_observed = false;
 std::atomic_bool valid_time_info_observed = false;
+std::atomic_uint32_t minimum_round_trip_callback_lag = UINT32_MAX;
 
 std::unique_ptr<sar::graph::Graph> make_graph(
     const sar::platform::VirtualAsioFormat& format) {
@@ -46,17 +48,30 @@ void buffer_switch(long buffer_index, ASIOBool) {
   const auto half = static_cast<std::size_t>(buffer_index);
   const auto* input_left = static_cast<const float*>((*active_buffers)[0].buffers[half]);
   const auto* input_right = static_cast<const float*>((*active_buffers)[1].buffers[half]);
-  if (std::fabs(input_left[0] - 0.2F) < 0.000001F &&
-      std::fabs(input_right[0] - 0.21F) < 0.000001F) {
-    round_trip_observed.store(true, std::memory_order_release);
+  const auto callback_number =
+      callback_count.fetch_add(1, std::memory_order_acq_rel) + 1;
+  if (input_left[0] > 0.0F && input_right[0] > 0.0F) {
+    const auto source_callback = static_cast<std::uint32_t>(std::lround(
+        (input_left[0] * 4.0F - 0.4F) * 1000.0F));
+    if (source_callback > 0 && source_callback < callback_number &&
+        std::fabs(input_right[0] - (input_left[0] + 0.01F)) < 0.000001F) {
+      const auto lag = callback_number - source_callback;
+      auto minimum = minimum_round_trip_callback_lag.load();
+      while (lag < minimum &&
+             !minimum_round_trip_callback_lag.compare_exchange_weak(minimum,
+                                                                    lag)) {
+      }
+      round_trip_observed.store(true, std::memory_order_release);
+    }
   }
   auto* output_left = static_cast<float*>((*active_buffers)[2].buffers[half]);
   auto* output_right = static_cast<float*>((*active_buffers)[3].buffers[half]);
+  const auto output_value =
+      0.4F + static_cast<float>(callback_number) * 0.001F;
   for (std::size_t frame = 0; frame < 256; ++frame) {
-    output_left[frame] = 0.8F;
-    output_right[frame] = 0.84F;
+    output_left[frame] = output_value;
+    output_right[frame] = output_value + 0.04F;
   }
-  callback_count.fetch_add(1, std::memory_order_release);
 }
 void sample_rate_changed(ASIOSampleRate) {}
 long asio_message(long selector, long, void*, double*) {
@@ -87,6 +102,18 @@ ASIOTime* buffer_switch_time_info(ASIOTime* time,
 
 int wmain(int argc, wchar_t** argv) {
   assert(argc == 2);
+  using sar::driver::detail::advance_windows_virtual_asio_deadline;
+  auto schedule = advance_windows_virtual_asio_deadline(100, 10, 106);
+  assert(schedule.deadline_qpc == 110);
+  assert(schedule.skipped_periods == 0);
+  schedule = advance_windows_virtual_asio_deadline(
+      schedule.deadline_qpc, 10, 116);
+  assert(schedule.deadline_qpc == 120);
+  assert(schedule.skipped_periods == 0);
+  schedule = advance_windows_virtual_asio_deadline(
+      schedule.deadline_qpc, 10, 155);
+  assert(schedule.deadline_qpc == 160);
+  assert(schedule.skipped_periods == 3);
   const std::wstring pipe_name =
       L"sys-audio-route-asio-com-smoke-" +
       std::to_wstring(GetCurrentProcessId());
@@ -216,6 +243,7 @@ int wmain(int argc, wchar_t** argv) {
   assert(time_info_callback_count.load(std::memory_order_acquire) >= 2);
   assert(valid_time_info_observed.load(std::memory_order_acquire));
   assert(round_trip_observed.load(std::memory_order_acquire));
+  assert(minimum_round_trip_callback_lag.load(std::memory_order_acquire) <= 2);
   assert(asio->setSampleRate(48000.0) == ASE_InvalidMode);
   ASIOSamples sample_position{};
   ASIOTimeStamp timestamp{};

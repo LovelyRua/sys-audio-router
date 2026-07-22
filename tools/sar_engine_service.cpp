@@ -12,6 +12,7 @@
 
 #include <Windows.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -283,19 +284,22 @@ sar::service::EngineAudioRuntimeBuildResult convert_runtime_result(
       result.take_runtime());
 }
 
-sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator() {
-  return [](const sar::control::AudioRuntimeConfiguration& configuration,
-            std::shared_ptr<sar::graph::Graph> graph) {
+sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator(
+    sar::platform::RealtimeAudioSource* external_render_input) {
+  return [external_render_input](
+             const sar::control::AudioRuntimeConfiguration& configuration,
+             std::shared_ptr<sar::graph::Graph> graph) {
     if (configuration.mode ==
         sar::control::AudioRuntimeMode::WasapiRender) {
       if (!configuration.render_device_id.empty()) {
         return convert_runtime_result(
             sar::service::WindowsWasapiEngineRuntime::open_render(
-                configuration.render_device_id, std::move(graph)));
+                configuration.render_device_id, std::move(graph),
+                external_render_input));
       }
       return convert_runtime_result(
           sar::service::WindowsWasapiEngineRuntime::open_default_render(
-              std::move(graph)));
+              std::move(graph), external_render_input));
     }
     if (configuration.mode ==
         sar::control::AudioRuntimeMode::WasapiDuplex) {
@@ -394,6 +398,12 @@ int main(int argc, char** argv) {
     }
   }
 
+  const auto render_bus_channels = std::max(
+      desired_session.preset.matrix.inputs.size(),
+      desired_session.preset.matrix.outputs.size());
+  sar::platform::VirtualAsioRenderBus asio_render_bus(
+      render_bus_channels, desired_session.preset.frames_per_block, 8, 8);
+
   auto service_result =
       sar::service::EngineControlService::create(desired_session.preset);
   if (!service_result.ok()) {
@@ -406,7 +416,7 @@ int main(int argc, char** argv) {
   service->add_audio_device_provider(
       std::make_unique<sar::platform::WindowsWasapiDeviceProvider>());
   service->set_audio_runtime_configurator(
-      make_wasapi_runtime_configurator());
+      make_wasapi_runtime_configurator(&asio_render_bus));
   if (has_session_path &&
       desired_session.audio_runtime.mode !=
           sar::control::AudioRuntimeMode::None) {
@@ -460,7 +470,7 @@ int main(int argc, char** argv) {
       .maximum_clients = 8,
       .queue_capacity_blocks = 8,
       .wait_timeout_ms = 20,
-  });
+  }, &asio_render_bus);
   sar::service::WindowsVirtualAsioBrokerServer asio_broker(
       asio_pipe_name, asio_host,
       [&service](const sar::platform::VirtualAsioFormat& format) {
