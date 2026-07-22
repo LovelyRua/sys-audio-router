@@ -311,6 +311,12 @@ if(WIN32)
 
   target_link_libraries(sar_control_cli PRIVATE sar_core)
 
+  add_executable(sar_measure_wasapi_capture_level
+    tools/measure_wasapi_capture_level.cpp
+  )
+
+  target_link_libraries(sar_measure_wasapi_capture_level PRIVATE sar_core)
+
   add_executable(sar_windows_named_pipe_control_smoke
     tests/realtime/windows_named_pipe_control_smoke.cpp
   )
@@ -807,6 +813,12 @@ if(WIN32)
     COMMAND sar_measure_wasapi_duplex_loop --render-id render-endpoint-id)
   add_test(NAME windows_wasapi_loopback_loop_measure_help
     COMMAND sar_measure_wasapi_loopback_loop --help)
+  add_test(NAME windows_wasapi_capture_level_measure_help
+    COMMAND sar_measure_wasapi_capture_level --help)
+  add_test(NAME windows_wasapi_capture_level_measure_missing_id
+    COMMAND sar_measure_wasapi_capture_level)
+  add_test(NAME windows_wasapi_capture_level_measure_bad_duration
+    COMMAND sar_measure_wasapi_capture_level --capture-id dummy --duration-ms abc)
   add_test(NAME windows_wasapi_loopback_loop_measure_short_help
     COMMAND sar_measure_wasapi_loopback_loop -h)
   add_test(NAME windows_wasapi_loopback_loop_measure_missing_duration
@@ -864,6 +876,8 @@ if(WIN32)
     windows_wasapi_loopback_loop_measure_bad_duration
     windows_wasapi_loopback_loop_measure_bad_timeout
     windows_wasapi_loopback_loop_measure_unknown_arg
+    windows_wasapi_capture_level_measure_missing_id
+    windows_wasapi_capture_level_measure_bad_duration
     windows_wasapi_recovery_measure_missing_duration
     windows_wasapi_recovery_measure_bad_duration
     windows_wasapi_recovery_measure_zero_duration
@@ -893,6 +907,9 @@ if(WIN32)
     windows_wasapi_recovery_measure_help
     windows_wasapi_recovery_measure_short_help
     PROPERTIES PASS_REGULAR_EXPRESSION "--poll-ms")
+  set_tests_properties(
+    windows_wasapi_capture_level_measure_help
+    PROPERTIES PASS_REGULAR_EXPRESSION "--capture-id ID")
 endif()
 add_test(NAME diagnostics_smoke COMMAND sar_diagnostics_smoke)
 add_test(NAME spsc_ring_buffer_smoke COMMAND sar_spsc_ring_buffer_smoke)

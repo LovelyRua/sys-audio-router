@@ -64,6 +64,8 @@ int main() {
   response.has_diagnostics = true;
   response.diagnostics.graph_version = 6;
   response.diagnostics.processed_blocks = 123;
+  response.diagnostics.virtual_asio_pushed_blocks = 456;
+  response.diagnostics.virtual_asio_peak = 0.75;
   response.has_audio_runtime_state = true;
   response.audio_runtime.installed = true;
   response.audio_runtime.running = true;
@@ -92,6 +94,8 @@ int main() {
   assert(decoded_response.response.devices.size() == 1);
   assert(decoded_response.response.devices[0].is_virtual);
   assert(decoded_response.response.diagnostics.processed_blocks == 123);
+  assert(decoded_response.response.diagnostics.virtual_asio_pushed_blocks == 456);
+  assert(decoded_response.response.diagnostics.virtual_asio_peak == 0.75);
   assert(decoded_response.response.has_audio_runtime_state);
   assert(decoded_response.response.audio_runtime.installed);
   assert(decoded_response.response.audio_runtime.running);

@@ -78,7 +78,7 @@ binary protocol. On Windows, `sar_engine_service` hosts that control surface on
 a named pipe and `sar_control_cli` can query state, the merged virtual and
 physical WASAPI device directory, graph, diagnostics, and audio-runtime state;
 start or stop an installed runtime; or apply gain and mute
-commands. Control wire version 3 carries installed/running/runtime graph-version
+commands. Control wire version 4 carries installed/running/runtime graph-version
 state plus the active runtime mode and endpoint selection in lifecycle
 responses. A stopped service can configure default or pinned WASAPI render and
 default or pinned-pair duplex runtimes through the same protocol; configuration
@@ -489,7 +489,7 @@ pairing, 24-hour soak, and physical unplug/replug evidence remain outstanding.
 
 ## Current Testing Model
 
-The Windows CTest suite currently has 114 smoke targets. The named-pipe coverage
+The Windows CTest suite currently has 117 smoke targets. The named-pipe coverage
 includes a full control-wire integration path through `EngineControlService`
 for device enumeration, session state, runtime configuration, lifecycle, and
 diagnostics. Several tests are
@@ -544,17 +544,21 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   2.6/2.6 ms, and process-module inspection resolves the loaded DLL to the Alpha
   installation directory. A host probe using the ASIO CLSID-as-IID activation
   convention also completed buffer creation, streaming, and clean shutdown.
-  Real-host callback-cadence capture, non-silent audio evidence, and automatic
-  negotiation when a host requests a format different from the active preset
-  remain outstanding.
+  A retained REAPER-to-CABLE acceptance run captured 233,472 frames with a
+  0.366211 peak and 0.136627 RMS, with zero timeout, non-finite sample, or
+  engine xrun. Automatic negotiation when a host requests a format different
+  from the active preset remains outstanding.
 - The first ASIO-to-physical-render bridge is wired for exact-format clients.
   On 2026-07-22, REAPER 7.78 loaded the deployed driver while the service ran a
   pinned 48 kHz hardware render endpoint; after 11,301 graph blocks the runtime
   reported zero xruns, FIFO overflow, or FIFO underflow and a 754-microsecond
   callback peak. Production-bus concurrency and WASAPI source injection are
-  covered by dedicated smoke tests. Per-client clock adaptation, bridge waterline
-  diagnostics, clipping telemetry, and externally captured non-silent hardware
-  output remain outstanding.
+  covered by dedicated smoke tests. Control-wire v4 now reports producer,
+  consumer, queue-waterline, peak, clipping, and non-finite-sample evidence.
+  A ten-second live delta measured 372.1 ASIO production attempts per second but
+  only 105.4 consumed blocks per second on the shared-mode CABLE render endpoint,
+  so 266.8 blocks per second were dropped. Per-client clock adaptation and a
+  render-side rate bridge or lower-period IAudioClient3 path remain outstanding.
 - No virtual WDM/WASAPI driver implementation exists yet.
 - No UI exists yet.
 - No plugin hosting exists yet.

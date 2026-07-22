@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cassert>
 #include <iostream>
+#include <limits>
 #include <thread>
 
 namespace {
@@ -47,6 +48,12 @@ int main() {
   assert(second.push(second_block));
   assert(bus.read(mixed));
   expect(mixed, 0.75F, -0.25F);
+
+  first_block.channel(0)[0] = std::numeric_limits<float>::infinity();
+  assert(first.push(first_block));
+  assert(bus.read(mixed));
+  assert(mixed.channel(0)[0] == 0.0F);
+  first_block.channel(0)[0] = 0.25F;
 
   mixed.channel(0)[0] = 99.0F;
   assert(!bus.read(mixed));
@@ -96,11 +103,20 @@ int main() {
   assert(!failed.load(std::memory_order_acquire));
 
   const auto stats = bus.stats();
-  assert(stats.pushed_blocks >= 10'004);
+  assert(stats.pushed_blocks >= 10'005);
   assert(stats.dropped_blocks >= 1);
-  assert(stats.mixed_blocks >= 10'003);
+  assert(stats.consumed_blocks >= 10'005);
+  assert(stats.mixed_blocks >= 10'004);
   assert(stats.silent_reads >= 1);
+  assert(stats.non_finite_samples == 1);
+  assert(stats.maximum_queue_depth == 2);
   assert(stats.active_producers == 2);
+  assert(sar::tests::nearly_equal(stats.peak, 0.75F));
+  const auto diagnostics = bus.diagnostics();
+  assert(diagnostics.pushed_blocks == stats.pushed_blocks);
+  assert(diagnostics.consumed_blocks == stats.consumed_blocks);
+  assert(diagnostics.maximum_queue_depth == stats.maximum_queue_depth);
+  assert(sar::tests::nearly_equal(diagnostics.peak, stats.peak));
 
   std::cout << "Virtual ASIO render bus smoke test passed\n";
   return 0;

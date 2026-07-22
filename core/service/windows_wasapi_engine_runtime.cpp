@@ -66,7 +66,7 @@ WindowsWasapiEngineRuntime::open_default_render(
   }
 
   auto runtime = std::unique_ptr<WindowsWasapiEngineRuntime>(
-      new WindowsWasapiEngineRuntime(std::move(graph)));
+      new WindowsWasapiEngineRuntime(std::move(graph), external_input));
   auto loop = platform::open_default_wasapi_render_loop(
       *runtime->graph_, runtime->realtime_diagnostics_, external_input);
   if (!loop.ok()) {
@@ -94,7 +94,7 @@ WindowsWasapiEngineRuntimeOpenResult WindowsWasapiEngineRuntime::open_render(
   }
 
   auto runtime = std::unique_ptr<WindowsWasapiEngineRuntime>(
-      new WindowsWasapiEngineRuntime(std::move(graph)));
+      new WindowsWasapiEngineRuntime(std::move(graph), external_input));
   auto loop = platform::open_wasapi_render_loop(
       render_device_id, *runtime->graph_, runtime->realtime_diagnostics_,
       external_input);
@@ -247,6 +247,19 @@ diagnostics::EngineDiagnostics WindowsWasapiEngineRuntime::diagnostics() const {
   result.render_fifo_overflow_frames = snapshot.render_fifo_overflow_frames;
   result.render_fifo_underflow_cycles = snapshot.render_fifo_underflow_cycles;
   result.render_fifo_underflow_frames = snapshot.render_fifo_underflow_frames;
+  if (external_input_ != nullptr) {
+    const auto input = external_input_->diagnostics();
+    result.virtual_asio_pushed_blocks = input.pushed_blocks;
+    result.virtual_asio_dropped_blocks = input.dropped_blocks;
+    result.virtual_asio_consumed_blocks = input.consumed_blocks;
+    result.virtual_asio_mixed_blocks = input.mixed_blocks;
+    result.virtual_asio_silent_reads = input.silent_reads;
+    result.virtual_asio_clipped_samples = input.clipped_samples;
+    result.virtual_asio_non_finite_samples = input.non_finite_samples;
+    result.virtual_asio_maximum_queue_depth = input.maximum_queue_depth;
+    result.virtual_asio_active_producers = input.active_producers;
+    result.virtual_asio_peak = input.peak;
+  }
   result.last_callback_seconds =
       static_cast<double>(snapshot.last_callback_nanoseconds) / 1'000'000'000.0;
   result.peak_callback_seconds =
@@ -319,8 +332,9 @@ void WindowsWasapiEngineRuntime::run_duplex_supervisor() noexcept {
 }
 
 WindowsWasapiEngineRuntime::WindowsWasapiEngineRuntime(
-    std::shared_ptr<graph::Graph> graph) noexcept
-    : graph_(std::move(graph)) {}
+    std::shared_ptr<graph::Graph> graph,
+    platform::RealtimeAudioSource* external_input) noexcept
+    : graph_(std::move(graph)), external_input_(external_input) {}
 
 WindowsWasapiEngineRuntimeOpenResult
 WindowsWasapiEngineRuntimeOpenResult::success(

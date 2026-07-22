@@ -342,6 +342,26 @@ int main(int argc, char** argv) {
               << response.response.diagnostics.render_fifo_overflow_frames
               << " render_underflow_frames="
               << response.response.diagnostics.render_fifo_underflow_frames
+              << " asio_pushed_blocks="
+              << response.response.diagnostics.virtual_asio_pushed_blocks
+              << " asio_dropped_blocks="
+              << response.response.diagnostics.virtual_asio_dropped_blocks
+              << " asio_consumed_blocks="
+              << response.response.diagnostics.virtual_asio_consumed_blocks
+              << " asio_mixed_blocks="
+              << response.response.diagnostics.virtual_asio_mixed_blocks
+              << " asio_silent_reads="
+              << response.response.diagnostics.virtual_asio_silent_reads
+              << " asio_clipped_samples="
+              << response.response.diagnostics.virtual_asio_clipped_samples
+              << " asio_non_finite_samples="
+              << response.response.diagnostics.virtual_asio_non_finite_samples
+              << " asio_max_queue_depth="
+              << response.response.diagnostics.virtual_asio_maximum_queue_depth
+              << " asio_active_producers="
+              << response.response.diagnostics.virtual_asio_active_producers
+              << " asio_peak="
+              << response.response.diagnostics.virtual_asio_peak
               << " callback_peak_us="
               << response.response.diagnostics.peak_callback_seconds * 1'000'000.0;
   }

@@ -324,8 +324,18 @@ void encode_diagnostics(Writer& writer,
   writer.scalar(diagnostics.render_fifo_overflow_frames);
   writer.scalar(diagnostics.render_fifo_underflow_cycles);
   writer.scalar(diagnostics.render_fifo_underflow_frames);
+  writer.scalar(diagnostics.virtual_asio_pushed_blocks);
+  writer.scalar(diagnostics.virtual_asio_dropped_blocks);
+  writer.scalar(diagnostics.virtual_asio_consumed_blocks);
+  writer.scalar(diagnostics.virtual_asio_mixed_blocks);
+  writer.scalar(diagnostics.virtual_asio_silent_reads);
+  writer.scalar(diagnostics.virtual_asio_clipped_samples);
+  writer.scalar(diagnostics.virtual_asio_non_finite_samples);
+  writer.scalar(diagnostics.virtual_asio_maximum_queue_depth);
+  writer.scalar(diagnostics.virtual_asio_active_producers);
   writer.floating(diagnostics.last_callback_seconds);
   writer.floating(diagnostics.peak_callback_seconds);
+  writer.floating(diagnostics.virtual_asio_peak);
 }
 
 diagnostics::EngineDiagnostics decode_diagnostics(Reader& reader) {
@@ -341,8 +351,18 @@ diagnostics::EngineDiagnostics decode_diagnostics(Reader& reader) {
   diagnostics.render_fifo_overflow_frames = reader.scalar<std::uint64_t>();
   diagnostics.render_fifo_underflow_cycles = reader.scalar<std::uint64_t>();
   diagnostics.render_fifo_underflow_frames = reader.scalar<std::uint64_t>();
+  diagnostics.virtual_asio_pushed_blocks = reader.scalar<std::uint64_t>();
+  diagnostics.virtual_asio_dropped_blocks = reader.scalar<std::uint64_t>();
+  diagnostics.virtual_asio_consumed_blocks = reader.scalar<std::uint64_t>();
+  diagnostics.virtual_asio_mixed_blocks = reader.scalar<std::uint64_t>();
+  diagnostics.virtual_asio_silent_reads = reader.scalar<std::uint64_t>();
+  diagnostics.virtual_asio_clipped_samples = reader.scalar<std::uint64_t>();
+  diagnostics.virtual_asio_non_finite_samples = reader.scalar<std::uint64_t>();
+  diagnostics.virtual_asio_maximum_queue_depth = reader.scalar<std::uint64_t>();
+  diagnostics.virtual_asio_active_producers = reader.scalar<std::uint64_t>();
   diagnostics.last_callback_seconds = reader.float64();
   diagnostics.peak_callback_seconds = reader.float64();
+  diagnostics.virtual_asio_peak = reader.float64();
   return diagnostics;
 }
 

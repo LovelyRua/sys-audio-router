@@ -14,9 +14,14 @@ namespace sar::platform {
 struct VirtualAsioRenderBusStats {
   std::uint64_t pushed_blocks = 0;
   std::uint64_t dropped_blocks = 0;
+  std::uint64_t consumed_blocks = 0;
   std::uint64_t mixed_blocks = 0;
   std::uint64_t silent_reads = 0;
+  std::uint64_t clipped_samples = 0;
+  std::uint64_t non_finite_samples = 0;
+  std::size_t maximum_queue_depth = 0;
   std::size_t active_producers = 0;
+  float peak = 0.0F;
 };
 
 class VirtualAsioRenderBus;
@@ -56,6 +61,8 @@ class VirtualAsioRenderBus final : public RealtimeAudioSource {
 
   [[nodiscard]] VirtualAsioRenderProducer attach();
   [[nodiscard]] bool read(realtime::AudioBuffer& destination) noexcept override;
+  [[nodiscard]] RealtimeAudioSourceDiagnostics diagnostics()
+      const noexcept override;
   [[nodiscard]] VirtualAsioRenderBusStats stats() const noexcept;
   [[nodiscard]] std::size_t channels() const noexcept;
   [[nodiscard]] std::size_t frames() const noexcept;
@@ -96,9 +103,14 @@ class VirtualAsioRenderBus final : public RealtimeAudioSource {
   std::atomic<std::uint64_t> next_generation_ = 1;
   std::atomic<std::uint64_t> pushed_blocks_ = 0;
   std::atomic<std::uint64_t> dropped_blocks_ = 0;
+  std::atomic<std::uint64_t> consumed_blocks_ = 0;
   std::atomic<std::uint64_t> mixed_blocks_ = 0;
   std::atomic<std::uint64_t> silent_reads_ = 0;
+  std::atomic<std::uint64_t> clipped_samples_ = 0;
+  std::atomic<std::uint64_t> non_finite_samples_ = 0;
+  std::atomic<std::size_t> maximum_queue_depth_ = 0;
   std::atomic<std::size_t> active_producers_ = 0;
+  std::atomic<std::uint32_t> peak_bits_ = 0;
 };
 
 }  // namespace sar::platform

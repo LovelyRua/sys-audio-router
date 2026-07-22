@@ -189,8 +189,11 @@ render-only blocks with zero xruns and 987 supervised duplex blocks across a
 xrun, 1,088 render underflow frames, zero capture/render overflow, and a
 279.6-microsecond peak callback. FIFO diagnostics are mirrored into atomic
 worker snapshots so service queries do not race the realtime diagnostics writer.
-Control wire version 3 and `sar_control_cli` now expose runtime state, start,
+Control wire version 4 and `sar_control_cli` now expose runtime state, start,
 stop, and WASAPI runtime configuration without restarting the service process.
+Version 4 also exposes Virtual ASIO producer, queue, silence, peak, clipping,
+and non-finite-sample evidence so a real DAW bridge can be accepted without
+inferring audio flow from callback cadence alone.
 Render mode accepts default or pinned output selection; duplex accepts default
 or paired pinned capture/render selection. A physical named-pipe
 stop/start check then processed 304 duplex blocks in three seconds with zero
@@ -238,11 +241,16 @@ gives each ASIO session an independent preallocated SPSC producer and mixes the
 available client blocks on the WASAPI render thread through a generic realtime
 source interface. The ASIO worker now samples host output after callback return
 and advances an absolute QPC deadline instead of accumulating callback duration.
-The 114-test Windows suite passes, including production-bus concurrency and
+The Windows suite includes production-bus concurrency and
 WASAPI external-input coverage. REAPER and a pinned hardware render runtime ran
 together for 11,301 graph blocks with zero reported xrun, FIFO overflow, or FIFO
-underflow; externally captured non-silent output and independent client-clock
-adaptation remain before the Phase 3 exit criteria are met.
+underflow. `sar_measure_wasapi_capture_level` then retained 233,472 frames from
+CABLE Output while REAPER drove a fixed tone through Virtual ASIO and CABLE
+Input: peak was 0.366211, RMS was 0.136627, with zero timeout, non-finite sample,
+or engine xrun. A ten-second delta also exposed the next hard gate: 372.1 ASIO
+production attempts per second versus 105.4 consumed blocks per second on the
+shared-mode render path, dropping 266.8 blocks per second. Render-side clock
+adaptation or a lower-period IAudioClient3 path remains before Phase 3 exit.
 The session itself monitors its
 admitted client process and exits on client death.
 The transport host now manages the bounded registry and session collection,

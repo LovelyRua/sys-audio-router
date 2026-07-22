@@ -54,10 +54,12 @@ class WindowsWasapiEngineRuntime final : public EngineAudioRuntime {
 
  private:
   explicit WindowsWasapiEngineRuntime(
-      std::shared_ptr<graph::Graph> graph) noexcept;
+      std::shared_ptr<graph::Graph> graph,
+      platform::RealtimeAudioSource* external_input = nullptr) noexcept;
   void run_duplex_supervisor() noexcept;
 
   std::shared_ptr<graph::Graph> graph_;
+  platform::RealtimeAudioSource* external_input_ = nullptr;
   diagnostics::EngineDiagnostics realtime_diagnostics_;
   std::unique_ptr<platform::WindowsWasapiRenderLoop> render_loop_;
   platform::WasapiEndpointSelectionPolicy duplex_endpoint_policy_;

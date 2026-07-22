@@ -1,6 +1,8 @@
 #include "core/platform/virtual_asio_render_bus.h"
 
 #include <algorithm>
+#include <bit>
+#include <cmath>
 #include <stdexcept>
 #include <thread>
 #include <utility>
@@ -11,6 +13,23 @@ namespace {
 constexpr std::uint8_t kIdle = 0;
 constexpr std::uint8_t kClaiming = 1;
 constexpr std::uint8_t kActive = 2;
+
+template <typename T>
+void update_max(std::atomic<T>& target, T value) noexcept {
+  auto current = target.load(std::memory_order_relaxed);
+  while (current < value &&
+         !target.compare_exchange_weak(current, value,
+                                       std::memory_order_relaxed)) {
+  }
+}
+
+void update_peak(std::atomic<std::uint32_t>& target, float value) noexcept {
+  auto current_bits = target.load(std::memory_order_relaxed);
+  while (std::bit_cast<float>(current_bits) < value &&
+         !target.compare_exchange_weak(current_bits, std::bit_cast<std::uint32_t>(value),
+                                       std::memory_order_relaxed)) {
+  }
+}
 
 }  // namespace
 
@@ -139,12 +158,34 @@ bool VirtualAsioRenderBus::read(
       }
       slot.read_index.store(increment(slot, read_index),
                             std::memory_order_release);
+      consumed_blocks_.fetch_add(1, std::memory_order_relaxed);
       mixed = true;
     }
     slot.consumer_reading.store(false, std::memory_order_release);
   }
 
   if (mixed) {
+    float block_peak = 0.0F;
+    std::uint64_t clipped = 0;
+    std::uint64_t non_finite = 0;
+    for (std::size_t channel = 0; channel < channels_; ++channel) {
+      auto samples = destination.channel(channel);
+      for (auto& sample : samples) {
+        if (!std::isfinite(sample)) {
+          sample = 0.0F;
+          ++non_finite;
+          continue;
+        }
+        const auto magnitude = std::abs(sample);
+        block_peak = std::max(block_peak, magnitude);
+        if (magnitude > 1.0F) {
+          ++clipped;
+        }
+      }
+    }
+    clipped_samples_.fetch_add(clipped, std::memory_order_relaxed);
+    non_finite_samples_.fetch_add(non_finite, std::memory_order_relaxed);
+    update_peak(peak_bits_, block_peak);
     mixed_blocks_.fetch_add(1, std::memory_order_relaxed);
   } else {
     silent_reads_.fetch_add(1, std::memory_order_relaxed);
@@ -156,9 +197,31 @@ VirtualAsioRenderBusStats VirtualAsioRenderBus::stats() const noexcept {
   return {
       pushed_blocks_.load(std::memory_order_relaxed),
       dropped_blocks_.load(std::memory_order_relaxed),
+      consumed_blocks_.load(std::memory_order_relaxed),
       mixed_blocks_.load(std::memory_order_relaxed),
       silent_reads_.load(std::memory_order_relaxed),
+      clipped_samples_.load(std::memory_order_relaxed),
+      non_finite_samples_.load(std::memory_order_relaxed),
+      maximum_queue_depth_.load(std::memory_order_relaxed),
       active_producers_.load(std::memory_order_relaxed),
+      std::bit_cast<float>(peak_bits_.load(std::memory_order_relaxed)),
+  };
+}
+
+RealtimeAudioSourceDiagnostics VirtualAsioRenderBus::diagnostics()
+    const noexcept {
+  const auto snapshot = stats();
+  return {
+      snapshot.pushed_blocks,
+      snapshot.dropped_blocks,
+      snapshot.consumed_blocks,
+      snapshot.mixed_blocks,
+      snapshot.silent_reads,
+      snapshot.clipped_samples,
+      snapshot.non_finite_samples,
+      snapshot.maximum_queue_depth,
+      snapshot.active_producers,
+      snapshot.peak,
   };
 }
 
@@ -194,6 +257,11 @@ bool VirtualAsioRenderBus::push(
   }
   slot.blocks[write_index].audio.copy_from(source);
   slot.write_index.store(next, std::memory_order_release);
+  const auto read_after_push = slot.read_index.load(std::memory_order_acquire);
+  const auto depth = next >= read_after_push
+                         ? next - read_after_push
+                         : slot.blocks.size() - read_after_push + next;
+  update_max(maximum_queue_depth_, depth);
   pushed_blocks_.fetch_add(1, std::memory_order_relaxed);
   return true;
 }
