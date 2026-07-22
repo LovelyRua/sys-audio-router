@@ -39,6 +39,9 @@ Primary references:
 
 Time box: five engineering days. Throwaway code is expected.
 
+Record commands, environment versions, failures, and acceptance evidence in
+the [Windows virtual audio driver spike log](../lab/windows-virtual-audio-driver-spike.md).
+
 1. Build and test-install the smallest ACX 1.1 stereo render endpoint. Add a
    capture endpoint only after render data reaches a bounded receiver.
 2. Keep SysVAD/PortCls as the fallback baseline; do not maintain two production

@@ -35,7 +35,9 @@ Record installed versions here when testing begins:
 
 | Component | Version | Notes |
 | --- | --- | --- |
-| Windows | TBD | |
+| Windows | `10.0.26100.4770` | Observed before the virtual endpoint spike. |
+| Visual Studio Build Tools | 2022 | DriverKit component integration in progress. |
+| Windows Driver Kit | `10.1.26100.6584` | `Microsoft.WindowsWDK.10.0.26100`; ACX headers present. |
 | REAPER | TBD | |
 | Cubase | TBD | |
 | Ableton Live | TBD | |
