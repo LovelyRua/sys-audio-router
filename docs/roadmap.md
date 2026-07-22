@@ -104,9 +104,11 @@ Exit criteria:
 
 ### Backend Alpha Gates
 
-These gates turn the remaining Phase 2 work into repeatable measurements. A
-short hardware run or a synthetic test can validate a path, but neither replaces
-the soak gates.
+These gates turn the remaining Phase 2 work into repeatable measurements.
+Functional failures in device recovery, render ordering, or unexplained audio
+loss block downstream integration. Long soaks remain Alpha release
+qualification and run in parallel; they do not block Virtual ASIO, WDM research,
+or GUI feedback work after the corresponding short hardware path has passed.
 
 - **Clock feed-forward:** report valid, invalid, and disabled observer samples,
   plus time at the final +/-2500 ppm clamp. After the first valid estimate, each
@@ -157,7 +159,7 @@ the soak gates.
   zero unattributed underflow and a 2,304-frame maximum recovery episode against
   the 2,594-frame callback-quantized bound. Longer hardware evidence remains
   part of the soak gate below.
-- **Long soaks:** first pass an eight-hour duplex run on two distinct physical
+- **Release-qualification soaks:** first pass an eight-hour duplex run on two distinct physical
   capture/render pairings, including one pairing with different endpoint mix
   rates, then pass one 24-hour duplex run. Each run must complete startup and
   bounded shutdown, process at least 99.99% of the duration-derived render-frame
@@ -199,8 +201,9 @@ or paired pinned capture/render selection. A physical named-pipe
 stop/start check then processed 304 duplex blocks in three seconds with zero
 capture/render overflow and a 41.1-microsecond peak callback. The first x64
 DAW-facing DLL now implements the `IASIO` discovery and buffer-lifecycle surface
-and has an architecture-aware registration utility; real-host evidence remains
-outstanding.
+and has an architecture-aware registration utility. REAPER load, callback,
+non-silent capture, and physical-render evidence now exist; repeatable host
+automation and a second target DAW remain outstanding.
 
 A bounded control-plane client registry now admits multiple DAWs into one fixed
 session clock domain. It rejects duplicate IDs, capacity overflow, mismatched
@@ -234,8 +237,9 @@ driver CLSID as the interface identifier, while the DLL initially accepted only
 `IID_IUnknown`. The driver and COM smoke now cover both conventions, and a
 standalone host probe exercises activation, enumeration, buffer creation,
 streaming callbacks, and shutdown against the real engine broker. Automatic
-host/preset format negotiation, real DAW cadence capture, and non-silent audio
-evidence remain outstanding.
+host/preset format negotiation and long-duration real DAW cadence capture remain
+outstanding. The host probe can generate a bounded optional test tone so this
+path no longer depends on a manually prepared DAW project.
 The first physical-render bridge is now implemented. A fixed eight-client bus
 gives each ASIO session an independent preallocated SPSC producer and mixes the
 available client blocks on the WASAPI render thread through a generic realtime
@@ -255,6 +259,13 @@ activated legacy client. The repeated run consumed 3,665 blocks while 3,664
 were produced in ten seconds with zero drop, xrun, FIFO overflow, or underflow;
 captured peak was 0.366211 and RMS was 0.252209. Long-duration per-client clock
 adaptation and engine-period contention remain before Phase 3 exit.
+An automated three-second host-probe run then generated a 440 Hz, -24 dBFS
+signal. It observed 1,113 callbacks against 1,125 expected and the engine
+reported matching deltas of 1,113 pushed, consumed, and mixed blocks with a
+0.0630957 peak and no additional drop. The first run exposed that a normal
+waitable timer delivered only 194 callbacks; the driver now requests a
+high-resolution waitable timer with a legacy fallback, and the probe rejects
+callback coverage below 80%.
 The session itself monitors its
 admitted client process and exits on client death.
 The transport host now manages the bounded registry and session collection,
@@ -306,6 +317,14 @@ Exit criteria:
 
 Purpose: support ordinary Windows applications.
 
+Status: a time-boxed driver decision spike is promoted ahead of product driver
+implementation. Windows standard audio endpoints require a kernel audio driver;
+ACX 1.1 is the preferred modern baseline and SysVAD/PortCls is the compatibility
+baseline. The spike is limited to five engineering days and may be discarded.
+It must produce an installable test-signed stereo endpoint, demonstrate or
+falsify a bounded user-mode audio transport boundary, record supported Windows
+versions and signing/install costs, and end with an architecture decision.
+
 Deliverables:
 
 - Multiple virtual playback endpoints.
@@ -323,9 +342,11 @@ Exit criteria:
 
 Purpose: make the engine usable without hiding the system model.
 
-Status: not started as a UI, but several backend pieces now exist: preset
-validation, route matrix graph building, active graph summaries, virtual
-endpoint listing, and full session-state responses.
+Status: the first Qt Quick control application is merged. It connects to control
+wire v4 without entering the realtime process and provides an operational route
+matrix, route enable/gain controls, device listing, runtime start/stop, and live
+diagnostics. Release packaging, preset browsing, large-matrix virtualization,
+undo/redo, and seed-user workflow testing remain.
 
 Deliverables:
 

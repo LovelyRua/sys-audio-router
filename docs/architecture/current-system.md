@@ -9,7 +9,8 @@ The project is still pre-alpha. The portable realtime core, graph execution
 prototype, control session shell, Windows WASAPI stream shell, graph runner,
 realtime worker, render, duplex, and loopback loop wrappers, sample conversion
 helpers, a first named-pipe engine control service, a bounded control wire
-protocol, a mock Virtual ASIO transport, and the smoke-test harness are in place.
+protocol, a mock Virtual ASIO transport, the first Qt Quick control application,
+and the smoke-test harness are in place.
 
 The first measured real-device loops now execute this path:
 
@@ -92,8 +93,9 @@ after its bound graph version becomes stale unless it has an installed runtime
 builder. The Windows service retains its render/duplex endpoint configuration in
 such a builder, reconstructs a stale stopped runtime against the current graph on
 the next start command, and preserves the previous stopped runtime if rebuilding
-fails. Persistence, service installation, concurrent client policy, and UI
-binding remain future work.
+fails. The Qt Quick GUI now binds to control wire v4 from a separate process.
+Service installation and concurrent control-client authorization remain future
+work.
 
 A physical HDA lifecycle check exercised runtime state, stop, state, start,
 diagnostics, and stop through one named-pipe service process. The restarted
@@ -534,7 +536,9 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   endpoint identity, successful recovery, reset failure, process exit, and
   recovery-duration gates for retained logs.
 - One eight-hour physical, mismatched-rate pairing has passed. A second distinct
-  eight-hour pairing and the 24-hour backend alpha soak remain outstanding.
+  eight-hour pairing and the 24-hour backend alpha soak remain release-
+  qualification work; they no longer block feature integration after short
+  hardware gates pass.
 - Loopback capture is not yet connected to a selectable render destination or
   virtual endpoint.
 - The virtual ASIO DLL has a real control/buffer ABI and broker-backed callback
@@ -548,6 +552,13 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   0.366211 peak and 0.136627 RMS, with zero timeout, non-finite sample, or
   engine xrun. Automatic negotiation when a host requests a format different
   from the active preset remains outstanding.
+  A repeatable host-probe run now generates a 440 Hz, -24 dBFS signal without
+  callback allocation. Over three seconds it observed 1,113 of 1,125 expected
+  callbacks; engine diagnostics increased by exactly 1,113 pushed, consumed,
+  and mixed blocks and reported the expected 0.0630957 peak with no new drop.
+  This run exposed and fixed an implicit dependency on another host raising the
+  Windows timer resolution: the driver now prefers a high-resolution waitable
+  timer and falls back to the legacy timer only when unavailable.
 - The first ASIO-to-physical-render bridge is wired for exact-format clients.
   On 2026-07-22, REAPER 7.78 loaded the deployed driver while the service ran a
   pinned 48 kHz hardware render endpoint; after 11,301 graph blocks the runtime
@@ -563,8 +574,12 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   produced in ten seconds, with zero dropped blocks, xrun, FIFO overflow, or
   FIFO underflow. Captured peak was 0.366211 and RMS was 0.252209. Per-client
   long-duration clock adaptation and engine-period contention remain outstanding.
-- No virtual WDM/WASAPI driver implementation exists yet.
-- No UI exists yet.
+- No virtual WDM/WASAPI driver implementation exists yet. A five-day ACX 1.1
+  versus SysVAD/PortCls decision spike is now required before product driver
+  implementation.
+- The first Qt Quick GUI exists and controls route state, gain, runtime
+  lifecycle, device listing, and diagnostics. Preset browsing, undo/redo,
+  large-matrix virtualization, packaging, and seed-user feedback remain.
 - No plugin hosting exists yet.
 - Graph execution is still linear.
 - The named-pipe control service can own a WASAPI render or duplex runtime and
