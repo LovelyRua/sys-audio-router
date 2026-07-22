@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(SAR_BUILD_GUI "Build the Qt Quick control application" OFF)
+
 add_library(sar_libsamplerate STATIC
   third_party/libsamplerate/src/samplerate.c
   third_party/libsamplerate/src/src_linear.c
@@ -100,6 +102,15 @@ if(WIN32)
     core/service/windows_virtual_asio_transport_host.cpp
   )
   target_link_libraries(sar_core PUBLIC advapi32 avrt bcrypt ole32 uuid)
+endif()
+
+if(SAR_BUILD_GUI)
+  if(NOT WIN32)
+    message(FATAL_ERROR "The alpha GUI control client currently requires Windows")
+  endif()
+  find_package(Qt6 6.8 REQUIRED COMPONENTS Concurrent Quick QuickControls2)
+  qt_standard_project_setup(REQUIRES 6.8)
+  add_subdirectory(app/gui)
 endif()
 
 add_executable(sar_realtime_smoke
