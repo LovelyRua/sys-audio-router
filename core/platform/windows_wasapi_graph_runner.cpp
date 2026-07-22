@@ -757,8 +757,8 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
         }
         static_cast<void>(capture_path_->fifo.pop(input_, graph_block_frames_));
       }
-    } else if (external_input_ != nullptr) {
-      static_cast<void>(external_input_->read(input_));
+    } else if (external_input_ != nullptr && !external_input_->read(input_)) {
+      break;
     }
     auto shape_errors = validate_graph_shape(graph, input_, output_);
     if (!shape_errors.empty()) {

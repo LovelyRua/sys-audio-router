@@ -555,10 +555,14 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   callback peak. Production-bus concurrency and WASAPI source injection are
   covered by dedicated smoke tests. Control-wire v4 now reports producer,
   consumer, queue-waterline, peak, clipping, and non-finite-sample evidence.
-  A ten-second live delta measured 372.1 ASIO production attempts per second but
-  only 105.4 consumed blocks per second on the shared-mode CABLE render endpoint,
-  so 266.8 blocks per second were dropped. Per-client clock adaptation and a
-  render-side rate bridge or lower-period IAudioClient3 path remain outstanding.
+  An initial ten-second live delta measured 372.1 ASIO production attempts per
+  second but only 105.4 consumed blocks per second on the default shared-mode
+  CABLE render period. The render opener now uses `IAudioClient3` to select the
+  legal engine period nearest the graph quantum, with a freshly activated legacy
+  client fallback. The repeated run consumed 3,665 blocks while 3,664 were
+  produced in ten seconds, with zero dropped blocks, xrun, FIFO overflow, or
+  FIFO underflow. Captured peak was 0.366211 and RMS was 0.252209. Per-client
+  long-duration clock adaptation and engine-period contention remain outstanding.
 - No virtual WDM/WASAPI driver implementation exists yet.
 - No UI exists yet.
 - No plugin hosting exists yet.

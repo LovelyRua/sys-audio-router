@@ -164,7 +164,9 @@ WasapiRenderLoopOpenResult open_default_wasapi_render_loop(
     diagnostics::EngineDiagnostics& diagnostics,
     RealtimeAudioSource* external_input) {
   return WindowsWasapiRenderLoop::open_from_stream(
-      open_default_wasapi_stream_shell(WasapiStreamDirection::Render),
+      open_default_wasapi_stream_shell(
+          WasapiStreamDirection::Render, WasapiStreamMode::Endpoint, 0,
+          external_input != nullptr ? static_cast<std::uint32_t>(graph.frames()) : 0),
       graph,
       diagnostics,
       external_input);
@@ -186,7 +188,10 @@ WasapiRenderLoopOpenResult open_wasapi_render_loop(
     return WasapiRenderLoopOpenResult::failure(convert_errors(probe.errors()));
   }
   return WindowsWasapiRenderLoop::open_from_stream(
-      open_wasapi_stream_shell(probe.probe()), graph, diagnostics,
+      open_wasapi_stream_shell(
+          probe.probe(), 0,
+          external_input != nullptr ? static_cast<std::uint32_t>(graph.frames()) : 0),
+      graph, diagnostics,
       external_input);
 }
 

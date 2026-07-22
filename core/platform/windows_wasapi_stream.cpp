@@ -16,11 +16,48 @@
 
 #include <cstdio>
 #include <algorithm>
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
 
 namespace sar::platform {
+
+std::uint32_t select_wasapi_shared_period_frames(
+    std::uint32_t requested,
+    std::uint32_t default_period,
+    std::uint32_t fundamental_period,
+    std::uint32_t minimum_period,
+    std::uint32_t maximum_period) noexcept {
+  if (requested == 0 || minimum_period == 0 || maximum_period < minimum_period) {
+    return default_period;
+  }
+  if (fundamental_period == 0) {
+    return default_period;
+  }
+  const auto first =
+      ((static_cast<std::uint64_t>(minimum_period) + fundamental_period - 1) /
+       fundamental_period) * fundamental_period;
+  const auto last =
+      (static_cast<std::uint64_t>(maximum_period) / fundamental_period) *
+      fundamental_period;
+  if (first > last || first > std::numeric_limits<std::uint32_t>::max()) {
+    return default_period;
+  }
+  if (requested <= first) {
+    return static_cast<std::uint32_t>(first);
+  }
+  if (requested >= last) {
+    return static_cast<std::uint32_t>(last);
+  }
+  const auto lower =
+      (static_cast<std::uint64_t>(requested) / fundamental_period) *
+      fundamental_period;
+  const auto upper = lower + fundamental_period;
+  return requested - lower < upper - requested
+             ? static_cast<std::uint32_t>(lower)
+             : static_cast<std::uint32_t>(upper);
+}
 
 namespace {
 
@@ -291,6 +328,7 @@ struct WindowsWasapiStream::Impl {
   ComPtr<IMMDeviceEnumerator> enumerator;
   ComPtr<IMMDevice> device;
   ComPtr<IAudioClient> audio_client;
+  ComPtr<IAudioClient3> audio_client3;
   ComPtr<IAudioClock> audio_clock;
   ComPtr<IAudioRenderClient> render_client;
   ComPtr<IAudioCaptureClient> capture_client;
@@ -924,7 +962,8 @@ WasapiStreamOpenResult::WasapiStreamOpenResult(WindowsWasapiStream stream,
 
 WasapiStreamOpenResult open_wasapi_stream_shell(
     WasapiStreamProbe probe,
-    std::uint32_t requested_sample_rate) {
+    std::uint32_t requested_sample_rate,
+    std::uint32_t requested_period_frames) {
   WindowsWasapiStream stream;
   auto open_result = stream.open(std::move(probe));
   if (!open_result.ok()) {
@@ -1040,12 +1079,49 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
                             (mode == WasapiStreamMode::Loopback
                                  ? AUDCLNT_STREAMFLAGS_LOOPBACK
                                  : 0);
-  const auto init_result = impl->audio_client->Initialize(AUDCLNT_SHAREMODE_SHARED,
-                                                         stream_flags,
-                                                         0,
-                                                         0,
-                                                         impl->wave_format,
-                                                         nullptr);
+  HRESULT init_result = E_NOINTERFACE;
+  bool used_requested_period = false;
+  if (requested_period_frames != 0 && !use_audio_engine_resampler &&
+      mode == WasapiStreamMode::Endpoint &&
+      SUCCEEDED(impl->audio_client->QueryInterface(
+          __uuidof(IAudioClient3),
+          reinterpret_cast<void**>(impl->audio_client3.put())))) {
+    UINT32 default_period = 0;
+    UINT32 fundamental_period = 0;
+    UINT32 minimum_period = 0;
+    UINT32 maximum_period = 0;
+    if (SUCCEEDED(impl->audio_client3->GetSharedModeEnginePeriod(
+            impl->wave_format, &default_period, &fundamental_period,
+            &minimum_period, &maximum_period))) {
+      const auto selected_period = select_wasapi_shared_period_frames(
+          requested_period_frames, default_period, fundamental_period,
+          minimum_period, maximum_period);
+      if (selected_period != 0) {
+        init_result = impl->audio_client3->InitializeSharedAudioStream(
+            stream_flags, selected_period, impl->wave_format, nullptr);
+        used_requested_period = SUCCEEDED(init_result);
+      }
+    }
+  }
+  if (!used_requested_period) {
+    if (impl->audio_client3) {
+      impl->audio_client3.reset();
+      impl->audio_client.reset();
+      init_result = impl->device->Activate(
+          __uuidof(IAudioClient), CLSCTX_ALL, nullptr,
+          reinterpret_cast<void**>(impl->audio_client.put()));
+    } else {
+      init_result = S_OK;
+    }
+    if (SUCCEEDED(init_result) && impl->audio_client) {
+      init_result = impl->audio_client->Initialize(AUDCLNT_SHAREMODE_SHARED,
+                                                   stream_flags,
+                                                   0,
+                                                   0,
+                                                   impl->wave_format,
+                                                   nullptr);
+    }
+  }
   if (FAILED(init_result)) {
     return WasapiStreamOpenResult::failure({
         {
@@ -1069,7 +1145,7 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
         },
     });
   }
-  if (!use_audio_engine_resampler &&
+  if (!use_audio_engine_resampler && !used_requested_period &&
       native_buffer_frames != stream.probe().buffer_frames) {
     return WasapiStreamOpenResult::failure({
         {
@@ -1078,8 +1154,8 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
         },
     });
   }
-  if (use_audio_engine_resampler) {
-    stream.probe_.mix_format.sample_rate = requested_sample_rate;
+  if (use_audio_engine_resampler || used_requested_period) {
+    stream.probe_.mix_format.sample_rate = impl->wave_format->nSamplesPerSec;
     stream.probe_.mix_format.frames_per_block = native_buffer_frames;
     stream.probe_.buffer_frames = native_buffer_frames;
   }
@@ -1210,12 +1286,14 @@ WasapiStreamOpenResult open_wasapi_stream_shell(
 
 WasapiStreamOpenResult open_default_wasapi_stream_shell(WasapiStreamDirection direction,
                                                         WasapiStreamMode mode,
-                                                        std::uint32_t requested_sample_rate) {
+                                                        std::uint32_t requested_sample_rate,
+                                                        std::uint32_t requested_period_frames) {
   auto probe_result = probe_default_wasapi_stream(direction, mode);
   if (!probe_result.ok()) {
     return WasapiStreamOpenResult::failure(convert_probe_errors(probe_result.errors()));
   }
-  return open_wasapi_stream_shell(probe_result.probe(), requested_sample_rate);
+  return open_wasapi_stream_shell(probe_result.probe(), requested_sample_rate,
+                                  requested_period_frames);
 }
 
 }  // namespace sar::platform

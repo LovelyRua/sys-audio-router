@@ -80,6 +80,35 @@ bool has_default_output_device() {
 
 int main() {
   {
+    using sar::platform::select_wasapi_shared_period_frames;
+    if (const auto failure = expect(
+            select_wasapi_shared_period_frames(128, 480, 48, 144, 960) == 144,
+            "Expected requested period to clamp to the first legal quantum")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            select_wasapi_shared_period_frames(336, 480, 48, 144, 960) == 336,
+            "Expected exact shared period selection")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            select_wasapi_shared_period_frames(312, 480, 48, 144, 960) == 336,
+            "Expected equal-distance shared period to select the larger value")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            select_wasapi_shared_period_frames(2000, 480, 48, 144, 960) == 960,
+            "Expected requested period to clamp to the last legal quantum")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            select_wasapi_shared_period_frames(128, 480, 0, 144, 960) == 480,
+            "Expected invalid fundamental period to use the default")) {
+      return failure;
+    }
+  }
+
+  {
     const sar::platform::WasapiStreamError error{
         "synthetic_error", "Synthetic stream error."};
     if (const auto failure = expect(!error.native_hresult.has_value() &&

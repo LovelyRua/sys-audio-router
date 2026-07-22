@@ -11,6 +11,13 @@
 
 namespace sar::platform {
 
+[[nodiscard]] std::uint32_t select_wasapi_shared_period_frames(
+    std::uint32_t requested,
+    std::uint32_t default_period,
+    std::uint32_t fundamental_period,
+    std::uint32_t minimum_period,
+    std::uint32_t maximum_period) noexcept;
+
 enum class WasapiStreamState {
   Closed,
   Open,
@@ -169,11 +176,13 @@ class WindowsWasapiStream final : public WasapiStreamIo {
       std::uint32_t timeout_ms) noexcept;
   friend WasapiStreamOpenResult open_wasapi_stream_shell(
       WasapiStreamProbe probe,
-      std::uint32_t requested_sample_rate);
+      std::uint32_t requested_sample_rate,
+      std::uint32_t requested_period_frames);
   friend WasapiStreamOpenResult open_default_wasapi_stream_shell(
       WasapiStreamDirection direction,
       WasapiStreamMode mode,
-      std::uint32_t requested_sample_rate);
+      std::uint32_t requested_sample_rate,
+      std::uint32_t requested_period_frames);
 
   struct Impl;
 
@@ -212,10 +221,12 @@ class WasapiStreamOpenResult {
 [[nodiscard]] WasapiStreamOpenResult open_default_wasapi_stream_shell(
     WasapiStreamDirection direction,
     WasapiStreamMode mode = WasapiStreamMode::Endpoint,
-    std::uint32_t requested_sample_rate = 0);
+    std::uint32_t requested_sample_rate = 0,
+    std::uint32_t requested_period_frames = 0);
 
 [[nodiscard]] WasapiStreamOpenResult open_wasapi_stream_shell(
     WasapiStreamProbe probe,
-    std::uint32_t requested_sample_rate = 0);
+    std::uint32_t requested_sample_rate = 0,
+    std::uint32_t requested_period_frames = 0);
 
 }  // namespace sar::platform

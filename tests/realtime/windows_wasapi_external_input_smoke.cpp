@@ -61,6 +61,16 @@ int main() {
     }
   }
 
+  const auto empty_result = runner.process_once(graph, diagnostics, 0);
+  assert(empty_result.ok());
+  assert(!empty_result.stats().graph_processed);
+  assert(empty_result.stats().rendered_frames == 0);
+  assert(empty_result.stats().render_stream_idle);
+  assert(diagnostics.processed_blocks == 1);
+  assert(diagnostics.render_fifo_underflow_cycles == 1);
+  assert(diagnostics.render_fifo_underflow_frames == 4);
+  assert(render.render_submissions().size() == 1);
+
   std::cout << "WASAPI external input smoke test passed\n";
   return 0;
 }

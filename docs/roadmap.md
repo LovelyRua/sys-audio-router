@@ -247,10 +247,14 @@ together for 11,301 graph blocks with zero reported xrun, FIFO overflow, or FIFO
 underflow. `sar_measure_wasapi_capture_level` then retained 233,472 frames from
 CABLE Output while REAPER drove a fixed tone through Virtual ASIO and CABLE
 Input: peak was 0.366211, RMS was 0.136627, with zero timeout, non-finite sample,
-or engine xrun. A ten-second delta also exposed the next hard gate: 372.1 ASIO
-production attempts per second versus 105.4 consumed blocks per second on the
-shared-mode render path, dropping 266.8 blocks per second. Render-side clock
-adaptation or a lower-period IAudioClient3 path remains before Phase 3 exit.
+or engine xrun. An initial ten-second delta exposed 372.1 ASIO production
+attempts per second versus 105.4 consumed blocks per second on the default
+shared-mode render period. The first `IAudioClient3` low-period path now selects
+the legal period nearest the graph quantum and falls back through a freshly
+activated legacy client. The repeated run consumed 3,665 blocks while 3,664
+were produced in ten seconds with zero drop, xrun, FIFO overflow, or underflow;
+captured peak was 0.366211 and RMS was 0.252209. Long-duration per-client clock
+adaptation and engine-period contention remain before Phase 3 exit.
 The session itself monitors its
 admitted client process and exits on client death.
 The transport host now manages the bounded registry and session collection,
