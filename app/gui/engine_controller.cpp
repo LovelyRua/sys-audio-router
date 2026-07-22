@@ -1,0 +1,289 @@
+#include "app/gui/engine_controller.h"
+
+#include "core/control/control_wire_protocol.h"
+#include "core/service/windows_named_pipe_control.h"
+
+#include <QtConcurrentRun>
+
+#include <algorithm>
+#include <cstddef>
+#include <span>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace sar::gui {
+namespace {
+
+std::vector<std::byte> as_bytes(const std::vector<std::uint8_t>& input) {
+  std::vector<std::byte> result(input.size());
+  for (std::size_t index = 0; index < input.size(); ++index) {
+    result[index] = static_cast<std::byte>(input[index]);
+  }
+  return result;
+}
+
+std::vector<std::uint8_t> as_u8(std::span<const std::byte> input) {
+  std::vector<std::uint8_t> result(input.size());
+  for (std::size_t index = 0; index < input.size(); ++index) {
+    result[index] = std::to_integer<std::uint8_t>(input[index]);
+  }
+  return result;
+}
+
+QString text(const std::string& value) {
+  return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
+}
+
+EngineReply transact(control::ControlCommand command) {
+  EngineReply reply;
+  reply.request_type = command.type;
+  const auto encoded = control::encode_control_command(command);
+  if (!encoded.ok()) {
+    reply.error = QStringLiteral("Could not encode the control request");
+    return reply;
+  }
+
+  service::NamedPipeControlConfig config;
+  const auto transaction = service::transact_named_pipe_control(
+      config, as_bytes(encoded.bytes), 500);
+  if (!transaction.ok()) {
+    reply.error = text(transaction.error().message);
+    return reply;
+  }
+
+  const auto decoded =
+      control::decode_control_response(as_u8(transaction.payload()));
+  if (!decoded.ok()) {
+    reply.error = QStringLiteral("The engine returned an invalid response");
+    return reply;
+  }
+  reply.response = decoded.response;
+  reply.transport_ok = true;
+  if (reply.response.status == control::ControlResponseStatus::Rejected) {
+    reply.error = reply.response.errors.empty()
+                      ? QStringLiteral("The engine rejected the request")
+                      : text(reply.response.errors.front().message);
+  }
+  return reply;
+}
+
+QVariantMap endpoint(const graph::RouteEndpointDescriptor& value) {
+  return {{QStringLiteral("id"), text(value.id)},
+          {QStringLiteral("label"), text(value.label)}};
+}
+
+}  // namespace
+
+EngineController::EngineController(QObject* parent) : QObject(parent) {
+  connect(&watcher_, &QFutureWatcher<EngineReply>::finished, this, [this] {
+    const auto reply = watcher_.result();
+    busy_ = false;
+    emit busyChanged();
+    applyReply(reply);
+  });
+  poll_timer_.setInterval(250);
+  connect(&poll_timer_, &QTimer::timeout, this,
+          &EngineController::schedulePoll);
+  poll_timer_.start();
+  QTimer::singleShot(0, this, &EngineController::refresh);
+}
+
+bool EngineController::connected() const noexcept { return connected_; }
+QString EngineController::connectionLabel() const {
+  return connected_ ? QStringLiteral("Engine online")
+                    : QStringLiteral("Engine offline");
+}
+QString EngineController::lastError() const { return last_error_; }
+bool EngineController::runtimeRunning() const noexcept { return runtime_running_; }
+bool EngineController::busy() const noexcept { return busy_; }
+int EngineController::sampleRate() const noexcept { return sample_rate_; }
+int EngineController::blockSize() const noexcept { return block_size_; }
+qulonglong EngineController::graphVersion() const noexcept { return graph_version_; }
+qulonglong EngineController::xrunCount() const noexcept { return xrun_count_; }
+qulonglong EngineController::droppedBlocks() const noexcept { return dropped_blocks_; }
+int EngineController::activeClients() const noexcept { return active_clients_; }
+double EngineController::peak() const noexcept { return peak_; }
+double EngineController::callbackPeakUs() const noexcept { return callback_peak_us_; }
+QVariantList EngineController::inputs() const { return inputs_; }
+QVariantList EngineController::outputs() const { return outputs_; }
+QVariantList EngineController::routes() const { return routes_; }
+QVariantList EngineController::devices() const { return devices_; }
+int EngineController::routeRevision() const noexcept { return route_revision_; }
+
+void EngineController::refresh() {
+  control::ControlCommand command;
+  command.type = control::ControlCommandType::QuerySessionState;
+  dispatch(std::move(command));
+}
+
+void EngineController::startRuntime() {
+  control::ControlCommand command;
+  command.type = control::ControlCommandType::StartAudioRuntime;
+  dispatch(std::move(command));
+}
+
+void EngineController::stopRuntime() {
+  control::ControlCommand command;
+  command.type = control::ControlCommandType::StopAudioRuntime;
+  dispatch(std::move(command));
+}
+
+bool EngineController::routeEnabled(const QString& input_id,
+                                    const QString& output_id) const {
+  return std::ranges::any_of(routes_, [&](const QVariant& value) {
+    const auto route = value.toMap();
+    return route.value(QStringLiteral("inputId")) == input_id &&
+           route.value(QStringLiteral("outputId")) == output_id &&
+           !route.value(QStringLiteral("muted")).toBool();
+  });
+}
+
+double EngineController::routeGain(const QString& input_id,
+                                   const QString& output_id) const {
+  for (const auto& value : routes_) {
+    const auto route = value.toMap();
+    if (route.value(QStringLiteral("inputId")) == input_id &&
+        route.value(QStringLiteral("outputId")) == output_id) {
+      return route.value(QStringLiteral("gain")).toDouble();
+    }
+  }
+  return 0.0;
+}
+
+void EngineController::setRoute(const QString& input_id,
+                                const QString& output_id,
+                                bool enabled) {
+  control::ControlCommand command;
+  command.type = enabled ? control::ControlCommandType::ConnectRoute
+                         : control::ControlCommandType::DisconnectRoute;
+  command.input_id = input_id.toStdString();
+  command.output_id = output_id.toStdString();
+  command.gain = 1.0F;
+  dispatch(std::move(command));
+}
+
+void EngineController::setRouteGain(const QString& input_id,
+                                    const QString& output_id,
+                                    double gain) {
+  control::ControlCommand command;
+  command.type = control::ControlCommandType::SetGain;
+  command.input_id = input_id.toStdString();
+  command.output_id = output_id.toStdString();
+  command.gain = static_cast<float>(std::clamp(gain, 0.0, 2.0));
+  dispatch(std::move(command));
+}
+
+void EngineController::dispatch(control::ControlCommand command) {
+  if (busy_) {
+    return;
+  }
+  command.command_id = "gui-" + std::to_string(++command_sequence_);
+  busy_ = true;
+  emit busyChanged();
+  watcher_.setFuture(QtConcurrent::run([command = std::move(command)] {
+    return transact(command);
+  }));
+}
+
+void EngineController::applyReply(const EngineReply& reply) {
+  const bool was_connected = connected_;
+  connected_ = reply.transport_ok;
+  last_error_ = reply.error;
+  if (was_connected != connected_ || !last_error_.isEmpty()) {
+    emit connectionChanged();
+  }
+  if (!reply.transport_ok ||
+      reply.response.status == control::ControlResponseStatus::Rejected) {
+    return;
+  }
+
+  if (reply.response.has_session_state || reply.response.has_preset ||
+      reply.response.has_devices || reply.response.has_active_graph) {
+    updateSession(reply.response);
+  }
+  if (reply.response.has_audio_runtime_state) {
+    runtime_running_ = reply.response.audio_runtime.running;
+    graph_version_ = reply.response.audio_runtime.graph_version;
+    emit runtimeChanged();
+    emit sessionChanged();
+  }
+  if (reply.response.has_diagnostics) {
+    const auto& diagnostics = reply.response.diagnostics;
+    xrun_count_ = diagnostics.xrun_count;
+    dropped_blocks_ = diagnostics.virtual_asio_dropped_blocks;
+    active_clients_ =
+        static_cast<int>(diagnostics.virtual_asio_active_producers);
+    peak_ = diagnostics.virtual_asio_peak;
+    callback_peak_us_ = diagnostics.peak_callback_seconds * 1'000'000.0;
+    emit diagnosticsChanged();
+  }
+
+  if (reply.request_type == control::ControlCommandType::ConnectRoute ||
+      reply.request_type == control::ControlCommandType::DisconnectRoute ||
+      reply.request_type == control::ControlCommandType::SetGain ||
+      reply.request_type == control::ControlCommandType::StartAudioRuntime ||
+      reply.request_type == control::ControlCommandType::StopAudioRuntime) {
+    QTimer::singleShot(0, this, &EngineController::refresh);
+  }
+}
+
+void EngineController::updateSession(const control::ControlResponse& response) {
+  if (response.has_preset || response.has_session_state) {
+    const auto& preset = response.preset;
+    sample_rate_ = static_cast<int>(preset.sample_rate);
+    block_size_ = static_cast<int>(preset.frames_per_block);
+    inputs_.clear();
+    outputs_.clear();
+    routes_.clear();
+    for (const auto& input : preset.matrix.inputs) {
+      inputs_.push_back(endpoint(input));
+    }
+    for (const auto& output : preset.matrix.outputs) {
+      outputs_.push_back(endpoint(output));
+    }
+    for (const auto& route : preset.matrix.routes) {
+      routes_.push_back(QVariantMap{
+          {QStringLiteral("inputId"), text(route.input_id)},
+          {QStringLiteral("outputId"), text(route.output_id)},
+          {QStringLiteral("gain"), route.gain},
+          {QStringLiteral("muted"), route.muted},
+      });
+    }
+    ++route_revision_;
+  }
+  if (response.has_devices || response.has_session_state) {
+    devices_.clear();
+    for (const auto& device : response.devices) {
+      devices_.push_back(QVariantMap{
+          {QStringLiteral("id"), text(device.id)},
+          {QStringLiteral("label"), text(device.label)},
+          {QStringLiteral("isDefault"), device.is_default},
+          {QStringLiteral("isVirtual"), device.is_virtual},
+          {QStringLiteral("direction"), static_cast<int>(device.direction)},
+      });
+    }
+  }
+  if (response.has_active_graph) {
+    graph_version_ = response.active_graph.version;
+  }
+  emit sessionChanged();
+}
+
+void EngineController::schedulePoll() {
+  if (busy_) {
+    return;
+  }
+  control::ControlCommand command;
+  ++poll_sequence_;
+  if (poll_sequence_ % 20 == 0) {
+    command.type = control::ControlCommandType::QuerySessionState;
+  } else if (poll_sequence_ % 4 == 0) {
+    command.type = control::ControlCommandType::QueryAudioRuntime;
+  } else {
+    command.type = control::ControlCommandType::QueryDiagnostics;
+  }
+  dispatch(std::move(command));
+}
+
+}  // namespace sar::gui
