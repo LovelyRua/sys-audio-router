@@ -97,6 +97,17 @@ void close_handle(void*& value) noexcept {
   }
 }
 
+void* create_callback_timer() noexcept {
+#ifdef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+  if (auto* timer = CreateWaitableTimerExW(
+          nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+          TIMER_MODIFY_STATE | SYNCHRONIZE)) {
+    return timer;
+  }
+#endif
+  return CreateWaitableTimerW(nullptr, FALSE, nullptr);
+}
+
 }  // namespace
 
 WindowsVirtualAsioRuntime::WindowsVirtualAsioRuntime(
@@ -185,7 +196,7 @@ bool WindowsVirtualAsioRuntime::start(std::string& error) {
     return true;
   }
   stop_event_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-  timer_ = CreateWaitableTimerW(nullptr, FALSE, nullptr);
+  timer_ = create_callback_timer();
   LARGE_INTEGER now{};
   if (stop_event_ == nullptr || timer_ == nullptr ||
       !QueryPerformanceCounter(&now)) {
