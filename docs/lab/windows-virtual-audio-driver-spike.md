@@ -74,6 +74,23 @@ resource lists, adds static render and capture circuits, and initializes what
 the sample calls a virtual streaming engine. No physical codec resource is
 required by this sample path.
 
+The render transport insertion point is also concrete. ACX supplies a fixed set
+of RT packet buffers, `CRenderStreamEngine::ProcessPacket` receives the current
+packet from a high-resolution one-shot WDF timer, and the callback is permitted
+at `DISPATCH_LEVEL`. The sample already copies each packet into a preallocated,
+bounded `CSaveData` buffer and drops work when a frame remains busy.
+
+The first SAR transport prototype should preserve that behavior:
+
+1. Replace file-oriented `CSaveData` with a nonpaged, fixed-capacity SPSC ring
+   per stream.
+2. Copy once from the ACX RT packet into a free ring slot; never wait when full.
+3. Drain the ring to user mode from a passive-level WDF queue or work item.
+4. When the receiver is absent, continue endpoint timing and count dropped
+   packets instead of blocking or growing memory.
+5. Keep direct shared user mappings out of the first spike; add them only if a
+   measured copy cost requires the extra lifetime and security complexity.
+
 ## Day 1: SysVAD Comparison Baseline
 
 The sparse checkout was expanded without cloning unrelated samples:
@@ -111,8 +128,8 @@ Build SysVAD only as the comparison baseline. Compare:
 | --- | --- | --- |
 | Unmodified sample builds | Pass | Pass |
 | Software-only render endpoint | Present in root-enumerated reference sample; runtime proof pending | Present in reference sample; runtime proof pending |
-| Bounded user-mode transport | Pending | Pending |
-| Service-down behavior | Pending | Pending |
+| Bounded user-mode transport | Concrete packet callback and bounded-ring insertion point; runtime pending | Pending |
+| Service-down behavior | Drop-and-count policy selected; runtime pending | Pending |
 | Minimum driver code and INF surface | Pending | Pending |
 | Windows version support | Pending | Pending |
 | Install/uninstall cleanliness | Pending | Pending |
@@ -142,5 +159,6 @@ After uninstall validation, disable test signing and restore Secure Boot.
 ## Evidence Still Required
 
 - ACX endpoint install and runtime-enumeration result.
+- Bounded ring and passive-level user-mode receiver implementation.
 - Measured transport copy count and receiver-down behavior.
 - Install, application playback, and uninstall transcripts.
