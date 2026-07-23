@@ -36,7 +36,8 @@ Record installed versions here when testing begins:
 | Component | Version | Notes |
 | --- | --- | --- |
 | Windows | `10.0.26100.4770` | Observed before the virtual endpoint spike. |
-| Visual Studio Build Tools | 2022 | DriverKit component integration in progress. |
+| Visual Studio Community | `2022 17.14.35` | Minimal C++, WDK, Spectre, and ATL components. |
+| Visual Studio Build Tools | 2022 | Used for user-mode builds; VS 2022 Build Tools cannot host the WDK component. |
 | Windows Driver Kit | `10.1.26100.6584` | `Microsoft.WindowsWDK.10.0.26100`; ACX headers present. |
 | REAPER | TBD | |
 | Cubase | TBD | |
