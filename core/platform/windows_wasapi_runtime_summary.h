@@ -50,6 +50,8 @@ struct WasapiRuntimeSummary {
   std::uint64_t render_fifo_overflow_frames = 0;
   std::uint64_t render_fifo_underflow_cycles = 0;
   std::uint64_t render_fifo_underflow_frames = 0;
+  std::uint64_t sample_conversion_import_failures = 0;
+  std::uint64_t sample_conversion_export_failures = 0;
   std::uint64_t last_callback_nanoseconds = 0;
   std::uint64_t peak_callback_nanoseconds = 0;
   std::uint64_t total_callback_nanoseconds = 0;
