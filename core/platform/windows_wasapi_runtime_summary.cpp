@@ -121,6 +121,10 @@ std::string format_wasapi_runtime_summary_line(
          << summary.render_fifo_underflow_cycles
          << " render_fifo_underflow_frames="
          << summary.render_fifo_underflow_frames
+         << " sample_conversion_import_failures="
+         << summary.sample_conversion_import_failures
+         << " sample_conversion_export_failures="
+         << summary.sample_conversion_export_failures
          << " last_callback_ns=" << summary.last_callback_nanoseconds
          << " peak_callback_ns=" << summary.peak_callback_nanoseconds
          << " total_callback_ns=" << summary.total_callback_nanoseconds
@@ -283,6 +287,10 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
         engine_diagnostics->render_fifo_underflow_cycles;
     summary.render_fifo_underflow_frames =
         engine_diagnostics->render_fifo_underflow_frames;
+    summary.sample_conversion_import_failures =
+        engine_diagnostics->sample_conversion_import_failures;
+    summary.sample_conversion_export_failures =
+        engine_diagnostics->sample_conversion_export_failures;
   }
 
   if (capture_diagnostics != nullptr) {
@@ -381,6 +389,29 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
     summary.reason_code = "engine_xrun";
     summary.reason = "One or more realtime graph callbacks exceeded their block budget.";
     return summary;
+  }
+
+  if (engine_diagnostics != nullptr) {
+    if (engine_diagnostics->sample_conversion_import_failures > 0 ||
+        engine_diagnostics->sample_conversion_export_failures > 0) {
+      summary.health = WasapiRuntimeHealth::Degraded;
+      if (engine_diagnostics->sample_conversion_import_failures > 0 &&
+          engine_diagnostics->sample_conversion_export_failures == 0) {
+        summary.reason_code = "sample_conversion_import_failure";
+        summary.reason =
+            "One or more capture sample conversions failed.";
+      } else if (engine_diagnostics->sample_conversion_export_failures > 0 &&
+                 engine_diagnostics->sample_conversion_import_failures == 0) {
+        summary.reason_code = "sample_conversion_export_failure";
+        summary.reason =
+            "One or more render sample conversions failed.";
+      } else {
+        summary.reason_code = "sample_conversion_failure";
+        summary.reason =
+            "One or more sample conversions failed on capture and render.";
+      }
+      return summary;
+    }
   }
 
   if (stats.loop_cycles == 0 && stats.graph_processed_cycles == 0 &&

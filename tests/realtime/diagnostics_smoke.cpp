@@ -18,8 +18,12 @@ int main() {
       diagnostics.render_fifo_overflow_cycles != 0 ||
       diagnostics.render_fifo_overflow_frames != 0 ||
       diagnostics.render_fifo_underflow_cycles != 0 ||
-      diagnostics.render_fifo_underflow_frames != 0) {
-    std::cerr << "FIFO diagnostics should default to zero\n";
+      diagnostics.render_fifo_underflow_frames != 0 ||
+      diagnostics.capture_wait_timeout_cycles != 0 ||
+      diagnostics.render_wait_timeout_cycles != 0 ||
+      diagnostics.sample_conversion_import_failures != 0 ||
+      diagnostics.sample_conversion_export_failures != 0) {
+    std::cerr << "FIFO and failure diagnostics should default to zero\n";
     return 1;
   }
 
