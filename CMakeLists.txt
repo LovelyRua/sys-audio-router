@@ -131,6 +131,12 @@ add_executable(sar_meter_node_smoke
 
 target_link_libraries(sar_meter_node_smoke PRIVATE sar_core)
 
+add_executable(sar_bus_polarity_node_smoke
+  tests/realtime/bus_polarity_node_smoke.cpp
+)
+
+target_link_libraries(sar_bus_polarity_node_smoke PRIVATE sar_core)
+
 add_executable(sar_graph_snapshot_smoke
   tests/realtime/graph_snapshot_smoke.cpp
 )
@@ -670,6 +676,7 @@ enable_testing()
 add_test(NAME realtime_smoke COMMAND sar_realtime_smoke)
 add_test(NAME atomic_float_parameter_smoke COMMAND sar_atomic_float_parameter_smoke)
 add_test(NAME meter_node_smoke COMMAND sar_meter_node_smoke)
+add_test(NAME bus_polarity_node_smoke COMMAND sar_bus_polarity_node_smoke)
 add_test(NAME graph_snapshot_smoke COMMAND sar_graph_snapshot_smoke)
 add_test(NAME graph_builder_smoke COMMAND sar_graph_builder_smoke)
 add_test(NAME route_matrix_smoke COMMAND sar_route_matrix_smoke)

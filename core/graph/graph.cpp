@@ -115,6 +115,67 @@ void MeterNode::process(const realtime::ProcessContext& context,
   static_cast<void>(rms_.set(std::isfinite(block_rms) ? block_rms : 0.0F));
 }
 
+BusNode::BusNode(std::size_t output_channels) noexcept
+    : output_channels_(output_channels) {}
+
+std::size_t BusNode::output_channels() const noexcept {
+  return output_channels_;
+}
+
+void BusNode::process(const realtime::ProcessContext& context,
+                      const realtime::AudioBuffer& input,
+                      realtime::AudioBuffer& output) noexcept {
+  (void)context;
+  output.clear();
+
+  const auto frames = std::min(input.frames(), output.frames());
+  const auto input_channels = input.channels();
+  const auto output_channels = std::min(output.channels(), output_channels_);
+
+  for (std::size_t frame = 0; frame < frames; ++frame) {
+    for (std::size_t out_channel = 0; out_channel < output_channels; ++out_channel) {
+      float sum = 0.0F;
+      for (std::size_t in_channel = out_channel; in_channel < input_channels;
+           in_channel += output_channels) {
+        sum += input.channel(in_channel)[frame];
+      }
+      output.channel(out_channel)[frame] = sum;
+    }
+  }
+}
+
+PolarityInvertNode::PolarityInvertNode(bool inverted) noexcept
+    : inverted_(inverted ? 1U : 0U) {}
+
+void PolarityInvertNode::set_inverted(bool inverted) noexcept {
+  inverted_.store(inverted ? 1U : 0U, std::memory_order_relaxed);
+}
+
+bool PolarityInvertNode::inverted() const noexcept {
+  return inverted_.load(std::memory_order_relaxed) != 0;
+}
+
+void PolarityInvertNode::process(const realtime::ProcessContext& context,
+                                 const realtime::AudioBuffer& input,
+                                 realtime::AudioBuffer& output) noexcept {
+  (void)context;
+  const auto channels = std::min(input.channels(), output.channels());
+  const auto frames = std::min(input.frames(), output.frames());
+
+  if (!inverted()) {
+    output.copy_from(input);
+    return;
+  }
+
+  for (std::size_t channel_index = 0; channel_index < channels; ++channel_index) {
+    const auto source = input.channel(channel_index);
+    auto destination = output.channel(channel_index);
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+      destination[frame] = -source[frame];
+    }
+  }
+}
+
 Graph::Graph(std::uint64_t version,
              std::size_t channels,
              std::size_t frames,

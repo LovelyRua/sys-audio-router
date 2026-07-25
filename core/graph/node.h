@@ -75,4 +75,44 @@ class MeterNode final : public Node {
   realtime::AtomicFloatParameter rms_;
 };
 
+// Phase 1 bus node. Mixes input channels into a fixed output channel count
+// without allocation. When the output has fewer channels than the input, the
+// extra input channels are summed into the available outputs (modulo the
+// output channel count). When the output has more channels, the remaining
+// outputs are silenced. This keeps the behavior deterministic and realtime-safe
+// for the linear graph executor.
+class BusNode final : public Node {
+ public:
+  explicit BusNode(std::size_t output_channels) noexcept;
+
+  [[nodiscard]] std::size_t output_channels() const noexcept;
+
+  void process(const realtime::ProcessContext& context,
+               const realtime::AudioBuffer& input,
+               realtime::AudioBuffer& output) noexcept override;
+
+ private:
+  std::size_t output_channels_;
+};
+
+// Phase 7 polarity invert node. Negates every sample on every channel. The
+// invert state is atomic so the control plane can toggle it without locks.
+class PolarityInvertNode final : public Node {
+ public:
+  explicit PolarityInvertNode(bool inverted = true) noexcept;
+
+  void set_inverted(bool inverted) noexcept;
+  [[nodiscard]] bool inverted() const noexcept;
+
+  void process(const realtime::ProcessContext& context,
+               const realtime::AudioBuffer& input,
+               realtime::AudioBuffer& output) noexcept override;
+
+ private:
+  static_assert(std::atomic_uint32_t::is_always_lock_free,
+                "PolarityInvertNode requires a lock-free 32-bit atomic.");
+
+  std::atomic_uint32_t inverted_;
+};
+
 }  // namespace sar::graph
