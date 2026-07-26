@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <memory>
+#include <stdexcept>
 
 namespace {
 
@@ -185,13 +186,18 @@ int main() {
   auto observer_service = observer_create.take_service();
   std::uint32_t observer_calls = 0;
   bool reject_observer = false;
+  bool throw_observer = false;
   observer_service->set_preset_commit_observer(
       [&](const sar::control::PresetDocument& preset,
           std::uint64_t graph_version) {
         ++observer_calls;
         assert(graph_version >= 16);
         assert(preset.matrix.routes[0].gain == 0.5F ||
-               preset.matrix.routes[0].gain == 0.25F);
+               preset.matrix.routes[0].gain == 0.25F ||
+               preset.matrix.routes[0].gain == 0.75F);
+        if (throw_observer) {
+          throw std::runtime_error("Injected preset observer exception.");
+        }
         if (reject_observer) {
           return std::vector<sar::control::PresetError>{
               {"injected_preset_observer_failure",
@@ -218,6 +224,19 @@ int main() {
   assert(observer_rejected.errors[0].code ==
          "injected_preset_observer_failure");
   assert(observer_calls == 2);
+  assert(observer_service->session().current_preset().matrix.routes[0].gain ==
+         0.5F);
+
+  reject_observer = false;
+  throw_observer = true;
+  gain.command_id = "observer-gain-exception";
+  gain.gain = 0.75F;
+  const auto observer_exception = send(*observer_service, gain);
+  assert(observer_exception.status ==
+         sar::control::ControlResponseStatus::Rejected);
+  assert(observer_exception.errors[0].code ==
+         "preset_commit_observer_exception");
+  assert(observer_calls == 3);
   assert(observer_service->session().current_preset().matrix.routes[0].gain ==
          0.5F);
 

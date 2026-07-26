@@ -328,8 +328,22 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
   if (response.status == control::ControlResponseStatus::Accepted &&
       mutates_preset && preset_commit_observer_) {
     const auto graph = session_->current_graph();
-    auto observer_errors = preset_commit_observer_(
-        session_->current_preset(), graph ? graph->version() : 1);
+    std::vector<control::PresetError> observer_errors;
+    try {
+      observer_errors = preset_commit_observer_(
+          session_->current_preset(), graph ? graph->version() : 1);
+    } catch (const std::exception& error) {
+      observer_errors.push_back({
+          "preset_commit_observer_exception",
+          std::string("The preset commit observer threw an exception: ") +
+              error.what(),
+      });
+    } catch (...) {
+      observer_errors.push_back({
+          "preset_commit_observer_exception",
+          "The preset commit observer threw an unknown exception.",
+      });
+    }
     if (!observer_errors.empty()) {
       control::ControlCommand rollback;
       rollback.command_id = "preset-commit-rollback";
