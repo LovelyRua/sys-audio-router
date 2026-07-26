@@ -343,7 +343,9 @@ recovery deadline. Standalone users can drive it with explicit control-plane
 control thread and COM endpoint-notification apartment. A lock-free
 `IMMNotificationClient` generation/event source and an
 independent capture/render endpoint-selection policy feed the supervisor on the
-control thread. Follow-default generation changes settle for 300 ms so paired
+control thread. Notification registration records that control thread and
+rejects cross-thread registration or unregistration without releasing the live
+COM callback or event. Follow-default generation changes settle for 300 ms so paired
 capture/render notifications coalesce into one bounded duplex reopen, while
 pinned directions ignore unrelated default-device changes. Snapshot consumption
 uses a read-reset-read protocol so event-reset races cannot lose a generation.

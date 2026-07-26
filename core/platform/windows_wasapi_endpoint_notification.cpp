@@ -123,7 +123,10 @@ WindowsWasapiEndpointNotification::~WindowsWasapiEndpointNotification() {
 
 std::int32_t WindowsWasapiEndpointNotification::register_notifications() noexcept {
   if (registered()) {
-    return S_FALSE;
+    return owner_thread_id_.load(std::memory_order_acquire) ==
+                   GetCurrentThreadId()
+               ? S_FALSE
+               : RPC_E_WRONG_THREAD;
   }
 
   const auto change_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -161,12 +164,17 @@ std::int32_t WindowsWasapiEndpointNotification::register_notifications() noexcep
   change_event_ = change_event;
   enumerator_ = enumerator;
   client_ = client;
+  owner_thread_id_.store(GetCurrentThreadId(), std::memory_order_release);
   return S_OK;
 }
 
 std::int32_t WindowsWasapiEndpointNotification::unregister_notifications() noexcept {
   if (!registered()) {
     return S_FALSE;
+  }
+  if (owner_thread_id_.load(std::memory_order_acquire) !=
+      GetCurrentThreadId()) {
+    return RPC_E_WRONG_THREAD;
   }
 
   auto* enumerator = as_enumerator(enumerator_);
@@ -196,6 +204,7 @@ std::int32_t WindowsWasapiEndpointNotification::finish_unregistration(
   enumerator_ = nullptr;
   client_ = nullptr;
   change_event_ = nullptr;
+  owner_thread_id_.store(0, std::memory_order_release);
   return unregister_result;
 }
 

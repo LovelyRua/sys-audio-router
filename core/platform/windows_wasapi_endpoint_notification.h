@@ -21,7 +21,8 @@ class WindowsWasapiEndpointNotification {
       const WindowsWasapiEndpointNotification&) = delete;
   ~WindowsWasapiEndpointNotification();
 
-  // The calling control thread must have initialized COM.
+  // The calling control thread must have initialized COM. Registration,
+  // unregistration, and destruction belong to that same thread.
   [[nodiscard]] std::int32_t register_notifications() noexcept;
   [[nodiscard]] std::int32_t unregister_notifications() noexcept;
 
@@ -44,6 +45,7 @@ class WindowsWasapiEndpointNotification {
 
   std::atomic<std::uint64_t> capture_generation_{0};
   std::atomic<std::uint64_t> render_generation_{0};
+  std::atomic<std::uint32_t> owner_thread_id_{0};
   void* change_event_ = nullptr;
   void* enumerator_ = nullptr;
   void* client_ = nullptr;
