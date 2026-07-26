@@ -273,7 +273,11 @@ including random object identity, transactional connection rollback, stale
 disconnect protection, stop-all, and crashed-session reaping. The local broker
 obtains the caller PID from the pipe peer, rejects remote clients, builds each
 session graph through an injected factory, and binds disconnect to the admitted
-process. The graph factory still needs production wiring to the active preset.
+process. The production factory builds admitted sessions from the active
+preset. Existing sessions can also receive a transactionally prepared refresh:
+all replacement graphs are built and format-checked before any session
+publishes its new realtime snapshot, and a failed refresh restores the previous
+preset instead of leaving DAWs on different route generations.
 A bounded broker wire v1 now defines connect/disconnect request and response
 frames with fixed magic, version, type, payload length, and request identity.
 The client never supplies a process ID in this protocol; the pipe server obtains
