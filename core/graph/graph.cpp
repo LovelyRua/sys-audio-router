@@ -131,6 +131,9 @@ void BusNode::process(const realtime::ProcessContext& context,
   const auto frames = std::min(input.frames(), output.frames());
   const auto input_channels = input.channels();
   const auto output_channels = std::min(output.channels(), output_channels_);
+  if (output_channels == 0) {
+    return;
+  }
 
   for (std::size_t frame = 0; frame < frames; ++frame) {
     for (std::size_t out_channel = 0; out_channel < output_channels; ++out_channel) {

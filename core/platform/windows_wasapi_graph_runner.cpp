@@ -89,6 +89,27 @@ void deinterleave_planar(std::span<const float> source,
   }
 }
 
+bool has_sample_conversion_failure(
+    const std::vector<WasapiStreamError>& errors) noexcept {
+  for (const auto& error : errors) {
+    if (error.code == "unsupported_sample_format" ||
+        error.code == "sample_buffer_too_small" ||
+        error.code == "sample_channel_mismatch" ||
+        error.code == "sample_conversion_failed") {
+      return true;
+    }
+  }
+  return false;
+}
+
+void record_sample_conversion_failure(
+    const std::vector<WasapiStreamError>& errors,
+    std::uint64_t& counter) noexcept {
+  if (has_sample_conversion_failure(errors)) {
+    ++counter;
+  }
+}
+
 }  // namespace
 
 WasapiGraphRunnerResult WasapiGraphRunnerResult::success(WasapiGraphRunnerStats stats) {
@@ -365,6 +386,9 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
     input_.clear();
     auto capture_result = capture_stream_->capture_once(input_, timeout_ms);
     if (!capture_result.ok()) {
+      record_sample_conversion_failure(
+          capture_result.errors(),
+          diagnostics.sample_conversion_import_failures);
       return WasapiGraphRunnerResult::failure(capture_result.errors());
     }
     if (capture_result.cancelled()) {
@@ -409,6 +433,9 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
     auto render_result = render_stream_->render_once(
         output_, static_cast<std::uint32_t>(output_.frames()), timeout_ms);
     if (!render_result.ok()) {
+      record_sample_conversion_failure(
+          render_result.errors(),
+          diagnostics.sample_conversion_export_failures);
       return WasapiGraphRunnerResult::failure(render_result.errors());
     }
     if (render_result.cancelled()) {
@@ -488,6 +515,9 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     auto render_result = render_stream_->render_once(
         render_path_->packet, static_cast<std::uint32_t>(staged), render_timeout_ms);
     if (!render_result.ok()) {
+      record_sample_conversion_failure(
+          render_result.errors(),
+          diagnostics.sample_conversion_export_failures);
       return WasapiGraphRunnerResult::failure(render_result.errors());
     }
     if (render_result.cancelled()) {
@@ -535,6 +565,9 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
       auto capture_result = capture_stream_->capture_once(
           capture_path_->packet, capture_timeout_ms);
       if (!capture_result.ok()) {
+        record_sample_conversion_failure(
+            capture_result.errors(),
+            diagnostics.sample_conversion_import_failures);
         return WasapiGraphRunnerResult::failure(capture_result.errors());
       }
       if (capture_result.cancelled()) {
@@ -808,6 +841,9 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
         static_cast<std::uint32_t>(render_path_->packet.frames()),
         render_timeout_ms);
     if (!render_result.ok()) {
+      record_sample_conversion_failure(
+          render_result.errors(),
+          diagnostics.sample_conversion_export_failures);
       return WasapiGraphRunnerResult::failure(render_result.errors());
     }
     if (render_result.cancelled()) {
