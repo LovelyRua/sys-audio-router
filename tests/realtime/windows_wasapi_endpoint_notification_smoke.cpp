@@ -4,6 +4,7 @@
 #include <windows.h>
 
 #include <iostream>
+#include <thread>
 
 namespace sar::platform {
 
@@ -69,6 +70,30 @@ int main() {
                                   "Expected notification registration")) {
     return failure;
   }
+  if (const auto failure = expect(notification.register_notifications() == S_FALSE,
+                                  "Expected same-thread registration to be idempotent")) {
+    return failure;
+  }
+
+  std::int32_t cross_thread_register_result = S_OK;
+  std::int32_t cross_thread_unregister_result = S_OK;
+  std::thread wrong_control_thread([&] {
+    cross_thread_register_result = notification.register_notifications();
+    cross_thread_unregister_result = notification.unregister_notifications();
+  });
+  wrong_control_thread.join();
+  if (const auto failure = expect(
+          cross_thread_register_result == RPC_E_WRONG_THREAD &&
+              cross_thread_unregister_result == RPC_E_WRONG_THREAD,
+          "Expected cross-thread lifecycle calls to be rejected")) {
+    return failure;
+  }
+  if (const auto failure = expect(
+          notification.registered() && notification.change_event() != nullptr,
+          "Cross-thread lifecycle call discarded notification resources")) {
+    return failure;
+  }
+
   if (const auto failure = expect(
           WaitForSingleObject(static_cast<HANDLE>(notification.change_event()), 0) ==
               WAIT_TIMEOUT,
