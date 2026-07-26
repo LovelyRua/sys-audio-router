@@ -40,7 +40,7 @@ if errorlevel 1 exit /b 1
 cmake --build "%BUILD_DIR%"
 if errorlevel 1 exit /b 1
 
-ctest --test-dir "%BUILD_DIR%" --output-on-failure
+ctest --test-dir "%BUILD_DIR%" -C Debug --output-on-failure
 if errorlevel 1 exit /b 1
 
 popd

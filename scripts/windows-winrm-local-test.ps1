@@ -343,7 +343,7 @@ try {
         "if errorlevel 1 exit /b 1",
         "cmake --build `"$buildDir`"",
         "if errorlevel 1 exit /b 1",
-        "ctest --test-dir `"$buildDir`" --output-on-failure",
+        "ctest --test-dir `"$buildDir`" -C Debug --output-on-failure",
         "exit /b %errorlevel%"
       )
       Set-Content -LiteralPath $cmdFile -Value $lines -Encoding ASCII
