@@ -80,7 +80,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "Set-Service WinRM -Start
 exit /b %errorlevel%
 
 :refresh_common_paths
-set "PATH=%ProgramFiles%\Git\cmd;%ProgramFiles%\CMake\bin;%LocalAppData%\Microsoft\WindowsApps;%PATH%"
+set "PATH=C:\Tools\cmake-4.4.0-windows-x86_64\bin;%ProgramFiles%\Git\cmd;%ProgramFiles%\CMake\bin;%LocalAppData%\Microsoft\WindowsApps;%PATH%"
 call :add_vs_tool_paths
 exit /b 0
 
