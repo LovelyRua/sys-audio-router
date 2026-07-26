@@ -683,6 +683,46 @@ int main() {
   {
     sar::tests::ScriptedWasapiStream capture(
         make_adaptive_probe(sar::platform::WasapiStreamDirection::Capture));
+    capture.enqueue_capture({
+        .status = sar::platform::WasapiStreamIoStatus::Failed,
+        .errors = {{"unsupported_sample_format",
+                    "WASAPI stream sample format is not supported yet."}},
+    });
+
+    sar::platform::WindowsWasapiGraphRunner runner(&capture, nullptr, 1, 64);
+    sar::graph::Graph graph(21, 1, 64, 48000);
+    graph.add_node(std::make_unique<sar::graph::PassthroughNode>());
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    sar::platform::WindowsWasapiRealtimeWorker worker(runner, graph, diagnostics);
+
+    const auto start_result = worker.start(1);
+    if (const auto failure =
+            expect(start_result.ok(), "Expected format-failure worker start")) {
+      return failure;
+    }
+    for (int attempt = 0; attempt < 100 && worker.running(); ++attempt) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    worker.stop();
+
+    const auto errors = worker.last_errors();
+    if (const auto failure = expect(
+            errors.size() == 1 &&
+                errors.front().code == "unsupported_sample_format" &&
+                errors.front().message ==
+                    "WASAPI stream sample format is not supported.",
+            "Expected worker to publish the stable sample format error")) {
+      return failure;
+    }
+    if (const auto failure = expect(worker.stats().process_error_cycles == 1,
+                                    "Expected one format process error")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::tests::ScriptedWasapiStream capture(
+        make_adaptive_probe(sar::platform::WasapiStreamDirection::Capture));
     capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::Cancelled});
     capture.set_stop_result(sar::platform::WasapiStreamResult::failure({
         {"synthetic_stop_failed", "Synthetic capture stream stop failure."},

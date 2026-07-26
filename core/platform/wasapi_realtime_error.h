@@ -33,6 +33,8 @@ enum class WasapiRealtimeErrorCode : std::uint16_t {
   CaptureResamplerPrerollFailed,
   CaptureResamplerPrerollStalled,
   CaptureResamplerFailed,
+  UnsupportedSampleFormat,
+  SampleBufferTooSmall,
 };
 
 enum class WasapiRealtimeErrorContext : std::uint16_t {

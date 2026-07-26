@@ -54,6 +54,23 @@ int main() {
     return failure;
   }
 
+  const auto unsupported_format = sar::platform::map_wasapi_realtime_error(
+      "unsupported_sample_format",
+      "WASAPI stream sample format is not supported yet.");
+  const auto undersized_buffer = sar::platform::map_wasapi_realtime_error(
+      "sample_buffer_too_small",
+      "Audio buffer is too small for the requested frames.");
+  if (const auto failure = expect(
+          std::string_view(
+              sar::platform::wasapi_realtime_error_code(unsupported_format)) ==
+                  "unsupported_sample_format" &&
+              std::string_view(
+                  sar::platform::wasapi_realtime_error_code(undersized_buffer)) ==
+                  "sample_buffer_too_small",
+          "Expected sample conversion failures to retain stable error codes")) {
+    return failure;
+  }
+
   WasapiRealtimeErrorBatch overflow{};
   for (std::uint32_t index = 0; index < 12; ++index) {
     (void)overflow.push({static_cast<std::uint16_t>(index + 1),
