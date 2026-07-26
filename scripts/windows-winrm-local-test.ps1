@@ -336,14 +336,14 @@ try {
         "setlocal EnableExtensions",
         "call `"$vsDevCmd`" -arch=x64 -host_arch=x64",
         "if errorlevel 1 exit /b 1",
-        "set `"PATH=$vsInstall\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;$vsInstall\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;%PATH%`"",
+        "set `"PATH=C:\Tools\cmake-4.4.0-windows-x86_64\bin;$vsInstall\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;$vsInstall\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;%PATH%`"",
         "cd /d `"$repoDir`"",
         "where ninja >nul 2>nul",
         "if errorlevel 1 (cmake -S . -B `"$buildDir`") else (cmake -S . -B `"$buildDir`" -G Ninja)",
         "if errorlevel 1 exit /b 1",
         "cmake --build `"$buildDir`"",
         "if errorlevel 1 exit /b 1",
-        "ctest --test-dir `"$buildDir`" --output-on-failure",
+        "ctest --test-dir `"$buildDir`" -C Debug --output-on-failure",
         "exit /b %errorlevel%"
       )
       Set-Content -LiteralPath $cmdFile -Value $lines -Encoding ASCII

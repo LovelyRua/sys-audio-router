@@ -91,6 +91,33 @@ int main() {
     }
   }
 
+  // --- BusNode: zero configured outputs returns silence without hanging ---
+  {
+    sar::realtime::AudioBuffer input(1, 2);
+    sar::realtime::AudioBuffer output(2, 2);
+    input.channel(0)[0] = 0.5F;
+    input.channel(0)[1] = -0.25F;
+    output.channel(0)[0] = 1.0F;
+    output.channel(1)[1] = 1.0F;
+
+    sar::graph::BusNode bus(0);
+    sar::realtime::ProcessContext context{
+        .sample_rate = 48000,
+        .frames = input.frames(),
+        .block_index = 0,
+    };
+    bus.process(context, input, output);
+
+    for (std::size_t channel = 0; channel < output.channels(); ++channel) {
+      for (std::size_t frame = 0; frame < output.frames(); ++frame) {
+        if (!sar::tests::nearly_equal(output.channel(channel)[frame], 0.0F)) {
+          return sar::tests::fail_sample(
+              "BusNode with zero outputs did not return silence", channel, frame);
+        }
+      }
+    }
+  }
+
   // --- PolarityInvertNode: inversion enabled (default) ---
   {
     sar::realtime::AudioBuffer input(2, 4);

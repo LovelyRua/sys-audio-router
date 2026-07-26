@@ -40,7 +40,7 @@ if errorlevel 1 exit /b 1
 cmake --build "%BUILD_DIR%"
 if errorlevel 1 exit /b 1
 
-ctest --test-dir "%BUILD_DIR%" --output-on-failure
+ctest --test-dir "%BUILD_DIR%" -C Debug --output-on-failure
 if errorlevel 1 exit /b 1
 
 popd
@@ -80,7 +80,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "Set-Service WinRM -Start
 exit /b %errorlevel%
 
 :refresh_common_paths
-set "PATH=%ProgramFiles%\Git\cmd;%ProgramFiles%\CMake\bin;%LocalAppData%\Microsoft\WindowsApps;%PATH%"
+set "PATH=C:\Tools\cmake-4.4.0-windows-x86_64\bin;%ProgramFiles%\Git\cmd;%ProgramFiles%\CMake\bin;%LocalAppData%\Microsoft\WindowsApps;%PATH%"
 call :add_vs_tool_paths
 exit /b 0
 

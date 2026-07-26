@@ -20,7 +20,7 @@ Do not keep both driver models alive after the spike.
 | Item | Value |
 | --- | --- |
 | Machine | Windows integration host at `192.168.123.123` |
-| Windows build | `10.0.26100.4770` observed before the spike |
+| Windows build | `10.0.19045` runtime host; SDK/WDK `26100` |
 | Visual Studio | Visual Studio Community 2022 `17.14.35` |
 | WDK package | `Microsoft.WindowsWDK.10.0.26100` |
 | WDK version | `10.1.26100.6584` |
@@ -28,7 +28,7 @@ Do not keep both driver models alive after the spike.
 | Microsoft samples | `microsoft/Windows-driver-samples` at `2ee527bfeb0aeb6be11f0a8b6dce4011b358ce89` |
 | Sample path | `C:\Users\codex\src\windows-driver-samples-acx` |
 | WIL submodule | `3c00e7f1d8cf9930bbb8e5be3ef0df65c84e8928` |
-| Test signing | Disabled; do not enable until a sample package builds |
+| Test signing | Enabled after the sample packages built; Secure Boot disabled |
 
 The installed WDK contains the kernel headers, ACX headers, driver MSBuild
 targets, `signtool.exe`, and `stampinf.exe`.
@@ -150,11 +150,32 @@ one run:
 4. Stopping the receiver produces deterministic silence or an explicit error.
 5. Uninstall removes the endpoint, device node, and driver package cleanly.
 
-Runtime preflight on the test machine found Secure Boot enabled, BitLocker
-fully disabled, test signing disabled, and the x64 WDK DevCon tool present.
-Before the first install, take a VM snapshot, disable Secure Boot, enable test
-signing, and reboot. These boot changes require explicit operator approval.
-After uninstall validation, disable test signing and restore Secure Boot.
+Runtime preflight initially found Secure Boot enabled, BitLocker fully
+disabled, test signing disabled, and the x64 WDK DevCon tool present. A VM
+snapshot was taken before Secure Boot was disabled and test signing enabled.
+
+Use the checked-in runtime probe to inspect the current state without changing
+the machine:
+
+```bat
+scripts\windows-winrm-driver-spike.cmd 192.168.123.123 codex <password> Sysvad Status
+scripts\windows-winrm-driver-spike.cmd 192.168.123.123 codex <password> Acx Status
+```
+
+The first runtime attempt exposed two independent blockers:
+
+- SysVAD packages staged successfully, but the sample INF targets Windows
+  `10.0.22621` or newer. The Windows `10.0.19045` test host therefore created
+  `ROOT\MEDIA\0006` without binding `TabletAudioSample`; SetupAPI reported no
+  compatible driver.
+- The ACX sample package bound far enough to load the driver, but `DriverEntry`
+  returned `STATUS_INVALID_PARAMETER`. This requires an ACX-specific runtime
+  investigation on a supported Windows build.
+
+These results do not select a production driver model yet. The next runtime
+attempt must use Windows 11 build 22621 or newer so the comparison measures the
+driver models instead of an INF operating-system gate. After uninstall
+validation, disable test signing and restore Secure Boot.
 
 ## Evidence Still Required
 

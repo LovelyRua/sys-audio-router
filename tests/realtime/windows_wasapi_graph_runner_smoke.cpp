@@ -125,6 +125,56 @@ int main() {
   }
 
   {
+    sar::tests::ScriptedWasapiStream capture_stream(make_capture_probe());
+    capture_stream.enqueue_capture({
+        .status = sar::platform::WasapiStreamIoStatus::Failed,
+        .errors = {{"sample_channel_mismatch",
+                    "Synthetic capture conversion failure."}},
+    });
+    sar::platform::WindowsWasapiGraphRunner runner(
+        &capture_stream, nullptr, 2, 4);
+    sar::graph::Graph graph(16, 2, 4, 48000);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+
+    const auto result = runner.process_once(graph, diagnostics, 0);
+    if (const auto failure =
+            expect(!result.ok(), "Expected capture conversion failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            diagnostics.sample_conversion_import_failures == 1 &&
+                diagnostics.sample_conversion_export_failures == 0,
+            "Expected capture conversion diagnostics increment")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::tests::ScriptedWasapiStream render_stream(make_render_probe());
+    render_stream.enqueue_render({
+        .status = sar::platform::WasapiStreamIoStatus::Failed,
+        .errors = {{"unsupported_sample_format",
+                    "Synthetic render conversion failure."}},
+    });
+    sar::platform::WindowsWasapiGraphRunner runner(
+        nullptr, &render_stream, 2, 4);
+    sar::graph::Graph graph(17, 2, 4, 48000);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+
+    const auto result = runner.process_once(graph, diagnostics, 0);
+    if (const auto failure =
+            expect(!result.ok(), "Expected render conversion failure")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            diagnostics.sample_conversion_import_failures == 0 &&
+                diagnostics.sample_conversion_export_failures == 1,
+            "Expected render conversion diagnostics increment")) {
+      return failure;
+    }
+  }
+
+  {
     sar::platform::WindowsWasapiStream capture_stream;
     auto open_result = capture_stream.open(make_capture_probe());
     if (const auto failure =
