@@ -22,6 +22,8 @@ class EngineControlServiceCreateResult;
 using EngineAudioRuntimeConfigurator = std::function<EngineAudioRuntimeBuildResult(
     const control::AudioRuntimeConfiguration&,
     std::shared_ptr<graph::Graph>)>;
+using EnginePresetCommitObserver = std::function<std::vector<control::PresetError>(
+    const control::PresetDocument&, std::uint64_t)>;
 
 class EngineControlService {
  public:
@@ -37,6 +39,7 @@ class EngineControlService {
       std::uint32_t timeout_ms = 10);
   void set_audio_runtime_configurator(
       EngineAudioRuntimeConfigurator configurator);
+  void set_preset_commit_observer(EnginePresetCommitObserver observer);
   [[nodiscard]] EngineAudioRuntimeResult configure_audio_runtime(
       control::AudioRuntimeConfiguration configuration);
   void add_audio_device_provider(
@@ -79,6 +82,7 @@ class EngineControlService {
   std::unique_ptr<EngineAudioRuntime> audio_runtime_;
   EngineAudioRuntimeBuilder audio_runtime_builder_;
   EngineAudioRuntimeConfigurator audio_runtime_configurator_;
+  EnginePresetCommitObserver preset_commit_observer_;
   std::optional<control::AudioRuntimeConfiguration>
       audio_runtime_configuration_;
   platform::AudioDeviceRegistry audio_device_registry_;

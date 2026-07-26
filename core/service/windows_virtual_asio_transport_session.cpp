@@ -163,12 +163,13 @@ WindowsVirtualAsioTransportSession::create(
                      "Could not bind the Virtual ASIO output queue.");
     }
 
+    auto shared_graph = std::shared_ptr<graph::Graph>(std::move(graph));
     return WindowsVirtualAsioTransportSessionCreateResult::success(
         std::unique_ptr<WindowsVirtualAsioTransportSession>(
             new WindowsVirtualAsioTransportSession(
                 std::move(mapping), std::move(events),
                 input_result.take_queue(), output_result.take_queue(),
-                std::move(graph), std::move(render_producer),
+                std::move(shared_graph), std::move(render_producer),
                 client_process.release(), wait_timeout_ms)));
   } catch (const std::bad_alloc&) {
     return failure("virtual_asio_session_allocation_failed",
@@ -238,7 +239,30 @@ WindowsVirtualAsioTransportSession::stats() const noexcept {
       client_process_exits_.load(std::memory_order_relaxed),
       last_sequence_.load(std::memory_order_relaxed),
       dropped_render_bus_blocks_.load(std::memory_order_relaxed),
+      graph_updates_.load(std::memory_order_relaxed),
+      current_graph_version_.load(std::memory_order_relaxed),
   };
+}
+
+bool WindowsVirtualAsioTransportSession::accepts_graph(
+    const graph::Graph& graph) const noexcept {
+  return graph.sample_rate() == sample_rate_ &&
+         graph.frames() == input_buffer_.frames() &&
+         graph.channels() == input_buffer_.channels() &&
+         graph.frames() == output_buffer_.frames() &&
+         graph.channels() == output_buffer_.channels();
+}
+
+bool WindowsVirtualAsioTransportSession::replace_graph(
+    std::unique_ptr<graph::Graph> graph) {
+  if (graph == nullptr || !accepts_graph(*graph)) {
+    return false;
+  }
+  const auto version = graph->version();
+  graph_publisher_.publish(std::shared_ptr<graph::Graph>(std::move(graph)));
+  current_graph_version_.store(version, std::memory_order_release);
+  graph_updates_.fetch_add(1, std::memory_order_relaxed);
+  return true;
 }
 
 WindowsVirtualAsioTransportSession::WindowsVirtualAsioTransportSession(
@@ -246,7 +270,7 @@ WindowsVirtualAsioTransportSession::WindowsVirtualAsioTransportSession(
     std::unique_ptr<platform::WindowsVirtualAsioEvents> events,
     platform::WindowsVirtualAsioSharedQueue input_queue,
     platform::WindowsVirtualAsioSharedQueue output_queue,
-    std::unique_ptr<graph::Graph> graph,
+    std::shared_ptr<graph::Graph> graph,
     platform::VirtualAsioRenderProducer render_producer,
     void* client_process_handle,
     std::uint32_t wait_timeout_ms)
@@ -254,12 +278,15 @@ WindowsVirtualAsioTransportSession::WindowsVirtualAsioTransportSession(
       events_(std::move(events)),
       input_queue_(std::move(input_queue)),
       output_queue_(std::move(output_queue)),
-      graph_(std::move(graph)),
+      graph_publisher_(graph),
       render_producer_(std::move(render_producer)),
-      input_buffer_(graph_->channels(), graph_->frames()),
-      output_buffer_(graph_->channels(), graph_->frames()),
+      input_buffer_(graph->channels(), graph->frames()),
+      output_buffer_(graph->channels(), graph->frames()),
+      sample_rate_(graph->sample_rate()),
       client_process_handle_(client_process_handle),
-      wait_timeout_ms_(wait_timeout_ms) {}
+      wait_timeout_ms_(wait_timeout_ms) {
+  current_graph_version_.store(graph->version(), std::memory_order_relaxed);
+}
 
 void WindowsVirtualAsioTransportSession::run() noexcept {
   platform::WindowsRealtimeThreadScope realtime_scope;
@@ -321,7 +348,7 @@ void WindowsVirtualAsioTransportSession::process_available_input() noexcept {
     if (render_producer_.valid() && !render_producer_.push(input_buffer_)) {
       dropped_render_bus_blocks_.fetch_add(1, std::memory_order_relaxed);
     }
-    graph_->process(input_buffer_, output_buffer_, graph_diagnostics_);
+    graph_publisher_.process(input_buffer_, output_buffer_, graph_diagnostics_);
     processed_blocks_.fetch_add(1, std::memory_order_relaxed);
     last_sequence_.store(metadata.sequence, std::memory_order_relaxed);
 

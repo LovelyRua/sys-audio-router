@@ -471,6 +471,31 @@ int main(int argc, char** argv) {
       .queue_capacity_blocks = 8,
       .wait_timeout_ms = 20,
   }, &asio_render_bus);
+  service->set_preset_commit_observer(
+      [&asio_host](const sar::control::PresetDocument& preset,
+                   std::uint64_t graph_version) {
+        const auto refreshed = asio_host.refresh_graphs(
+            [&preset, graph_version](
+                const sar::platform::VirtualAsioFormat& format) {
+              if (format.sample_rate != preset.sample_rate ||
+                  format.frames_per_block != preset.frames_per_block ||
+                  format.input_channels != format.output_channels ||
+                  format.input_channels != preset.matrix.inputs.size() ||
+                  format.output_channels != preset.matrix.outputs.size()) {
+                return std::unique_ptr<sar::graph::Graph>{};
+              }
+              auto built =
+                  sar::control::build_preset_graph(preset, graph_version);
+              return built.ok() ? built.take_graph()
+                                : std::unique_ptr<sar::graph::Graph>{};
+            });
+        std::vector<sar::control::PresetError> errors;
+        errors.reserve(refreshed.errors.size());
+        for (const auto& error : refreshed.errors) {
+          errors.push_back({error.code, error.message});
+        }
+        return errors;
+      });
   sar::service::WindowsVirtualAsioBrokerServer asio_broker(
       asio_pipe_name, asio_host,
       [&service](const sar::platform::VirtualAsioFormat& format) {

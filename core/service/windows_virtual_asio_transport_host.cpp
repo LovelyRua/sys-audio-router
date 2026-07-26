@@ -219,6 +219,67 @@ std::size_t WindowsVirtualAsioTransportHost::reap_stopped_sessions() {
   return reap_stopped_sessions_locked();
 }
 
+WindowsVirtualAsioGraphRefreshResult
+WindowsVirtualAsioTransportHost::refresh_graphs(
+    const WindowsVirtualAsioGraphFactory& graph_factory) {
+  if (!graph_factory) {
+    return {
+        .errors = {{"virtual_asio_graph_factory_missing",
+                    "Virtual ASIO graph refresh requires a graph factory.", 0}},
+    };
+  }
+
+  std::lock_guard lock(mutex_);
+  static_cast<void>(reap_stopped_sessions_locked());
+  std::vector<std::unique_ptr<graph::Graph>> replacements;
+  try {
+    replacements.reserve(sessions_.size());
+    for (const auto& record : sessions_) {
+      auto graph = graph_factory(record.connection.client.format);
+      if (graph == nullptr) {
+        return {
+            .errors = {{"virtual_asio_graph_refresh_build_failed",
+                        "Could not build a replacement graph for every "
+                        "Virtual ASIO session.",
+                        0}},
+        };
+      }
+      if (!record.session->accepts_graph(*graph)) {
+        return {
+            .errors = {{"virtual_asio_graph_refresh_format_mismatch",
+                        "A replacement graph does not match its Virtual ASIO "
+                        "session format.",
+                        0}},
+        };
+      }
+      replacements.push_back(std::move(graph));
+    }
+  } catch (const std::bad_alloc&) {
+    return {
+        .errors = {{"virtual_asio_graph_refresh_allocation_failed",
+                    "Could not allocate replacement Virtual ASIO graphs.", 0}},
+    };
+  } catch (...) {
+    return {
+        .errors = {{"virtual_asio_graph_refresh_factory_exception",
+                    "The Virtual ASIO graph factory raised an exception.", 0}},
+    };
+  }
+
+  for (std::size_t index = 0; index < sessions_.size(); ++index) {
+    if (!sessions_[index].session->replace_graph(
+            std::move(replacements[index]))) {
+      return {
+          .updated_sessions = index,
+          .errors = {{"virtual_asio_graph_refresh_publish_failed",
+                      "A validated Virtual ASIO graph could not be published.",
+                      0}},
+      };
+    }
+  }
+  return {.updated_sessions = sessions_.size()};
+}
+
 void WindowsVirtualAsioTransportHost::stop_all() noexcept {
   std::lock_guard lock(mutex_);
   for (auto& record : sessions_) {

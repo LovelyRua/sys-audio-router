@@ -179,6 +179,48 @@ int main() {
   assert(after.next_graph_version == 12);
   assert(after.preset.matrix.routes[0].gain == 0.25F);
 
+  auto observer_create =
+      sar::service::EngineControlService::create(make_preset(), 15);
+  assert(observer_create.ok());
+  auto observer_service = observer_create.take_service();
+  std::uint32_t observer_calls = 0;
+  bool reject_observer = false;
+  observer_service->set_preset_commit_observer(
+      [&](const sar::control::PresetDocument& preset,
+          std::uint64_t graph_version) {
+        ++observer_calls;
+        assert(graph_version >= 16);
+        assert(preset.matrix.routes[0].gain == 0.5F ||
+               preset.matrix.routes[0].gain == 0.25F);
+        if (reject_observer) {
+          return std::vector<sar::control::PresetError>{
+              {"injected_preset_observer_failure",
+               "Injected preset observer failure."},
+          };
+        }
+        return std::vector<sar::control::PresetError>{};
+      });
+  gain.command_id = "observer-gain-accepted";
+  gain.gain = 0.5F;
+  const auto observer_accepted = send(*observer_service, gain);
+  assert(observer_accepted.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  assert(observer_calls == 1);
+  assert(observer_service->session().current_preset().matrix.routes[0].gain ==
+         0.5F);
+
+  reject_observer = true;
+  gain.command_id = "observer-gain-rejected";
+  gain.gain = 0.25F;
+  const auto observer_rejected = send(*observer_service, gain);
+  assert(observer_rejected.status ==
+         sar::control::ControlResponseStatus::Rejected);
+  assert(observer_rejected.errors[0].code ==
+         "injected_preset_observer_failure");
+  assert(observer_calls == 2);
+  assert(observer_service->session().current_preset().matrix.routes[0].gain ==
+         0.5F);
+
   const std::uint8_t malformed[] = {0, 1, 2};
   const auto rejected_bytes = service->handle_wire_request(malformed);
   assert(rejected_bytes.ok());

@@ -6,12 +6,17 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
 namespace sar::service {
+
+using WindowsVirtualAsioGraphFactory =
+    std::function<std::unique_ptr<graph::Graph>(
+        const platform::VirtualAsioFormat&)>;
 
 struct WindowsVirtualAsioHostConfig {
   std::string endpoint_token = "default";
@@ -31,6 +36,13 @@ struct WindowsVirtualAsioHostConnection {
   platform::WindowsVirtualAsioObjectNames names;
   std::uint64_t server_nonce_low = 0;
   std::uint64_t server_nonce_high = 0;
+};
+
+struct WindowsVirtualAsioGraphRefreshResult {
+  std::size_t updated_sessions = 0;
+  std::vector<WindowsVirtualAsioTransportError> errors;
+
+  [[nodiscard]] bool ok() const noexcept { return errors.empty(); }
 };
 
 class WindowsVirtualAsioHostConnectResult {
@@ -71,6 +83,8 @@ class WindowsVirtualAsioTransportHost {
       const std::string& client_id,
       std::uint64_t connection_generation);
   [[nodiscard]] std::size_t reap_stopped_sessions();
+  [[nodiscard]] WindowsVirtualAsioGraphRefreshResult refresh_graphs(
+      const WindowsVirtualAsioGraphFactory& graph_factory);
   void stop_all() noexcept;
 
   [[nodiscard]] std::vector<WindowsVirtualAsioHostConnection> connections() const;
