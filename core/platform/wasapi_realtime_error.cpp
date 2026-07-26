@@ -40,6 +40,8 @@ using Context = WasapiRealtimeErrorContext;
   if (code == "wasapi_capture_buffer_release_failed") {
     return Code::WasapiCaptureBufferReleaseFailed;
   }
+  if (code == "unsupported_sample_format") return Code::UnsupportedSampleFormat;
+  if (code == "sample_buffer_too_small") return Code::SampleBufferTooSmall;
   if (code == "sample_channel_mismatch") return Code::SampleChannelMismatch;
   if (code == "sample_conversion_failed") return Code::SampleConversionFailed;
   if (code == "graph_sample_rate_mismatch") return Code::GraphSampleRateMismatch;
@@ -131,6 +133,8 @@ const char* wasapi_realtime_error_code(WasapiRealtimeErrorRecord error) noexcept
     case Code::WasapiCaptureBufferFailed: return "wasapi_capture_buffer_failed";
     case Code::WasapiCaptureBufferReleaseFailed:
       return "wasapi_capture_buffer_release_failed";
+    case Code::UnsupportedSampleFormat: return "unsupported_sample_format";
+    case Code::SampleBufferTooSmall: return "sample_buffer_too_small";
     case Code::SampleChannelMismatch: return "sample_channel_mismatch";
     case Code::SampleConversionFailed: return "sample_conversion_failed";
     case Code::GraphSampleRateMismatch: return "graph_sample_rate_mismatch";
@@ -164,6 +168,8 @@ const char* wasapi_realtime_error_message(WasapiRealtimeErrorRecord error) noexc
     case Code::CaptureBufferTooSmall: return "Capture destination buffer cannot hold the packet.";
     case Code::WasapiCaptureBufferFailed: return "WASAPI capture buffer acquisition failed.";
     case Code::WasapiCaptureBufferReleaseFailed: return "WASAPI capture buffer release failed.";
+    case Code::UnsupportedSampleFormat: return "WASAPI stream sample format is not supported.";
+    case Code::SampleBufferTooSmall: return "Audio buffer is too small for the requested frames.";
     case Code::SampleChannelMismatch: return "Audio buffer channel count does not match the stream.";
     case Code::SampleConversionFailed: return "Sample conversion failed.";
     case Code::GraphSampleRateMismatch: return "Graph sample rate must match the WASAPI stream sample rate.";
