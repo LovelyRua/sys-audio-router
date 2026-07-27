@@ -49,6 +49,10 @@ struct VirtualAsioBrokerDisconnectRequest {
   std::uint64_t connection_generation = 0;
 };
 
+struct VirtualAsioBrokerFormatRequest {
+  std::uint64_t request_id = 0;
+};
+
 struct VirtualAsioBrokerConnectResponse {
   std::uint64_t request_id = 0;
   bool accepted = false;
@@ -63,6 +67,14 @@ struct VirtualAsioBrokerConnectResponse {
 struct VirtualAsioBrokerDisconnectResponse {
   std::uint64_t request_id = 0;
   bool accepted = false;
+  std::string error_code;
+  std::string error_message;
+};
+
+struct VirtualAsioBrokerFormatResponse {
+  std::uint64_t request_id = 0;
+  bool accepted = false;
+  platform::VirtualAsioFormat format;
   std::string error_code;
   std::string error_message;
 };
@@ -95,6 +107,11 @@ encode_virtual_asio_broker_disconnect(
 [[nodiscard]] VirtualAsioBrokerDecodeResult<VirtualAsioBrokerDisconnectRequest>
 decode_virtual_asio_broker_disconnect(std::span<const std::uint8_t> bytes);
 
+[[nodiscard]] VirtualAsioBrokerEncodeResult encode_virtual_asio_broker_format(
+    const VirtualAsioBrokerFormatRequest& request);
+[[nodiscard]] VirtualAsioBrokerDecodeResult<VirtualAsioBrokerFormatRequest>
+decode_virtual_asio_broker_format(std::span<const std::uint8_t> bytes);
+
 [[nodiscard]] VirtualAsioBrokerEncodeResult
 encode_virtual_asio_broker_connect_response(
     const VirtualAsioBrokerConnectResponse& response);
@@ -107,6 +124,13 @@ encode_virtual_asio_broker_disconnect_response(
     const VirtualAsioBrokerDisconnectResponse& response);
 [[nodiscard]] VirtualAsioBrokerDecodeResult<VirtualAsioBrokerDisconnectResponse>
 decode_virtual_asio_broker_disconnect_response(
+    std::span<const std::uint8_t> bytes);
+
+[[nodiscard]] VirtualAsioBrokerEncodeResult
+encode_virtual_asio_broker_format_response(
+    const VirtualAsioBrokerFormatResponse& response);
+[[nodiscard]] VirtualAsioBrokerDecodeResult<VirtualAsioBrokerFormatResponse>
+decode_virtual_asio_broker_format_response(
     std::span<const std::uint8_t> bytes);
 
 }  // namespace sar::control

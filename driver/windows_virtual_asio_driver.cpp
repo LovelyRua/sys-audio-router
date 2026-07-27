@@ -107,7 +107,25 @@ class VirtualAsioDriver final : public IASIO {
     std::scoped_lock lock(control_mutex_);
     system_handle_ = system_handle;
     initialized_ = true;
-    last_error_.clear();
+    const auto format = WindowsVirtualAsioRuntime::query_engine_format();
+    if (format.ok() &&
+        format.format.input_channels == kOutputChannels &&
+        format.format.output_channels == kInputChannels &&
+        format.format.sample_rate != 0 &&
+        format.format.frames_per_block <=
+            static_cast<std::uint32_t>(std::numeric_limits<long>::max()) &&
+        supported_buffer_size(
+            static_cast<long>(format.format.frames_per_block))) {
+      sample_rate_ = static_cast<ASIOSampleRate>(format.format.sample_rate);
+      preferred_buffer_frames_ =
+          static_cast<long>(format.format.frames_per_block);
+      format_discovered_ = true;
+      last_error_.clear();
+    } else if (!format.errors.empty()) {
+      last_error_ = format.errors.front().message;
+    } else {
+      last_error_ = "The engine published an incompatible ASIO format.";
+    }
     return ASIOTrue;
   }
 
@@ -170,7 +188,7 @@ class VirtualAsioDriver final : public IASIO {
                               "Latency output pointers must not be null.");
     }
     std::scoped_lock lock(control_mutex_);
-    const auto frames = buffer_frames_ == 0 ? kPreferredBufferFrames
+    const auto frames = buffer_frames_ == 0 ? preferred_buffer_frames_
                                             : buffer_frames_;
     *input_latency = frames;
     *output_latency = frames;
@@ -186,14 +204,25 @@ class VirtualAsioDriver final : public IASIO {
       return fail_thread_safe(ASE_InvalidParameter,
                               "Buffer size output pointers must not be null.");
     }
-    *minimum = kMinimumBufferFrames;
-    *maximum = kMaximumBufferFrames;
-    *preferred = kPreferredBufferFrames;
-    *granularity = -1;
+    if (format_discovered_) {
+      *minimum = preferred_buffer_frames_;
+      *maximum = preferred_buffer_frames_;
+      *preferred = preferred_buffer_frames_;
+      *granularity = 0;
+    } else {
+      *minimum = kMinimumBufferFrames;
+      *maximum = kMaximumBufferFrames;
+      *preferred = preferred_buffer_frames_;
+      *granularity = -1;
+    }
     return ASE_OK;
   }
 
   ASIOError canSampleRate(ASIOSampleRate sample_rate) override {
+    std::scoped_lock lock(control_mutex_);
+    if (format_discovered_) {
+      return sample_rate == sample_rate_ ? ASE_OK : ASE_NoClock;
+    }
     return supported_sample_rate(sample_rate) ? ASE_OK : ASE_NoClock;
   }
 
@@ -211,6 +240,10 @@ class VirtualAsioDriver final : public IASIO {
     std::scoped_lock lock(control_mutex_);
     if (!supported_sample_rate(sample_rate)) {
       return fail(ASE_NoClock, "The requested sample rate is not supported.");
+    }
+    if (format_discovered_ && sample_rate != sample_rate_) {
+      return fail(ASE_NoClock,
+                  "The requested sample rate does not match the engine.");
     }
     if (running_.load(std::memory_order_acquire)) {
       return fail(ASE_InvalidMode,
@@ -303,6 +336,10 @@ class VirtualAsioDriver final : public IASIO {
         buffers_created_) {
       return fail(ASE_InvalidMode,
                   "Buffers require an initialized, stopped, unprepared driver.");
+    }
+    if (format_discovered_ && buffer_frames != preferred_buffer_frames_) {
+      return fail(ASE_InvalidMode,
+                  "The requested buffer size does not match the engine.");
     }
 
     try {
@@ -457,9 +494,11 @@ class VirtualAsioDriver final : public IASIO {
   std::unique_ptr<WindowsVirtualAsioRuntime> runtime_;
   std::string last_error_;
   ASIOSampleRate sample_rate_ = kDefaultSampleRate;
+  long preferred_buffer_frames_ = kPreferredBufferFrames;
   long buffer_frames_ = 0;
   bool initialized_ = false;
   bool buffers_created_ = false;
+  bool format_discovered_ = false;
   std::atomic_bool running_ = false;
 };
 

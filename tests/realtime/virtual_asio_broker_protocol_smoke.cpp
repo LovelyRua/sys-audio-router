@@ -79,6 +79,12 @@ int main() {
   assert(decoded_disconnect.value.connection_generation ==
          disconnect.connection_generation);
 
+  const VirtualAsioBrokerFormatRequest format_request{.request_id = 92};
+  const auto format_request_roundtrip = decode_virtual_asio_broker_format(
+      encode_virtual_asio_broker_format(format_request).bytes);
+  assert(format_request_roundtrip.ok());
+  assert(format_request_roundtrip.value.request_id == format_request.request_id);
+
   const VirtualAsioBrokerConnectResponse accepted{
       .request_id = connect.request_id,
       .accepted = true,
@@ -136,4 +142,18 @@ int main() {
   assert(!disconnect_response_roundtrip.value.accepted);
   assert(disconnect_response_roundtrip.value.error_code ==
          disconnect_response.error_code);
+
+  const VirtualAsioBrokerFormatResponse format_response{
+      .request_id = format_request.request_id,
+      .accepted = true,
+      .format = {96000, 256, 2, 2},
+  };
+  const auto format_response_roundtrip =
+      decode_virtual_asio_broker_format_response(
+          encode_virtual_asio_broker_format_response(format_response).bytes);
+  assert(format_response_roundtrip.ok());
+  assert(format_response_roundtrip.value.request_id ==
+         format_response.request_id);
+  assert(format_response_roundtrip.value.accepted);
+  assert(format_response_roundtrip.value.format == format_response.format);
 }

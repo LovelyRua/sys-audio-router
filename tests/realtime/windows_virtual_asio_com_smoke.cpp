@@ -89,7 +89,7 @@ ASIOTime* buffer_switch_time_info(ASIOTime* time,
   const auto required_flags =
       kSystemTimeValid | kSamplePositionValid | kSampleRateValid | kSpeedValid;
   if ((time->timeInfo.flags & required_flags) == required_flags &&
-      time->timeInfo.sampleRate == 96000.0 &&
+      time->timeInfo.sampleRate == 48000.0 &&
       time->timeInfo.speed == 1.0) {
     valid_time_info_observed.store(true, std::memory_order_release);
   }
@@ -124,7 +124,8 @@ int wmain(int argc, wchar_t** argv) {
       .wait_timeout_ms = 10,
   });
   sar::service::WindowsVirtualAsioBrokerServer broker_server(
-      pipe_name, transport_host, make_graph);
+      pipe_name, transport_host, make_graph,
+      [] { return sar::platform::VirtualAsioFormat{48000, 256, 2, 2}; });
   assert(broker_server.start().ok());
   assert(SetEnvironmentVariableW(L"SAR_VIRTUAL_ASIO_PIPE",
                                  pipe_name.c_str()));
@@ -183,16 +184,16 @@ int wmain(int argc, wchar_t** argv) {
   long granularity = 0;
   assert(asio->getBufferSize(&minimum, &maximum, &preferred, &granularity) ==
          ASE_OK);
-  assert(minimum == 64);
-  assert(maximum == 2048);
+  assert(minimum == 256);
+  assert(maximum == 256);
   assert(preferred == 256);
-  assert(granularity == -1);
+  assert(granularity == 0);
   assert(asio->canSampleRate(48000.0) == ASE_OK);
   assert(asio->canSampleRate(12345.0) == ASE_NoClock);
-  assert(asio->setSampleRate(96000.0) == ASE_OK);
+  assert(asio->setSampleRate(96000.0) == ASE_NoClock);
   ASIOSampleRate sample_rate = 0;
   assert(asio->getSampleRate(&sample_rate) == ASE_OK);
-  assert(sample_rate == 96000.0);
+  assert(sample_rate == 48000.0);
   assert(asio->future(kAsioCanTimeInfo, nullptr) == ASE_SUCCESS);
   assert(asio->future(kAsioCanTimeCode, nullptr) == ASE_NotPresent);
 

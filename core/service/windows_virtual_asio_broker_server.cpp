@@ -11,6 +11,7 @@ namespace {
 
 constexpr std::uint16_t kConnectRequestType = 1;
 constexpr std::uint16_t kDisconnectRequestType = 2;
+constexpr std::uint16_t kFormatRequestType = 5;
 
 std::uint16_t message_type(std::span<const std::byte> bytes) noexcept {
   if (bytes.size() < 8) {
@@ -61,9 +62,11 @@ control::VirtualAsioBrokerConnectResponse connect_rejection(
 WindowsVirtualAsioBrokerServer::WindowsVirtualAsioBrokerServer(
     std::wstring pipe_name,
     WindowsVirtualAsioTransportHost& host,
-    WindowsVirtualAsioGraphFactory graph_factory)
+    WindowsVirtualAsioGraphFactory graph_factory,
+    WindowsVirtualAsioFormatProvider format_provider)
     : host_(host),
       graph_factory_(std::move(graph_factory)),
+      format_provider_(std::move(format_provider)),
       pipe_config_{std::move(pipe_name),
                    static_cast<std::uint32_t>(
                        control::kVirtualAsioBrokerMaxMessageBytes)},
@@ -112,11 +115,64 @@ NamedPipeControlResult WindowsVirtualAsioBrokerServer::handle(
       return handle_connect(peer, as_u8(request));
     case kDisconnectRequestType:
       return handle_disconnect(peer, as_u8(request));
+    case kFormatRequestType:
+      return handle_format(as_u8(request));
     default:
       return encoded(control::encode_virtual_asio_broker_connect_response(
           connect_rejection(0, "invalid_virtual_asio_broker_message",
                             "Broker message type is missing or unsupported.")));
   }
+}
+
+NamedPipeControlResult WindowsVirtualAsioBrokerServer::handle_format(
+    std::span<const std::uint8_t> request) {
+  const auto decoded = control::decode_virtual_asio_broker_format(request);
+  if (!decoded.ok()) {
+    return encoded(control::encode_virtual_asio_broker_format_response({
+        .request_id = decoded.value.request_id,
+        .accepted = false,
+        .error_code = "invalid_virtual_asio_format_request",
+        .error_message = "Virtual ASIO format request is malformed.",
+    }));
+  }
+  if (!format_provider_) {
+    return encoded(control::encode_virtual_asio_broker_format_response({
+        .request_id = decoded.value.request_id,
+        .accepted = false,
+        .error_code = "virtual_asio_format_unavailable",
+        .error_message = "The engine did not publish a preferred ASIO format.",
+    }));
+  }
+
+  platform::VirtualAsioFormat format;
+  try {
+    format = format_provider_();
+  } catch (...) {
+    return encoded(control::encode_virtual_asio_broker_format_response({
+        .request_id = decoded.value.request_id,
+        .accepted = false,
+        .error_code = "virtual_asio_format_provider_failed",
+        .error_message = "The engine could not publish its preferred ASIO format.",
+    }));
+  }
+  const auto errors = platform::validate_virtual_asio_client_request({
+      .client_id = "format-probe",
+      .process_id = 1,
+      .format = format,
+  });
+  if (!errors.empty()) {
+    return encoded(control::encode_virtual_asio_broker_format_response({
+        .request_id = decoded.value.request_id,
+        .accepted = false,
+        .error_code = "virtual_asio_format_invalid",
+        .error_message = "The engine published an invalid preferred ASIO format.",
+    }));
+  }
+  return encoded(control::encode_virtual_asio_broker_format_response({
+      .request_id = decoded.value.request_id,
+      .accepted = true,
+      .format = format,
+  }));
 }
 
 NamedPipeControlResult WindowsVirtualAsioBrokerServer::handle_connect(

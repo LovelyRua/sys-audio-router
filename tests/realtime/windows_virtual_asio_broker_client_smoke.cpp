@@ -46,8 +46,17 @@ int main() {
   sar::service::WindowsVirtualAsioBrokerServer server(
       L"sys-audio-route-asio-client-smoke-" +
           std::to_wstring(GetCurrentProcessId()),
-      host, make_graph);
+      host, make_graph,
+      [] { return sar::platform::VirtualAsioFormat{48000, kFrames, kChannels,
+                                                   kChannels}; });
   assert(server.start().ok());
+
+  const auto format =
+      sar::service::WindowsVirtualAsioBrokerClient::query_format(
+          server.pipe_config(), 700);
+  assert(format.ok());
+  assert(format.format ==
+         sar::platform::VirtualAsioFormat(48000, kFrames, kChannels, kChannels));
 
   const sar::control::VirtualAsioBrokerConnectRequest request{
       .request_id = 701,

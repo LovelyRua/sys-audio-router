@@ -79,6 +79,8 @@ class WindowsVirtualAsioRuntime {
 
   [[nodiscard]] static WindowsVirtualAsioRuntimeOpenResult open(
       WindowsVirtualAsioRuntimeConfig config);
+  [[nodiscard]] static service::WindowsVirtualAsioBrokerFormatResult
+  query_engine_format(std::uint32_t timeout_ms = 250);
 
   [[nodiscard]] bool start(std::string& error);
   void stop() noexcept;

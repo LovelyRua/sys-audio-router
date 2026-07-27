@@ -236,9 +236,12 @@ The first attempt exposed an ASIO COM compatibility gap: REAPER requests the
 driver CLSID as the interface identifier, while the DLL initially accepted only
 `IID_IUnknown`. The driver and COM smoke now cover both conventions, and a
 standalone host probe exercises activation, enumeration, buffer creation,
-streaming callbacks, and shutdown against the real engine broker. Automatic
-host/preset format negotiation and long-duration real DAW cadence capture remain
-outstanding. The host probe can generate a bounded optional test tone so this
+streaming callbacks, and shutdown against the real engine broker. The broker now
+publishes the active sample rate, block size, and channel layout before buffer
+creation, and the driver reports that exact clock domain to the host instead of
+advertising combinations the engine will reject. Cross-block-size adaptation
+and long-duration real DAW cadence capture remain outstanding. The host probe
+can generate a bounded optional test tone so this
 path no longer depends on a manually prepared DAW project.
 The first physical-render bridge is now implemented. A fixed eight-client bus
 gives each ASIO session an independent preallocated SPSC producer and mixes the
