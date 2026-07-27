@@ -211,6 +211,40 @@ WindowsVirtualAsioBrokerClient::connect(
               output_result.take_queue())));
 }
 
+WindowsVirtualAsioBrokerFormatResult
+WindowsVirtualAsioBrokerClient::query_format(
+    const NamedPipeControlConfig& pipe_config,
+    std::uint64_t request_id,
+    std::uint32_t timeout_ms) {
+  const auto encoded = control::encode_virtual_asio_broker_format({request_id});
+  if (!encoded.ok()) {
+    return {{}, {{"virtual_asio_format_encode_failed",
+                  "Could not encode the Virtual ASIO format request.", 0}}};
+  }
+  const auto transaction = transact_named_pipe_control(
+      pipe_config, as_bytes(encoded.bytes), timeout_ms);
+  if (!transaction.ok()) {
+    return {{}, {{transaction.error().code, transaction.error().message,
+                  transaction.error().native_win32_code}}};
+  }
+  const auto decoded = control::decode_virtual_asio_broker_format_response(
+      as_u8(transaction.payload()));
+  if (!decoded.ok()) {
+    return {{}, {{"virtual_asio_format_response_invalid",
+                  "Virtual ASIO broker returned an invalid format response.",
+                  0}}};
+  }
+  if (decoded.value.request_id != request_id) {
+    return {{}, {{"virtual_asio_format_response_mismatch",
+                  "Virtual ASIO broker format response identity did not match.",
+                  0}}};
+  }
+  if (!decoded.value.accepted) {
+    return {{}, {{decoded.value.error_code, decoded.value.error_message, 0}}};
+  }
+  return {decoded.value.format, {}};
+}
+
 bool WindowsVirtualAsioBrokerClient::connected() const noexcept {
   return connected_;
 }

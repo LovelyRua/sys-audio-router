@@ -4,17 +4,22 @@
 #include "core/service/windows_named_pipe_control.h"
 #include "core/service/windows_virtual_asio_transport_host.h"
 
+#include <functional>
 #include <memory>
 #include <string>
 
 namespace sar::service {
+
+using WindowsVirtualAsioFormatProvider =
+    std::function<platform::VirtualAsioFormat()>;
 
 class WindowsVirtualAsioBrokerServer {
  public:
   WindowsVirtualAsioBrokerServer(
       std::wstring pipe_name,
       WindowsVirtualAsioTransportHost& host,
-      WindowsVirtualAsioGraphFactory graph_factory);
+      WindowsVirtualAsioGraphFactory graph_factory,
+      WindowsVirtualAsioFormatProvider format_provider = {});
   WindowsVirtualAsioBrokerServer(const WindowsVirtualAsioBrokerServer&) = delete;
   WindowsVirtualAsioBrokerServer& operator=(
       const WindowsVirtualAsioBrokerServer&) = delete;
@@ -36,9 +41,12 @@ class WindowsVirtualAsioBrokerServer {
   [[nodiscard]] NamedPipeControlResult handle_disconnect(
       const NamedPipeControlPeer& peer,
       std::span<const std::uint8_t> request);
+  [[nodiscard]] NamedPipeControlResult handle_format(
+      std::span<const std::uint8_t> request);
 
   WindowsVirtualAsioTransportHost& host_;
   WindowsVirtualAsioGraphFactory graph_factory_;
+  WindowsVirtualAsioFormatProvider format_provider_;
   NamedPipeControlConfig pipe_config_;
   WindowsNamedPipeControlServer server_;
 };

@@ -552,8 +552,11 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   convention also completed buffer creation, streaming, and clean shutdown.
   A retained REAPER-to-CABLE acceptance run captured 233,472 frames with a
   0.366211 peak and 0.136627 RMS, with zero timeout, non-finite sample, or
-  engine xrun. Automatic negotiation when a host requests a format different
-  from the active preset remains outstanding.
+  engine xrun. The broker now publishes the active preset format before buffer
+  creation, and the driver reports that exact sample rate and block size to the
+  host. This removes the previous hidden 256-frame driver preference versus the
+  128-frame service default. Arbitrary host-to-engine block-size adaptation
+  remains outstanding.
   A repeatable host-probe run now generates a 440 Hz, -24 dBFS signal without
   callback allocation. Over three seconds it observed 1,113 of 1,125 expected
   callbacks; engine diagnostics increased by exactly 1,113 pushed, consumed,

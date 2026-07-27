@@ -127,6 +127,21 @@ WindowsVirtualAsioRuntime::~WindowsVirtualAsioRuntime() {
   disconnect();
 }
 
+service::WindowsVirtualAsioBrokerFormatResult
+WindowsVirtualAsioRuntime::query_engine_format(std::uint32_t timeout_ms) {
+  std::array<std::uint64_t, 3> random{};
+  if (!secure_random(random)) {
+    return {{}, {{"virtual_asio_format_identity_failed",
+                  "Could not generate the format query identity.", 0}}};
+  }
+  service::NamedPipeControlConfig pipe_config;
+  pipe_config.pipe_name = broker_pipe_name();
+  pipe_config.maximum_message_bytes =
+      static_cast<std::uint32_t>(control::kVirtualAsioBrokerMaxMessageBytes);
+  return service::WindowsVirtualAsioBrokerClient::query_format(
+      pipe_config, random[0], timeout_ms);
+}
+
 WindowsVirtualAsioRuntimeOpenResult WindowsVirtualAsioRuntime::open(
     WindowsVirtualAsioRuntimeConfig config) {
   if (config.sample_rate == 0 || config.frames_per_block == 0 ||

@@ -19,6 +19,15 @@ struct WindowsVirtualAsioBrokerClientError {
 
 class WindowsVirtualAsioBrokerClient;
 
+struct WindowsVirtualAsioBrokerFormatResult {
+  platform::VirtualAsioFormat format;
+  std::vector<WindowsVirtualAsioBrokerClientError> errors;
+
+  [[nodiscard]] bool ok() const noexcept {
+    return errors.empty();
+  }
+};
+
 class WindowsVirtualAsioBrokerClientConnectResult {
  public:
   static WindowsVirtualAsioBrokerClientConnectResult success(
@@ -52,6 +61,10 @@ class WindowsVirtualAsioBrokerClient {
   [[nodiscard]] static WindowsVirtualAsioBrokerClientConnectResult connect(
       NamedPipeControlConfig pipe_config,
       control::VirtualAsioBrokerConnectRequest request,
+      std::uint32_t timeout_ms = 5000);
+  [[nodiscard]] static WindowsVirtualAsioBrokerFormatResult query_format(
+      const NamedPipeControlConfig& pipe_config,
+      std::uint64_t request_id,
       std::uint32_t timeout_ms = 5000);
 
   [[nodiscard]] bool connected() const noexcept;

@@ -12,6 +12,8 @@ constexpr std::uint16_t kConnectRequest = 1;
 constexpr std::uint16_t kDisconnectRequest = 2;
 constexpr std::uint16_t kConnectResponse = 3;
 constexpr std::uint16_t kDisconnectResponse = 4;
+constexpr std::uint16_t kFormatRequest = 5;
+constexpr std::uint16_t kFormatResponse = 6;
 
 class Writer {
  public:
@@ -275,6 +277,21 @@ decode_virtual_asio_broker_disconnect(std::span<const std::uint8_t> bytes) {
   return {std::move(value), reader.error()};
 }
 
+VirtualAsioBrokerEncodeResult encode_virtual_asio_broker_format(
+    const VirtualAsioBrokerFormatRequest& request) {
+  Writer writer(kFormatRequest, request.request_id);
+  return writer.finish();
+}
+
+VirtualAsioBrokerDecodeResult<VirtualAsioBrokerFormatRequest>
+decode_virtual_asio_broker_format(std::span<const std::uint8_t> bytes) {
+  Reader reader(bytes, kFormatRequest);
+  VirtualAsioBrokerFormatRequest value;
+  value.request_id = reader.request_id();
+  reader.finish();
+  return {value, reader.error()};
+}
+
 VirtualAsioBrokerEncodeResult encode_virtual_asio_broker_connect_response(
     const VirtualAsioBrokerConnectResponse& response) {
   Writer writer(kConnectResponse, response.request_id);
@@ -327,6 +344,29 @@ decode_virtual_asio_broker_disconnect_response(
   value.accepted = reader.boolean();
   value.error_code = reader.string();
   value.error_message = reader.string();
+  reader.finish();
+  return {std::move(value), reader.error()};
+}
+
+VirtualAsioBrokerEncodeResult encode_virtual_asio_broker_format_response(
+    const VirtualAsioBrokerFormatResponse& response) {
+  Writer writer(kFormatResponse, response.request_id);
+  write_error(writer, response.accepted, response.error_code,
+              response.error_message);
+  write_format(writer, response.format);
+  return writer.finish();
+}
+
+VirtualAsioBrokerDecodeResult<VirtualAsioBrokerFormatResponse>
+decode_virtual_asio_broker_format_response(
+    std::span<const std::uint8_t> bytes) {
+  Reader reader(bytes, kFormatResponse);
+  VirtualAsioBrokerFormatResponse value;
+  value.request_id = reader.request_id();
+  value.accepted = reader.boolean();
+  value.error_code = reader.string();
+  value.error_message = reader.string();
+  value.format = read_format(reader);
   reader.finish();
   return {std::move(value), reader.error()};
 }

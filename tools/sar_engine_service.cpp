@@ -502,6 +502,17 @@ int main(int argc, char** argv) {
         return service->build_client_graph(
             format.sample_rate, format.frames_per_block,
             format.input_channels, format.output_channels);
+      },
+      [&service] {
+        const auto session = service->session_document();
+        return sar::platform::VirtualAsioFormat{
+            .sample_rate = session.preset.sample_rate,
+            .frames_per_block = session.preset.frames_per_block,
+            .input_channels = static_cast<std::uint32_t>(
+                session.preset.matrix.inputs.size()),
+            .output_channels = static_cast<std::uint32_t>(
+                session.preset.matrix.outputs.size()),
+        };
       });
   const auto asio_started = asio_broker.start();
   if (!asio_started.ok()) {
