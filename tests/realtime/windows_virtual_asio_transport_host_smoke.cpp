@@ -49,6 +49,25 @@ int main() {
   assert(second.connection().names.mapping != first.connection().names.mapping);
   assert(!host.connect(request("daw-c"), make_graph(5)).ok());
 
+  std::uint64_t next_version = 10;
+  auto refreshed = host.refresh_graphs(
+      [&](const sar::platform::VirtualAsioFormat&) {
+        return make_graph(next_version++);
+      });
+  assert(refreshed.ok());
+  assert(refreshed.updated_sessions == 2);
+
+  std::size_t build_index = 0;
+  const auto rejected_refresh = host.refresh_graphs(
+      [&](const sar::platform::VirtualAsioFormat&) {
+        ++build_index;
+        return make_graph(20 + build_index, build_index == 2 ? 1 : 2);
+      });
+  assert(!rejected_refresh.ok());
+  assert(rejected_refresh.updated_sessions == 0);
+  assert(rejected_refresh.errors[0].code ==
+         "virtual_asio_graph_refresh_format_mismatch");
+
   assert(!host.disconnect(
       "daw-a", first.connection().client.connection_generation + 1).ok());
   assert(host.active_session_count() == 2);

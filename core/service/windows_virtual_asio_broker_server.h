@@ -4,14 +4,10 @@
 #include "core/service/windows_named_pipe_control.h"
 #include "core/service/windows_virtual_asio_transport_host.h"
 
-#include <functional>
 #include <memory>
 #include <string>
 
 namespace sar::service {
-
-using WindowsVirtualAsioGraphFactory = std::function<std::unique_ptr<graph::Graph>(
-    const platform::VirtualAsioFormat&)>;
 
 class WindowsVirtualAsioBrokerServer {
  public:

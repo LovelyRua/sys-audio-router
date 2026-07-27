@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/graph/graph.h"
+#include "core/graph/graph_snapshot.h"
 #include "core/platform/virtual_asio_shared_memory_layout.h"
 #include "core/platform/virtual_asio_render_bus.h"
 #include "core/platform/windows_virtual_asio_events.h"
@@ -34,6 +34,8 @@ struct WindowsVirtualAsioTransportStats {
   std::uint64_t client_process_exits = 0;
   std::uint64_t last_sequence = 0;
   std::uint64_t dropped_render_bus_blocks = 0;
+  std::uint64_t graph_updates = 0;
+  std::uint64_t current_graph_version = 0;
 };
 
 class WindowsVirtualAsioTransportSession;
@@ -86,6 +88,8 @@ class WindowsVirtualAsioTransportSession {
   [[nodiscard]] platform::VirtualAsioSharedMemoryState shared_state()
       const noexcept;
   [[nodiscard]] WindowsVirtualAsioTransportStats stats() const noexcept;
+  [[nodiscard]] bool accepts_graph(const graph::Graph& graph) const noexcept;
+  [[nodiscard]] bool replace_graph(std::unique_ptr<graph::Graph> graph);
 
  private:
   WindowsVirtualAsioTransportSession(
@@ -93,7 +97,7 @@ class WindowsVirtualAsioTransportSession {
       std::unique_ptr<platform::WindowsVirtualAsioEvents> events,
       platform::WindowsVirtualAsioSharedQueue input_queue,
       platform::WindowsVirtualAsioSharedQueue output_queue,
-      std::unique_ptr<graph::Graph> graph,
+      std::shared_ptr<graph::Graph> graph,
       platform::VirtualAsioRenderProducer render_producer,
       void* client_process_handle,
       std::uint32_t wait_timeout_ms);
@@ -106,10 +110,11 @@ class WindowsVirtualAsioTransportSession {
   std::unique_ptr<platform::WindowsVirtualAsioEvents> events_;
   platform::WindowsVirtualAsioSharedQueue input_queue_;
   platform::WindowsVirtualAsioSharedQueue output_queue_;
-  std::unique_ptr<graph::Graph> graph_;
+  graph::GraphSnapshotPublisher graph_publisher_;
   platform::VirtualAsioRenderProducer render_producer_;
   realtime::AudioBuffer input_buffer_;
   realtime::AudioBuffer output_buffer_;
+  std::uint32_t sample_rate_ = 0;
   diagnostics::EngineDiagnostics graph_diagnostics_;
   void* client_process_handle_ = nullptr;
   std::uint32_t wait_timeout_ms_ = 100;
@@ -127,6 +132,8 @@ class WindowsVirtualAsioTransportSession {
   std::atomic<std::uint64_t> client_process_exits_ = 0;
   std::atomic<std::uint64_t> last_sequence_ = 0;
   std::atomic<std::uint64_t> dropped_render_bus_blocks_ = 0;
+  std::atomic<std::uint64_t> graph_updates_ = 0;
+  std::atomic<std::uint64_t> current_graph_version_ = 0;
 };
 
 }  // namespace sar::service

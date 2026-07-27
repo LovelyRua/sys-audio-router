@@ -26,14 +26,15 @@ void fill(sar::realtime::AudioBuffer& buffer, std::uint64_t sequence) {
   }
 }
 
-void expect_half_gain(const sar::realtime::AudioBuffer& input,
-                      const sar::realtime::AudioBuffer& output) {
+void expect_gain(const sar::realtime::AudioBuffer& input,
+                 const sar::realtime::AudioBuffer& output,
+                 float gain) {
   assert(input.channels() == output.channels());
   assert(input.frames() == output.frames());
   for (std::size_t channel = 0; channel < input.channels(); ++channel) {
     for (std::size_t frame = 0; frame < input.frames(); ++frame) {
       assert(std::fabs(output.channel(channel)[frame] -
-                       input.channel(channel)[frame] * 0.5F) < 0.000001F);
+                       input.channel(channel)[frame] * gain) < 0.000001F);
     }
   }
 }
@@ -103,6 +104,15 @@ int main() {
   sar::realtime::AudioBuffer destination(kChannels, kFrames);
   constexpr std::uint64_t kBlocks = 128;
   for (std::uint64_t sequence = 0; sequence < kBlocks; ++sequence) {
+    if (sequence == kBlocks / 2) {
+      auto incompatible =
+          std::make_unique<sar::graph::Graph>(3, 1, kFrames, 48000);
+      assert(!session->replace_graph(std::move(incompatible)));
+      auto replacement =
+          std::make_unique<sar::graph::Graph>(3, kChannels, kFrames, 48000);
+      replacement->add_node(std::make_unique<sar::graph::GainNode>(0.25F));
+      assert(session->replace_graph(std::move(replacement)));
+    }
     fill(source, sequence);
     const VirtualAsioSharedBlockMetadata sent{
         .sequence = sequence,
@@ -123,7 +133,8 @@ int main() {
     assert(received.sample_position == sent.sample_position);
     assert(received.qpc_position_100ns == sent.qpc_position_100ns);
     assert(received.flags == sent.flags);
-    expect_half_gain(source, destination);
+    expect_gain(source, destination,
+                sequence < kBlocks / 2 ? 0.5F : 0.25F);
   }
 
   const auto before_stop = std::chrono::steady_clock::now();
@@ -142,6 +153,8 @@ int main() {
   assert(stats.wait_failures == 0);
   assert(stats.output_signal_failures == 0);
   assert(stats.last_sequence == kBlocks - 1);
+  assert(stats.graph_updates == 1);
+  assert(stats.current_graph_version == 3);
 
   STARTUPINFOW startup{};
   startup.cb = sizeof(startup);
