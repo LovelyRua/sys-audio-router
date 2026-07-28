@@ -78,7 +78,9 @@ void VirtualAsioRenderProducer::reset() noexcept {
 
 VirtualAsioRenderBus::Slot::Slot(std::size_t channels,
                                 std::size_t frames,
-                                std::size_t queue_capacity_blocks) {
+                                std::size_t queue_capacity_blocks)
+    : pending(channels, kVirtualAsioMaxFramesPerBlock + frames),
+      adapted_block(channels, frames) {
   blocks.reserve(queue_capacity_blocks + 1);
   for (std::size_t index = 0; index <= queue_capacity_blocks; ++index) {
     blocks.emplace_back(channels, frames);
@@ -116,6 +118,7 @@ VirtualAsioRenderProducer VirtualAsioRenderBus::attach() {
     }
     slot.read_index.store(0, std::memory_order_relaxed);
     slot.write_index.store(0, std::memory_order_relaxed);
+    slot.pending.clear();
     const auto generation =
         next_generation_.fetch_add(1, std::memory_order_relaxed);
     slot.generation.store(generation, std::memory_order_relaxed);
@@ -238,7 +241,8 @@ bool VirtualAsioRenderBus::push(
     std::uint64_t generation,
     const realtime::AudioBuffer& source) noexcept {
   if (slot_index >= slots_.size() || source.channels() != channels_ ||
-      source.frames() != frames_) {
+      source.frames() == 0 ||
+      source.frames() > kVirtualAsioMaxFramesPerBlock) {
     dropped_blocks_.fetch_add(1, std::memory_order_relaxed);
     return false;
   }
@@ -249,10 +253,31 @@ bool VirtualAsioRenderBus::push(
     return false;
   }
 
+  drain_pending(slot);
+  const auto write_index = slot.write_index.load(std::memory_order_relaxed);
+  const auto queue_full =
+      increment(slot, write_index) ==
+      slot.read_index.load(std::memory_order_acquire);
+  if (queue_full &&
+      slot.pending.available_frames() + source.frames() >= frames_) {
+    dropped_blocks_.fetch_add(1, std::memory_order_relaxed);
+    return false;
+  }
+  if (slot.pending.free_frames() < source.frames() ||
+      slot.pending.push(source, source.frames()) != source.frames()) {
+    dropped_blocks_.fetch_add(1, std::memory_order_relaxed);
+    return false;
+  }
+  drain_pending(slot);
+  return true;
+}
+
+bool VirtualAsioRenderBus::enqueue(
+    Slot& slot,
+    const realtime::AudioBuffer& source) noexcept {
   const auto write_index = slot.write_index.load(std::memory_order_relaxed);
   const auto next = increment(slot, write_index);
   if (next == slot.read_index.load(std::memory_order_acquire)) {
-    dropped_blocks_.fetch_add(1, std::memory_order_relaxed);
     return false;
   }
   slot.blocks[write_index].audio.copy_from(source);
@@ -264,6 +289,21 @@ bool VirtualAsioRenderBus::push(
   update_max(maximum_queue_depth_, depth);
   pushed_blocks_.fetch_add(1, std::memory_order_relaxed);
   return true;
+}
+
+void VirtualAsioRenderBus::drain_pending(Slot& slot) noexcept {
+  while (slot.pending.available_frames() >= frames_) {
+    const auto write_index = slot.write_index.load(std::memory_order_relaxed);
+    if (increment(slot, write_index) ==
+        slot.read_index.load(std::memory_order_acquire)) {
+      return;
+    }
+    if (slot.pending.pop(slot.adapted_block, frames_) != frames_ ||
+        !enqueue(slot, slot.adapted_block)) {
+      dropped_blocks_.fetch_add(1, std::memory_order_relaxed);
+      return;
+    }
+  }
 }
 
 void VirtualAsioRenderBus::detach(std::size_t slot_index,
@@ -282,6 +322,7 @@ void VirtualAsioRenderBus::detach(std::size_t slot_index,
   }
   slot.read_index.store(0, std::memory_order_relaxed);
   slot.write_index.store(0, std::memory_order_relaxed);
+  slot.pending.clear();
   slot.state.store(kIdle, std::memory_order_release);
   active_producers_.fetch_sub(1, std::memory_order_relaxed);
 }

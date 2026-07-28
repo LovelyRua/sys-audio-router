@@ -28,6 +28,31 @@ void expect(const sar::realtime::AudioBuffer& buffer,
 }  // namespace
 
 int main() {
+  sar::platform::VirtualAsioRenderBus adapter_bus(2, 128, 1, 8);
+  auto adapter = adapter_bus.attach();
+  sar::realtime::AudioBuffer half_a(2, 64);
+  sar::realtime::AudioBuffer half_b(2, 64);
+  sar::realtime::AudioBuffer double_block(2, 256);
+  sar::realtime::AudioBuffer adapted(2, 128);
+  fill(half_a, 0.1F, -0.1F);
+  fill(half_b, 0.2F, -0.2F);
+  fill(double_block, 0.3F, -0.3F);
+  assert(adapter.push(half_a));
+  assert(!adapter_bus.read(adapted));
+  assert(adapter.push(half_b));
+  assert(adapter_bus.read(adapted));
+  for (std::size_t frame = 0; frame < 64; ++frame) {
+    assert(sar::tests::nearly_equal(adapted.channel(0)[frame], 0.1F));
+    assert(sar::tests::nearly_equal(adapted.channel(1)[frame], -0.1F));
+    assert(sar::tests::nearly_equal(adapted.channel(0)[frame + 64], 0.2F));
+    assert(sar::tests::nearly_equal(adapted.channel(1)[frame + 64], -0.2F));
+  }
+  assert(adapter.push(double_block));
+  assert(adapter_bus.read(adapted));
+  expect(adapted, 0.3F, -0.3F);
+  assert(adapter_bus.read(adapted));
+  expect(adapted, 0.3F, -0.3F);
+
   sar::platform::VirtualAsioRenderBus bus(2, 16, 2, 2);
   assert(bus.channels() == 2);
   assert(bus.frames() == 16);

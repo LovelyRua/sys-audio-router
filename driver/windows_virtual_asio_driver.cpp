@@ -205,10 +205,10 @@ class VirtualAsioDriver final : public IASIO {
                               "Buffer size output pointers must not be null.");
     }
     if (format_discovered_) {
-      *minimum = preferred_buffer_frames_;
-      *maximum = preferred_buffer_frames_;
+      *minimum = kMinimumBufferFrames;
+      *maximum = kMaximumBufferFrames;
       *preferred = preferred_buffer_frames_;
-      *granularity = 0;
+      *granularity = -1;
     } else {
       *minimum = kMinimumBufferFrames;
       *maximum = kMaximumBufferFrames;
@@ -337,11 +337,6 @@ class VirtualAsioDriver final : public IASIO {
       return fail(ASE_InvalidMode,
                   "Buffers require an initialized, stopped, unprepared driver.");
     }
-    if (format_discovered_ && buffer_frames != preferred_buffer_frames_) {
-      return fail(ASE_InvalidMode,
-                  "The requested buffer size does not match the engine.");
-    }
-
     try {
       buffers_.assign(static_cast<std::size_t>(channel_count) * 2U, {});
       active_channels_.clear();

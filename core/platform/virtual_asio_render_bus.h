@@ -1,6 +1,8 @@
 #pragma once
 
 #include "core/platform/realtime_audio_source.h"
+#include "core/platform/virtual_asio_client_registry.h"
+#include "core/realtime/planar_audio_fifo.h"
 
 #include <atomic>
 #include <cstddef>
@@ -81,6 +83,8 @@ class VirtualAsioRenderBus final : public RealtimeAudioSource {
          std::size_t frames,
          std::size_t queue_capacity_blocks);
 
+    realtime::PlanarAudioFifo pending;
+    realtime::AudioBuffer adapted_block;
     std::vector<Block> blocks;
     std::atomic<std::size_t> read_index = 0;
     std::atomic<std::size_t> write_index = 0;
@@ -92,6 +96,9 @@ class VirtualAsioRenderBus final : public RealtimeAudioSource {
   [[nodiscard]] bool push(std::size_t slot,
                           std::uint64_t generation,
                           const realtime::AudioBuffer& source) noexcept;
+  [[nodiscard]] bool enqueue(Slot& slot,
+                             const realtime::AudioBuffer& source) noexcept;
+  void drain_pending(Slot& slot) noexcept;
   void detach(std::size_t slot, std::uint64_t generation) noexcept;
   [[nodiscard]] std::size_t increment(const Slot& slot,
                                       std::size_t index) const noexcept;

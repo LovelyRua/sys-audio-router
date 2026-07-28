@@ -78,7 +78,7 @@ int wmain(int argc, wchar_t** argv) {
       {
           .request_id = 9001,
           .client_id = "engine-process-smoke",
-          .format = {48000, 128, 2, 2},
+          .format = {48000, 256, 2, 2},
           .queue_capacity_blocks = 8,
           .client_nonce_low = 0x0102030405060708ULL,
           .client_nonce_high = 0x1112131415161718ULL,
@@ -86,17 +86,17 @@ int wmain(int argc, wchar_t** argv) {
   assert(connected.ok());
   auto client = connected.take_client();
 
-  sar::realtime::AudioBuffer input(2, 128);
-  sar::realtime::AudioBuffer output(2, 128);
+  sar::realtime::AudioBuffer input(2, 256);
+  sar::realtime::AudioBuffer output(2, 256);
   for (std::size_t channel = 0; channel < input.channels(); ++channel) {
     for (std::size_t frame = 0; frame < input.frames(); ++frame) {
       input.channel(channel)[frame] =
-          static_cast<float>(channel * 128 + frame) / 512.0F;
+          static_cast<float>(channel * 256 + frame) / 1024.0F;
     }
   }
   const sar::platform::VirtualAsioSharedBlockMetadata sent{
       .sequence = 1,
-      .sample_position = 128,
+      .sample_position = 256,
       .qpc_position_100ns = 123456,
   };
   assert(client->push_input(input, sent) ==

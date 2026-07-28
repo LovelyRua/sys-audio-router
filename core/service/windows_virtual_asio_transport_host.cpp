@@ -106,11 +106,11 @@ WindowsVirtualAsioHostConnectResult WindowsVirtualAsioTransportHost::connect(
 
   platform::VirtualAsioRenderProducer render_producer;
   if (render_bus_ != nullptr) {
-    if (client.format.output_channels != render_bus_->channels() ||
-        client.format.frames_per_block != render_bus_->frames()) {
+    if (client.format.output_channels != render_bus_->channels()) {
       rollback();
       return failure("virtual_asio_render_bus_format_mismatch",
-                     "Virtual ASIO client output does not match the render bus.");
+                     "Virtual ASIO client output channels do not match the "
+                     "render bus.");
     }
     render_producer = render_bus_->attach();
     if (!render_producer.valid()) {
