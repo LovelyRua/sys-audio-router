@@ -571,6 +571,11 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   and verifies the tested DLL, launches both processes in the active Explorer
   session, checks the loaded module and non-zero producer/consumer/mixer
   counters with zero drops, and removes its exact processes and Scheduled Tasks.
+  The same helper accepts up to eight requested REAPER clients. A two-process
+  run loaded the production DLL in both hosts and reported two active producers,
+  2,731 pushed blocks, 2,728 consumed blocks, 1,515 physical mix cycles, zero
+  drops, zero xruns, and a 257.899-microsecond peak graph callback. A subsequent
+  single-client compatibility run also passed.
 - The first ASIO-to-physical-render bridge is wired for exact-format clients.
   On 2026-07-22, REAPER 7.78 loaded the deployed driver while the service ran a
   pinned 48 kHz hardware render endpoint; after 11,301 graph blocks the runtime

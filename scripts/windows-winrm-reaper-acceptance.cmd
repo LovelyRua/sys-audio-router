@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 
 if "%~3"=="" (
-  echo Usage: scripts\windows-winrm-reaper-acceptance.cmd ^<host^> ^<user^> ^<password^> ^<remote-build-path^> ^<render-endpoint-id^> [slot]
+  echo Usage: scripts\windows-winrm-reaper-acceptance.cmd ^<host^> ^<user^> ^<password^> ^<remote-build-path^> ^<render-endpoint-id^> [slot] [client-count]
   exit /b 1
 )
 
@@ -18,6 +18,8 @@ if "%~5"=="" (
 
 set "SLOT=%~6"
 if "%SLOT%"=="" set "SLOT=reaper"
+set "CLIENT_COUNT=%~7"
+if "%CLIENT_COUNT%"=="" set "CLIENT_COUNT=1"
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0windows-winrm-reaper-acceptance.ps1" ^
   -HostName "%~1" ^
@@ -25,5 +27,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0windows-winrm-reaper-a
   -Password "%~3" ^
   -RemoteBuildPath "%~4" ^
   -RenderDeviceId "%~5" ^
-  -Slot "%SLOT%"
+  -Slot "%SLOT%" ^
+  -ClientCount "%CLIENT_COUNT%"
 exit /b %errorlevel%

@@ -24,6 +24,16 @@ with 1,140 pushed, consumed, and mixed blocks, zero drops, zero xruns, and a
 90.3-microsecond peak graph callback, then removed both processes and temporary
 Scheduled Tasks.
 
+Two independent REAPER instances then loaded the production DLL concurrently.
+The engine reported two active producers, 3,895 pushed blocks, 3,893 consumed
+blocks, 2,072 physical mix cycles, zero drops, zero xruns, and a
+173.5-microsecond peak graph callback. Both REAPER processes and all three
+temporary Scheduled Tasks were removed after the run.
+The generalized acceptance helper repeated the two-client gate with 2,731
+pushed blocks, 2,728 consumed blocks, 1,515 physical mix cycles, zero drops,
+zero xruns, and a 257.899-microsecond peak callback. Its single-client
+compatibility run also passed with 1,091 pushed blocks and zero drops or xruns.
+
 The preceding bounded host-probe physical loop generated a 440 Hz, -24 dBFS
 signal through the same production driver and engine bridge. `CABLE Output`
 captured 160,896 frames with peak `0.0630989075`, RMS `0.0327823061`, zero
@@ -43,5 +53,5 @@ coverage and this real-machine acceptance both pass with the fix.
 ## Remaining DAW Gates
 
 - Run the scripted acceptance against a second target DAW.
-- Run two real DAWs concurrently for the planned duration gate.
+- Extend the passing two-REAPER process gate into the planned duration run.
 - Add long-duration per-client cadence and clock-adaptation evidence.

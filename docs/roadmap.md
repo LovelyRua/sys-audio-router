@@ -205,7 +205,9 @@ and has an architecture-aware registration utility. REAPER load, callback,
 non-silent capture, and physical-render evidence now exist. A repeatable WinRM
 acceptance now registers the tested DLL, launches the engine and REAPER in the
 interactive session, verifies the loaded module and producer counters, and
-cleans up exact process/task identities. A second target DAW remains outstanding.
+cleans up exact process/task identities. Two isolated REAPER processes also
+connected concurrently with two active producers, zero drops, and zero xruns.
+A second target DAW and the multi-client duration gate remain outstanding.
 
 A bounded control-plane client registry now admits multiple DAWs into one fixed
 session clock domain. It rejects duplicate IDs, capacity overflow, mismatched
