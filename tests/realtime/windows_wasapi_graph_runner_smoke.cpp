@@ -75,6 +75,19 @@ sar::platform::WasapiStreamProbe make_mismatched_capture_probe() {
   return probe;
 }
 
+class EmptyRealtimeAudioSource final
+    : public sar::platform::RealtimeAudioSource {
+ public:
+  [[nodiscard]] bool read(
+      sar::realtime::AudioBuffer& destination) noexcept override {
+    destination.clear();
+    ++read_calls;
+    return false;
+  }
+
+  std::size_t read_calls = 0;
+};
+
 }  // namespace
 
 int main() {
@@ -171,6 +184,45 @@ int main() {
                 diagnostics.sample_conversion_export_failures == 1,
             "Expected render conversion diagnostics increment")) {
       return failure;
+    }
+  }
+
+  {
+    sar::tests::ScriptedWasapiStream render_stream(make_render_probe());
+    render_stream.enqueue_render({.writable_frames = 4});
+    render_stream.enqueue_render({.writable_frames = 4});
+    EmptyRealtimeAudioSource external_input;
+    sar::platform::WindowsWasapiGraphRunner runner(
+        nullptr, &render_stream, 2, 2, 4, 0, 4, 8, false, false,
+        &external_input);
+    sar::graph::Graph graph(18, 2, 4, 48000);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+
+    const auto first = runner.process_once(graph, diagnostics, 10);
+    const auto second = runner.process_once(graph, diagnostics, 10);
+    if (const auto failure =
+            expect(first.ok() && second.ok(),
+                   "Expected empty external input render pacing success")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(external_input.read_calls == 2,
+                   "Expected one external input read per render cycle")) {
+      return failure;
+    }
+    if (const auto failure =
+            expect(render_stream.render_submissions().size() == 2,
+                   "Expected empty external input to remain render paced")) {
+      return failure;
+    }
+    for (const auto& submission : render_stream.render_submissions()) {
+      if (const auto failure =
+              expect(submission.frames == 4 &&
+                         submission.samples[0][0] == 0.0F &&
+                         submission.samples[1][0] == 0.0F,
+                     "Expected render-paced silence while ASIO input is empty")) {
+        return failure;
+      }
     }
   }
 
