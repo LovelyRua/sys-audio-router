@@ -566,6 +566,11 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   This run exposed and fixed an implicit dependency on another host raising the
   Windows timer resolution: the driver now prefers a high-resolution waitable
   timer and falls back to the legacy timer only when unavailable.
+  A WinRM acceptance helper now repeats the real REAPER load without manual
+  process setup. It refuses to take over an existing DAW or engine, registers
+  and verifies the tested DLL, launches both processes in the active Explorer
+  session, checks the loaded module and non-zero producer/consumer/mixer
+  counters with zero drops, and removes its exact processes and Scheduled Tasks.
 - The first ASIO-to-physical-render bridge is wired for exact-format clients.
   On 2026-07-22, REAPER 7.78 loaded the deployed driver while the service ran a
   pinned 48 kHz hardware render endpoint; after 11,301 graph blocks the runtime

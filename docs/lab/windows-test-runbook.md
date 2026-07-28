@@ -153,9 +153,26 @@ When a stream opens, the tools also print `wasapi_stream_diagnostics ...` lines
 with state, direction, sample format, bit depth, buffer size, and device period
 fields before the matching human-readable stream diagnostics block.
 
+## REAPER Virtual ASIO Acceptance
+
+REAPER must already be configured to use `System Audio Route Virtual ASIO` at
+48 kHz with a 128-frame block. Run the interactive acceptance against a tested
+remote build and a pinned render endpoint:
+
+```bat
+scripts\windows-winrm-reaper-acceptance.cmd 192.168.123.123 codex <password> C:\path\to\Debug "<render-endpoint-id>" engineer-a
+```
+
+The helper refuses to take over an existing REAPER or engine process. It
+registers and verifies the x64 per-user driver, starts the engine and REAPER in
+the logged-in Explorer session, proves that REAPER loaded the exact driver DLL,
+and requires one active producer, non-zero pushed/consumed/mixed blocks, and
+zero dropped blocks. Temporary processes and Scheduled Tasks are removed on
+success and failure.
+
 ## Expected Test Targets
 
-The Windows suite currently has 83 CTest targets, including the portable core
+The Windows suite currently has 118 CTest targets, including the portable core
 smoke tests plus WASAPI stream, graph runner, realtime thread, realtime
 worker/render/duplex loop, runtime summary, preflight, and measure tool smoke
 tests.
