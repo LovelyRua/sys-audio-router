@@ -202,8 +202,10 @@ stop/start check then processed 304 duplex blocks in three seconds with zero
 capture/render overflow and a 41.1-microsecond peak callback. The first x64
 DAW-facing DLL now implements the `IASIO` discovery and buffer-lifecycle surface
 and has an architecture-aware registration utility. REAPER load, callback,
-non-silent capture, and physical-render evidence now exist; repeatable host
-automation and a second target DAW remain outstanding.
+non-silent capture, and physical-render evidence now exist. A repeatable WinRM
+acceptance now registers the tested DLL, launches the engine and REAPER in the
+interactive session, verifies the loaded module and producer counters, and
+cleans up exact process/task identities. A second target DAW remains outstanding.
 
 A bounded control-plane client registry now admits multiple DAWs into one fixed
 session clock domain. It rejects duplicate IDs, capacity overflow, mismatched
