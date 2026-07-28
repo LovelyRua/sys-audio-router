@@ -10,6 +10,8 @@ param(
   [string]$ReaperPath = "C:\Program Files\REAPER (x64)\reaper.exe",
   [string]$InteractiveUser = "",
   [string]$Slot = "reaper",
+  [ValidateRange(1, 8)]
+  [uint32]$ClientCount = 1,
   [ValidateRange(5, 120)]
   [uint32]$StartupTimeoutSeconds = 30
 )
@@ -33,13 +35,14 @@ try {
   $session = New-PSSession -ComputerName $HostName -Credential $credential
   $result = Invoke-Command -Session $session -ArgumentList `
       $RemoteBuildPath, $RenderDeviceId, $ReaperPath, $InteractiveUser, `
-      $safeSlot, $StartupTimeoutSeconds -ScriptBlock {
+      $safeSlot, $ClientCount, $StartupTimeoutSeconds -ScriptBlock {
     param(
       [string]$BuildPath,
       [string]$PinnedRenderId,
       [string]$RequestedReaperPath,
       [string]$RequestedInteractiveUser,
       [string]$SafeSlot,
+      [uint32]$RequestedClientCount,
       [uint32]$TimeoutSeconds
     )
 
@@ -127,9 +130,9 @@ try {
 
     $suffix = [guid]::NewGuid().ToString("N").Substring(0, 8)
     $engineTask = "SAR-$SafeSlot-engine-$suffix"
-    $reaperTask = "SAR-$SafeSlot-reaper-$suffix"
+    $reaperTasks = @()
     $engineProcess = $null
-    $reaperProcess = $null
+    $reaperProcesses = @()
     try {
       $principal = New-ScheduledTaskPrincipal -UserId $interactiveUser `
           -LogonType Interactive -RunLevel Limited
@@ -153,32 +156,46 @@ try {
         throw "Engine did not start within $TimeoutSeconds seconds."
       }
 
-      $reaperAction = New-ScheduledTaskAction -Execute $RequestedReaperPath
-      Register-ScheduledTask -TaskName $reaperTask -Action $reaperAction `
-          -Principal $principal -Settings $settings | Out-Null
-      Start-ScheduledTask -TaskName $reaperTask
+      for ($clientIndex = 1; $clientIndex -le $RequestedClientCount; ++$clientIndex) {
+        $reaperTask = "SAR-$SafeSlot-reaper-$clientIndex-$suffix"
+        $reaperTasks += $reaperTask
+        if ($RequestedClientCount -gt 1) {
+          $reaperAction = New-ScheduledTaskAction -Execute $RequestedReaperPath `
+              -Argument "-newinst"
+        } else {
+          $reaperAction = New-ScheduledTaskAction -Execute $RequestedReaperPath
+        }
+        Register-ScheduledTask -TaskName $reaperTask -Action $reaperAction `
+            -Principal $principal -Settings $settings | Out-Null
+        Start-ScheduledTask -TaskName $reaperTask
+        if ($clientIndex -lt $RequestedClientCount) {
+          Start-Sleep -Milliseconds 500
+        }
+      }
 
-      $moduleLoaded = $false
-      while ([datetime]::UtcNow -lt $deadline -and !$moduleLoaded) {
+      $deadline = [datetime]::UtcNow.AddSeconds($TimeoutSeconds)
+      $loadedProcesses = @()
+      while ([datetime]::UtcNow -lt $deadline -and
+          $loadedProcesses.Count -lt $RequestedClientCount) {
         Start-Sleep -Milliseconds 250
-        $reaperProcess = Get-Process reaper -ErrorAction SilentlyContinue |
-            Select-Object -First 1
-        if ($null -ne $reaperProcess) {
+        $reaperProcesses = @(Get-Process reaper -ErrorAction SilentlyContinue)
+        $loadedProcesses = @($reaperProcesses | Where-Object {
           try {
-            $moduleLoaded = @($reaperProcess.Modules | ForEach-Object {
+            @($_.Modules | ForEach-Object {
               $_.ModuleName
             }) -contains "SystemAudioRouteVirtualASIO.dll"
           } catch {
-            $moduleLoaded = $false
+            $false
           }
-        }
+        })
       }
-      if ($null -eq $reaperProcess) {
-        throw "REAPER did not start within $TimeoutSeconds seconds."
+      if ($reaperProcesses.Count -lt $RequestedClientCount) {
+        throw "Expected $RequestedClientCount REAPER processes; found $($reaperProcesses.Count)."
       }
-      if (!$moduleLoaded) {
-        throw "REAPER did not load SystemAudioRouteVirtualASIO.dll."
+      if ($loadedProcesses.Count -lt $RequestedClientCount) {
+        throw "Only $($loadedProcesses.Count) of $RequestedClientCount REAPER processes loaded SystemAudioRouteVirtualASIO.dll."
       }
+      $reaperProcesses = @($loadedProcesses | Select-Object -First $RequestedClientCount)
 
       Start-Sleep -Seconds 3
       $diagnostics = (& $controlPath diagnostics 2>&1 | Out-String).Trim()
@@ -201,7 +218,7 @@ try {
       $droppedBlocks = [uint64]$fields.asio_dropped_blocks
       $consumedBlocks = [uint64]$fields.asio_consumed_blocks
       $mixedBlocks = [uint64]$fields.asio_mixed_blocks
-      if ($activeProducers -ne 1 -or $pushedBlocks -eq 0 -or
+      if ($activeProducers -ne $RequestedClientCount -or $pushedBlocks -eq 0 -or
           $consumedBlocks -eq 0 -or $mixedBlocks -eq 0 -or
           $droppedBlocks -ne 0) {
         throw "REAPER ASIO diagnostics failed acceptance: $diagnostics"
@@ -210,8 +227,9 @@ try {
       [pscustomobject]@{
         DriverPath = $driverPath
         EngineProcessId = $engineProcess.Id
-        ReaperProcessId = $reaperProcess.Id
-        SessionId = $reaperProcess.SessionId
+        ReaperProcessIds = [string]::Join(",", @($reaperProcesses.Id))
+        SessionId = $reaperProcesses[0].SessionId
+        ClientCount = $RequestedClientCount
         ActiveProducers = $activeProducers
         PushedBlocks = $pushedBlocks
         DroppedBlocks = $droppedBlocks
@@ -220,13 +238,13 @@ try {
         Diagnostics = $diagnostics
       }
     } finally {
-      if ($null -ne $reaperProcess) {
+      foreach ($reaperProcess in $reaperProcesses) {
         Stop-Process -Id $reaperProcess.Id -Force -ErrorAction SilentlyContinue
       }
       if ($null -ne $engineProcess) {
         Stop-Process -Id $engineProcess.Id -Force -ErrorAction SilentlyContinue
       }
-      foreach ($taskName in @($reaperTask, $engineTask)) {
+      foreach ($taskName in @($reaperTasks) + @($engineTask)) {
         Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false `
             -ErrorAction SilentlyContinue
@@ -236,11 +254,12 @@ try {
 
   Write-Host $result.Diagnostics
   Write-Host ((("reaper_asio_acceptance status=passed session={0} " +
-      "engine_pid={1} reaper_pid={2} active_producers={3} pushed={4} " +
-      "dropped={5} consumed={6} mixed={7} driver=`"{8}`"") -f
-      $result.SessionId, $result.EngineProcessId, $result.ReaperProcessId,
-      $result.ActiveProducers, $result.PushedBlocks, $result.DroppedBlocks,
-      $result.ConsumedBlocks, $result.MixedBlocks, $result.DriverPath))
+      "engine_pid={1} reaper_pids={2} clients={3} active_producers={4} " +
+      "pushed={5} dropped={6} consumed={7} mixed={8} driver=`"{9}`"") -f
+      $result.SessionId, $result.EngineProcessId, $result.ReaperProcessIds,
+      $result.ClientCount, $result.ActiveProducers, $result.PushedBlocks,
+      $result.DroppedBlocks, $result.ConsumedBlocks, $result.MixedBlocks,
+      $result.DriverPath))
 } finally {
   if ($null -ne $session) {
     Remove-PSSession $session
