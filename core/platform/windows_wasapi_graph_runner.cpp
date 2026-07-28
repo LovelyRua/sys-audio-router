@@ -209,7 +209,10 @@ WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(
       input_(input_channels, graph_block_frames),
       output_(output_channels, graph_block_frames),
       graph_block_frames_(graph_block_frames),
-      render_master_(prime_render_silence),
+      render_master_(
+          prime_render_silence ||
+          (capture_stream == nullptr && render_stream != nullptr &&
+           external_input != nullptr)),
       external_input_(external_input) {
   if (fifo_capacity_frames < graph_block_frames ||
       (capture_stream != nullptr && capture_packet_capacity_frames == 0) ||

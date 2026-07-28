@@ -95,15 +95,22 @@ int main() {
     }
   }
 
-  const auto empty_result = runner.process_once(graph, diagnostics, 0);
+  render.enqueue_render({.writable_frames = 10});
+  const auto empty_result = runner.process_once(graph, diagnostics, 10);
   assert(empty_result.ok());
   assert(!empty_result.stats().graph_processed);
-  assert(empty_result.stats().rendered_frames == 0);
-  assert(empty_result.stats().render_stream_idle);
+  assert(empty_result.stats().rendered_frames == 10);
+  assert(!empty_result.stats().render_stream_idle);
   assert(diagnostics.processed_blocks == 4);
   assert(diagnostics.render_fifo_underflow_cycles == 1);
-  assert(diagnostics.render_fifo_underflow_frames == 4);
-  assert(render.render_submissions().size() == 3);
+  assert(diagnostics.render_fifo_underflow_frames == 10);
+  assert(render.render_submissions().size() == 4);
+  const auto& silence = render.render_submissions().back();
+  for (const auto& channel : silence.samples) {
+    for (const auto sample : channel) {
+      assert(sample == 0.0F);
+    }
+  }
 
   std::cout << "WASAPI external input smoke test passed\n";
   return 0;
