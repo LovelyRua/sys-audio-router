@@ -238,7 +238,6 @@ std::unique_ptr<graph::Graph> EngineControlService::build_client_graph(
   std::lock_guard lock(control_mutex_);
   const auto& preset = session_->current_preset();
   if (sample_rate != preset.sample_rate ||
-      frames_per_block != preset.frames_per_block ||
       input_channels != output_channels ||
       input_channels != preset.matrix.inputs.size() ||
       output_channels != preset.matrix.outputs.size()) {
@@ -246,7 +245,9 @@ std::unique_ptr<graph::Graph> EngineControlService::build_client_graph(
   }
   const auto current = session_->current_graph();
   const auto version = current ? current->version() : 1;
-  auto built = control::build_preset_graph(preset, version);
+  auto client_preset = preset;
+  client_preset.frames_per_block = frames_per_block;
+  auto built = control::build_preset_graph(client_preset, version);
   return built.ok() ? built.take_graph() : nullptr;
 }
 

@@ -184,10 +184,10 @@ int wmain(int argc, wchar_t** argv) {
   long granularity = 0;
   assert(asio->getBufferSize(&minimum, &maximum, &preferred, &granularity) ==
          ASE_OK);
-  assert(minimum == 256);
-  assert(maximum == 256);
+  assert(minimum == 64);
+  assert(maximum == 2048);
   assert(preferred == 256);
-  assert(granularity == 0);
+  assert(granularity == -1);
   assert(asio->canSampleRate(48000.0) == ASE_OK);
   assert(asio->canSampleRate(12345.0) == ASE_NoClock);
   assert(asio->setSampleRate(96000.0) == ASE_NoClock);

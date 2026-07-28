@@ -402,7 +402,7 @@ int main(int argc, char** argv) {
       desired_session.preset.matrix.inputs.size(),
       desired_session.preset.matrix.outputs.size());
   sar::platform::VirtualAsioRenderBus asio_render_bus(
-      render_bus_channels, desired_session.preset.frames_per_block, 8, 8);
+      render_bus_channels, desired_session.preset.frames_per_block, 8, 32);
 
   auto service_result =
       sar::service::EngineControlService::create(desired_session.preset);
@@ -478,14 +478,15 @@ int main(int argc, char** argv) {
             [&preset, graph_version](
                 const sar::platform::VirtualAsioFormat& format) {
               if (format.sample_rate != preset.sample_rate ||
-                  format.frames_per_block != preset.frames_per_block ||
                   format.input_channels != format.output_channels ||
                   format.input_channels != preset.matrix.inputs.size() ||
                   format.output_channels != preset.matrix.outputs.size()) {
                 return std::unique_ptr<sar::graph::Graph>{};
               }
-              auto built =
-                  sar::control::build_preset_graph(preset, graph_version);
+              auto client_preset = preset;
+              client_preset.frames_per_block = format.frames_per_block;
+              auto built = sar::control::build_preset_graph(
+                  client_preset, graph_version);
               return built.ok() ? built.take_graph()
                                 : std::unique_ptr<sar::graph::Graph>{};
             });

@@ -238,9 +238,11 @@ driver CLSID as the interface identifier, while the DLL initially accepted only
 standalone host probe exercises activation, enumeration, buffer creation,
 streaming callbacks, and shutdown against the real engine broker. The broker now
 publishes the active sample rate, block size, and channel layout before buffer
-creation, and the driver reports that exact clock domain to the host instead of
-advertising combinations the engine will reject. Cross-block-size adaptation
-and long-duration real DAW cadence capture remain outstanding. The host probe
+creation. The driver reports the engine sample rate and preferred block size
+while accepting supported power-of-two host blocks. Each render-bus producer
+uses a preallocated planar FIFO to combine smaller host blocks or split larger
+ones into the fixed physical-render quantum. Cross-sample-rate adaptation and
+long-duration real DAW cadence capture remain outstanding. The host probe
 can generate a bounded optional test tone so this
 path no longer depends on a manually prepared DAW project.
 The first physical-render bridge is now implemented. A fixed eight-client bus
