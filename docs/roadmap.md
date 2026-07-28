@@ -225,6 +225,10 @@ events to the current user and LocalSystem. The first single-connection
 transport session now owns these primitives plus a dedicated graph and
 preallocated buffers, and its cancellable pump has an in-process synthetic DAW
 end-to-end smoke. Multi-client hosting and broker admission are implemented.
+The broker-client smoke now connects two independent clients concurrently,
+verifies that their shared-memory queues and graph outputs do not cross, then
+disconnects one client while the other continues processing. A corresponding
+two-real-DAW duration run remains an Alpha gate.
 The host-facing DLL now exposes the first fixed stereo `IASIO` control/buffer
 surface and a stoppable MMCSS callback worker. The worker exchanges preallocated
 planar blocks through the broker's lock-free queues, never waits for an engine
