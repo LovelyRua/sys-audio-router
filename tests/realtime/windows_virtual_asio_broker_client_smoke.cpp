@@ -32,6 +32,26 @@ void fill(sar::realtime::AudioBuffer& buffer) {
   }
 }
 
+void fill_constant(sar::realtime::AudioBuffer& buffer, float value) {
+  for (std::size_t channel = 0; channel < buffer.channels(); ++channel) {
+    for (std::size_t frame = 0; frame < buffer.frames(); ++frame) {
+      buffer.channel(channel)[frame] =
+          value + static_cast<float>(channel) * 0.1F;
+    }
+  }
+}
+
+void expect_gain(const sar::realtime::AudioBuffer& buffer, float value) {
+  for (std::size_t channel = 0; channel < buffer.channels(); ++channel) {
+    const auto expected =
+        (value + static_cast<float>(channel) * 0.1F) * 0.25F;
+    for (std::size_t frame = 0; frame < buffer.frames(); ++frame) {
+      assert(std::fabs(buffer.channel(channel)[frame] - expected) <
+             0.000001F);
+    }
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -108,5 +128,76 @@ int main() {
   assert(!client->connected());
   assert(host.active_session_count() == 0);
   assert(client->disconnect().ok());
+
+  auto request_a = request;
+  request_a.request_id = 801;
+  request_a.client_id = "asio-daw-a";
+  request_a.client_nonce_low = 0xA1;
+  request_a.client_nonce_high = 0xA2;
+  auto request_b = request;
+  request_b.request_id = 802;
+  request_b.client_id = "asio-daw-b";
+  request_b.client_nonce_low = 0xB1;
+  request_b.client_nonce_high = 0xB2;
+  auto connected_a = sar::service::WindowsVirtualAsioBrokerClient::connect(
+      server.pipe_config(), request_a);
+  auto connected_b = sar::service::WindowsVirtualAsioBrokerClient::connect(
+      server.pipe_config(), request_b);
+  assert(connected_a.ok());
+  assert(connected_b.ok());
+  auto client_a = connected_a.take_client();
+  auto client_b = connected_b.take_client();
+  assert(host.active_session_count() == 2);
+  assert(client_a->connection_generation() !=
+         client_b->connection_generation());
+  assert(client_a->names().mapping != client_b->names().mapping);
+
+  sar::realtime::AudioBuffer input_a(kChannels, kFrames);
+  sar::realtime::AudioBuffer input_b(kChannels, kFrames);
+  sar::realtime::AudioBuffer output_a(kChannels, kFrames);
+  sar::realtime::AudioBuffer output_b(kChannels, kFrames);
+  fill_constant(input_a, 0.2F);
+  fill_constant(input_b, 0.6F);
+  const sar::platform::VirtualAsioSharedBlockMetadata sent_a{
+      .sequence = 21, .sample_position = 672, .qpc_position_100ns = 1001};
+  const sar::platform::VirtualAsioSharedBlockMetadata sent_b{
+      .sequence = 22, .sample_position = 704, .qpc_position_100ns = 1002};
+  assert(client_a->push_input(input_a, sent_a) ==
+         sar::platform::VirtualAsioSharedQueueStatus::Completed);
+  assert(client_b->push_input(input_b, sent_b) ==
+         sar::platform::VirtualAsioSharedQueueStatus::Completed);
+  assert(client_a->signal_input());
+  assert(client_b->signal_input());
+  assert(client_a->wait_output_or_shutdown(1000).status ==
+         sar::platform::WindowsVirtualAsioEventWaitStatus::Ready);
+  assert(client_b->wait_output_or_shutdown(1000).status ==
+         sar::platform::WindowsVirtualAsioEventWaitStatus::Ready);
+  sar::platform::VirtualAsioSharedBlockMetadata received_a;
+  sar::platform::VirtualAsioSharedBlockMetadata received_b;
+  assert(client_a->pop_output(output_a, received_a) ==
+         sar::platform::VirtualAsioSharedQueueStatus::Completed);
+  assert(client_b->pop_output(output_b, received_b) ==
+         sar::platform::VirtualAsioSharedQueueStatus::Completed);
+  assert(received_a.sequence == sent_a.sequence);
+  assert(received_b.sequence == sent_b.sequence);
+  expect_gain(output_a, 0.2F);
+  expect_gain(output_b, 0.6F);
+
+  assert(client_a->disconnect().ok());
+  assert(host.active_session_count() == 1);
+  fill_constant(input_b, 0.8F);
+  const sar::platform::VirtualAsioSharedBlockMetadata sent_b_after{
+      .sequence = 23, .sample_position = 736, .qpc_position_100ns = 1003};
+  assert(client_b->push_input(input_b, sent_b_after) ==
+         sar::platform::VirtualAsioSharedQueueStatus::Completed);
+  assert(client_b->signal_input());
+  assert(client_b->wait_output_or_shutdown(1000).status ==
+         sar::platform::WindowsVirtualAsioEventWaitStatus::Ready);
+  assert(client_b->pop_output(output_b, received_b) ==
+         sar::platform::VirtualAsioSharedQueueStatus::Completed);
+  assert(received_b.sequence == sent_b_after.sequence);
+  expect_gain(output_b, 0.8F);
+  assert(client_b->disconnect().ok());
+  assert(host.active_session_count() == 0);
   server.stop();
 }
