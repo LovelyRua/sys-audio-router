@@ -42,6 +42,13 @@ zero drops, xruns, clipping, or non-finite samples and a 1,267.4-microsecond
 peak graph callback. Both hosts remained loaded and connected at the final
 snapshot, and cleanup removed both processes and all temporary tasks.
 
+The acceptance helper now also terminates clients one at a time and gates the
+producer-count sequence. After the engine service began reaping stopped
+transport sessions from its 20 ms control loop, a two-client three-second
+regression delivered 2,326 pushed, 2,325 consumed, 1,168 mixed, and 1,166
+processed blocks with zero drop or xrun and a 64.999-microsecond callback peak.
+Cleanup completed the required `2->1->0` active-producer sequence.
+
 The preceding bounded host-probe physical loop generated a 440 Hz, -24 dBFS
 signal through the same production driver and engine bridge. `CABLE Output`
 captured 160,896 frames with peak `0.0630989075`, RMS `0.0327823061`, zero
@@ -60,6 +67,8 @@ coverage and this real-machine acceptance both pass with the fix.
 
 ## Remaining DAW Gates
 
-- Run the scripted acceptance against a second target DAW.
 - Extend the passing 60-second two-REAPER gate into the release-duration run.
 - Add long-duration per-client cadence and clock-adaptation evidence.
+
+The second-target-DAW gate is recorded separately in
+[Cakewalk Virtual ASIO Acceptance](cakewalk-virtual-asio-2026-07-29.md).

@@ -209,8 +209,14 @@ cleans up exact process/task identities. Two isolated REAPER processes also
 connected concurrently with two active producers, zero drops, and zero xruns.
 A duration-aware 60-second run then retained both producers, delivered 44,426
 pushed and 44,425 consumed blocks with zero drop or xrun, and kept the peak
-graph callback to 1.2674 ms. A second target DAW and the release-duration
-multi-client gate remain outstanding.
+graph callback to 1.2674 ms. Cakewalk by BandLab 29.09 then became the second
+target DAW: Cakewalk and REAPER loaded the production DLL concurrently and a
+30-second cross-host gate delivered 22,493 pushed, 22,492 consumed, 11,282
+mixed, and 11,269 processed blocks with zero drop or xrun and a 745.1 us peak
+graph callback. The release-duration multi-client gate remains outstanding.
+The service control loop now reaps transport sessions whose monitored DAW
+process exited. A real two-REAPER teardown regression completed the required
+`2->1->0` active-producer sequence instead of retaining dead render-bus slots.
 
 A bounded control-plane client registry now admits multiple DAWs into one fixed
 session clock domain. It rejects duplicate IDs, capacity overflow, mismatched
@@ -234,8 +240,9 @@ preallocated buffers, and its cancellable pump has an in-process synthetic DAW
 end-to-end smoke. Multi-client hosting and broker admission are implemented.
 The broker-client smoke now connects two independent clients concurrently,
 verifies that their shared-memory queues and graph outputs do not cross, then
-disconnects one client while the other continues processing. A corresponding
-two-real-DAW duration run remains an Alpha gate.
+disconnects one client while the other continues processing. The corresponding
+Cakewalk-plus-REAPER 30-second real-DAW gate now passes; release-duration
+multi-client evidence remains an Alpha qualification gate.
 The host-facing DLL now exposes the first fixed stereo `IASIO` control/buffer
 surface and a stoppable MMCSS callback worker. The worker exchanges preallocated
 planar blocks through the broker's lock-free queues, never waits for an engine

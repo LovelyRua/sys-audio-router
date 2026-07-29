@@ -243,7 +243,14 @@ try {
       }
       $reaperProcesses = @($loadedProcesses | Select-Object -First $RequestedClientCount)
 
-      $initial = Get-DiagnosticsSnapshot
+      $deadline = [datetime]::UtcNow.AddSeconds($TimeoutSeconds)
+      do {
+        $initial = Get-DiagnosticsSnapshot
+        if ($initial.ActiveProducers -eq $RequestedClientCount) {
+          break
+        }
+        Start-Sleep -Milliseconds 100
+      } while ([datetime]::UtcNow -lt $deadline)
       if ($initial.ActiveProducers -ne $RequestedClientCount) {
         throw "Initial active producer count was $($initial.ActiveProducers), expected $RequestedClientCount."
       }
@@ -291,11 +298,33 @@ try {
             $final.CallbackPeakMicroseconds, $MaximumCallbackUs, $final.Text))
       }
 
+      $reaperProcessIds = [string]::Join(",", @($reaperProcesses.Id))
+      $disconnectSequence = @($reaperProcesses.Count)
+      for ($processIndex = 0;
+          $processIndex -lt $reaperProcesses.Count;
+          ++$processIndex) {
+        Stop-Process -Id $reaperProcesses[$processIndex].Id -Force
+        $expectedProducers = $reaperProcesses.Count - $processIndex - 1
+        $disconnectDeadline = [datetime]::UtcNow.AddSeconds($TimeoutSeconds)
+        do {
+          Start-Sleep -Milliseconds 100
+          $afterDisconnect = Get-DiagnosticsSnapshot
+          if ($afterDisconnect.ActiveProducers -eq $expectedProducers) {
+            break
+          }
+        } while ([datetime]::UtcNow -lt $disconnectDeadline)
+        if ($afterDisconnect.ActiveProducers -ne $expectedProducers) {
+          throw "REAPER process disconnected, but active producer count remained $($afterDisconnect.ActiveProducers); expected $expectedProducers."
+        }
+        $disconnectSequence += $expectedProducers
+      }
+      $reaperProcesses = @()
+
       [pscustomobject]@{
         DriverPath = $driverPath
         EngineProcessId = $engineProcess.Id
-        ReaperProcessIds = [string]::Join(",", @($reaperProcesses.Id))
-        SessionId = $reaperProcesses[0].SessionId
+        ReaperProcessIds = $reaperProcessIds
+        SessionId = $loadedProcesses[0].SessionId
         ClientCount = $RequestedClientCount
         DurationSeconds = $RequestedDurationSeconds
         ActiveProducers = $final.ActiveProducers
@@ -308,6 +337,7 @@ try {
         ProcessedDelta = $processedDelta
         XrunDelta = $xrunDelta
         CallbackPeakMicroseconds = $final.CallbackPeakMicroseconds
+        DisconnectSequence = [string]::Join("->", $disconnectSequence)
         Diagnostics = $final.Text
       }
     } finally {
@@ -331,13 +361,14 @@ try {
       "duration_seconds={5} pushed_delta={6} minimum_pushed={7} " +
       "dropped_delta={8} consumed_delta={9} mixed_delta={10} " +
       "minimum_mixed={11} processed_delta={12} xrun_delta={13} " +
-      "callback_peak_us={14} driver=`"{15}`"") -f
+      "callback_peak_us={14} disconnect_sequence={15} driver=`"{16}`"") -f
       $result.SessionId, $result.EngineProcessId, $result.ReaperProcessIds,
       $result.ClientCount, $result.ActiveProducers, $result.DurationSeconds,
       $result.PushedDelta, $result.MinimumProducerBlocks, $result.DroppedDelta,
       $result.ConsumedDelta, $result.MixedDelta, $result.MinimumMixedBlocks,
       $result.ProcessedDelta, $result.XrunDelta,
-      $result.CallbackPeakMicroseconds, $result.DriverPath))
+      $result.CallbackPeakMicroseconds, $result.DisconnectSequence,
+      $result.DriverPath))
 } finally {
   if ($null -ne $session) {
     Remove-PSSession $session
