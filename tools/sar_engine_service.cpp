@@ -571,6 +571,7 @@ int main(int argc, char** argv) {
     if (once && pipe_server.stats().completed_requests >= 1) {
       break;
     }
+    static_cast<void>(asio_host.reap_stopped_sessions());
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
   pipe_server.stop();

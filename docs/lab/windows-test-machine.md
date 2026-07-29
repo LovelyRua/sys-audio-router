@@ -40,6 +40,7 @@ Record installed versions here when testing begins:
 | Visual Studio Build Tools | 2022 | Used for user-mode builds; VS 2022 Build Tools cannot host the WDK component. |
 | Windows Driver Kit | `10.1.26100.6584` | `Microsoft.WindowsWDK.10.0.26100`; ACX headers present. |
 | REAPER | `7.78 x64` | Virtual ASIO discovery, load, callback, and physical CABLE render evidence recorded on 2026-07-28. |
+| Cakewalk by BandLab | `29.09.0.098` | Second-DAW discovery, load, callback, and simultaneous REAPER evidence recorded on 2026-07-29. |
 | Cubase | TBD | |
 | Ableton Live | TBD | |
 | FL Studio | TBD | |

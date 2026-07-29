@@ -580,6 +580,17 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   floor. Its first 60-second two-client run delivered 44,426 pushed, 44,425
   consumed, 22,514 mixed, and 22,346 processed blocks with zero drop, xrun,
   clipping, or non-finite sample and a 1.2674-millisecond peak graph callback.
+  Cakewalk by BandLab 29.09 is the second validated DAW. A 30-second
+  Cakewalk-plus-REAPER run loaded the same production DLL in both processes,
+  retained two active producers, delivered 22,493 pushed, 22,492 consumed,
+  11,282 mixed, and 11,269 processed blocks, and reported zero drop or xrun
+  with a 745.1-microsecond peak graph callback. The cross-DAW helper preserves
+  the already-running first host, owns only the second host task and process,
+  and requires the producer count to return to one after disconnect.
+  The engine service also reaps stopped transport sessions from its 20 ms
+  control loop. A real two-REAPER teardown regression now requires and passed
+  the `2->1->0` active-producer sequence, closing the dead-client render-bus
+  slot leak exposed by the first interrupted cross-DAW run.
 - The first ASIO-to-physical-render bridge is wired for exact-format clients.
   On 2026-07-22, REAPER 7.78 loaded the deployed driver while the service ran a
   pinned 48 kHz hardware render endpoint; after 11,301 graph blocks the runtime
