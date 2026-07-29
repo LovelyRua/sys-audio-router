@@ -162,6 +162,7 @@ remote build and a pinned render endpoint:
 ```bat
 scripts\windows-winrm-reaper-acceptance.cmd 192.168.123.123 codex <password> C:\path\to\Debug "<render-endpoint-id>" engineer-a
 scripts\windows-winrm-reaper-acceptance.cmd 192.168.123.123 codex <password> C:\path\to\Debug "<render-endpoint-id>" engineer-a-two-client 2
+scripts\windows-winrm-reaper-acceptance.cmd 192.168.123.123 codex <password> C:\path\to\Debug "<render-endpoint-id>" engineer-a-two-client-soak 2 3600
 ```
 
 The helper refuses to take over an existing REAPER or engine process. It
@@ -170,7 +171,11 @@ the logged-in Explorer session, proves that REAPER loaded the exact driver DLL,
 and requires the requested number of active producers, non-zero
 pushed/consumed/mixed blocks, and zero dropped blocks. Counts from one through
 eight are accepted; counts above one launch isolated REAPER instances.
-Temporary processes and Scheduled Tasks are removed on success and failure.
+The optional eighth argument sets the measured duration in seconds. The gate
+uses diagnostic deltas over that interval and requires at least 80% of nominal
+48 kHz/128-frame producer and render coverage, zero drops, xruns, clipping, and
+non-finite samples, and a peak graph callback no greater than 10 ms. Temporary
+processes and Scheduled Tasks are removed on success and failure.
 
 ## Expected Test Targets
 

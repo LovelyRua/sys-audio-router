@@ -207,7 +207,10 @@ acceptance now registers the tested DLL, launches the engine and REAPER in the
 interactive session, verifies the loaded module and producer counters, and
 cleans up exact process/task identities. Two isolated REAPER processes also
 connected concurrently with two active producers, zero drops, and zero xruns.
-A second target DAW and the multi-client duration gate remain outstanding.
+A duration-aware 60-second run then retained both producers, delivered 44,426
+pushed and 44,425 consumed blocks with zero drop or xrun, and kept the peak
+graph callback to 1.2674 ms. A second target DAW and the release-duration
+multi-client gate remain outstanding.
 
 A bounded control-plane client registry now admits multiple DAWs into one fixed
 session clock domain. It rejects duplicate IDs, capacity overflow, mismatched

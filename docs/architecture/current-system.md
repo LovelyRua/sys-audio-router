@@ -576,6 +576,10 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   2,731 pushed blocks, 2,728 consumed blocks, 1,515 physical mix cycles, zero
   drops, zero xruns, and a 257.899-microsecond peak graph callback. A subsequent
   single-client compatibility run also passed.
+  The duration gate now measures counter deltas against an 80% nominal cadence
+  floor. Its first 60-second two-client run delivered 44,426 pushed, 44,425
+  consumed, 22,514 mixed, and 22,346 processed blocks with zero drop, xrun,
+  clipping, or non-finite sample and a 1.2674-millisecond peak graph callback.
 - The first ASIO-to-physical-render bridge is wired for exact-format clients.
   On 2026-07-22, REAPER 7.78 loaded the deployed driver while the service ran a
   pinned 48 kHz hardware render endpoint; after 11,301 graph blocks the runtime

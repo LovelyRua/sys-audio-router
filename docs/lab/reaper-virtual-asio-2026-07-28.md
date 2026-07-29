@@ -34,6 +34,14 @@ pushed blocks, 2,728 consumed blocks, 1,515 physical mix cycles, zero drops,
 zero xruns, and a 257.899-microsecond peak callback. Its single-client
 compatibility run also passed with 1,091 pushed blocks and zero drops or xruns.
 
+On 2026-07-29, the duration-aware gate ran two REAPER processes for 60 seconds.
+The measured interval produced 44,426 pushed blocks, 44,425 consumed blocks,
+22,514 physical mix cycles, and 22,346 processed graph blocks. The 80% coverage
+floors were 36,000 producer blocks and 18,000 physical blocks. The run reported
+zero drops, xruns, clipping, or non-finite samples and a 1,267.4-microsecond
+peak graph callback. Both hosts remained loaded and connected at the final
+snapshot, and cleanup removed both processes and all temporary tasks.
+
 The preceding bounded host-probe physical loop generated a 440 Hz, -24 dBFS
 signal through the same production driver and engine bridge. `CABLE Output`
 captured 160,896 frames with peak `0.0630989075`, RMS `0.0327823061`, zero
@@ -53,5 +61,5 @@ coverage and this real-machine acceptance both pass with the fix.
 ## Remaining DAW Gates
 
 - Run the scripted acceptance against a second target DAW.
-- Extend the passing two-REAPER process gate into the planned duration run.
+- Extend the passing 60-second two-REAPER gate into the release-duration run.
 - Add long-duration per-client cadence and clock-adaptation evidence.
