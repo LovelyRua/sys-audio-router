@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(SystemAudioRoute LANGUAGES C CXX)
+project(SystemAudioRoute VERSION 0.1.0 LANGUAGES C CXX)
+
+include(GNUInstallDirs)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -956,3 +958,44 @@ foreach(sar_target IN LISTS sar_directory_targets)
     endif()
   endif()
 endforeach()
+
+if(WIN32)
+  install(TARGETS
+    sar_engine_service
+    sar_control_cli
+    sar_virtual_asio_driver
+    sar_virtual_asio_register
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_BINDIR}
+  )
+  if(SAR_BUILD_GUI)
+    install(TARGETS sar_gui
+      RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+  endif()
+  install(FILES
+    LICENSE
+    NOTICE.md
+    README.md
+    DESTINATION .
+  )
+  install(FILES
+    packaging/windows/install-alpha.ps1
+    packaging/windows/uninstall-alpha.ps1
+    DESTINATION .
+  )
+  install(PROGRAMS
+    packaging/windows/install-alpha.cmd
+    packaging/windows/uninstall-alpha.cmd
+    DESTINATION .
+  )
+
+  set(CPACK_GENERATOR ZIP)
+  set(CPACK_PACKAGE_NAME "SystemAudioRoute")
+  set(CPACK_PACKAGE_VENDOR "System Audio Route contributors")
+  set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+  set(CPACK_PACKAGE_FILE_NAME
+      "SystemAudioRoute-${PROJECT_VERSION}-windows-x64")
+  set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY ON)
+  include(CPack)
+endif()

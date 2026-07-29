@@ -35,6 +35,7 @@ Start here:
 - [Performance Targets](docs/architecture/performance-targets.md)
 - [Phase 0 Validation Plan](docs/research/phase-0-validation-plan.md)
 - [Development](docs/development.md)
+- [Windows Alpha Package](docs/alpha-package.md)
 - [Windows Test Runbook](docs/lab/windows-test-runbook.md)
 
 Architecture decisions:
