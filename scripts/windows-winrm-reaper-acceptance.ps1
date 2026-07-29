@@ -12,6 +12,12 @@ param(
   [string]$Slot = "reaper",
   [ValidateRange(1, 8)]
   [uint32]$ClientCount = 1,
+  [ValidateRange(1, 86400)]
+  [uint32]$DurationSeconds = 3,
+  [ValidateRange(1, 10000)]
+  [uint32]$MinimumCallbackCoverageBasisPoints = 8000,
+  [ValidateRange(1, 1000000)]
+  [double]$MaximumCallbackMicroseconds = 10000,
   [ValidateRange(5, 120)]
   [uint32]$StartupTimeoutSeconds = 30
 )
@@ -35,7 +41,9 @@ try {
   $session = New-PSSession -ComputerName $HostName -Credential $credential
   $result = Invoke-Command -Session $session -ArgumentList `
       $RemoteBuildPath, $RenderDeviceId, $ReaperPath, $InteractiveUser, `
-      $safeSlot, $ClientCount, $StartupTimeoutSeconds -ScriptBlock {
+      $safeSlot, $ClientCount, $DurationSeconds, `
+      $MinimumCallbackCoverageBasisPoints, $MaximumCallbackMicroseconds, `
+      $StartupTimeoutSeconds -ScriptBlock {
     param(
       [string]$BuildPath,
       [string]$PinnedRenderId,
@@ -43,6 +51,9 @@ try {
       [string]$RequestedInteractiveUser,
       [string]$SafeSlot,
       [uint32]$RequestedClientCount,
+      [uint32]$RequestedDurationSeconds,
+      [uint32]$MinimumCoverageBasisPoints,
+      [double]$MaximumCallbackUs,
       [uint32]$TimeoutSeconds
     )
 
@@ -61,6 +72,41 @@ try {
         $RequestedReaperPath)) {
       if (!(Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "Required acceptance executable was not found at '$path'."
+      }
+    }
+
+    function Get-DiagnosticsSnapshot {
+      $text = (& $controlPath diagnostics 2>&1 | Out-String).Trim()
+      if ($LASTEXITCODE -ne 0) {
+        throw "Diagnostics query failed: $text"
+      }
+      $fields = @{}
+      foreach ($match in [regex]::Matches($text, '([a-z_]+)=([^\s]+)')) {
+        $fields[$match.Groups[1].Value] = $match.Groups[2].Value
+      }
+      foreach ($name in @(
+          "processed_blocks", "xruns", "asio_active_producers",
+          "asio_pushed_blocks", "asio_dropped_blocks", "asio_consumed_blocks",
+          "asio_mixed_blocks", "asio_clipped_samples",
+          "asio_non_finite_samples", "callback_peak_us")) {
+        if (!$fields.ContainsKey($name)) {
+          throw "Diagnostics response is missing '$name': $text"
+        }
+      }
+      [pscustomobject]@{
+        Text = $text
+        ProcessedBlocks = [uint64]$fields.processed_blocks
+        Xruns = [uint64]$fields.xruns
+        ActiveProducers = [uint64]$fields.asio_active_producers
+        PushedBlocks = [uint64]$fields.asio_pushed_blocks
+        DroppedBlocks = [uint64]$fields.asio_dropped_blocks
+        ConsumedBlocks = [uint64]$fields.asio_consumed_blocks
+        MixedBlocks = [uint64]$fields.asio_mixed_blocks
+        ClippedSamples = [uint64]$fields.asio_clipped_samples
+        NonFiniteSamples = [uint64]$fields.asio_non_finite_samples
+        CallbackPeakMicroseconds = [double]::Parse(
+            $fields.callback_peak_us,
+            [Globalization.CultureInfo]::InvariantCulture)
       }
     }
 
@@ -197,31 +243,52 @@ try {
       }
       $reaperProcesses = @($loadedProcesses | Select-Object -First $RequestedClientCount)
 
-      Start-Sleep -Seconds 3
-      $diagnostics = (& $controlPath diagnostics 2>&1 | Out-String).Trim()
-      if ($LASTEXITCODE -ne 0) {
-        throw "Diagnostics query failed: $diagnostics"
+      $initial = Get-DiagnosticsSnapshot
+      if ($initial.ActiveProducers -ne $RequestedClientCount) {
+        throw "Initial active producer count was $($initial.ActiveProducers), expected $RequestedClientCount."
       }
-      $fields = @{}
-      foreach ($match in [regex]::Matches($diagnostics, '([a-z_]+)=([^\s]+)')) {
-        $fields[$match.Groups[1].Value] = $match.Groups[2].Value
-      }
-      foreach ($name in @(
-          "asio_active_producers", "asio_pushed_blocks", "asio_dropped_blocks",
-          "asio_consumed_blocks", "asio_mixed_blocks")) {
-        if (!$fields.ContainsKey($name)) {
-          throw "Diagnostics response is missing '$name': $diagnostics"
+      Start-Sleep -Seconds $RequestedDurationSeconds
+      $final = Get-DiagnosticsSnapshot
+      foreach ($process in $reaperProcesses) {
+        if ($null -eq (Get-Process -Id $process.Id -ErrorAction SilentlyContinue)) {
+          throw "REAPER process $($process.Id) exited during acceptance."
         }
       }
-      $activeProducers = [uint64]$fields.asio_active_producers
-      $pushedBlocks = [uint64]$fields.asio_pushed_blocks
-      $droppedBlocks = [uint64]$fields.asio_dropped_blocks
-      $consumedBlocks = [uint64]$fields.asio_consumed_blocks
-      $mixedBlocks = [uint64]$fields.asio_mixed_blocks
-      if ($activeProducers -ne $RequestedClientCount -or $pushedBlocks -eq 0 -or
-          $consumedBlocks -eq 0 -or $mixedBlocks -eq 0 -or
-          $droppedBlocks -ne 0) {
-        throw "REAPER ASIO diagnostics failed acceptance: $diagnostics"
+      if ($final.ActiveProducers -ne $RequestedClientCount) {
+        throw "Final active producer count was $($final.ActiveProducers), expected $RequestedClientCount."
+      }
+
+      $pushedDelta = $final.PushedBlocks - $initial.PushedBlocks
+      $droppedDelta = $final.DroppedBlocks - $initial.DroppedBlocks
+      $consumedDelta = $final.ConsumedBlocks - $initial.ConsumedBlocks
+      $mixedDelta = $final.MixedBlocks - $initial.MixedBlocks
+      $processedDelta = $final.ProcessedBlocks - $initial.ProcessedBlocks
+      $xrunDelta = $final.Xruns - $initial.Xruns
+      $clippedDelta = $final.ClippedSamples - $initial.ClippedSamples
+      $nonFiniteDelta = $final.NonFiniteSamples - $initial.NonFiniteSamples
+      $nominalBlocksPerClient = [double]$RequestedDurationSeconds * 48000.0 / 128.0
+      $coverage = [double]$MinimumCoverageBasisPoints / 10000.0
+      $minimumProducerBlocks = [uint64][Math]::Floor(
+          $nominalBlocksPerClient * $RequestedClientCount * $coverage)
+      $minimumMixedBlocks = [uint64][Math]::Floor(
+          $nominalBlocksPerClient * $coverage)
+
+      if ($pushedDelta -lt $minimumProducerBlocks -or
+          $consumedDelta -lt $minimumProducerBlocks -or
+          $mixedDelta -lt $minimumMixedBlocks -or
+          $processedDelta -lt $minimumMixedBlocks -or
+          $droppedDelta -ne 0 -or $xrunDelta -ne 0 -or
+          $clippedDelta -ne 0 -or $nonFiniteDelta -ne 0 -or
+          $final.CallbackPeakMicroseconds -gt $MaximumCallbackUs) {
+        throw ((("REAPER ASIO duration acceptance failed: duration={0} " +
+            "pushed_delta={1}/{2} consumed_delta={3}/{2} mixed_delta={4}/{5} " +
+            "processed_delta={6}/{5} dropped_delta={7} xrun_delta={8} " +
+            "clipped_delta={9} non_finite_delta={10} callback_peak_us={11}/{12}. " +
+            "Final diagnostics: {13}") -f
+            $RequestedDurationSeconds, $pushedDelta, $minimumProducerBlocks,
+            $consumedDelta, $mixedDelta, $minimumMixedBlocks, $processedDelta,
+            $droppedDelta, $xrunDelta, $clippedDelta, $nonFiniteDelta,
+            $final.CallbackPeakMicroseconds, $MaximumCallbackUs, $final.Text))
       }
 
       [pscustomobject]@{
@@ -230,12 +297,18 @@ try {
         ReaperProcessIds = [string]::Join(",", @($reaperProcesses.Id))
         SessionId = $reaperProcesses[0].SessionId
         ClientCount = $RequestedClientCount
-        ActiveProducers = $activeProducers
-        PushedBlocks = $pushedBlocks
-        DroppedBlocks = $droppedBlocks
-        ConsumedBlocks = $consumedBlocks
-        MixedBlocks = $mixedBlocks
-        Diagnostics = $diagnostics
+        DurationSeconds = $RequestedDurationSeconds
+        ActiveProducers = $final.ActiveProducers
+        PushedDelta = $pushedDelta
+        MinimumProducerBlocks = $minimumProducerBlocks
+        DroppedDelta = $droppedDelta
+        ConsumedDelta = $consumedDelta
+        MixedDelta = $mixedDelta
+        MinimumMixedBlocks = $minimumMixedBlocks
+        ProcessedDelta = $processedDelta
+        XrunDelta = $xrunDelta
+        CallbackPeakMicroseconds = $final.CallbackPeakMicroseconds
+        Diagnostics = $final.Text
       }
     } finally {
       foreach ($reaperProcess in $reaperProcesses) {
@@ -255,11 +328,16 @@ try {
   Write-Host $result.Diagnostics
   Write-Host ((("reaper_asio_acceptance status=passed session={0} " +
       "engine_pid={1} reaper_pids={2} clients={3} active_producers={4} " +
-      "pushed={5} dropped={6} consumed={7} mixed={8} driver=`"{9}`"") -f
+      "duration_seconds={5} pushed_delta={6} minimum_pushed={7} " +
+      "dropped_delta={8} consumed_delta={9} mixed_delta={10} " +
+      "minimum_mixed={11} processed_delta={12} xrun_delta={13} " +
+      "callback_peak_us={14} driver=`"{15}`"") -f
       $result.SessionId, $result.EngineProcessId, $result.ReaperProcessIds,
-      $result.ClientCount, $result.ActiveProducers, $result.PushedBlocks,
-      $result.DroppedBlocks, $result.ConsumedBlocks, $result.MixedBlocks,
-      $result.DriverPath))
+      $result.ClientCount, $result.ActiveProducers, $result.DurationSeconds,
+      $result.PushedDelta, $result.MinimumProducerBlocks, $result.DroppedDelta,
+      $result.ConsumedDelta, $result.MixedDelta, $result.MinimumMixedBlocks,
+      $result.ProcessedDelta, $result.XrunDelta,
+      $result.CallbackPeakMicroseconds, $result.DriverPath))
 } finally {
   if ($null -ne $session) {
     Remove-PSSession $session
