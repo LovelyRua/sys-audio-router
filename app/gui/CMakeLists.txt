@@ -2,6 +2,8 @@ qt_add_executable(sar_gui WIN32
   engine_controller.cpp
   engine_controller.h
   main.cpp
+  preset_store.cpp
+  preset_store.h
 )
 
 qt_add_qml_module(sar_gui
@@ -20,4 +22,22 @@ target_link_libraries(sar_gui PRIVATE
 
 set_target_properties(sar_gui PROPERTIES
   OUTPUT_NAME "SystemAudioRoute"
+)
+
+enable_testing()
+add_executable(sar_gui_preset_store_smoke
+  preset_store.cpp
+  preset_store.h
+  tests/preset_store_smoke.cpp
+)
+target_link_libraries(sar_gui_preset_store_smoke PRIVATE Qt6::Core sar_core)
+if(MSVC)
+  target_compile_options(sar_gui_preset_store_smoke PRIVATE /UNDEBUG)
+else()
+  target_compile_options(sar_gui_preset_store_smoke PRIVATE -UNDEBUG)
+endif()
+add_test(NAME gui_preset_store_smoke COMMAND sar_gui_preset_store_smoke)
+set_tests_properties(gui_preset_store_smoke PROPERTIES
+  ENVIRONMENT_MODIFICATION
+    "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
 )

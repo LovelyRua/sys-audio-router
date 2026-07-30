@@ -53,6 +53,12 @@ crosses into the realtime path.
 - Engine start and stop remain visible in the global header.
 - Device and diagnostics views stay in the same window so repeated routing work
   does not create modal-dialog churn.
+- The preset shelf keeps browsing, naming, saving, and loading in the routing
+  workspace. Saves request the authoritative preset from the engine and commit
+  it atomically under the user's application-data directory; loads validate the
+  local document before asking the engine to publish it.
+- Preset success and command/file errors remain visible in a compact footer
+  until dismissed. A connected engine no longer hides a rejected command.
 - Colors communicate state: green is healthy/connected, cyan is selection,
   amber is degraded, and red is reserved for drops, clipping, or failure.
 - Geometry is compact and stable: 44 px matrix cells, 42 px navigation rows,
@@ -61,12 +67,18 @@ crosses into the realtime path.
 ## Delivery order
 
 1. Live session, matrix, route gain, devices, diagnostics, engine start/stop.
-2. Preset open/save, device configuration, reconnect backoff, and command
-   acknowledgement feedback.
-3. Virtual endpoint creation, matrix keyboard editing, route groups, and
+2. Preset browse/save/load and persistent command acknowledgement feedback.
+3. Device configuration and reconnect backoff.
+4. Virtual endpoint creation, matrix keyboard editing, route groups, and
    scalable custom matrix rendering.
-4. Accessibility pass, localization, packaging, GPU/software-renderer visual
+5. Accessibility pass, localization, packaging, GPU/software-renderer visual
    regression screenshots, and long-running GUI disconnect testing.
+
+Preset files use the suffix `.sarpreset` and live in
+`QStandardPaths::AppDataLocation/presets`. The GUI uses the same versioned
+binary preset codec as `sar_control_cli`, constrains names to safe local
+filenames, commits writes with `QSaveFile`, and rejects malformed or
+core-invalid documents before contacting the engine.
 
 ## Build
 
