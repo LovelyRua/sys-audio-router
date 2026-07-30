@@ -611,7 +611,13 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   implementation.
 - The first Qt Quick GUI exists and controls route state, gain, runtime
   lifecycle, device listing, and diagnostics. Preset browsing, undo/redo,
-  large-matrix virtualization, packaging, and seed-user feedback remain.
+  large-matrix virtualization, and seed-user feedback remain. CMake/CPack now
+  produces the first per-user Windows x64 ZIP payload. Its install scripts
+  validate all required binaries, verify Virtual ASIO registration, preserve
+  and restore an existing install on failure, and provide a bounded uninstall
+  path that refuses to remove running installed processes. Real-machine
+  install/update/uninstall acceptance remains before calling the package an
+  Alpha release artifact.
 - No plugin hosting exists yet.
 - Graph execution is still linear.
 - The named-pipe control service can own a WASAPI render or duplex runtime and
