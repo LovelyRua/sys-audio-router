@@ -972,6 +972,13 @@ if(WIN32)
     install(TARGETS sar_gui
       RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     )
+    qt_generate_deploy_qml_app_script(
+      TARGET sar_gui
+      OUTPUT_SCRIPT sar_gui_deploy_script
+      NO_TRANSLATIONS
+      NO_UNSUPPORTED_PLATFORM_ERROR
+    )
+    install(SCRIPT ${sar_gui_deploy_script})
   endif()
   install(FILES
     LICENSE

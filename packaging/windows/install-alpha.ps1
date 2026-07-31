@@ -14,12 +14,40 @@ $requiredPayload = @(
   "sar_engine_service.exe",
   "sar_control_cli.exe",
   "sar_virtual_asio_register.exe",
-  "SystemAudioRouteVirtualASIO.dll"
+  "SystemAudioRouteVirtualASIO.dll",
+  "SystemAudioRoute.exe",
+  "Qt6Core.dll",
+  "Qt6Quick.dll",
+  "vc_redist.x64.exe"
 )
 foreach ($name in $requiredPayload) {
   $path = Join-Path $sourceBin $name
   if (!(Test-Path -LiteralPath $path -PathType Leaf)) {
     throw "Alpha package payload is missing '$path'."
+  }
+}
+$requiredRuntimePayload = @(
+  "plugins\platforms\qwindows.dll",
+  "qml\QtQuick\qtquick2plugin.dll"
+)
+foreach ($relativePath in $requiredRuntimePayload) {
+  $path = Join-Path $packageRoot $relativePath
+  if (!(Test-Path -LiteralPath $path -PathType Leaf)) {
+    throw "Alpha package runtime payload is missing '$path'."
+  }
+}
+$redistPath = Join-Path $sourceBin "vc_redist.x64.exe"
+
+$runtimeKey =
+    "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64"
+$runtime = Get-ItemProperty -LiteralPath $runtimeKey `
+    -ErrorAction SilentlyContinue
+if ($null -eq $runtime -or $runtime.Installed -ne 1) {
+  $redist = Start-Process -FilePath $redistPath `
+      -ArgumentList "/install", "/passive", "/norestart" `
+      -Wait -PassThru
+  if ($redist.ExitCode -notin @(0, 1638, 3010)) {
+    throw "Microsoft VC++ Runtime installation failed with exit code $($redist.ExitCode)."
   }
 }
 
@@ -69,6 +97,10 @@ if (Test-Path -LiteralPath $inprocKey) {
 try {
   New-Item -ItemType Directory -Path $stagingPath -Force | Out-Null
   Copy-Item -LiteralPath $sourceBin -Destination $stagingPath -Recurse
+  foreach ($directoryName in @("plugins", "qml")) {
+    Copy-Item -LiteralPath (Join-Path $packageRoot $directoryName) `
+        -Destination $stagingPath -Recurse
+  }
   Set-Content -LiteralPath (Join-Path $stagingPath $markerName) `
       -Value "System Audio Route Alpha 0.1.0" -Encoding ASCII
   foreach ($name in @(
