@@ -373,11 +373,12 @@ Status: the first Qt Quick control application is merged. It connects to control
 wire v4 without entering the realtime process and provides an operational route
 matrix, route enable/gain controls, device listing, runtime start/stop, and live
 diagnostics. The first per-user Windows x64 ZIP package now stages a validated
-engine, CLI, Virtual ASIO driver, registration utility, and optional GUI. Its
-installer verifies current-user x64 registration and restores the previous
-payload if installation fails; uninstall refuses to remove running binaries.
-Package installation acceptance, preset browsing, large-matrix virtualization,
-undo/redo, and seed-user workflow testing remain.
+engine, CLI, Virtual ASIO driver, registration utility, Qt Quick GUI, Qt/QML
+runtime, platform plugins, and compiler runtime. Its installer verifies
+current-user x64 registration and restores the previous payload if installation
+fails; uninstall refuses unrelated directories and registrations. Preset
+browsing and atomic save/load are connected to the engine. Large-matrix
+virtualization, undo/redo, and seed-user workflow testing remain.
 
 Deliverables:
 
