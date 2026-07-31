@@ -4,6 +4,24 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+function Test-PathBelowDirectory {
+  param(
+    [string]$CandidatePath,
+    [string]$DirectoryPath
+  )
+
+  $candidate = [IO.Path]::GetFullPath($CandidatePath)
+  $directoryPrefix =
+      [IO.Path]::GetFullPath($DirectoryPath).TrimEnd(
+          [IO.Path]::DirectorySeparatorChar,
+          [IO.Path]::AltDirectorySeparatorChar) +
+      [IO.Path]::DirectorySeparatorChar
+  return $candidate.StartsWith(
+      $directoryPrefix,
+      [StringComparison]::OrdinalIgnoreCase)
+}
+
 $packageRoot = [IO.Path]::GetFullPath(
     (Join-Path $PSScriptRoot "..\.."))
 if (Test-Path -LiteralPath (Join-Path $PSScriptRoot "bin") -PathType Container) {
@@ -38,19 +56,6 @@ foreach ($relativePath in $requiredRuntimePayload) {
 }
 $redistPath = Join-Path $sourceBin "vc_redist.x64.exe"
 
-$runtimeKey =
-    "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64"
-$runtime = Get-ItemProperty -LiteralPath $runtimeKey `
-    -ErrorAction SilentlyContinue
-if ($null -eq $runtime -or $runtime.Installed -ne 1) {
-  $redist = Start-Process -FilePath $redistPath `
-      -ArgumentList "/install", "/passive", "/norestart" `
-      -Wait -PassThru
-  if ($redist.ExitCode -notin @(0, 1638, 3010)) {
-    throw "Microsoft VC++ Runtime installation failed with exit code $($redist.ExitCode)."
-  }
-}
-
 $installPath = [IO.Path]::GetFullPath($InstallDirectory.Trim().Trim('"'))
 if ($installPath -eq $packageRoot) {
   throw "Install directory must not be the extracted package directory."
@@ -65,15 +70,28 @@ foreach ($processName in @("sar_engine_service", "SystemAudioRoute")) {
   $running = @(Get-Process -Name $processName -ErrorAction SilentlyContinue |
       Where-Object {
         try {
-          $_.Path.StartsWith(
-              $installPath,
-              [StringComparison]::OrdinalIgnoreCase)
+          Test-PathBelowDirectory `
+              -CandidatePath $_.Path `
+              -DirectoryPath $installPath
         } catch {
           $false
         }
       })
   if ($running.Count -ne 0) {
     throw "Close installed process '$processName' before updating."
+  }
+}
+
+$runtimeKey =
+    "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64"
+$runtime = Get-ItemProperty -LiteralPath $runtimeKey `
+    -ErrorAction SilentlyContinue
+if ($null -eq $runtime -or $runtime.Installed -ne 1) {
+  $redist = Start-Process -FilePath $redistPath `
+      -ArgumentList "/install", "/passive", "/norestart" `
+      -Wait -PassThru
+  if ($redist.ExitCode -notin @(0, 1638, 3010)) {
+    throw "Microsoft VC++ Runtime installation failed with exit code $($redist.ExitCode)."
   }
 }
 

@@ -45,3 +45,18 @@ current-user ASIO entry only when that entry points to this installation. A
 failed removal restores both the directory and its registration. Both
 operations emit one machine-readable `alpha_install` or `alpha_uninstall`
 result line.
+
+Run the complete package acceptance gate from a clean current-user environment:
+
+```bat
+scripts\windows-alpha-package-acceptance.cmd ^
+  -PackagePath build-alpha\package-output\SystemAudioRoute-0.1.0-windows-x64.zip ^
+  -InstallDirectory "%LOCALAPPDATA%\Programs\SystemAudioRoute-Alpha-Acceptance"
+```
+
+The acceptance gate refuses an existing install directory or Virtual ASIO
+registration. It verifies missing-runtime rejection, installation, the deployed
+Qt/QML layout, a GUI health launch without Qt development paths, in-place
+update, same-prefix process isolation, A/B ASIO ownership, and complete
+self-uninstall. It removes only its unique extraction directory and the
+marker-protected installations it created.
