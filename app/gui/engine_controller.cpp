@@ -3,6 +3,7 @@
 #include "core/control/control_wire_protocol.h"
 #include "core/service/windows_named_pipe_control.h"
 
+#include <QStandardPaths>
 #include <QtConcurrentRun>
 
 #include <algorithm>
@@ -75,7 +76,11 @@ QVariantMap endpoint(const graph::RouteEndpointDescriptor& value) {
 
 }  // namespace
 
-EngineController::EngineController(QObject* parent) : QObject(parent) {
+EngineController::EngineController(QObject* parent)
+    : QObject(parent),
+      preset_store_(QStandardPaths::writableLocation(
+                        QStandardPaths::AppDataLocation) +
+                    QStringLiteral("/presets")) {
   connect(&watcher_, &QFutureWatcher<EngineReply>::finished, this, [this] {
     const auto reply = watcher_.result();
     busy_ = false;
@@ -86,6 +91,7 @@ EngineController::EngineController(QObject* parent) : QObject(parent) {
   connect(&poll_timer_, &QTimer::timeout, this,
           &EngineController::schedulePoll);
   poll_timer_.start();
+  refreshPresets();
   QTimer::singleShot(0, this, &EngineController::refresh);
 }
 
@@ -95,6 +101,7 @@ QString EngineController::connectionLabel() const {
                     : QStringLiteral("Engine offline");
 }
 QString EngineController::lastError() const { return last_error_; }
+QString EngineController::statusMessage() const { return status_message_; }
 bool EngineController::runtimeRunning() const noexcept { return runtime_running_; }
 bool EngineController::busy() const noexcept { return busy_; }
 int EngineController::sampleRate() const noexcept { return sample_rate_; }
@@ -110,11 +117,73 @@ QVariantList EngineController::outputs() const { return outputs_; }
 QVariantList EngineController::routes() const { return routes_; }
 QVariantList EngineController::devices() const { return devices_; }
 int EngineController::routeRevision() const noexcept { return route_revision_; }
+QStringList EngineController::presetNames() const { return preset_names_; }
+QString EngineController::activePresetName() const {
+  return active_preset_name_;
+}
 
 void EngineController::refresh() {
   control::ControlCommand command;
   command.type = control::ControlCommandType::QuerySessionState;
   dispatch(std::move(command));
+}
+
+void EngineController::refreshPresets() {
+  QString error;
+  const auto names = preset_store_.names(&error);
+  if (!error.isEmpty()) {
+    setError(std::move(error));
+    return;
+  }
+  if (preset_names_ != names) {
+    preset_names_ = names;
+    emit presetsChanged();
+  }
+}
+
+void EngineController::savePreset(const QString& name) {
+  const auto normalized = name.trimmed();
+  QString error;
+  if (!PresetStore::validName(normalized, &error)) {
+    setError(std::move(error));
+    return;
+  }
+  if (busy_) {
+    setError(QStringLiteral("Wait for the current engine command to finish"));
+    return;
+  }
+  clearFeedback();
+  control::ControlCommand command;
+  command.type = control::ControlCommandType::SavePreset;
+  dispatchPreset(std::move(command), PendingPresetAction::Save, normalized);
+}
+
+void EngineController::loadPreset(const QString& name) {
+  const auto normalized = name.trimmed();
+  if (busy_) {
+    setError(QStringLiteral("Wait for the current engine command to finish"));
+    return;
+  }
+  control::PresetDocument preset;
+  QString error;
+  if (!preset_store_.load(normalized, &preset, &error)) {
+    setError(std::move(error));
+    return;
+  }
+  clearFeedback();
+  control::ControlCommand command;
+  command.type = control::ControlCommandType::LoadPreset;
+  command.preset = std::move(preset);
+  dispatchPreset(std::move(command), PendingPresetAction::Load, normalized);
+}
+
+void EngineController::clearFeedback() {
+  if (last_error_.isEmpty() && status_message_.isEmpty()) {
+    return;
+  }
+  last_error_.clear();
+  status_message_.clear();
+  emit feedbackChanged();
 }
 
 void EngineController::startRuntime() {
@@ -186,15 +255,27 @@ void EngineController::dispatch(control::ControlCommand command) {
   }));
 }
 
+void EngineController::dispatchPreset(control::ControlCommand command,
+                                      PendingPresetAction action,
+                                      QString name) {
+  pending_preset_action_ = action;
+  pending_preset_name_ = std::move(name);
+  dispatch(std::move(command));
+}
+
 void EngineController::applyReply(const EngineReply& reply) {
   const bool was_connected = connected_;
   connected_ = reply.transport_ok;
-  last_error_ = reply.error;
-  if (was_connected != connected_ || !last_error_.isEmpty()) {
+  if (was_connected != connected_) {
     emit connectionChanged();
+  }
+  if (!reply.error.isEmpty()) {
+    setError(reply.error);
   }
   if (!reply.transport_ok ||
       reply.response.status == control::ControlResponseStatus::Rejected) {
+    pending_preset_action_ = PendingPresetAction::None;
+    pending_preset_name_.clear();
     return;
   }
 
@@ -219,9 +300,33 @@ void EngineController::applyReply(const EngineReply& reply) {
     emit diagnosticsChanged();
   }
 
+  if (pending_preset_action_ == PendingPresetAction::Save) {
+    QString error;
+    if (!reply.response.has_preset) {
+      setError(QStringLiteral("The engine did not return a preset document"));
+    } else if (!preset_store_.save(pending_preset_name_,
+                                   reply.response.preset, &error)) {
+      setError(std::move(error));
+    } else {
+      active_preset_name_ = pending_preset_name_;
+      refreshPresets();
+      emit presetsChanged();
+      setStatus(QStringLiteral("Saved preset \"%1\"")
+                    .arg(active_preset_name_));
+    }
+  } else if (pending_preset_action_ == PendingPresetAction::Load) {
+    active_preset_name_ = pending_preset_name_;
+    emit presetsChanged();
+    setStatus(QStringLiteral("Loaded preset \"%1\"")
+                  .arg(active_preset_name_));
+  }
+  pending_preset_action_ = PendingPresetAction::None;
+  pending_preset_name_.clear();
+
   if (reply.request_type == control::ControlCommandType::ConnectRoute ||
       reply.request_type == control::ControlCommandType::DisconnectRoute ||
       reply.request_type == control::ControlCommandType::SetGain ||
+      reply.request_type == control::ControlCommandType::LoadPreset ||
       reply.request_type == control::ControlCommandType::StartAudioRuntime ||
       reply.request_type == control::ControlCommandType::StopAudioRuntime) {
     QTimer::singleShot(0, this, &EngineController::refresh);
@@ -268,6 +373,29 @@ void EngineController::updateSession(const control::ControlResponse& response) {
     graph_version_ = response.active_graph.version;
   }
   emit sessionChanged();
+}
+
+void EngineController::setError(QString error) {
+  if (error.isEmpty()) {
+    return;
+  }
+  const bool changed =
+      last_error_ != error || !status_message_.isEmpty();
+  last_error_ = std::move(error);
+  status_message_.clear();
+  if (changed) {
+    emit feedbackChanged();
+  }
+}
+
+void EngineController::setStatus(QString status) {
+  const bool changed =
+      status_message_ != status || !last_error_.isEmpty();
+  status_message_ = std::move(status);
+  last_error_.clear();
+  if (changed) {
+    emit feedbackChanged();
+  }
 }
 
 void EngineController::schedulePoll() {

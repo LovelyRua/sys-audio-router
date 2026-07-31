@@ -5,7 +5,8 @@ import QtQuick.Layouts
 ApplicationWindow {
     id: window
     width: Math.min(1440, Screen.desktopAvailableWidth)
-    height: Math.min(900, Screen.desktopAvailableHeight, Screen.height - 48)
+    height: Math.min(900, Screen.desktopAvailableHeight - 36,
+                     Screen.height - 84)
     minimumWidth: 900
     minimumHeight: 640
     visible: true
@@ -53,6 +54,85 @@ ApplicationWindow {
             color: control.down ? colors.hover
                                 : control.hovered ? colors.raised : "transparent"
             border.color: control.highlighted ? colors.cyan : colors.line
+        }
+    }
+
+    component ConsoleField: TextField {
+        id: control
+        implicitHeight: 34
+        leftPadding: 10
+        rightPadding: 10
+        color: colors.text
+        selectionColor: colors.cyan
+        selectedTextColor: colors.canvas
+        placeholderTextColor: colors.muted
+        font.pixelSize: 12
+        background: Rectangle {
+            radius: 3
+            color: colors.canvas
+            border.color: control.activeFocus ? colors.cyan : colors.line
+        }
+    }
+
+    component ConsoleCombo: ComboBox {
+        id: control
+        implicitHeight: 34
+        leftPadding: 10
+        rightPadding: 28
+        font.pixelSize: 12
+        contentItem: Text {
+            text: control.displayText.length > 0 ? control.displayText
+                                                 : "No saved presets"
+            color: control.displayText.length > 0 ? colors.text : colors.muted
+            font: control.font
+            verticalAlignment: Text.AlignVCenter
+            elide: Text.ElideRight
+        }
+        indicator: Text {
+            x: control.width - width - 10
+            anchors.verticalCenter: parent.verticalCenter
+            text: "v"
+            color: colors.muted
+            font.pixelSize: 10
+        }
+        background: Rectangle {
+            radius: 3
+            color: control.hovered ? colors.raised : colors.canvas
+            border.color: control.activeFocus ? colors.cyan : colors.line
+        }
+        delegate: ItemDelegate {
+            required property var modelData
+            width: control.width
+            height: 34
+            leftPadding: 10
+            contentItem: Text {
+                text: modelData
+                color: colors.text
+                font.pixelSize: 12
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+            }
+            background: Rectangle {
+                color: hovered ? colors.hover : colors.surface
+            }
+        }
+        popup: Popup {
+            y: control.height + 2
+            width: control.width
+            implicitHeight: Math.min(contentItem.implicitHeight, 210)
+            padding: 1
+            contentItem: ListView {
+                clip: true
+                implicitHeight: contentHeight
+                model: control.popup.visible ? control.delegateModel : null
+                currentIndex: control.highlightedIndex
+                ScrollIndicator.vertical: ScrollIndicator {}
+            }
+            background: Rectangle {
+                color: colors.surface
+                border.color: colors.line
+                radius: 3
+            }
         }
     }
 
@@ -163,6 +243,41 @@ ApplicationWindow {
         }
     }
 
+    footer: Rectangle {
+        readonly property string message: engine.lastError.length > 0
+                                          ? engine.lastError
+                                          : engine.statusMessage
+        height: message.length > 0 ? 38 : 0
+        visible: height > 0
+        color: engine.lastError.length > 0 ? "#321d20" : "#153028"
+        border.color: engine.lastError.length > 0 ? colors.danger : colors.healthy
+        clip: true
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 16
+            anchors.rightMargin: 10
+            spacing: 10
+            Text {
+                text: engine.lastError.length > 0 ? "ACTION FAILED" : "PRESET"
+                color: engine.lastError.length > 0 ? colors.danger : colors.healthy
+                font.pixelSize: 10
+                font.weight: Font.Bold
+            }
+            Text {
+                text: parent.parent.message
+                color: colors.text
+                font.pixelSize: 12
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+            FlatButton {
+                text: "Dismiss"
+                onClicked: engine.clearFeedback()
+            }
+        }
+    }
+
     RowLayout {
         anchors.fill: parent
         spacing: 0
@@ -190,6 +305,59 @@ ApplicationWindow {
                 NavButton { text: "Routing matrix"; viewId: "matrix"; Layout.fillWidth: true }
                 NavButton { text: "Audio devices"; viewId: "devices"; Layout.fillWidth: true }
                 NavButton { text: "Diagnostics"; viewId: "diagnostics"; Layout.fillWidth: true }
+
+                Text {
+                    text: "PRESETS"
+                    color: colors.muted
+                    font.pixelSize: 10
+                    font.weight: Font.DemiBold
+                    leftPadding: 8
+                    topPadding: 16
+                    bottomPadding: 3
+                }
+                ConsoleCombo {
+                    id: presetBrowser
+                    Layout.fillWidth: true
+                    model: engine.presetNames
+                    currentIndex: engine.activePresetName.length > 0
+                                  ? engine.presetNames.indexOf(engine.activePresetName)
+                                  : -1
+                    enabled: model.length > 0 && !engine.busy
+                    onActivated: presetName.text = currentText
+                }
+                ConsoleField {
+                    id: presetName
+                    Layout.fillWidth: true
+                    placeholderText: "Preset name"
+                    text: engine.activePresetName
+                    maximumLength: 80
+                    selectByMouse: true
+                    onAccepted: {
+                        if (engine.connected && text.trim().length > 0 && !engine.busy)
+                            engine.savePreset(text)
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    FlatButton {
+                        text: "Load"
+                        Layout.fillWidth: true
+                        enabled: engine.connected &&
+                                 presetBrowser.currentIndex >= 0 &&
+                                 !engine.busy
+                        onClicked: engine.loadPreset(presetBrowser.currentText)
+                    }
+                    FlatButton {
+                        text: "Save"
+                        highlighted: true
+                        Layout.fillWidth: true
+                        enabled: engine.connected &&
+                                 presetName.text.trim().length > 0 &&
+                                 !engine.busy
+                        onClicked: engine.savePreset(presetName.text)
+                    }
+                }
 
                 Item { Layout.fillHeight: true }
 
