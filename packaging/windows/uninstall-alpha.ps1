@@ -91,9 +91,15 @@ try {
   Remove-Item -LiteralPath $removalPath -Recurse -Force
   $movedInstall = $false
 } catch {
+  $primaryError = $_
+  $rollbackErrors = [System.Collections.Generic.List[string]]::new()
   if ($movedInstall -and (Test-Path -LiteralPath $removalPath) -and
       !(Test-Path -LiteralPath $installPath)) {
-    Move-Item -LiteralPath $removalPath -Destination $installPath
+    try {
+      Move-Item -LiteralPath $removalPath -Destination $installPath
+    } catch {
+      $rollbackErrors.Add("restore_install error=$($_.Exception.Message)")
+    }
   }
   if ($removedRegistration -and
       (Test-Path -LiteralPath $installPath -PathType Container)) {
@@ -104,9 +110,19 @@ try {
     if ((Test-Path -LiteralPath $restoreRegister -PathType Leaf) -and
         (Test-Path -LiteralPath $restoreDriver -PathType Leaf)) {
       & $restoreRegister --register $restoreDriver --user --x64 2>$null
+      if ($LASTEXITCODE -ne 0) {
+        $rollbackErrors.Add("restore_asio exit_code=$LASTEXITCODE")
+      }
+    } else {
+      $rollbackErrors.Add("restore_asio missing_payload")
     }
   }
-  throw
+  if ($rollbackErrors.Count -ne 0) {
+    $steps = [string]::Join(",", $rollbackErrors)
+    Write-Host "alpha_uninstall rollback=failed steps=$steps"
+    throw ("$($primaryError.Exception.Message) Rollback failures: $steps")
+  }
+  throw $primaryError
 }
 
 $registrationStatus = if ($ownsRegistration) { "removed" } else { "not_owned" }

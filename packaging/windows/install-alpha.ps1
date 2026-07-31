@@ -158,27 +158,58 @@ try {
       "driver=`"{1}`"") -f $installPath, $driverPath
   Write-Host $result
 } catch {
+  $primaryError = $_
+  $rollbackErrors = [System.Collections.Generic.List[string]]::new()
   if ($installedNewPayload -and (Test-Path -LiteralPath $installPath)) {
     $newRegister = Join-Path $installPath "bin\sar_virtual_asio_register.exe"
     if (Test-Path -LiteralPath $newRegister -PathType Leaf) {
       & $newRegister --unregister --user --x64 2>$null | Out-Null
+      if ($LASTEXITCODE -ne 0) {
+        $rollbackErrors.Add(
+            "unregister_new_payload exit_code=$LASTEXITCODE")
+      }
     }
-    Remove-Item -LiteralPath $installPath -Recurse -Force
+    try {
+      Remove-Item -LiteralPath $installPath -Recurse -Force
+    } catch {
+      $rollbackErrors.Add("remove_new_payload error=$($_.Exception.Message)")
+    }
   }
   if (Test-Path -LiteralPath $backupPath) {
-    Move-Item -LiteralPath $backupPath -Destination $installPath
-    $oldRegister = Join-Path $installPath "bin\sar_virtual_asio_register.exe"
-    $oldDriver = Join-Path $installPath "bin\SystemAudioRouteVirtualASIO.dll"
-    if ((Test-Path -LiteralPath $oldRegister -PathType Leaf) -and
-        (Test-Path -LiteralPath $oldDriver -PathType Leaf)) {
-      & $oldRegister --register $oldDriver --user --x64 2>$null
+    try {
+      Move-Item -LiteralPath $backupPath -Destination $installPath
+    } catch {
+      $rollbackErrors.Add("restore_previous_install error=$($_.Exception.Message)")
+    }
+    if (Test-Path -LiteralPath $installPath -PathType Container) {
+      $oldRegister = Join-Path $installPath "bin\sar_virtual_asio_register.exe"
+      $oldDriver = Join-Path $installPath "bin\SystemAudioRouteVirtualASIO.dll"
+      if ((Test-Path -LiteralPath $oldRegister -PathType Leaf) -and
+          (Test-Path -LiteralPath $oldDriver -PathType Leaf)) {
+        & $oldRegister --register $oldDriver --user --x64 2>$null
+        if ($LASTEXITCODE -ne 0) {
+          $rollbackErrors.Add(
+              "restore_previous_asio exit_code=$LASTEXITCODE")
+        }
+      } else {
+        $rollbackErrors.Add("restore_previous_asio missing_payload")
+      }
     }
   } elseif ($null -ne $previousDriverPath -and
       (Test-Path -LiteralPath $previousDriverPath -PathType Leaf)) {
     $sourceRegister = Join-Path $sourceBin "sar_virtual_asio_register.exe"
     & $sourceRegister --register $previousDriverPath --user --x64 2>$null
+    if ($LASTEXITCODE -ne 0) {
+      $rollbackErrors.Add(
+          "restore_previous_asio exit_code=$LASTEXITCODE")
+    }
   }
-  throw
+  if ($rollbackErrors.Count -ne 0) {
+    $steps = [string]::Join(",", $rollbackErrors)
+    Write-Host "alpha_install rollback=failed steps=$steps"
+    throw ("$($primaryError.Exception.Message) Rollback failures: $steps")
+  }
+  throw $primaryError
 } finally {
   if (Test-Path -LiteralPath $stagingPath) {
     Remove-Item -LiteralPath $stagingPath -Recurse -Force

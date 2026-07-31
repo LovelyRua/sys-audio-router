@@ -44,7 +44,9 @@ driver still loaded by a DAW before changing the registry. It unregisters the
 current-user ASIO entry only when that entry points to this installation. A
 failed removal restores both the directory and its registration. Both
 operations emit one machine-readable `alpha_install` or `alpha_uninstall`
-result line.
+result line. If a rollback step itself fails, the script emits an additional
+`rollback=failed` line naming the failed restoration step instead of hiding
+that secondary fault behind the original error.
 
 Run the complete package acceptance gate from a clean current-user environment:
 
