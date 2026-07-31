@@ -610,14 +610,18 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   versus SysVAD/PortCls decision spike is now required before product driver
   implementation.
 - The first Qt Quick GUI exists and controls route state, gain, runtime
-  lifecycle, device listing, and diagnostics. Preset browsing, undo/redo,
-  large-matrix virtualization, and seed-user feedback remain. CMake/CPack now
-  produces the first per-user Windows x64 ZIP payload. Its install scripts
-  validate all required binaries, verify Virtual ASIO registration, preserve
-  and restore an existing install on failure, and provide a bounded uninstall
-  path that refuses to remove running installed processes. Real-machine
-  install/update/uninstall acceptance remains before calling the package an
-  Alpha release artifact.
+  lifecycle, device listing, diagnostics, and preset browsing with atomic
+  save/load. Undo/redo, large-matrix virtualization, and seed-user feedback
+  remain. CMake/CPack now produces the first per-user Windows x64 ZIP payload.
+  Its install scripts validate the engine, ASIO, Qt DLL, QML, and platform
+  plugin payloads, verify Virtual ASIO registration, preserve and restore an
+  existing install on failure, and provide a bounded uninstall path that refuses
+  to remove running installed processes. A clean-machine acceptance installed
+  the final ZIP, launched its GUI without Qt development paths, verified ASIO
+  ownership, rejected a deliberately incomplete runtime before changing the
+  target, and removed the installation and registration through its packaged
+  uninstaller. The same gate is now repeatable through
+  `windows-alpha-package-acceptance.cmd`.
 - No plugin hosting exists yet.
 - Graph execution is still linear.
 - The named-pipe control service can own a WASAPI render or duplex runtime and

@@ -3,6 +3,24 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+function Test-PathBelowDirectory {
+  param(
+    [string]$CandidatePath,
+    [string]$DirectoryPath
+  )
+
+  $candidate = [IO.Path]::GetFullPath($CandidatePath)
+  $directoryPrefix =
+      [IO.Path]::GetFullPath($DirectoryPath).TrimEnd(
+          [IO.Path]::DirectorySeparatorChar,
+          [IO.Path]::AltDirectorySeparatorChar) +
+      [IO.Path]::DirectorySeparatorChar
+  return $candidate.StartsWith(
+      $directoryPrefix,
+      [StringComparison]::OrdinalIgnoreCase)
+}
+
 if ([string]::IsNullOrWhiteSpace($InstallDirectory)) {
   $InstallDirectory = $PSScriptRoot
   if (!(Test-Path -LiteralPath (Join-Path $InstallDirectory "bin") `
@@ -25,9 +43,9 @@ foreach ($processName in @("sar_engine_service", "SystemAudioRoute")) {
   $running = @(Get-Process -Name $processName -ErrorAction SilentlyContinue |
       Where-Object {
         try {
-          $_.Path.StartsWith(
-              $installPath,
-              [StringComparison]::OrdinalIgnoreCase)
+          Test-PathBelowDirectory `
+              -CandidatePath $_.Path `
+              -DirectoryPath $installPath
         } catch {
           $false
         }
