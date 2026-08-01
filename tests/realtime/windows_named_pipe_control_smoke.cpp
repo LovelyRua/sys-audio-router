@@ -64,7 +64,7 @@ int main() {
     auto response = sar::service::transact_named_pipe_control(config, request);
     if (!response.ok()) {
       std::cerr << "Named-pipe request failed: " << response.error().code
-                << " native=" << response.error().native_error << '\n';
+                << " native=" << response.error().native_win32_code << '\n';
     }
     assert(response.ok());
     assert(response.payload() == expected);
