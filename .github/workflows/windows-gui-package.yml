@@ -39,6 +39,7 @@ jobs:
           cmake -S . -B build-alpha
           -G Ninja
           -DSAR_BUILD_GUI=ON
+          -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
 
       - name: Build package targets
