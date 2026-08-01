@@ -42,10 +42,7 @@ jobs:
           -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
 
       - name: Build package targets
-        run: >-
-          cmake --build build-alpha --config Release --target
-          sar_engine_service sar_control_cli sar_virtual_asio_driver
-          sar_virtual_asio_register sar_gui
+        run: cmake --build build-alpha --config Release
 
       - name: Run tests
         run: ctest --test-dir build-alpha -C Release --output-on-failure
