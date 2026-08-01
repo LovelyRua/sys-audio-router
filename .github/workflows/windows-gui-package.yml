@@ -28,12 +28,16 @@ jobs:
           archives: qtbase qtdeclarative
           cache: true
 
+      - name: Load MSVC build environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Configure GUI build
         shell: pwsh
         run: >-
           cmake -S . -B build-alpha
-          -G "Visual Studio 17 2022"
-          -A x64
+          -G Ninja
           -DSAR_BUILD_GUI=ON
           -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
 
