@@ -959,7 +959,7 @@ foreach(sar_target IN LISTS sar_directory_targets)
   endif()
 endforeach()
 
-if(WIN32)
+if(WIN32 AND SAR_BUILD_GUI)
   install(TARGETS
     sar_engine_service
     sar_control_cli

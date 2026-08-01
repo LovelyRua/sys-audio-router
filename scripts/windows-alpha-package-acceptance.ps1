@@ -82,6 +82,7 @@ foreach ($unusedPath in @($negativeInstallPath, $ownershipInstallPath)) {
 
 $savedEnvironment = @{}
 foreach ($name in @(
+    "PATH",
     "QTDIR",
     "QT_PLUGIN_PATH",
     "QML2_IMPORT_PATH",
@@ -145,8 +146,8 @@ try {
     "bin\qt.conf",
     "bin\sar_virtual_asio_register.exe",
     "bin\SystemAudioRouteVirtualASIO.dll",
-    "plugins\platforms\qwindows.dll",
-    "qml\QtQuick\qtquick2plugin.dll",
+    "bin\plugins\platforms\qwindows.dll",
+    "bin\qml\QtQuick\qtquick2plugin.dll",
     ".system-audio-route-alpha",
     "uninstall-alpha.cmd"
   )
@@ -163,6 +164,11 @@ try {
       "QT_PLUGIN_PATH", $null, [EnvironmentVariableTarget]::Process)
   [Environment]::SetEnvironmentVariable(
       "QML2_IMPORT_PATH", $null, [EnvironmentVariableTarget]::Process)
+  $cleanPath = @($env:PATH -split ';' | Where-Object {
+      $_ -and $_ -notmatch '(?i)\\Qt\\|\\Qt6\\|\\Qt\\6\\'
+    }) -join ';'
+  [Environment]::SetEnvironmentVariable(
+      "PATH", $cleanPath, [EnvironmentVariableTarget]::Process)
   [Environment]::SetEnvironmentVariable(
       "QT_QPA_PLATFORM", "offscreen", [EnvironmentVariableTarget]::Process)
   [Environment]::SetEnvironmentVariable(

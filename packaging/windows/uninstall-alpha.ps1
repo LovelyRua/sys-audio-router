@@ -21,6 +21,20 @@ function Test-PathBelowDirectory {
       [StringComparison]::OrdinalIgnoreCase)
 }
 
+function Test-CompleteAlphaPayload {
+  param([string]$Path)
+  foreach ($relativePath in @(
+      ".system-audio-route-alpha",
+      "bin\\sar_engine_service.exe",
+      "bin\\sar_virtual_asio_register.exe",
+      "bin\\SystemAudioRouteVirtualASIO.dll")) {
+    if (!(Test-Path -LiteralPath (Join-Path $Path $relativePath) -PathType Leaf)) {
+      return $false
+    }
+  }
+  return $true
+}
+
 if ([string]::IsNullOrWhiteSpace($InstallDirectory)) {
   $InstallDirectory = $PSScriptRoot
   if (!(Test-Path -LiteralPath (Join-Path $InstallDirectory "bin") `
@@ -94,12 +108,16 @@ try {
   $primaryError = $_
   $rollbackErrors = [System.Collections.Generic.List[string]]::new()
   if ($movedInstall -and (Test-Path -LiteralPath $removalPath) -and
-      !(Test-Path -LiteralPath $installPath)) {
+      !(Test-Path -LiteralPath $installPath) -and
+      (Test-CompleteAlphaPayload -Path $removalPath)) {
     try {
       Move-Item -LiteralPath $removalPath -Destination $installPath
     } catch {
       $rollbackErrors.Add("restore_install error=$($_.Exception.Message)")
     }
+  } elseif ($movedInstall -and (Test-Path -LiteralPath $removalPath) -and
+      !(Test-Path -LiteralPath $installPath)) {
+    $rollbackErrors.Add("restore_install skipped_incomplete_removal_payload=$removalPath")
   }
   if ($removedRegistration -and
       (Test-Path -LiteralPath $installPath -PathType Container)) {

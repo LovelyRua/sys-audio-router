@@ -21,6 +21,7 @@ namespace sar::service {
 namespace {
 
 constexpr std::uint32_t kFrameHeaderBytes = 4;
+constexpr std::size_t kMaximumClientWorkers = 16;
 
 std::wstring full_pipe_name(const std::wstring& pipe_name) {
   constexpr wchar_t kPrefix[] = L"\\\\.\\pipe\\";
@@ -56,17 +57,38 @@ std::uint32_t decode_length(
 enum class PipeIoStatus {
   Completed,
   Cancelled,
+  TimedOut,
   Failed,
 };
+
+using PipeDeadline = std::chrono::steady_clock::time_point;
+
+DWORD remaining_timeout_ms(PipeDeadline deadline) noexcept {
+  if (deadline == PipeDeadline::max()) {
+    return INFINITE;
+  }
+  const auto now = std::chrono::steady_clock::now();
+  if (now >= deadline) {
+    return 0;
+  }
+  const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+      deadline - now);
+  if (remaining.count() >= static_cast<std::int64_t>(INFINITE - 1U)) {
+    return INFINITE - 1U;
+  }
+  return static_cast<DWORD>(std::max<std::int64_t>(1, remaining.count()));
+}
 
 PipeIoStatus wait_for_pipe_io(HANDLE pipe,
                               OVERLAPPED& overlapped,
                               HANDLE stop_event,
+                              PipeDeadline deadline,
                               DWORD& transferred,
                               DWORD& error) noexcept {
-  const std::array handles{overlapped.hEvent, stop_event};
+  std::array<HANDLE, 2> handles{overlapped.hEvent, stop_event};
+  const DWORD handle_count = stop_event == nullptr ? 1U : 2U;
   const auto wait = WaitForMultipleObjects(
-      static_cast<DWORD>(handles.size()), handles.data(), FALSE, INFINITE);
+      handle_count, handles.data(), FALSE, remaining_timeout_ms(deadline));
   if (wait == WAIT_OBJECT_0) {
     if (GetOverlappedResult(pipe, &overlapped, &transferred, FALSE)) {
       error = ERROR_SUCCESS;
@@ -76,13 +98,21 @@ PipeIoStatus wait_for_pipe_io(HANDLE pipe,
     return error == ERROR_OPERATION_ABORTED ? PipeIoStatus::Cancelled
                                             : PipeIoStatus::Failed;
   }
-  if (wait == WAIT_OBJECT_0 + 1) {
+  if (stop_event != nullptr && wait == WAIT_OBJECT_0 + 1) {
     CancelIoEx(pipe, &overlapped);
     GetOverlappedResult(pipe, &overlapped, &transferred, TRUE);
     error = ERROR_OPERATION_ABORTED;
     return PipeIoStatus::Cancelled;
   }
+  if (wait == WAIT_TIMEOUT) {
+    CancelIoEx(pipe, &overlapped);
+    GetOverlappedResult(pipe, &overlapped, &transferred, TRUE);
+    error = ERROR_TIMEOUT;
+    return PipeIoStatus::TimedOut;
+  }
   error = GetLastError();
+  CancelIoEx(pipe, &overlapped);
+  GetOverlappedResult(pipe, &overlapped, &transferred, TRUE);
   return PipeIoStatus::Failed;
 }
 
@@ -92,8 +122,13 @@ PipeIoStatus transfer_pipe(HANDLE pipe,
                            bool write,
                            HANDLE io_event,
                            HANDLE stop_event,
+                           PipeDeadline deadline,
                            DWORD& transferred,
                            DWORD& error) noexcept {
+  if (remaining_timeout_ms(deadline) == 0) {
+    error = ERROR_TIMEOUT;
+    return PipeIoStatus::TimedOut;
+  }
   ResetEvent(io_event);
   OVERLAPPED overlapped{};
   overlapped.hEvent = io_event;
@@ -110,13 +145,14 @@ PipeIoStatus transfer_pipe(HANDLE pipe,
                                             : PipeIoStatus::Failed;
   }
   return wait_for_pipe_io(
-      pipe, overlapped, stop_event, transferred, error);
+      pipe, overlapped, stop_event, deadline, transferred, error);
 }
 
 PipeIoStatus read_exact(HANDLE pipe,
                         std::span<std::byte> destination,
                         HANDLE io_event,
                         HANDLE stop_event,
+                        PipeDeadline deadline,
                         DWORD& error) noexcept {
   std::size_t offset = 0;
   while (offset < destination.size()) {
@@ -125,7 +161,8 @@ PipeIoStatus read_exact(HANDLE pipe,
     const auto chunk = static_cast<DWORD>(std::min<std::size_t>(
         remaining, std::numeric_limits<DWORD>::max()));
     const auto status = transfer_pipe(pipe, destination.data() + offset, chunk,
-                                      false, io_event, stop_event, transferred, error);
+                                      false, io_event, stop_event, deadline,
+                                      transferred, error);
     if (status != PipeIoStatus::Completed) {
       return status;
     }
@@ -143,6 +180,7 @@ PipeIoStatus write_exact(HANDLE pipe,
                          std::span<const std::byte> source,
                          HANDLE io_event,
                          HANDLE stop_event,
+                         PipeDeadline deadline,
                          DWORD& error) noexcept {
   std::size_t offset = 0;
   while (offset < source.size()) {
@@ -152,7 +190,7 @@ PipeIoStatus write_exact(HANDLE pipe,
         remaining, std::numeric_limits<DWORD>::max()));
     const auto status = transfer_pipe(
         pipe, const_cast<std::byte*>(source.data() + offset), chunk, true,
-        io_event, stop_event, transferred, error);
+        io_event, stop_event, deadline, transferred, error);
     if (status != PipeIoStatus::Completed) {
       return status;
     }
@@ -166,52 +204,9 @@ PipeIoStatus write_exact(HANDLE pipe,
   return PipeIoStatus::Completed;
 }
 
-bool read_exact_sync(HANDLE pipe,
-                     std::span<std::byte> destination,
-                     DWORD& error) noexcept {
-  std::size_t offset = 0;
-  while (offset < destination.size()) {
-    DWORD transferred = 0;
-    const auto chunk = static_cast<DWORD>(std::min<std::size_t>(
-        destination.size() - offset, std::numeric_limits<DWORD>::max()));
-    if (!ReadFile(pipe, destination.data() + offset, chunk, &transferred, nullptr)) {
-      error = GetLastError();
-      return false;
-    }
-    if (transferred == 0) {
-      error = ERROR_BROKEN_PIPE;
-      return false;
-    }
-    offset += transferred;
-  }
-  error = ERROR_SUCCESS;
-  return true;
-}
-
-bool write_exact_sync(HANDLE pipe,
-                      std::span<const std::byte> source,
-                      DWORD& error) noexcept {
-  std::size_t offset = 0;
-  while (offset < source.size()) {
-    DWORD transferred = 0;
-    const auto chunk = static_cast<DWORD>(std::min<std::size_t>(
-        source.size() - offset, std::numeric_limits<DWORD>::max()));
-    if (!WriteFile(pipe, source.data() + offset, chunk, &transferred, nullptr)) {
-      error = GetLastError();
-      return false;
-    }
-    if (transferred == 0) {
-      error = ERROR_BROKEN_PIPE;
-      return false;
-    }
-    offset += transferred;
-  }
-  error = ERROR_SUCCESS;
-  return true;
-}
-
 bool valid_config(const NamedPipeControlConfig& config) noexcept {
-  return !config.pipe_name.empty() && config.maximum_message_bytes != 0;
+  return !config.pipe_name.empty() && config.maximum_message_bytes != 0 &&
+         config.request_timeout_ms != 0;
 }
 
 void close_pipe(HANDLE pipe) noexcept {
@@ -289,6 +284,14 @@ NamedPipeControlResult WindowsNamedPipeControlServer::start() {
   if (thread_.joinable()) {
     thread_.join();
   }
+  reap_client_workers(true);
+  try {
+    std::lock_guard lock(clients_mutex_);
+    client_workers_.reserve(kMaximumClientWorkers);
+  } catch (const std::exception&) {
+    return NamedPipeControlResult::failure(
+        {"pipe_worker_reserve_failed", "Reserving named-pipe client workers failed.", 0});
+  }
 
   if (stop_event_ == nullptr) {
     stop_event_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -349,6 +352,7 @@ void WindowsNamedPipeControlServer::stop() noexcept {
   if (thread_.joinable()) {
     thread_.join();
   }
+  reap_client_workers(true);
   running_.store(false, std::memory_order_release);
 }
 
@@ -372,6 +376,121 @@ std::vector<NamedPipeControlError> WindowsNamedPipeControlServer::last_errors() 
   auto result = last_errors_;
   error_lock_.clear(std::memory_order_release);
   return result;
+}
+
+void WindowsNamedPipeControlServer::reap_client_workers(bool join_all) noexcept {
+  std::lock_guard lock(clients_mutex_);
+  auto worker = client_workers_.begin();
+  while (worker != client_workers_.end()) {
+    if (!join_all && !worker->finished->load(std::memory_order_acquire)) {
+      ++worker;
+      continue;
+    }
+    if (worker->thread.joinable()) {
+      worker->thread.join();
+    }
+    worker = client_workers_.erase(worker);
+  }
+}
+
+void WindowsNamedPipeControlServer::serve_client(
+    void* raw_pipe,
+    std::uint32_t client_process_id,
+    std::shared_ptr<std::atomic_bool> finished) noexcept {
+  const auto pipe = static_cast<HANDLE>(raw_pipe);
+  HANDLE io_event = nullptr;
+  auto finish = [&] {
+    if (io_event != nullptr) {
+      CloseHandle(io_event);
+    }
+    close_pipe(pipe);
+    finished->store(true, std::memory_order_release);
+  };
+
+  try {
+    io_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (io_event == nullptr) {
+      protocol_errors_.fetch_add(1, std::memory_order_relaxed);
+      finish();
+      return;
+    }
+
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds(config_.request_timeout_ms);
+    std::array<std::byte, kFrameHeaderBytes> header{};
+    DWORD native = ERROR_SUCCESS;
+    const auto header_status =
+        read_exact(pipe, header, io_event, static_cast<HANDLE>(stop_event_), deadline, native);
+    if (header_status != PipeIoStatus::Completed) {
+      if (header_status != PipeIoStatus::Cancelled && native != ERROR_BROKEN_PIPE &&
+          native != ERROR_NO_DATA) {
+        protocol_errors_.fetch_add(1, std::memory_order_relaxed);
+      }
+      finish();
+      return;
+    }
+
+    const auto request_length = decode_length(header);
+    if (request_length > config_.maximum_message_bytes) {
+      protocol_errors_.fetch_add(1, std::memory_order_relaxed);
+      finish();
+      return;
+    }
+
+    std::vector<std::byte> request(request_length);
+    const auto request_status =
+        read_exact(pipe, request, io_event, static_cast<HANDLE>(stop_event_), deadline, native);
+    if (request_status != PipeIoStatus::Completed) {
+      if (request_status != PipeIoStatus::Cancelled) {
+        protocol_errors_.fetch_add(1, std::memory_order_relaxed);
+      }
+      finish();
+      return;
+    }
+
+    NamedPipeControlResult response = NamedPipeControlResult::failure(
+        {"pipe_handler_failed", "Named pipe control handler failed.", 0});
+    try {
+      if (peer_handler_) {
+        response = peer_handler_({client_process_id}, request);
+      } else {
+        response = handler_(request);
+      }
+    } catch (const std::exception& error) {
+      response = NamedPipeControlResult::failure(
+          {"pipe_handler_exception", error.what(), 0});
+    } catch (...) {
+      response = NamedPipeControlResult::failure(
+          {"pipe_handler_exception", "Named pipe handler threw an unknown exception.", 0});
+    }
+    if (!response.ok() || response.payload().size() > config_.maximum_message_bytes) {
+      handler_errors_.fetch_add(1, std::memory_order_relaxed);
+      finish();
+      return;
+    }
+
+    const auto response_header =
+        encode_length(static_cast<std::uint32_t>(response.payload().size()));
+    const auto header_write_status = write_exact(
+        pipe, response_header, io_event, static_cast<HANDLE>(stop_event_), deadline, native);
+    const auto payload_write_status = header_write_status == PipeIoStatus::Completed
+                                          ? write_exact(pipe, response.payload(), io_event,
+                                                        static_cast<HANDLE>(stop_event_), deadline,
+                                                        native)
+                                          : header_write_status;
+    if (payload_write_status != PipeIoStatus::Completed) {
+      if (payload_write_status != PipeIoStatus::Cancelled) {
+        protocol_errors_.fetch_add(1, std::memory_order_relaxed);
+      }
+      finish();
+      return;
+    }
+
+    completed_requests_.fetch_add(1, std::memory_order_relaxed);
+  } catch (...) {
+    handler_errors_.fetch_add(1, std::memory_order_relaxed);
+  }
+  finish();
 }
 
 void WindowsNamedPipeControlServer::run() noexcept {
@@ -399,6 +518,7 @@ void WindowsNamedPipeControlServer::run() noexcept {
   auto security = security_result.take_attributes();
 
   while (!stop_requested_.load(std::memory_order_acquire)) {
+    reap_client_workers(false);
     HANDLE pipe = CreateNamedPipeW(
         path.c_str(), PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
         PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT |
@@ -415,16 +535,11 @@ void WindowsNamedPipeControlServer::run() noexcept {
       last_errors_.push_back(win32_error(
           "pipe_create_failed", "CreateNamedPipeW failed.", native));
       error_lock_.clear(std::memory_order_release);
-      startup_succeeded_.store(false, std::memory_order_release);
-      startup_complete_.store(true, std::memory_order_release);
-      running_.store(false, std::memory_order_release);
-      return;
-    }
-
-    if (!startup_published) {
-      startup_succeeded_.store(true, std::memory_order_release);
-      startup_complete_.store(true, std::memory_order_release);
-      startup_published = true;
+      if (!startup_published) {
+        startup_succeeded_.store(false, std::memory_order_release);
+        startup_complete_.store(true, std::memory_order_release);
+      }
+      break;
     }
 
     HANDLE io_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
@@ -440,6 +555,12 @@ void WindowsNamedPipeControlServer::run() noexcept {
       break;
     }
 
+    if (!startup_published) {
+      startup_succeeded_.store(true, std::memory_order_release);
+      startup_complete_.store(true, std::memory_order_release);
+      startup_published = true;
+    }
+
     OVERLAPPED connect_overlapped{};
     connect_overlapped.hEvent = io_event;
     BOOL connected = ConnectNamedPipe(pipe, &connect_overlapped);
@@ -451,7 +572,8 @@ void WindowsNamedPipeControlServer::run() noexcept {
         DWORD ignored = 0;
         DWORD native = ERROR_SUCCESS;
         connected = wait_for_pipe_io(pipe, connect_overlapped, stop_event,
-                                     ignored, native) == PipeIoStatus::Completed;
+                                     PipeDeadline::max(), ignored, native) ==
+                    PipeIoStatus::Completed;
       }
     }
     if (!connected) {
@@ -477,91 +599,35 @@ void WindowsNamedPipeControlServer::run() noexcept {
       close_pipe(pipe);
       continue;
     }
-
-    std::array<std::byte, kFrameHeaderBytes> header{};
-    DWORD native = ERROR_SUCCESS;
-    const auto header_status =
-        read_exact(pipe, header, io_event, stop_event, native);
-    if (header_status != PipeIoStatus::Completed) {
-      if (native != ERROR_BROKEN_PIPE && native != ERROR_NO_DATA) {
-        if (header_status != PipeIoStatus::Cancelled) {
-          protocol_errors_.fetch_add(1, std::memory_order_relaxed);
-        }
-      }
-      CloseHandle(io_event);
-      close_pipe(pipe);
-      continue;
-    }
-    const auto request_length = decode_length(header);
-    if (request_length > config_.maximum_message_bytes) {
-      protocol_errors_.fetch_add(1, std::memory_order_relaxed);
-      CloseHandle(io_event);
-      close_pipe(pipe);
-      continue;
-    }
-
-    std::vector<std::byte> request(request_length);
-    const auto request_status =
-        read_exact(pipe, request, io_event, stop_event, native);
-    if (request_status != PipeIoStatus::Completed) {
-      if (request_status != PipeIoStatus::Cancelled) {
-        protocol_errors_.fetch_add(1, std::memory_order_relaxed);
-      }
-      CloseHandle(io_event);
-      close_pipe(pipe);
-      continue;
-    }
-
-    NamedPipeControlResult response = NamedPipeControlResult::failure(
-        {"pipe_handler_failed", "Named pipe control handler failed.", 0});
-    try {
-      if (peer_handler_) {
-        response = peer_handler_(
-            {static_cast<std::uint32_t>(client_process_id)}, request);
-      } else {
-        response = handler_(request);
-      }
-    } catch (const std::exception& error) {
-      response = NamedPipeControlResult::failure(
-          {"pipe_handler_exception", error.what(), 0});
-    } catch (...) {
-      response = NamedPipeControlResult::failure(
-          {"pipe_handler_exception", "Named pipe handler threw an unknown exception.", 0});
-    }
-    if (!response.ok()) {
-      handler_errors_.fetch_add(1, std::memory_order_relaxed);
-      CloseHandle(io_event);
-      close_pipe(pipe);
-      continue;
-    }
-    if (response.payload().size() > config_.maximum_message_bytes) {
-      handler_errors_.fetch_add(1, std::memory_order_relaxed);
-      CloseHandle(io_event);
-      close_pipe(pipe);
-      continue;
-    }
-
-    const auto response_header =
-        encode_length(static_cast<std::uint32_t>(response.payload().size()));
-    const auto header_write_status =
-        write_exact(pipe, response_header, io_event, stop_event, native);
-    const auto payload_write_status =
-        header_write_status == PipeIoStatus::Completed
-            ? write_exact(pipe, response.payload(), io_event, stop_event, native)
-            : header_write_status;
-    if (payload_write_status != PipeIoStatus::Completed) {
-      if (payload_write_status != PipeIoStatus::Cancelled) {
-        protocol_errors_.fetch_add(1, std::memory_order_relaxed);
-      }
-      CloseHandle(io_event);
-      close_pipe(pipe);
-      continue;
-    }
-    completed_requests_.fetch_add(1, std::memory_order_relaxed);
     CloseHandle(io_event);
-    close_pipe(pipe);
+
+    bool has_capacity = false;
+    {
+      std::lock_guard lock(clients_mutex_);
+      has_capacity = client_workers_.size() < kMaximumClientWorkers;
+    }
+    if (!has_capacity) {
+      protocol_errors_.fetch_add(1, std::memory_order_relaxed);
+      close_pipe(pipe);
+      continue;
+    }
+
+    try {
+      auto finished = std::make_shared<std::atomic_bool>(false);
+      std::thread worker([this, pipe, client_process_id, finished] {
+        serve_client(pipe, static_cast<std::uint32_t>(client_process_id), finished);
+      });
+      std::lock_guard lock(clients_mutex_);
+      client_workers_.push_back({std::move(worker), std::move(finished)});
+    } catch (...) {
+      handler_errors_.fetch_add(1, std::memory_order_relaxed);
+      close_pipe(pipe);
+    }
   }
 
+  stop_requested_.store(true, std::memory_order_release);
+  SetEvent(stop_event);
+  reap_client_workers(true);
   running_.store(false, std::memory_order_release);
   if (!startup_published) {
     startup_succeeded_.store(false, std::memory_order_release);
@@ -589,7 +655,8 @@ NamedPipeControlResult transact_named_pipe_control(
   DWORD connect_error = ERROR_SUCCESS;
   do {
     pipe = CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
-                       OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+                       OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
+                       nullptr);
     if (pipe != INVALID_HANDLE_VALUE) {
       break;
     }
@@ -605,34 +672,58 @@ NamedPipeControlResult transact_named_pipe_control(
     Sleep(1);
   } while (true);
 
+  HANDLE io_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+  if (io_event == nullptr) {
+    const auto native = GetLastError();
+    CloseHandle(pipe);
+    return NamedPipeControlResult::failure(win32_error(
+        "pipe_io_event_failed", "Creating the client pipe I/O event failed.", native));
+  }
+
   DWORD native = ERROR_SUCCESS;
   const auto request_header =
       encode_length(static_cast<std::uint32_t>(request.size()));
-  if (!write_exact_sync(pipe, request_header, native) ||
-      !write_exact_sync(pipe, request, native)) {
+  const auto request_header_status =
+      write_exact(pipe, request_header, io_event, nullptr, deadline, native);
+  const auto request_status = request_header_status == PipeIoStatus::Completed
+                                  ? write_exact(pipe, request, io_event, nullptr, deadline, native)
+                                  : request_header_status;
+  if (request_status != PipeIoStatus::Completed) {
+    CloseHandle(io_event);
     CloseHandle(pipe);
     return NamedPipeControlResult::failure(win32_error(
-        "pipe_write_failed", "Writing the named pipe request failed.", native));
+        request_status == PipeIoStatus::TimedOut ? "pipe_write_timeout" : "pipe_write_failed",
+        "Writing the named pipe request failed.", native));
   }
 
   std::array<std::byte, kFrameHeaderBytes> response_header{};
-  if (!read_exact_sync(pipe, response_header, native)) {
+  const auto response_header_status =
+      read_exact(pipe, response_header, io_event, nullptr, deadline, native);
+  if (response_header_status != PipeIoStatus::Completed) {
+    CloseHandle(io_event);
     CloseHandle(pipe);
     return NamedPipeControlResult::failure(win32_error(
-        "pipe_read_failed", "Reading the named pipe response header failed.", native));
+        response_header_status == PipeIoStatus::TimedOut ? "pipe_read_timeout" : "pipe_read_failed",
+        "Reading the named pipe response header failed.", native));
   }
   const auto response_length = decode_length(response_header);
   if (response_length > config.maximum_message_bytes) {
+    CloseHandle(io_event);
     CloseHandle(pipe);
     return NamedPipeControlResult::failure(
         {"pipe_response_too_large", "Named pipe response exceeds the configured limit.", 0});
   }
   std::vector<std::byte> response(response_length);
-  if (!read_exact_sync(pipe, response, native)) {
+  const auto response_status =
+      read_exact(pipe, response, io_event, nullptr, deadline, native);
+  if (response_status != PipeIoStatus::Completed) {
+    CloseHandle(io_event);
     CloseHandle(pipe);
     return NamedPipeControlResult::failure(win32_error(
-        "pipe_read_failed", "Reading the named pipe response failed.", native));
+        response_status == PipeIoStatus::TimedOut ? "pipe_read_timeout" : "pipe_read_failed",
+        "Reading the named pipe response failed.", native));
   }
+  CloseHandle(io_event);
   CloseHandle(pipe);
   return NamedPipeControlResult::success(std::move(response));
 }

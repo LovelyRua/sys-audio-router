@@ -279,18 +279,27 @@ std::vector<WasapiStreamError> convert_probe_errors(
   return converted;
 }
 
-WasapiStreamError sample_conversion_error(SampleConversionStatus status) {
+constexpr WasapiRealtimeErrorRecord realtime_error(
+    WasapiRealtimeErrorCode code,
+    WasapiRealtimeErrorContext context = WasapiRealtimeErrorContext::None,
+    std::uint32_t value = 0) noexcept {
+  return {static_cast<std::uint16_t>(code),
+          static_cast<std::uint16_t>(context), value};
+}
+
+WasapiRealtimeErrorRecord sample_conversion_error(
+    SampleConversionStatus status) noexcept {
   switch (status) {
     case SampleConversionStatus::Ok:
-      return {"sample_conversion_ok", "Sample conversion succeeded."};
+      return {};
     case SampleConversionStatus::UnsupportedFormat:
-      return {"unsupported_sample_format", "WASAPI stream sample format is not supported yet."};
+      return realtime_error(WasapiRealtimeErrorCode::UnsupportedSampleFormat);
     case SampleConversionStatus::BufferTooSmall:
-      return {"sample_buffer_too_small", "Audio buffer is too small for the requested frames."};
+      return realtime_error(WasapiRealtimeErrorCode::SampleBufferTooSmall);
     case SampleConversionStatus::ChannelMismatch:
-      return {"sample_channel_mismatch", "Audio buffer channel count does not match the stream."};
+      return realtime_error(WasapiRealtimeErrorCode::SampleChannelMismatch);
   }
-  return {"sample_conversion_failed", "Sample conversion failed."};
+  return realtime_error(WasapiRealtimeErrorCode::SampleConversionFailed);
 }
 
 }  // namespace
@@ -430,8 +439,13 @@ WasapiStreamIoResult WasapiStreamIoResult::failure(std::vector<WasapiStreamError
   return {0, WasapiStreamIoStatus::Failed, false, false, false, std::move(errors)};
 }
 
+WasapiStreamIoResult WasapiStreamIoResult::failure(
+    WasapiRealtimeErrorRecord error) noexcept {
+  return {0, WasapiStreamIoStatus::Failed, false, false, false, {}, error};
+}
+
 bool WasapiStreamIoResult::ok() const noexcept {
-  return errors_.empty();
+  return status_ != WasapiStreamIoStatus::Failed;
 }
 
 std::uint32_t WasapiStreamIoResult::frames() const noexcept {
@@ -470,18 +484,24 @@ const std::vector<WasapiStreamError>& WasapiStreamIoResult::errors() const noexc
   return errors_;
 }
 
+WasapiRealtimeErrorRecord WasapiStreamIoResult::realtime_error() const noexcept {
+  return realtime_error_;
+}
+
 WasapiStreamIoResult::WasapiStreamIoResult(std::uint32_t frames,
                                            WasapiStreamIoStatus status,
                                            bool silent,
                                            bool data_discontinuity,
                                            bool timestamp_error,
-                                           std::vector<WasapiStreamError> errors)
+                                           std::vector<WasapiStreamError> errors,
+                                           WasapiRealtimeErrorRecord realtime_error)
     : frames_(frames),
       status_(status),
       silent_(silent),
       data_discontinuity_(data_discontinuity),
       timestamp_error_(timestamp_error),
-      errors_(std::move(errors)) {}
+      errors_(std::move(errors)),
+      realtime_error_(realtime_error) {}
 
 WindowsWasapiStream::WindowsWasapiStream() = default;
 
@@ -592,20 +612,20 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
     std::uint32_t frames,
     std::uint32_t timeout_ms) noexcept {
   if (state_ != WasapiStreamState::Started) {
-    return WasapiStreamIoResult::failure({
-        {"stream_not_started", "WASAPI render requires a started stream."},
-    });
+    return WasapiStreamIoResult::failure(
+        realtime_error(WasapiRealtimeErrorCode::StreamNotStarted,
+                       WasapiRealtimeErrorContext::Render));
   }
   if (probe_.direction != WasapiStreamDirection::Render) {
-    return WasapiStreamIoResult::failure({
-        {"wrong_stream_direction", "WASAPI render requires a render stream."},
-    });
+    return WasapiStreamIoResult::failure(
+        realtime_error(WasapiRealtimeErrorCode::WrongStreamDirection,
+                       WasapiRealtimeErrorContext::Render));
   }
   if (!impl_ || !impl_->audio_client || !impl_->render_client ||
       !impl_->samples_ready_event.valid() || !impl_->stop_requested_event.valid()) {
-    return WasapiStreamIoResult::failure({
-        {"native_stream_unavailable", "WASAPI render requires a native opened stream."},
-    });
+    return WasapiStreamIoResult::failure(
+        realtime_error(WasapiRealtimeErrorCode::NativeStreamUnavailable,
+                       WasapiRealtimeErrorContext::Render));
   }
 
   if (!std::exchange(impl_->samples_ready_latched, false)) {
@@ -617,15 +637,12 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
     }
     if (wait_result.status != WasapiEventWaitStatus::SamplesReady &&
         wait_result.status != WasapiEventWaitStatus::TimedOut) {
-      return WasapiStreamIoResult::failure({
-          {
-              "wasapi_event_wait_failed",
-              "WASAPI render event wait failed.",
-              static_cast<std::int32_t>(
-                  HRESULT_FROM_WIN32(wait_result.native_win32_code)),
-              wait_result.native_win32_code,
-          },
-      });
+      return WasapiStreamIoResult::failure(realtime_error(
+          WasapiRealtimeErrorCode::WasapiEventWaitFailed,
+          static_cast<WasapiRealtimeErrorContext>(
+              static_cast<std::uint16_t>(WasapiRealtimeErrorContext::Render) |
+              static_cast<std::uint16_t>(WasapiRealtimeErrorContext::NativeWin32)),
+          wait_result.native_win32_code));
     }
   }
 
@@ -633,13 +650,12 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
   // The event timeout is a polling boundary; current padding is authoritative.
   const auto padding_result = impl_->audio_client->GetCurrentPadding(&padding_frames);
   if (FAILED(padding_result)) {
-    return WasapiStreamIoResult::failure({
-        {
-            "wasapi_padding_failed",
-            "WASAPI render padding query failed with " + hresult_hex(padding_result) + ".",
-            static_cast<std::int32_t>(padding_result),
-        },
-    });
+    return WasapiStreamIoResult::failure(realtime_error(
+        WasapiRealtimeErrorCode::WasapiPaddingFailed,
+        static_cast<WasapiRealtimeErrorContext>(
+            static_cast<std::uint16_t>(WasapiRealtimeErrorContext::Render) |
+            static_cast<std::uint16_t>(WasapiRealtimeErrorContext::NativeHresult)),
+        static_cast<std::uint32_t>(padding_result)));
   }
 
   if (padding_frames >= probe_.buffer_frames) {
@@ -657,13 +673,12 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
   const auto get_buffer_result =
       impl_->render_client->GetBuffer(requested_frames, &render_buffer);
   if (FAILED(get_buffer_result) || render_buffer == nullptr) {
-    return WasapiStreamIoResult::failure({
-        {
-            "wasapi_render_buffer_failed",
-            "WASAPI render buffer acquisition failed with " + hresult_hex(get_buffer_result) + ".",
-            static_cast<std::int32_t>(get_buffer_result),
-        },
-    });
+    return WasapiStreamIoResult::failure(realtime_error(
+        WasapiRealtimeErrorCode::WasapiRenderBufferFailed,
+        static_cast<WasapiRealtimeErrorContext>(
+            static_cast<std::uint16_t>(WasapiRealtimeErrorContext::Render) |
+            static_cast<std::uint16_t>(WasapiRealtimeErrorContext::NativeHresult)),
+        static_cast<std::uint32_t>(get_buffer_result)));
   }
 
   const auto conversion = export_float_to_interleaved(source,
@@ -675,18 +690,17 @@ WasapiStreamIoResult WindowsWasapiStream::render_once(
   if (!conversion.ok()) {
     static_cast<void>(
         impl_->render_client->ReleaseBuffer(requested_frames, AUDCLNT_BUFFERFLAGS_SILENT));
-    return WasapiStreamIoResult::failure({sample_conversion_error(conversion.status())});
+    return WasapiStreamIoResult::failure(sample_conversion_error(conversion.status()));
   }
 
   const auto release_result = impl_->render_client->ReleaseBuffer(requested_frames, 0);
   if (FAILED(release_result)) {
-    return WasapiStreamIoResult::failure({
-        {
-            "wasapi_render_buffer_release_failed",
-            "WASAPI render buffer release failed with " + hresult_hex(release_result) + ".",
-            static_cast<std::int32_t>(release_result),
-        },
-    });
+    return WasapiStreamIoResult::failure(realtime_error(
+        WasapiRealtimeErrorCode::WasapiRenderBufferReleaseFailed,
+        static_cast<WasapiRealtimeErrorContext>(
+            static_cast<std::uint16_t>(WasapiRealtimeErrorContext::Render) |
+            static_cast<std::uint16_t>(WasapiRealtimeErrorContext::NativeHresult)),
+        static_cast<std::uint32_t>(release_result)));
   }
 
   return WasapiStreamIoResult::success(requested_frames);
@@ -696,20 +710,20 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
     realtime::AudioBuffer& destination,
     std::uint32_t timeout_ms) noexcept {
   if (state_ != WasapiStreamState::Started) {
-    return WasapiStreamIoResult::failure({
-        {"stream_not_started", "WASAPI capture requires a started stream."},
-    });
+    return WasapiStreamIoResult::failure(
+        realtime_error(WasapiRealtimeErrorCode::StreamNotStarted,
+                       WasapiRealtimeErrorContext::Capture));
   }
   if (probe_.direction != WasapiStreamDirection::Capture) {
-    return WasapiStreamIoResult::failure({
-        {"wrong_stream_direction", "WASAPI capture requires a capture stream."},
-    });
+    return WasapiStreamIoResult::failure(
+        realtime_error(WasapiRealtimeErrorCode::WrongStreamDirection,
+                       WasapiRealtimeErrorContext::Capture));
   }
   if (!impl_ || !impl_->capture_client || !impl_->samples_ready_event.valid() ||
       !impl_->stop_requested_event.valid()) {
-    return WasapiStreamIoResult::failure({
-        {"native_stream_unavailable", "WASAPI capture requires a native opened stream."},
-    });
+    return WasapiStreamIoResult::failure(
+        realtime_error(WasapiRealtimeErrorCode::NativeStreamUnavailable,
+                       WasapiRealtimeErrorContext::Capture));
   }
 
   const auto samples_ready_latched =
@@ -717,13 +731,12 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
   UINT32 packet_frames = 0;
   auto packet_result = impl_->capture_client->GetNextPacketSize(&packet_frames);
   if (FAILED(packet_result)) {
-    return WasapiStreamIoResult::failure({
-        {
-            "wasapi_capture_packet_failed",
-            "WASAPI capture packet query failed with " + hresult_hex(packet_result) + ".",
-            static_cast<std::int32_t>(packet_result),
-        },
-    });
+    return WasapiStreamIoResult::failure(realtime_error(
+        WasapiRealtimeErrorCode::WasapiCapturePacketFailed,
+        static_cast<WasapiRealtimeErrorContext>(
+            static_cast<std::uint16_t>(WasapiRealtimeErrorContext::Capture) |
+            static_cast<std::uint16_t>(WasapiRealtimeErrorContext::NativeHresult)),
+        static_cast<std::uint32_t>(packet_result)));
   }
 
   if (packet_frames == 0 && !samples_ready_latched) {
@@ -737,36 +750,31 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
       return WasapiStreamIoResult::timeout();
     }
     if (wait_result.status != WasapiEventWaitStatus::SamplesReady) {
-      return WasapiStreamIoResult::failure({
-          {
-              "wasapi_event_wait_failed",
-              "WASAPI capture event wait failed.",
-              static_cast<std::int32_t>(
-                  HRESULT_FROM_WIN32(wait_result.native_win32_code)),
-              wait_result.native_win32_code,
-          },
-      });
+      return WasapiStreamIoResult::failure(realtime_error(
+          WasapiRealtimeErrorCode::WasapiEventWaitFailed,
+          static_cast<WasapiRealtimeErrorContext>(
+              static_cast<std::uint16_t>(WasapiRealtimeErrorContext::Capture) |
+              static_cast<std::uint16_t>(WasapiRealtimeErrorContext::NativeWin32)),
+          wait_result.native_win32_code));
     }
 
     packet_result = impl_->capture_client->GetNextPacketSize(&packet_frames);
     if (FAILED(packet_result)) {
-      return WasapiStreamIoResult::failure({
-          {
-              "wasapi_capture_packet_failed",
-              "WASAPI capture packet query failed with " +
-                  hresult_hex(packet_result) + ".",
-              static_cast<std::int32_t>(packet_result),
-          },
-      });
+      return WasapiStreamIoResult::failure(realtime_error(
+          WasapiRealtimeErrorCode::WasapiCapturePacketFailed,
+          static_cast<WasapiRealtimeErrorContext>(
+              static_cast<std::uint16_t>(WasapiRealtimeErrorContext::Capture) |
+              static_cast<std::uint16_t>(WasapiRealtimeErrorContext::NativeHresult)),
+          static_cast<std::uint32_t>(packet_result)));
     }
   }
   if (packet_frames == 0) {
     return WasapiStreamIoResult::success(0);
   }
   if (packet_frames > destination.frames()) {
-    return WasapiStreamIoResult::failure({
-        {"capture_buffer_too_small", "Capture destination buffer cannot hold the packet."},
-    });
+    return WasapiStreamIoResult::failure(realtime_error(
+        WasapiRealtimeErrorCode::CaptureBufferTooSmall,
+        WasapiRealtimeErrorContext::Capture));
   }
 
   BYTE* capture_buffer = nullptr;
@@ -780,13 +788,12 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
       &device_position,
       &qpc_position);
   if (FAILED(get_buffer_result)) {
-    return WasapiStreamIoResult::failure({
-        {
-            "wasapi_capture_buffer_failed",
-            "WASAPI capture buffer acquisition failed with " + hresult_hex(get_buffer_result) + ".",
-            static_cast<std::int32_t>(get_buffer_result),
-        },
-    });
+    return WasapiStreamIoResult::failure(realtime_error(
+        WasapiRealtimeErrorCode::WasapiCaptureBufferFailed,
+        static_cast<WasapiRealtimeErrorContext>(
+            static_cast<std::uint16_t>(WasapiRealtimeErrorContext::Capture) |
+            static_cast<std::uint16_t>(WasapiRealtimeErrorContext::NativeHresult)),
+        static_cast<std::uint32_t>(get_buffer_result)));
   }
 
   if ((flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0) {
@@ -803,19 +810,18 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
         packet_frames);
     if (!conversion.ok()) {
       static_cast<void>(impl_->capture_client->ReleaseBuffer(packet_frames));
-      return WasapiStreamIoResult::failure({sample_conversion_error(conversion.status())});
+      return WasapiStreamIoResult::failure(sample_conversion_error(conversion.status()));
     }
   }
 
   const auto release_result = impl_->capture_client->ReleaseBuffer(packet_frames);
   if (FAILED(release_result)) {
-    return WasapiStreamIoResult::failure({
-        {
-            "wasapi_capture_buffer_release_failed",
-            "WASAPI capture buffer release failed with " + hresult_hex(release_result) + ".",
-            static_cast<std::int32_t>(release_result),
-        },
-    });
+    return WasapiStreamIoResult::failure(realtime_error(
+        WasapiRealtimeErrorCode::WasapiCaptureBufferReleaseFailed,
+        static_cast<WasapiRealtimeErrorContext>(
+            static_cast<std::uint16_t>(WasapiRealtimeErrorContext::Capture) |
+            static_cast<std::uint16_t>(WasapiRealtimeErrorContext::NativeHresult)),
+        static_cast<std::uint32_t>(release_result)));
   }
 
   const auto data_discontinuity =

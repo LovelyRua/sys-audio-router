@@ -79,7 +79,7 @@ binary protocol. On Windows, `sar_engine_service` hosts that control surface on
 a named pipe and `sar_control_cli` can query state, the merged virtual and
 physical WASAPI device directory, graph, diagnostics, and audio-runtime state;
 start or stop an installed runtime; or apply gain and mute
-commands. Control wire version 4 carries installed/running/runtime graph-version
+commands. Control wire version 5 carries installed/running/runtime graph-version
 state plus the active runtime mode and endpoint selection in lifecycle
 responses. A stopped service can configure default or pinned WASAPI render and
 default or pinned-pair duplex runtimes through the same protocol; configuration
@@ -93,7 +93,7 @@ after its bound graph version becomes stale unless it has an installed runtime
 builder. The Windows service retains its render/duplex endpoint configuration in
 such a builder, reconstructs a stale stopped runtime against the current graph on
 the next start command, and preserves the previous stopped runtime if rebuilding
-fails. The Qt Quick GUI now binds to control wire v4 from a separate process.
+fails. The Qt Quick GUI now binds to control wire v5 from a separate process.
 Service installation and concurrent control-client authorization remain future
 work.
 
@@ -596,7 +596,7 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   pinned 48 kHz hardware render endpoint; after 11,301 graph blocks the runtime
   reported zero xruns, FIFO overflow, or FIFO underflow and a 754-microsecond
   callback peak. Production-bus concurrency and WASAPI source injection are
-  covered by dedicated smoke tests. Control-wire v4 now reports producer,
+  covered by dedicated smoke tests. Control-wire v5 now reports producer,
   consumer, queue-waterline, peak, clipping, and non-finite-sample evidence.
   An initial ten-second live delta measured 372.1 ASIO production attempts per
   second but only 105.4 consumed blocks per second on the default shared-mode

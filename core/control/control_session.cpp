@@ -144,12 +144,12 @@ ControlResponse ControlSession::handle(const ControlCommand& command,
     return command_accepted(command.command_id);
   }
 
-  auto apply_result = apply_command(current_preset_, command);
-  if (!apply_result.ok()) {
-    return command_rejected(command.command_id, apply_result.errors());
+  auto prepared = prepare_preset_update(command);
+  if (!prepared.ok()) {
+    return command_rejected(command.command_id, prepared.errors());
   }
-
-  return publish_preset(command, apply_result.take_document());
+  commit_preset_update(prepared.take_update());
+  return command_accepted(command.command_id);
 }
 
 ControlResponse ControlSession::handle_batch(
@@ -217,19 +217,70 @@ std::uint64_t ControlSession::next_graph_version() const noexcept {
   return next_graph_version_;
 }
 
-ControlResponse ControlSession::publish_preset(const ControlCommand& command,
-                                               PresetDocument preset) {
-  auto graph_result = build_preset_graph(preset, next_graph_version_);
-  if (!graph_result.ok()) {
-    return command_rejected(command.command_id, graph_result.errors());
+PreparedPresetUpdateResult ControlSession::prepare_preset_update(
+    const ControlCommand& command) const {
+  auto apply_result = apply_command(current_preset_, command);
+  if (!apply_result.ok()) {
+    return PreparedPresetUpdateResult::failure(apply_result.errors());
   }
 
-  auto graph = share_graph(graph_result.take_graph());
-  publisher_.publish(graph);
-  current_preset_ = std::move(preset);
+  auto preset = apply_result.take_document();
+  auto graph_result = build_preset_graph(preset, next_graph_version_);
+  if (!graph_result.ok()) {
+    return PreparedPresetUpdateResult::failure(graph_result.errors());
+  }
+
+  PreparedPresetUpdate update;
+  update.preset = std::move(preset);
+  update.graph = share_graph(graph_result.take_graph());
+  update.graph_version = next_graph_version_;
+  return PreparedPresetUpdateResult::success(std::move(update));
+}
+
+void ControlSession::commit_preset_update(PreparedPresetUpdate update) noexcept {
+  publisher_.publish(std::move(update.graph));
+  current_preset_ = std::move(update.preset);
   ++next_graph_version_;
+}
+
+ControlResponse ControlSession::publish_preset(const ControlCommand& command,
+                                               PresetDocument preset) {
+  auto publish_command = command;
+  publish_command.preset = std::move(preset);
+  auto prepared = prepare_preset_update(publish_command);
+  if (!prepared.ok()) {
+    return command_rejected(command.command_id, prepared.errors());
+  }
+  commit_preset_update(prepared.take_update());
   return command_accepted(command.command_id);
 }
+
+PreparedPresetUpdateResult PreparedPresetUpdateResult::success(
+    PreparedPresetUpdate update) {
+  return {std::move(update), {}};
+}
+
+PreparedPresetUpdateResult PreparedPresetUpdateResult::failure(
+    std::vector<PresetError> errors) {
+  return {{}, std::move(errors)};
+}
+
+bool PreparedPresetUpdateResult::ok() const noexcept {
+  return errors_.empty() && update_.graph != nullptr;
+}
+
+PreparedPresetUpdate PreparedPresetUpdateResult::take_update() noexcept {
+  return std::move(update_);
+}
+
+const std::vector<PresetError>& PreparedPresetUpdateResult::errors() const noexcept {
+  return errors_;
+}
+
+PreparedPresetUpdateResult::PreparedPresetUpdateResult(
+    PreparedPresetUpdate update,
+    std::vector<PresetError> errors) noexcept
+    : update_(std::move(update)), errors_(std::move(errors)) {}
 
 ControlSessionCreateResult ControlSessionCreateResult::success(
     std::unique_ptr<ControlSession> session) {

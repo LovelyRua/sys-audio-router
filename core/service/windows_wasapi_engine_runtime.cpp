@@ -247,6 +247,10 @@ diagnostics::EngineDiagnostics WindowsWasapiEngineRuntime::diagnostics() const {
   result.render_fifo_overflow_frames = snapshot.render_fifo_overflow_frames;
   result.render_fifo_underflow_cycles = snapshot.render_fifo_underflow_cycles;
   result.render_fifo_underflow_frames = snapshot.render_fifo_underflow_frames;
+  result.sample_conversion_import_failures =
+      snapshot.sample_conversion_import_failures;
+  result.sample_conversion_export_failures =
+      snapshot.sample_conversion_export_failures;
   if (external_input_ != nullptr) {
     const auto input = external_input_->diagnostics();
     result.virtual_asio_pushed_blocks = input.pushed_blocks;

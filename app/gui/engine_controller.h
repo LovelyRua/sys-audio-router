@@ -6,11 +6,14 @@
 
 #include <QFutureWatcher>
 #include <QObject>
+#include <QProcess>
 #include <QStringList>
 #include <QTimer>
 #include <QVariantList>
 
 #include <cstdint>
+#include <deque>
+#include <optional>
 
 namespace sar::gui {
 
@@ -52,6 +55,7 @@ class EngineController final : public QObject {
 
  public:
   explicit EngineController(QObject* parent = nullptr);
+  ~EngineController() override;
 
   [[nodiscard]] bool connected() const noexcept;
   [[nodiscard]] QString connectionLabel() const;
@@ -116,19 +120,44 @@ class EngineController final : public QObject {
     Load,
   };
 
+  enum class RuntimeApplyStage {
+    None,
+    StopForReconfigure,
+    ConfigureForReconfigure,
+    RestartAfterReconfigure,
+  };
+
+  struct QueuedCommand {
+    control::ControlCommand command;
+    PendingPresetAction preset_action = PendingPresetAction::None;
+    QString preset_name;
+    RuntimeApplyStage runtime_stage = RuntimeApplyStage::None;
+    bool poll = false;
+  };
+
   void dispatch(control::ControlCommand command);
   void dispatchPreset(control::ControlCommand command,
                       PendingPresetAction action,
                       QString name);
-  void applyReply(const EngineReply& reply);
+  void enqueue(QueuedCommand command);
+  void startNextCommand();
+  void updateBusyState();
+  void applyReply(const EngineReply& reply, const QueuedCommand& command);
   void updateSession(const control::ControlResponse& response);
   void schedulePoll();
+  void ensureEngineService();
+  void stopEngineService();
   void setError(QString error);
   void setStatus(QString status);
 
   QFutureWatcher<EngineReply> watcher_;
   QTimer poll_timer_;
+  QProcess engine_service_;
   PresetStore preset_store_;
+  std::deque<QueuedCommand> queued_commands_;
+  std::optional<QueuedCommand> active_command_;
+  std::optional<control::AudioRuntimeConfiguration>
+      pending_runtime_reconfigure_;
   std::uint64_t command_sequence_ = 0;
   std::uint32_t poll_sequence_ = 0;
   bool connected_ = false;
@@ -137,6 +166,9 @@ class EngineController final : public QObject {
   control::AudioRuntimeMode runtime_mode_ = control::AudioRuntimeMode::None;
   QString runtime_capture_device_id_;
   QString runtime_render_device_id_;
+  bool engine_service_owned_ = false;
+  bool engine_service_start_attempted_ = false;
+  bool shutting_down_ = false;
   bool busy_ = false;
   QString last_error_;
   QString status_message_;
@@ -155,8 +187,6 @@ class EngineController final : public QObject {
   int route_revision_ = 0;
   QStringList preset_names_;
   QString active_preset_name_;
-  PendingPresetAction pending_preset_action_ = PendingPresetAction::None;
-  QString pending_preset_name_;
 };
 
 }  // namespace sar::gui

@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 
-if defined SAR_ALPHA_UNINSTALL_TEMP goto execute
+if /i "%~1"=="--sar-alpha-relay" goto execute
 
 set "SAR_ALPHA_UNINSTALL_TEMP=%TEMP%\sar-alpha-uninstall-%RANDOM%-%RANDOM%"
 set "SAR_ALPHA_UNINSTALL_DEFAULT=%~dp0"
@@ -11,10 +11,15 @@ copy /y "%~dp0uninstall-alpha.ps1" "%SAR_ALPHA_UNINSTALL_TEMP%\uninstall-alpha.p
 if errorlevel 1 exit /b %errorlevel%
 copy /y "%~f0" "%SAR_ALPHA_UNINSTALL_TEMP%\uninstall-alpha.cmd" >nul
 if errorlevel 1 exit /b %errorlevel%
+> "%SAR_ALPHA_UNINSTALL_TEMP%\.system-audio-route-uninstall-relay" echo relay
 
-"%SAR_ALPHA_UNINSTALL_TEMP%\uninstall-alpha.cmd" %*
+"%SAR_ALPHA_UNINSTALL_TEMP%\uninstall-alpha.cmd" --sar-alpha-relay %*
+exit /b %errorlevel%
 
 :execute
+shift
+if not defined SAR_ALPHA_UNINSTALL_TEMP exit /b 1
+if not exist "%SAR_ALPHA_UNINSTALL_TEMP%\.system-audio-route-uninstall-relay" exit /b 1
 if not "%~1"=="" goto execute_arguments
 powershell -NoProfile -ExecutionPolicy Bypass ^
   -File "%~dp0uninstall-alpha.ps1" ^

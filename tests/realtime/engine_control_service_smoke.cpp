@@ -187,6 +187,7 @@ int main() {
   std::uint32_t observer_calls = 0;
   bool reject_observer = false;
   bool throw_observer = false;
+  bool query_from_observer = false;
   observer_service->set_preset_commit_observer(
       [&](const sar::control::PresetDocument& preset,
           std::uint64_t graph_version) {
@@ -195,6 +196,13 @@ int main() {
         assert(preset.matrix.routes[0].gain == 0.5F ||
                preset.matrix.routes[0].gain == 0.25F ||
                preset.matrix.routes[0].gain == 0.75F);
+        if (query_from_observer) {
+          sar::control::ControlCommand nested_state;
+          nested_state.command_id = "observer-nested-query";
+          nested_state.type = sar::control::ControlCommandType::QuerySessionState;
+          const auto nested = send(*observer_service, nested_state);
+          assert(nested.status == sar::control::ControlResponseStatus::Accepted);
+        }
         if (throw_observer) {
           throw std::runtime_error("Injected preset observer exception.");
         }
@@ -214,8 +222,10 @@ int main() {
   assert(observer_calls == 1);
   assert(observer_service->session().current_preset().matrix.routes[0].gain ==
          0.5F);
+  assert(observer_service->session().next_graph_version() == 17);
 
   reject_observer = true;
+  query_from_observer = true;
   gain.command_id = "observer-gain-rejected";
   gain.gain = 0.25F;
   const auto observer_rejected = send(*observer_service, gain);
@@ -226,8 +236,10 @@ int main() {
   assert(observer_calls == 2);
   assert(observer_service->session().current_preset().matrix.routes[0].gain ==
          0.5F);
+  assert(observer_service->session().next_graph_version() == 17);
 
   reject_observer = false;
+  query_from_observer = false;
   throw_observer = true;
   gain.command_id = "observer-gain-exception";
   gain.gain = 0.75F;

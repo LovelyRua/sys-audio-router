@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
+#include <mutex>
 #include <span>
 #include <string>
 #include <thread>
@@ -20,6 +22,7 @@ struct NamedPipeControlError {
 struct NamedPipeControlConfig {
   std::wstring pipe_name = L"sys-audio-route-control";
   std::uint32_t maximum_message_bytes = 1024 * 1024;
+  std::uint32_t request_timeout_ms = 2000;
 };
 
 struct NamedPipeControlStats {
@@ -76,7 +79,16 @@ class WindowsNamedPipeControlServer {
   [[nodiscard]] std::vector<NamedPipeControlError> last_errors() const;
 
  private:
+  struct ClientWorker {
+    std::thread thread;
+    std::shared_ptr<std::atomic_bool> finished;
+  };
+
   void run() noexcept;
+  void serve_client(void* pipe,
+                    std::uint32_t client_process_id,
+                    std::shared_ptr<std::atomic_bool> finished) noexcept;
+  void reap_client_workers(bool join_all) noexcept;
 
   NamedPipeControlConfig config_;
   NamedPipeControlHandler handler_;
@@ -92,6 +104,8 @@ class WindowsNamedPipeControlServer {
   std::atomic<std::uint64_t> handler_errors_ = 0;
   mutable std::atomic_flag error_lock_ = ATOMIC_FLAG_INIT;
   std::vector<NamedPipeControlError> last_errors_;
+  std::mutex clients_mutex_;
+  std::vector<ClientWorker> client_workers_;
   void* stop_event_ = nullptr;
 };
 

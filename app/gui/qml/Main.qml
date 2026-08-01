@@ -33,6 +33,39 @@ ApplicationWindow {
     property string selectedInputLabel: "No input selected"
     property string selectedOutputId: ""
     property string selectedOutputLabel: "No output selected"
+    property bool runtimeDraftDirty: false
+    property string runtimeDraftMode: "render"
+    property string runtimeDraftRenderDeviceId: ""
+    property string runtimeDraftCaptureDeviceId: ""
+
+    function syncRuntimeDraft() {
+        var engineMode = engine.runtimeMode === "duplex" ? "duplex" : "render"
+        var matchesDraft = engineMode === runtimeDraftMode
+                && engine.runtimeRenderDeviceId === runtimeDraftRenderDeviceId
+                && (engineMode !== "duplex"
+                    || engine.runtimeCaptureDeviceId === runtimeDraftCaptureDeviceId)
+        if (runtimeDraftDirty && !matchesDraft)
+            return
+        runtimeDraftDirty = false
+        runtimeDraftMode = engineMode
+        runtimeDraftRenderDeviceId = engine.runtimeRenderDeviceId
+        runtimeDraftCaptureDeviceId = engine.runtimeCaptureDeviceId
+    }
+
+    function indexForDevice(model, deviceId) {
+        for (var index = 0; index < model.length; ++index) {
+            if (model[index].id === deviceId)
+                return index
+        }
+        return deviceId.length === 0 && model.length > 0 && !runtimeDraftDirty ? 0 : -1
+    }
+
+    Connections {
+        target: engine
+        function onRuntimeChanged() { window.syncRuntimeDraft() }
+    }
+
+    Component.onCompleted: syncRuntimeDraft()
 
     component FlatButton: Button {
         id: control
@@ -106,7 +139,9 @@ ApplicationWindow {
             height: 34
             leftPadding: 10
             contentItem: Text {
-                text: modelData
+                text: control.textRole.length > 0 && modelData !== null
+                      && typeof modelData === "object"
+                      ? modelData[control.textRole] : modelData
                 color: colors.text
                 font.pixelSize: 12
                 verticalAlignment: Text.AlignVCenter
@@ -623,7 +658,7 @@ ApplicationWindow {
                                 from: 0
                                 to: 2
                                 stepSize: 0.01
-                                enabled: selectedInputId.length > 0 && routeSwitch.checked
+                                enabled: selectedInputId.length > 0 && routeSwitch.checked && engine.connected
                                 value: {
                                     engine.routeRevision;
                                     return selectedInputId.length > 0
@@ -717,7 +752,11 @@ ApplicationWindow {
                                     id: runtimeModeCombo
                                     Layout.fillWidth: true
                                     model: ["WASAPI render", "WASAPI duplex"]
-                                    currentIndex: engine.runtimeMode === "duplex" ? 1 : 0
+                                    currentIndex: window.runtimeDraftMode === "duplex" ? 1 : 0
+                                    onActivated: function(index) {
+                                        window.runtimeDraftMode = index === 1 ? "duplex" : "render"
+                                        window.runtimeDraftDirty = true
+                                    }
                                 }
                             }
 
@@ -732,12 +771,14 @@ ApplicationWindow {
                                     model: engine.devices.filter(function (device) {
                                         return device.direction === 1 || device.direction === 2
                                     })
-                                    currentIndex: {
-                                        for (var index = 0; index < model.length; ++index) {
-                                            if (model[index].id === engine.runtimeRenderDeviceId)
-                                                return index
+                                    currentIndex: window.indexForDevice(
+                                                      renderDeviceCombo.model,
+                                                      window.runtimeDraftRenderDeviceId)
+                                    onActivated: function(index) {
+                                        if (index >= 0) {
+                                            window.runtimeDraftRenderDeviceId = model[index].id
+                                            window.runtimeDraftDirty = true
                                         }
-                                        return model.length > 0 ? 0 : -1
                                     }
                                 }
                             }
@@ -745,7 +786,7 @@ ApplicationWindow {
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 8
-                                visible: runtimeModeCombo.currentIndex === 1
+                                visible: window.runtimeDraftMode === "duplex"
                                 Text { text: "Capture"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
                                 ConsoleCombo {
                                     id: captureDeviceCombo
@@ -754,12 +795,14 @@ ApplicationWindow {
                                     model: engine.devices.filter(function (device) {
                                         return device.direction === 0 || device.direction === 2
                                     })
-                                    currentIndex: {
-                                        for (var index = 0; index < model.length; ++index) {
-                                            if (model[index].id === engine.runtimeCaptureDeviceId)
-                                                return index
+                                    currentIndex: window.indexForDevice(
+                                                      captureDeviceCombo.model,
+                                                      window.runtimeDraftCaptureDeviceId)
+                                    onActivated: function(index) {
+                                        if (index >= 0) {
+                                            window.runtimeDraftCaptureDeviceId = model[index].id
+                                            window.runtimeDraftDirty = true
                                         }
-                                        return model.length > 0 ? 0 : -1
                                     }
                                 }
                             }
@@ -768,7 +811,9 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 spacing: 8
                                 Text {
-                                    text: engine.runtimeConfigured ? "Configured runtime can be restarted from the header" : "Select devices, then apply the runtime"
+                                    text: engine.runtimeRunning
+                                          ? "Apply restarts the engine with the selected devices"
+                                          : "Select devices, then apply the runtime"
                                     color: colors.muted
                                     font.pixelSize: 10
                                     elide: Text.ElideRight
@@ -779,13 +824,12 @@ ApplicationWindow {
                                     highlighted: true
                                     enabled: engine.connected && !engine.busy &&
                                              renderDeviceCombo.currentIndex >= 0 &&
-                                             (runtimeModeCombo.currentIndex === 0 || captureDeviceCombo.currentIndex >= 0)
+                                            (window.runtimeDraftMode === "render" || captureDeviceCombo.currentIndex >= 0)
                                     onClicked: {
                                         var renderDevice = renderDeviceCombo.model[renderDeviceCombo.currentIndex]
                                         var captureDevice = captureDeviceCombo.currentIndex >= 0
                                                 ? captureDeviceCombo.model[captureDeviceCombo.currentIndex] : null
-                                        engine.configureAudioRuntime(
-                                            runtimeModeCombo.currentIndex === 0 ? "render" : "duplex",
+                                        engine.configureAudioRuntime(window.runtimeDraftMode,
                                             captureDevice === null ? "" : captureDevice.id,
                                             renderDevice.id)
                                     }

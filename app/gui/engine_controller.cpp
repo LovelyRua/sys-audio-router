@@ -4,6 +4,9 @@
 #include "core/service/windows_named_pipe_control.h"
 
 #include <QStandardPaths>
+#include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
 #include <QtConcurrentRun>
 
 #include <algorithm>
@@ -52,6 +55,7 @@ EngineReply transact(control::ControlCommand command) {
     reply.error = text(transaction.error().message);
     return reply;
   }
+  reply.transport_ok = true;
 
   const auto decoded =
       control::decode_control_response(as_u8(transaction.payload()));
@@ -60,7 +64,6 @@ EngineReply transact(control::ControlCommand command) {
     return reply;
   }
   reply.response = decoded.response;
-  reply.transport_ok = true;
   if (reply.response.status == control::ControlResponseStatus::Rejected) {
     reply.error = reply.response.errors.empty()
                       ? QStringLiteral("The engine rejected the request")
@@ -83,16 +86,62 @@ EngineController::EngineController(QObject* parent)
                     QStringLiteral("/presets")) {
   connect(&watcher_, &QFutureWatcher<EngineReply>::finished, this, [this] {
     const auto reply = watcher_.result();
-    busy_ = false;
-    emit busyChanged();
-    applyReply(reply);
+    if (!active_command_.has_value()) {
+      updateBusyState();
+      return;
+    }
+    const auto command = std::move(*active_command_);
+    active_command_.reset();
+    applyReply(reply, command);
+    startNextCommand();
+    updateBusyState();
   });
+  connect(&engine_service_, &QProcess::started, this, [this] {
+    if (shutting_down_) {
+      return;
+    }
+    engine_service_owned_ = true;
+    setStatus(QStringLiteral("Engine service started"));
+    QTimer::singleShot(100, this, &EngineController::refresh);
+  });
+  connect(&engine_service_, &QProcess::errorOccurred, this,
+          [this](QProcess::ProcessError error) {
+            if (shutting_down_) {
+              return;
+            }
+            if (error == QProcess::FailedToStart) {
+              engine_service_owned_ = false;
+              engine_service_start_attempted_ = false;
+              setError(QStringLiteral("Could not start the engine service: %1")
+                           .arg(engine_service_.errorString()));
+            }
+          });
+  connect(&engine_service_, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+          this, [this](int exit_code, QProcess::ExitStatus exit_status) {
+            const bool was_owned = engine_service_owned_;
+            engine_service_owned_ = false;
+            engine_service_start_attempted_ = false;
+            if (!shutting_down_ && was_owned) {
+              const auto reason = exit_status == QProcess::CrashExit
+                                      ? QStringLiteral("crashed")
+                                      : QStringLiteral("exited");
+              setError(QStringLiteral("Engine service %1 (code %2)")
+                           .arg(reason)
+                           .arg(exit_code));
+            }
+          });
   poll_timer_.setInterval(250);
   connect(&poll_timer_, &QTimer::timeout, this,
           &EngineController::schedulePoll);
   poll_timer_.start();
   refreshPresets();
   QTimer::singleShot(0, this, &EngineController::refresh);
+}
+
+EngineController::~EngineController() {
+  poll_timer_.stop();
+  shutting_down_ = true;
+  stopEngineService();
 }
 
 bool EngineController::connected() const noexcept { return connected_; }
@@ -243,6 +292,14 @@ void EngineController::configureAudioRuntime(const QString& mode,
   command.audio_runtime.mode = runtime_mode;
   command.audio_runtime.capture_device_id = capture_device_id.toStdString();
   command.audio_runtime.render_device_id = render_device_id.toStdString();
+  if (runtime_running_) {
+    pending_runtime_reconfigure_ = command.audio_runtime;
+    command.type = control::ControlCommandType::StopAudioRuntime;
+    enqueue({std::move(command), PendingPresetAction::None, {},
+             RuntimeApplyStage::StopForReconfigure});
+    setStatus(QStringLiteral("Stopping the engine to apply the new audio devices"));
+    return;
+  }
   dispatch(std::move(command));
 }
 
@@ -292,26 +349,64 @@ void EngineController::setRouteGain(const QString& input_id,
 }
 
 void EngineController::dispatch(control::ControlCommand command) {
-  if (busy_) {
+  enqueue({std::move(command)});
+}
+
+void EngineController::enqueue(QueuedCommand queued) {
+  if (queued.command.type == control::ControlCommandType::SetGain) {
+    for (auto it = queued_commands_.rbegin(); it != queued_commands_.rend(); ++it) {
+      if (it->command.type == control::ControlCommandType::SetGain &&
+          it->command.input_id == queued.command.input_id &&
+          it->command.output_id == queued.command.output_id) {
+        it->command.gain = queued.command.gain;
+        return;
+      }
+    }
+  }
+  queued_commands_.push_back(std::move(queued));
+  startNextCommand();
+  updateBusyState();
+}
+
+void EngineController::startNextCommand() {
+  if (active_command_.has_value() || queued_commands_.empty()) {
     return;
   }
+  active_command_ = std::move(queued_commands_.front());
+  queued_commands_.pop_front();
+  auto command = std::move(active_command_->command);
   command.command_id = "gui-" + std::to_string(++command_sequence_);
-  busy_ = true;
-  emit busyChanged();
   watcher_.setFuture(QtConcurrent::run([command = std::move(command)] {
     return transact(command);
   }));
 }
 
+void EngineController::updateBusyState() {
+  const auto is_user_command = [](const QueuedCommand& command) {
+    return !command.poll;
+  };
+  const bool should_be_busy =
+      (active_command_.has_value() && is_user_command(*active_command_)) ||
+      std::ranges::any_of(queued_commands_, is_user_command);
+  if (busy_ == should_be_busy) {
+    return;
+  }
+  busy_ = should_be_busy;
+  emit busyChanged();
+}
+
 void EngineController::dispatchPreset(control::ControlCommand command,
                                       PendingPresetAction action,
                                       QString name) {
-  pending_preset_action_ = action;
-  pending_preset_name_ = std::move(name);
-  dispatch(std::move(command));
+  enqueue({std::move(command), action, std::move(name)});
 }
 
-void EngineController::applyReply(const EngineReply& reply) {
+void EngineController::applyReply(const EngineReply& reply,
+                                  const QueuedCommand& command) {
+  const bool command_succeeded =
+      reply.transport_ok &&
+      reply.error.isEmpty() &&
+      reply.response.status != control::ControlResponseStatus::Rejected;
   const bool was_connected = connected_;
   connected_ = reply.transport_ok;
   if (was_connected != connected_) {
@@ -320,10 +415,13 @@ void EngineController::applyReply(const EngineReply& reply) {
   if (!reply.error.isEmpty()) {
     setError(reply.error);
   }
-  if (!reply.transport_ok ||
-      reply.response.status == control::ControlResponseStatus::Rejected) {
-    pending_preset_action_ = PendingPresetAction::None;
-    pending_preset_name_.clear();
+  if (!command_succeeded) {
+    if (command.runtime_stage != RuntimeApplyStage::None) {
+      pending_runtime_reconfigure_.reset();
+    }
+    if (!reply.transport_ok) {
+      ensureEngineService();
+    }
     return;
   }
 
@@ -354,28 +452,42 @@ void EngineController::applyReply(const EngineReply& reply) {
     emit diagnosticsChanged();
   }
 
-  if (pending_preset_action_ == PendingPresetAction::Save) {
+  if (command.preset_action == PendingPresetAction::Save) {
     QString error;
     if (!reply.response.has_preset) {
       setError(QStringLiteral("The engine did not return a preset document"));
-    } else if (!preset_store_.save(pending_preset_name_,
+    } else if (!preset_store_.save(command.preset_name,
                                    reply.response.preset, &error)) {
       setError(std::move(error));
     } else {
-      active_preset_name_ = pending_preset_name_;
+      active_preset_name_ = command.preset_name;
       refreshPresets();
       emit presetsChanged();
       setStatus(QStringLiteral("Saved preset \"%1\"")
                     .arg(active_preset_name_));
     }
-  } else if (pending_preset_action_ == PendingPresetAction::Load) {
-    active_preset_name_ = pending_preset_name_;
+  } else if (command.preset_action == PendingPresetAction::Load) {
+    active_preset_name_ = command.preset_name;
     emit presetsChanged();
     setStatus(QStringLiteral("Loaded preset \"%1\"")
                   .arg(active_preset_name_));
   }
-  pending_preset_action_ = PendingPresetAction::None;
-  pending_preset_name_.clear();
+  if (command.runtime_stage == RuntimeApplyStage::StopForReconfigure &&
+      pending_runtime_reconfigure_.has_value()) {
+    control::ControlCommand configure;
+    configure.type = control::ControlCommandType::ConfigureAudioRuntime;
+    configure.audio_runtime = *pending_runtime_reconfigure_;
+    enqueue({std::move(configure), PendingPresetAction::None, {},
+             RuntimeApplyStage::ConfigureForReconfigure});
+  } else if (command.runtime_stage == RuntimeApplyStage::ConfigureForReconfigure) {
+    control::ControlCommand start;
+    start.type = control::ControlCommandType::StartAudioRuntime;
+    enqueue({std::move(start), PendingPresetAction::None, {},
+             RuntimeApplyStage::RestartAfterReconfigure});
+  } else if (command.runtime_stage == RuntimeApplyStage::RestartAfterReconfigure) {
+    pending_runtime_reconfigure_.reset();
+    setStatus(QStringLiteral("Audio runtime restarted with the new configuration"));
+  }
 
   if (reply.request_type == control::ControlCommandType::ConnectRoute ||
       reply.request_type == control::ControlCommandType::DisconnectRoute ||
@@ -453,7 +565,7 @@ void EngineController::setStatus(QString status) {
 }
 
 void EngineController::schedulePoll() {
-  if (busy_) {
+  if (active_command_.has_value() || !queued_commands_.empty()) {
     return;
   }
   control::ControlCommand command;
@@ -465,7 +577,47 @@ void EngineController::schedulePoll() {
   } else {
     command.type = control::ControlCommandType::QueryDiagnostics;
   }
-  dispatch(std::move(command));
+  enqueue({std::move(command), PendingPresetAction::None, {},
+           RuntimeApplyStage::None, true});
+}
+
+void EngineController::ensureEngineService() {
+  if (engine_service_start_attempted_ ||
+      engine_service_.state() != QProcess::NotRunning) {
+    return;
+  }
+  engine_service_start_attempted_ = true;
+  const auto executable = QDir(QCoreApplication::applicationDirPath())
+                              .filePath(QStringLiteral("sar_engine_service.exe"));
+  if (!QFileInfo::exists(executable)) {
+    setError(QStringLiteral("The engine service executable is missing from this installation"));
+    return;
+  }
+  const auto data_path = QStandardPaths::writableLocation(
+      QStandardPaths::AppDataLocation);
+  if (data_path.isEmpty() || !QDir().mkpath(data_path)) {
+    setError(QStringLiteral("Could not create the engine service data directory"));
+    return;
+  }
+  engine_service_.setProgram(executable);
+  engine_service_.setArguments({QStringLiteral("--session"),
+                                QDir(data_path).filePath(
+                                    QStringLiteral("engine-session.sarsession"))});
+  engine_service_.setProcessChannelMode(QProcess::MergedChannels);
+  setStatus(QStringLiteral("Starting engine service"));
+  engine_service_.start();
+}
+
+void EngineController::stopEngineService() {
+  if (engine_service_.state() == QProcess::NotRunning) {
+    return;
+  }
+  engine_service_.terminate();
+  if (!engine_service_.waitForFinished(1500)) {
+    engine_service_.kill();
+    engine_service_.waitForFinished(1500);
+  }
+  engine_service_owned_ = false;
 }
 
 }  // namespace sar::gui

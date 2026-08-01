@@ -57,17 +57,21 @@ class WasapiGraphRunnerResult {
  public:
   static WasapiGraphRunnerResult success(WasapiGraphRunnerStats stats);
   static WasapiGraphRunnerResult failure(std::vector<WasapiStreamError> errors);
+  static WasapiGraphRunnerResult failure(WasapiRealtimeErrorRecord error) noexcept;
 
   [[nodiscard]] bool ok() const noexcept;
   [[nodiscard]] const WasapiGraphRunnerStats& stats() const noexcept;
   [[nodiscard]] const std::vector<WasapiStreamError>& errors() const noexcept;
+  [[nodiscard]] WasapiRealtimeErrorRecord realtime_error() const noexcept;
 
  private:
   WasapiGraphRunnerResult(WasapiGraphRunnerStats stats,
-                          std::vector<WasapiStreamError> errors);
+                          std::vector<WasapiStreamError> errors,
+                          WasapiRealtimeErrorRecord realtime_error = {});
 
   WasapiGraphRunnerStats stats_;
   std::vector<WasapiStreamError> errors_;
+  WasapiRealtimeErrorRecord realtime_error_;
 };
 
 class WindowsWasapiGraphRunner {

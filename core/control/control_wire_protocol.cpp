@@ -333,6 +333,8 @@ void encode_diagnostics(Writer& writer,
   writer.scalar(diagnostics.virtual_asio_non_finite_samples);
   writer.scalar(diagnostics.virtual_asio_maximum_queue_depth);
   writer.scalar(diagnostics.virtual_asio_active_producers);
+  writer.scalar(diagnostics.sample_conversion_import_failures);
+  writer.scalar(diagnostics.sample_conversion_export_failures);
   writer.floating(diagnostics.last_callback_seconds);
   writer.floating(diagnostics.peak_callback_seconds);
   writer.floating(diagnostics.virtual_asio_peak);
@@ -360,6 +362,8 @@ diagnostics::EngineDiagnostics decode_diagnostics(Reader& reader) {
   diagnostics.virtual_asio_non_finite_samples = reader.scalar<std::uint64_t>();
   diagnostics.virtual_asio_maximum_queue_depth = reader.scalar<std::uint64_t>();
   diagnostics.virtual_asio_active_producers = reader.scalar<std::uint64_t>();
+  diagnostics.sample_conversion_import_failures = reader.scalar<std::uint64_t>();
+  diagnostics.sample_conversion_export_failures = reader.scalar<std::uint64_t>();
   diagnostics.last_callback_seconds = reader.float64();
   diagnostics.peak_callback_seconds = reader.float64();
   diagnostics.virtual_asio_peak = reader.float64();
@@ -439,7 +443,8 @@ ControlCommandDecodeResult decode_control_command(
   }
   command.schema_version = reader.scalar<std::uint32_t>();
   command.command_id = reader.string();
-  command.type = reader.enumeration<ControlCommandType>(16);
+  command.type = reader.enumeration<ControlCommandType>(
+      static_cast<std::uint32_t>(ControlCommandType::ConfigureAudioRuntime));
   command.endpoint_id = reader.string();
   command.endpoint_label = reader.string();
   command.input_id = reader.string();

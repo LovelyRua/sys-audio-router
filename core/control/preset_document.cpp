@@ -13,6 +13,13 @@ namespace sar::control {
 
 namespace {
 
+constexpr std::uint32_t kMaximumSampleRate = 384000;
+constexpr std::uint32_t kMaximumFramesPerBlock = 8192;
+constexpr std::size_t kMaximumNodes = 64;
+constexpr std::size_t kMaximumMatrixChannels = 64;
+constexpr std::size_t kMaximumRoutes =
+    kMaximumMatrixChannels * kMaximumMatrixChannels;
+
 void validate_identifier(const std::string& value,
                          const char* empty_code,
                          const char* empty_message,
@@ -113,10 +120,33 @@ PresetValidationResult validate_preset(const PresetDocument& preset) {
 
   if (preset.sample_rate == 0) {
     errors.push_back({"invalid_sample_rate", "Preset sample rate must be non-zero."});
+  } else if (preset.sample_rate > kMaximumSampleRate) {
+    errors.push_back({"sample_rate_too_large",
+                      "Preset sample rate exceeds the supported control-plane limit."});
   }
 
   if (preset.frames_per_block == 0) {
     errors.push_back({"invalid_frames_per_block", "Preset frames per block must be non-zero."});
+  } else if (preset.frames_per_block > kMaximumFramesPerBlock) {
+    errors.push_back({"frames_per_block_too_large",
+                      "Preset frames per block exceeds the supported control-plane limit."});
+  }
+
+  if (preset.nodes.size() > kMaximumNodes) {
+    errors.push_back({"too_many_preset_nodes",
+                      "Preset exceeds the supported node-count limit."});
+  }
+  if (preset.matrix.inputs.size() > kMaximumMatrixChannels) {
+    errors.push_back({"too_many_matrix_inputs",
+                      "Preset exceeds the supported matrix input-channel limit."});
+  }
+  if (preset.matrix.outputs.size() > kMaximumMatrixChannels) {
+    errors.push_back({"too_many_matrix_outputs",
+                      "Preset exceeds the supported matrix output-channel limit."});
+  }
+  if (preset.matrix.routes.size() > kMaximumRoutes) {
+    errors.push_back({"too_many_matrix_routes",
+                      "Preset exceeds the supported route-count limit."});
   }
 
   std::unordered_set<std::string> node_ids;

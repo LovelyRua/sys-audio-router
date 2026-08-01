@@ -117,7 +117,7 @@ try {
   Copy-Item -LiteralPath $sourceBin -Destination $stagingPath -Recurse
   foreach ($directoryName in @("plugins", "qml")) {
     Copy-Item -LiteralPath (Join-Path $packageRoot $directoryName) `
-        -Destination $stagingPath -Recurse
+        -Destination (Join-Path $stagingPath "bin") -Recurse
   }
   Set-Content -LiteralPath (Join-Path $stagingPath $markerName) `
       -Value "System Audio Route Alpha 0.1.0" -Encoding ASCII
@@ -152,7 +152,11 @@ try {
   }
 
   if (Test-Path -LiteralPath $backupPath) {
-    Remove-Item -LiteralPath $backupPath -Recurse -Force
+    try {
+      Remove-Item -LiteralPath $backupPath -Recurse -Force
+    } catch {
+      Write-Warning "Installed successfully but could not remove the previous payload backup: $($_.Exception.Message)"
+    }
   }
   $result = ("alpha_install status=installed directory=`"{0}`" " +
       "driver=`"{1}`"") -f $installPath, $driverPath
@@ -160,6 +164,7 @@ try {
 } catch {
   $primaryError = $_
   $rollbackErrors = [System.Collections.Generic.List[string]]::new()
+  $newPayloadRemoved = !$installedNewPayload
   if ($installedNewPayload -and (Test-Path -LiteralPath $installPath)) {
     $newRegister = Join-Path $installPath "bin\sar_virtual_asio_register.exe"
     if (Test-Path -LiteralPath $newRegister -PathType Leaf) {
@@ -171,37 +176,35 @@ try {
     }
     try {
       Remove-Item -LiteralPath $installPath -Recurse -Force
+      $newPayloadRemoved = !(Test-Path -LiteralPath $installPath)
     } catch {
       $rollbackErrors.Add("remove_new_payload error=$($_.Exception.Message)")
     }
   }
   if (Test-Path -LiteralPath $backupPath) {
-    try {
-      Move-Item -LiteralPath $backupPath -Destination $installPath
-    } catch {
-      $rollbackErrors.Add("restore_previous_install error=$($_.Exception.Message)")
-    }
-    if (Test-Path -LiteralPath $installPath -PathType Container) {
-      $oldRegister = Join-Path $installPath "bin\sar_virtual_asio_register.exe"
-      $oldDriver = Join-Path $installPath "bin\SystemAudioRouteVirtualASIO.dll"
-      if ((Test-Path -LiteralPath $oldRegister -PathType Leaf) -and
-          (Test-Path -LiteralPath $oldDriver -PathType Leaf)) {
-        & $oldRegister --register $oldDriver --user --x64 2>$null
-        if ($LASTEXITCODE -ne 0) {
-          $rollbackErrors.Add(
-              "restore_previous_asio exit_code=$LASTEXITCODE")
-        }
-      } else {
-        $rollbackErrors.Add("restore_previous_asio missing_payload")
+    if (!$newPayloadRemoved) {
+      $rollbackErrors.Add("restore_previous_install skipped_new_payload_remaining")
+    } else {
+      try {
+        Move-Item -LiteralPath $backupPath -Destination $installPath
+      } catch {
+        $rollbackErrors.Add("restore_previous_install error=$($_.Exception.Message)")
       }
     }
-  } elseif ($null -ne $previousDriverPath -and
-      (Test-Path -LiteralPath $previousDriverPath -PathType Leaf)) {
-    $sourceRegister = Join-Path $sourceBin "sar_virtual_asio_register.exe"
-    & $sourceRegister --register $previousDriverPath --user --x64 2>$null
-    if ($LASTEXITCODE -ne 0) {
-      $rollbackErrors.Add(
-          "restore_previous_asio exit_code=$LASTEXITCODE")
+  }
+  if ($null -ne $previousDriverPath) {
+    if (!(Test-Path -LiteralPath $previousDriverPath -PathType Leaf)) {
+      $rollbackErrors.Add("restore_previous_asio missing_previous_driver")
+    } else {
+      $restoreRegister = Join-Path $sourceBin "sar_virtual_asio_register.exe"
+      $restoredRegister = Join-Path $installPath "bin\sar_virtual_asio_register.exe"
+      if (Test-Path -LiteralPath $restoredRegister -PathType Leaf) {
+        $restoreRegister = $restoredRegister
+      }
+      & $restoreRegister --register $previousDriverPath --user --x64 2>$null
+      if ($LASTEXITCODE -ne 0) {
+        $rollbackErrors.Add("restore_previous_asio exit_code=$LASTEXITCODE")
+      }
     }
   }
   if ($rollbackErrors.Count -ne 0) {

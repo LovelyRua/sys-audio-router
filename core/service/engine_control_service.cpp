@@ -321,18 +321,27 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
   }
   const auto mutates_preset =
       control::control_command_mutates_preset(decoded.command.type);
-  std::optional<control::PresetDocument> previous_preset;
-  if (mutates_preset && preset_commit_observer_) {
-    previous_preset = session_->current_preset();
+  if (mutates_preset && preset_commit_in_progress_) {
+    return control::encode_control_response(control::command_rejected(
+        decoded.command.command_id,
+        {{"reentrant_preset_mutation_rejected",
+          "A preset observer cannot issue another preset mutation while a "
+          "commit is pending."}}));
   }
-  auto response = session_->handle(decoded.command, diagnostics);
-  if (response.status == control::ControlResponseStatus::Accepted &&
-      mutates_preset && preset_commit_observer_) {
-    const auto graph = session_->current_graph();
+
+  if (mutates_preset && preset_commit_observer_) {
+    auto prepared = session_->prepare_preset_update(decoded.command);
+    if (!prepared.ok()) {
+      return control::encode_control_response(control::command_rejected(
+          decoded.command.command_id, prepared.errors()));
+    }
+
+    auto update = prepared.take_update();
     std::vector<control::PresetError> observer_errors;
+    preset_commit_in_progress_ = true;
     try {
       observer_errors = preset_commit_observer_(
-          session_->current_preset(), graph ? graph->version() : 1);
+          update.preset, update.graph_version);
     } catch (const std::exception& error) {
       observer_errors.push_back({
           "preset_commit_observer_exception",
@@ -345,23 +354,16 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
           "The preset commit observer threw an unknown exception.",
       });
     }
+    preset_commit_in_progress_ = false;
     if (!observer_errors.empty()) {
-      control::ControlCommand rollback;
-      rollback.command_id = "preset-commit-rollback";
-      rollback.type = control::ControlCommandType::LoadPreset;
-      rollback.preset = std::move(*previous_preset);
-      const auto rollback_response = session_->handle(rollback);
-      if (rollback_response.status != control::ControlResponseStatus::Accepted) {
-        observer_errors.push_back({
-            "preset_commit_rollback_failed",
-            "The preset commit observer failed and the previous preset could "
-            "not be restored.",
-        });
-      }
-      response = control::command_rejected(
-          decoded.command.command_id, std::move(observer_errors));
+      return control::encode_control_response(control::command_rejected(
+          decoded.command.command_id, std::move(observer_errors)));
     }
+    session_->commit_preset_update(std::move(update));
+    auto response = control::command_accepted(decoded.command.command_id);
+    return control::encode_control_response(response);
   }
+  auto response = session_->handle(decoded.command, diagnostics);
   if (decoded.command.type == control::ControlCommandType::ListDevices ||
       decoded.command.type == control::ControlCommandType::QuerySessionState) {
     response = append_platform_devices_locked(std::move(response));

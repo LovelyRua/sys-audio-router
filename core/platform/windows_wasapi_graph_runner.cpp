@@ -62,6 +62,57 @@ std::vector<WasapiStreamError> validate_graph_sample_rate(
   return {};
 }
 
+std::optional<WasapiRealtimeErrorRecord> validate_graph_shape_realtime(
+    const graph::Graph& graph,
+    const realtime::AudioBuffer& input,
+    const realtime::AudioBuffer& output) noexcept {
+  if (graph.node_count() <= 1) {
+    return std::nullopt;
+  }
+
+  const auto required_channels = std::max(input.channels(), output.channels());
+  const auto required_frames = std::max(input.frames(), output.frames());
+  if (graph.channels() >= required_channels && graph.frames() >= required_frames) {
+    return std::nullopt;
+  }
+  return WasapiRealtimeErrorRecord{
+      static_cast<std::uint16_t>(WasapiRealtimeErrorCode::GraphBufferTooSmall)};
+}
+
+std::optional<WasapiRealtimeErrorRecord> validate_graph_sample_rate_realtime(
+    const graph::Graph& graph,
+    const WasapiStreamIo* capture_stream,
+    const WasapiStreamIo* render_stream,
+    bool adapt_capture_rate = false) noexcept {
+  if (!adapt_capture_rate && capture_stream != nullptr &&
+      graph.sample_rate() != capture_stream->probe().mix_format.sample_rate) {
+    return WasapiRealtimeErrorRecord{
+        static_cast<std::uint16_t>(WasapiRealtimeErrorCode::GraphSampleRateMismatch)};
+  }
+  if (render_stream != nullptr &&
+      graph.sample_rate() != render_stream->probe().mix_format.sample_rate) {
+    return WasapiRealtimeErrorRecord{
+        static_cast<std::uint16_t>(WasapiRealtimeErrorCode::GraphSampleRateMismatch)};
+  }
+  return std::nullopt;
+}
+
+WasapiRealtimeErrorRecord realtime_error_from(
+    const WasapiStreamIoResult& result) noexcept {
+  const auto direct = result.realtime_error();
+  if (direct.code != 0) {
+    return direct;
+  }
+  if (result.errors().empty()) {
+    return {};
+  }
+  const auto& error = result.errors().front();
+  return map_wasapi_realtime_error(
+      error.code, error.message, error.native_hresult.has_value(),
+      error.native_hresult.value_or(0), error.native_win32_code.has_value(),
+      error.native_win32_code.value_or(0));
+}
+
 std::size_t source_frames_for_output(std::size_t output_frames,
                                      double ratio) noexcept {
   return static_cast<std::size_t>(
@@ -89,23 +140,14 @@ void deinterleave_planar(std::span<const float> source,
   }
 }
 
-bool has_sample_conversion_failure(
-    const std::vector<WasapiStreamError>& errors) noexcept {
-  for (const auto& error : errors) {
-    if (error.code == "unsupported_sample_format" ||
-        error.code == "sample_buffer_too_small" ||
-        error.code == "sample_channel_mismatch" ||
-        error.code == "sample_conversion_failed") {
-      return true;
-    }
-  }
-  return false;
-}
-
 void record_sample_conversion_failure(
-    const std::vector<WasapiStreamError>& errors,
+    WasapiRealtimeErrorRecord error,
     std::uint64_t& counter) noexcept {
-  if (has_sample_conversion_failure(errors)) {
+  const auto code = static_cast<WasapiRealtimeErrorCode>(error.code);
+  if (code == WasapiRealtimeErrorCode::UnsupportedSampleFormat ||
+      code == WasapiRealtimeErrorCode::SampleBufferTooSmall ||
+      code == WasapiRealtimeErrorCode::SampleChannelMismatch ||
+      code == WasapiRealtimeErrorCode::SampleConversionFailed) {
     ++counter;
   }
 }
@@ -113,16 +155,21 @@ void record_sample_conversion_failure(
 }  // namespace
 
 WasapiGraphRunnerResult WasapiGraphRunnerResult::success(WasapiGraphRunnerStats stats) {
-  return {stats, {}};
+  return {stats, {}, {}};
 }
 
 WasapiGraphRunnerResult WasapiGraphRunnerResult::failure(
     std::vector<WasapiStreamError> errors) {
-  return {{}, std::move(errors)};
+  return {{}, std::move(errors), {}};
+}
+
+WasapiGraphRunnerResult WasapiGraphRunnerResult::failure(
+    WasapiRealtimeErrorRecord error) noexcept {
+  return {{}, {}, error};
 }
 
 bool WasapiGraphRunnerResult::ok() const noexcept {
-  return errors_.empty();
+  return errors_.empty() && realtime_error_.code == 0;
 }
 
 const WasapiGraphRunnerStats& WasapiGraphRunnerResult::stats() const noexcept {
@@ -133,9 +180,14 @@ const std::vector<WasapiStreamError>& WasapiGraphRunnerResult::errors() const no
   return errors_;
 }
 
+WasapiRealtimeErrorRecord WasapiGraphRunnerResult::realtime_error() const noexcept {
+  return realtime_error_;
+}
+
 WasapiGraphRunnerResult::WasapiGraphRunnerResult(WasapiGraphRunnerStats stats,
-                                                 std::vector<WasapiStreamError> errors)
-    : stats_(stats), errors_(std::move(errors)) {}
+                                                 std::vector<WasapiStreamError> errors,
+                                                 WasapiRealtimeErrorRecord realtime_error)
+    : stats_(stats), errors_(std::move(errors)), realtime_error_(realtime_error) {}
 
 WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(WasapiStreamIo* capture_stream,
                                                    WasapiStreamIo* render_stream,
@@ -379,20 +431,19 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
 
   WasapiGraphRunnerStats stats;
 
-  auto sample_rate_errors =
-      validate_graph_sample_rate(graph, capture_stream_, render_stream_);
-  if (!sample_rate_errors.empty()) {
-    return WasapiGraphRunnerResult::failure(std::move(sample_rate_errors));
+  if (const auto sample_rate_error =
+          validate_graph_sample_rate_realtime(graph, capture_stream_, render_stream_)) {
+    return WasapiGraphRunnerResult::failure(*sample_rate_error);
   }
 
   if (capture_stream_ != nullptr) {
     input_.clear();
     auto capture_result = capture_stream_->capture_once(input_, timeout_ms);
     if (!capture_result.ok()) {
-      record_sample_conversion_failure(
-          capture_result.errors(),
-          diagnostics.sample_conversion_import_failures);
-      return WasapiGraphRunnerResult::failure(capture_result.errors());
+      const auto error = realtime_error_from(capture_result);
+      record_sample_conversion_failure(error,
+                                       diagnostics.sample_conversion_import_failures);
+      return WasapiGraphRunnerResult::failure(error);
     }
     if (capture_result.cancelled()) {
       stats.cancelled = true;
@@ -423,9 +474,8 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
     static_cast<void>(external_input_->read(input_));
   }
 
-  auto shape_errors = validate_graph_shape(graph, input_, output_);
-  if (!shape_errors.empty()) {
-    return WasapiGraphRunnerResult::failure(std::move(shape_errors));
+  if (const auto shape_error = validate_graph_shape_realtime(graph, input_, output_)) {
+    return WasapiGraphRunnerResult::failure(*shape_error);
   }
 
   output_.clear();
@@ -436,10 +486,10 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
     auto render_result = render_stream_->render_once(
         output_, static_cast<std::uint32_t>(output_.frames()), timeout_ms);
     if (!render_result.ok()) {
-      record_sample_conversion_failure(
-          render_result.errors(),
-          diagnostics.sample_conversion_export_failures);
-      return WasapiGraphRunnerResult::failure(render_result.errors());
+      const auto error = realtime_error_from(render_result);
+      record_sample_conversion_failure(error,
+                                       diagnostics.sample_conversion_export_failures);
+      return WasapiGraphRunnerResult::failure(error);
     }
     if (render_result.cancelled()) {
       stats.cancelled = true;
@@ -479,11 +529,9 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     stats.capture_rate_adapter_recovering =
         capture_rate_adapter_->recovery_active;
   }
-  auto sample_rate_errors =
-      validate_graph_sample_rate(graph, capture_stream_, render_stream_,
-                                 capture_rate_adapter_.has_value());
-  if (!sample_rate_errors.empty()) {
-    return WasapiGraphRunnerResult::failure(std::move(sample_rate_errors));
+  if (const auto sample_rate_error = validate_graph_sample_rate_realtime(
+          graph, capture_stream_, render_stream_, capture_rate_adapter_.has_value())) {
+    return WasapiGraphRunnerResult::failure(*sample_rate_error);
   }
 
   bool coordinated_duplex_wait = false;
@@ -496,10 +544,9 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
       return WasapiGraphRunnerResult::success(stats);
     }
     if (wait_status == WasapiDuplexEventWaitStatus::Failed) {
-      return WasapiGraphRunnerResult::failure({{
-          "wasapi_duplex_event_wait_failed",
-          "WASAPI duplex event wait failed.",
-      }});
+      return WasapiGraphRunnerResult::failure({
+          static_cast<std::uint16_t>(
+              WasapiRealtimeErrorCode::WasapiDuplexEventWaitFailed)});
     }
     coordinated_duplex_wait =
         wait_status != WasapiDuplexEventWaitStatus::Unavailable;
@@ -518,10 +565,10 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     auto render_result = render_stream_->render_once(
         render_path_->packet, static_cast<std::uint32_t>(staged), render_timeout_ms);
     if (!render_result.ok()) {
-      record_sample_conversion_failure(
-          render_result.errors(),
-          diagnostics.sample_conversion_export_failures);
-      return WasapiGraphRunnerResult::failure(render_result.errors());
+      const auto error = realtime_error_from(render_result);
+      record_sample_conversion_failure(error,
+                                       diagnostics.sample_conversion_export_failures);
+      return WasapiGraphRunnerResult::failure(error);
     }
     if (render_result.cancelled()) {
       diagnostics.capture_fifo_fill_frames =
@@ -531,10 +578,9 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
       return WasapiGraphRunnerResult::success(stats);
     }
     if (render_result.frames() > staged) {
-      return WasapiGraphRunnerResult::failure({{
-          "render_committed_too_many_frames",
-          "WASAPI render stream committed more frames than were staged.",
-      }});
+      return WasapiGraphRunnerResult::failure({
+          static_cast<std::uint16_t>(
+              WasapiRealtimeErrorCode::RenderCommittedTooManyFrames)});
     }
     stats.rendered_frames = static_cast<std::uint32_t>(
         render_path_->fifo.consume(render_result.frames()));
@@ -568,10 +614,10 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
       auto capture_result = capture_stream_->capture_once(
           capture_path_->packet, capture_timeout_ms);
       if (!capture_result.ok()) {
-        record_sample_conversion_failure(
-            capture_result.errors(),
-            diagnostics.sample_conversion_import_failures);
-        return WasapiGraphRunnerResult::failure(capture_result.errors());
+        const auto error = realtime_error_from(capture_result);
+        record_sample_conversion_failure(error,
+                                         diagnostics.sample_conversion_import_failures);
+        return WasapiGraphRunnerResult::failure(error);
       }
       if (capture_result.cancelled()) {
         stats.cancelled = true;
@@ -690,10 +736,9 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
                 static_cast<std::uint32_t>(graph_block_frames_),
                 adapter.nominal_ratio);
             if (!preroll_result.ok()) {
-              return WasapiGraphRunnerResult::failure({{
-                  "capture_resampler_preroll_failed",
-                  "Adaptive capture resampler recovery pre-roll failed.",
-              }});
+              return WasapiGraphRunnerResult::failure({
+                  static_cast<std::uint16_t>(
+                      WasapiRealtimeErrorCode::CaptureResamplerPrerollFailed)});
             }
             if (preroll_result.input_frames_used == 0 &&
                 preroll_result.output_frames_generated == 0) {
@@ -702,10 +747,9 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
             preroll_frames_used += preroll_result.input_frames_used;
           }
           if (preroll_frames_used != preroll_frames) {
-            return WasapiGraphRunnerResult::failure({{
-                "capture_resampler_preroll_stalled",
-                "Adaptive capture resampler recovery pre-roll made no progress.",
-            }});
+            return WasapiGraphRunnerResult::failure({
+                static_cast<std::uint16_t>(
+                    WasapiRealtimeErrorCode::CaptureResamplerPrerollStalled)});
           }
           adapter.recovery_preroll_pending = false;
         }
@@ -766,10 +810,9 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
                                          adapter.output_frames_ready),
               adapter.ratio);
           if (!result.ok()) {
-            return WasapiGraphRunnerResult::failure({{
-                "capture_resampler_failed",
-                "Adaptive capture resampling failed in the buffered duplex path.",
-            }});
+            return WasapiGraphRunnerResult::failure({
+                static_cast<std::uint16_t>(
+                    WasapiRealtimeErrorCode::CaptureResamplerFailed)});
           }
           static_cast<void>(
               capture_path_->fifo.consume(result.input_frames_used));
@@ -799,9 +842,8 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     } else if (external_input_ != nullptr && !external_input_->read(input_)) {
       break;
     }
-    auto shape_errors = validate_graph_shape(graph, input_, output_);
-    if (!shape_errors.empty()) {
-      return WasapiGraphRunnerResult::failure(std::move(shape_errors));
+    if (const auto shape_error = validate_graph_shape_realtime(graph, input_, output_)) {
+      return WasapiGraphRunnerResult::failure(*shape_error);
     }
     output_.clear();
     graph.process(input_, output_, diagnostics);
@@ -844,10 +886,10 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
         static_cast<std::uint32_t>(render_path_->packet.frames()),
         render_timeout_ms);
     if (!render_result.ok()) {
-      record_sample_conversion_failure(
-          render_result.errors(),
-          diagnostics.sample_conversion_export_failures);
-      return WasapiGraphRunnerResult::failure(render_result.errors());
+      const auto error = realtime_error_from(render_result);
+      record_sample_conversion_failure(error,
+                                       diagnostics.sample_conversion_export_failures);
+      return WasapiGraphRunnerResult::failure(error);
     }
     if (render_result.cancelled()) {
       stats.cancelled = true;

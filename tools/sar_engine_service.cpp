@@ -94,6 +94,21 @@ struct SessionLoadResult {
   std::string error_code;
 };
 
+class SessionFileLock final {
+ public:
+  explicit SessionFileLock(HANDLE handle) noexcept : handle_(handle) {}
+  SessionFileLock(const SessionFileLock&) = delete;
+  SessionFileLock& operator=(const SessionFileLock&) = delete;
+  ~SessionFileLock() {
+    if (handle_ != INVALID_HANDLE_VALUE) {
+      CloseHandle(handle_);
+    }
+  }
+
+ private:
+  HANDLE handle_ = INVALID_HANDLE_VALUE;
+};
+
 SessionLoadResult load_session_file(const std::wstring& path) {
   const HANDLE file = CreateFileW(path.c_str(),
                                   GENERIC_READ,
@@ -386,7 +401,22 @@ int main(int argc, char** argv) {
   auto desired_session = default_session();
   bool session_writes_allowed = has_session_path;
   bool session_file_missing = false;
+  std::unique_ptr<SessionFileLock> session_lock;
   if (has_session_path) {
+    const auto lock_path = session_path + L".lock";
+    const HANDLE lock_handle = CreateFileW(lock_path.c_str(),
+                                           GENERIC_READ | GENERIC_WRITE,
+                                           0,
+                                           nullptr,
+                                           OPEN_ALWAYS,
+                                           FILE_ATTRIBUTE_NORMAL,
+                                           nullptr);
+    if (lock_handle == INVALID_HANDLE_VALUE) {
+      std::cerr << "session_lock_failed: Another engine may already own this session ("
+                << GetLastError() << ").\n";
+      return 1;
+    }
+    session_lock = std::make_unique<SessionFileLock>(lock_handle);
     auto loaded = load_session_file(session_path);
     desired_session = std::move(loaded.session);
     session_file_missing = loaded.status == SessionLoadStatus::Missing;
@@ -460,7 +490,11 @@ int main(int argc, char** argv) {
     }
   }
   if (session_file_missing && session_writes_allowed) {
-    save_session_file_atomic(session_path, desired_session);
+    if (!save_session_file_atomic(session_path, desired_session)) {
+      std::cerr << "session_write_failed: Could not initialize the requested session file.\n";
+      service->stop_audio_runtime();
+      return 1;
+    }
   }
 
   const std::wstring asio_pipe_name =
@@ -549,7 +583,12 @@ int main(int argc, char** argv) {
                   sar::control::ControlResponseStatus::Accepted) {
             merge_successful_command(
                 command.command, *service, desired_session);
-            save_session_file_atomic(session_path, desired_session);
+            if (!save_session_file_atomic(session_path, desired_session)) {
+              return sar::service::NamedPipeControlResult::failure(
+                  {"session_persist_failed",
+                   "The engine applied the command but could not persist the session.",
+                   ERROR_WRITE_FAULT});
+            }
           }
         }
         return sar::service::NamedPipeControlResult::success(
@@ -578,8 +617,10 @@ int main(int argc, char** argv) {
   asio_broker.stop();
   asio_host.stop_all();
   service->stop_audio_runtime();
-  if (session_writes_allowed) {
-    save_session_file_atomic(session_path, desired_session);
+  bool session_write_failed = false;
+  if (session_writes_allowed && !save_session_file_atomic(session_path, desired_session)) {
+    std::cerr << "session_write_failed: Could not persist the final engine session.\n";
+    session_write_failed = true;
   }
   const auto stats = pipe_server.stats();
   std::cout << "engine_service_state=stopped requests="
@@ -587,5 +628,5 @@ int main(int argc, char** argv) {
             << stats.protocol_errors << " handler_errors="
             << stats.handler_errors << " asio_requests="
             << asio_broker.stats().completed_requests << '\n';
-  return 0;
+  return session_write_failed ? 1 : 0;
 }

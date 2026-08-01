@@ -15,7 +15,7 @@ inventory, and live diagnostics without opening secondary windows.
 
 - Qt 6.8 or newer, using Qt Quick and QML for layout and interaction.
 - C++20 control client using the existing named-pipe transaction and control
-  wire v4 codecs.
+  wire v5 codecs.
 - Qt Concurrent for control transactions so pipe timeouts never block the UI
   thread.
 - Qt Quick scene graph on the platform-default RHI backend. Windows uses the
@@ -34,7 +34,7 @@ and test the engine exactly as before.
 Qt Quick views
     | queued properties and commands
 EngineController (GUI process)
-    | control wire v4 over named pipe
+    | control wire v5 over named pipe
 sar_engine_service
     | lock-free publication
 realtime graph and platform workers

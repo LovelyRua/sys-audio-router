@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/platform/wasapi_realtime_error.h"
 #include "core/realtime/audio_buffer.h"
 #include "core/platform/windows_wasapi_stream_probe.h"
 
@@ -96,6 +97,7 @@ class WasapiStreamIoResult {
   static WasapiStreamIoResult timeout();
   static WasapiStreamIoResult cancellation();
   static WasapiStreamIoResult failure(std::vector<WasapiStreamError> errors);
+  static WasapiStreamIoResult failure(WasapiRealtimeErrorRecord error) noexcept;
 
   [[nodiscard]] bool ok() const noexcept;
   [[nodiscard]] std::uint32_t frames() const noexcept;
@@ -107,6 +109,7 @@ class WasapiStreamIoResult {
   [[nodiscard]] bool timed_out() const noexcept;
   [[nodiscard]] bool cancelled() const noexcept;
   [[nodiscard]] const std::vector<WasapiStreamError>& errors() const noexcept;
+  [[nodiscard]] WasapiRealtimeErrorRecord realtime_error() const noexcept;
 
  private:
   WasapiStreamIoResult(std::uint32_t frames,
@@ -114,7 +117,8 @@ class WasapiStreamIoResult {
                        bool silent,
                        bool data_discontinuity,
                        bool timestamp_error,
-                       std::vector<WasapiStreamError> errors);
+                       std::vector<WasapiStreamError> errors,
+                       WasapiRealtimeErrorRecord realtime_error = {});
 
   std::uint32_t frames_ = 0;
   WasapiStreamIoStatus status_ = WasapiStreamIoStatus::Idle;
@@ -122,6 +126,7 @@ class WasapiStreamIoResult {
   bool data_discontinuity_ = false;
   bool timestamp_error_ = false;
   std::vector<WasapiStreamError> errors_;
+  WasapiRealtimeErrorRecord realtime_error_;
 };
 
 class WasapiStreamIo {

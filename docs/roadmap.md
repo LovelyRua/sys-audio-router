@@ -191,7 +191,7 @@ render-only blocks with zero xruns and 987 supervised duplex blocks across a
 xrun, 1,088 render underflow frames, zero capture/render overflow, and a
 279.6-microsecond peak callback. FIFO diagnostics are mirrored into atomic
 worker snapshots so service queries do not race the realtime diagnostics writer.
-Control wire version 4 and `sar_control_cli` now expose runtime state, start,
+Control wire version 5 and `sar_control_cli` now expose runtime state, start,
 stop, and WASAPI runtime configuration without restarting the service process.
 Version 4 also exposes Virtual ASIO producer, queue, silence, peak, clipping,
 and non-finite-sample evidence so a real DAW bridge can be accepted without
@@ -370,7 +370,7 @@ Exit criteria:
 Purpose: make the engine usable without hiding the system model.
 
 Status: the first Qt Quick control application is merged. It connects to control
-wire v4 without entering the realtime process and provides an operational route
+wire v5 without entering the realtime process and provides an operational route
 matrix, route enable/gain controls, device listing, runtime start/stop, and live
 diagnostics. The first per-user Windows x64 ZIP package now stages a validated
 engine, CLI, Virtual ASIO driver, registration utility, Qt Quick GUI, Qt/QML

@@ -83,10 +83,14 @@ class EngineControlService {
   EngineAudioRuntimeBuilder audio_runtime_builder_;
   EngineAudioRuntimeConfigurator audio_runtime_configurator_;
   EnginePresetCommitObserver preset_commit_observer_;
+  bool preset_commit_in_progress_ = false;
   std::optional<control::AudioRuntimeConfiguration>
       audio_runtime_configuration_;
   platform::AudioDeviceRegistry audio_device_registry_;
-  mutable std::mutex control_mutex_;
+  // The preset observer is a service extension point. It may query service
+  // state while a commit is in progress, so this lock must permit same-thread
+  // re-entry without blocking the single control-pipe request.
+  mutable std::recursive_mutex control_mutex_;
 };
 
 class EngineControlServiceCreateResult {

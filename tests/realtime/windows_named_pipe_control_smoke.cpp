@@ -23,6 +23,13 @@ std::vector<std::byte> bytes(std::string_view text) {
   return result;
 }
 
+bool equals_text(std::span<const std::byte> value, std::string_view text) {
+  return value.size() == text.size() &&
+         std::equal(value.begin(), value.end(), text.begin(), [](std::byte byte, char character) {
+           return byte == static_cast<std::byte>(static_cast<unsigned char>(character));
+         });
+}
+
 }  // namespace
 
 int main() {
@@ -30,6 +37,7 @@ int main() {
   config.pipe_name = L"sys-audio-route-control-smoke-" +
                      std::to_wstring(GetCurrentProcessId());
   config.maximum_message_bytes = 256;
+  config.request_timeout_ms = 150;
 
   std::atomic<std::uint32_t> observed_process_id = 0;
   sar::service::WindowsNamedPipeControlServer server(
@@ -37,6 +45,9 @@ int main() {
       [&observed_process_id](const sar::service::NamedPipeControlPeer& peer,
                              std::span<const std::byte> request) {
         observed_process_id.store(peer.process_id);
+        if (equals_text(request, "slow-response")) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        }
         std::vector<std::byte> response(request.rbegin(), request.rend());
         return sar::service::NamedPipeControlResult::success(std::move(response));
       });
@@ -93,6 +104,15 @@ int main() {
       CreateFileW(full_pipe_name.c_str(), GENERIC_READ | GENERIC_WRITE, 0,
                   nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
   assert(stalled_client != INVALID_HANDLE_VALUE);
+  const auto concurrent_response = sar::service::transact_named_pipe_control(
+      config, bytes("concurrent-request"), 1000);
+  assert(concurrent_response.ok());
+
+  const auto timed_out_response = sar::service::transact_named_pipe_control(
+      config, bytes("slow-response"), 25);
+  assert(!timed_out_response.ok());
+  assert(timed_out_response.error().code == "pipe_read_timeout");
+
   const auto stalled_stop_begin = std::chrono::steady_clock::now();
   server.stop();
   assert(std::chrono::steady_clock::now() - stalled_stop_begin <

@@ -14,6 +14,11 @@ namespace {
 
 bool has_error_code(const sar::platform::WasapiGraphRunnerResult& result,
                     const std::string& code) {
+  const auto realtime_error = result.realtime_error();
+  if (realtime_error.code != 0 &&
+      code == sar::platform::wasapi_realtime_error_code(realtime_error)) {
+    return true;
+  }
   for (const auto& error : result.errors()) {
     if (error.code == code) {
       return true;
@@ -24,7 +29,9 @@ bool has_error_code(const sar::platform::WasapiGraphRunnerResult& result,
 
 std::size_t error_code_count(const sar::platform::WasapiGraphRunnerResult& result,
                              const std::string& code) {
-  std::size_t count = 0;
+  std::size_t count = has_error_code(result, code) && result.realtime_error().code != 0
+                          ? 1
+                          : 0;
   for (const auto& error : result.errors()) {
     if (error.code == code) {
       ++count;

@@ -16,6 +16,29 @@ namespace sar::control {
 
 class ControlSessionCreateResult;
 
+struct PreparedPresetUpdate {
+  PresetDocument preset;
+  std::shared_ptr<graph::Graph> graph;
+  std::uint64_t graph_version = 0;
+};
+
+class PreparedPresetUpdateResult {
+ public:
+  static PreparedPresetUpdateResult success(PreparedPresetUpdate update);
+  static PreparedPresetUpdateResult failure(std::vector<PresetError> errors);
+
+  [[nodiscard]] bool ok() const noexcept;
+  [[nodiscard]] PreparedPresetUpdate take_update() noexcept;
+  [[nodiscard]] const std::vector<PresetError>& errors() const noexcept;
+
+ private:
+  PreparedPresetUpdateResult(PreparedPresetUpdate update,
+                             std::vector<PresetError> errors) noexcept;
+
+  PreparedPresetUpdate update_;
+  std::vector<PresetError> errors_;
+};
+
 class ControlSession {
  public:
   static ControlSessionCreateResult create(PresetDocument initial_preset,
@@ -36,6 +59,12 @@ class ControlSession {
   [[nodiscard]] const std::vector<platform::VirtualEndpointDescriptor>&
   virtual_endpoints() const noexcept;
   [[nodiscard]] std::uint64_t next_graph_version() const noexcept;
+
+  // Separates validation/build work from publication so service extensions can
+  // reject a pending preset without exposing it to concurrent readers.
+  [[nodiscard]] PreparedPresetUpdateResult prepare_preset_update(
+      const ControlCommand& command) const;
+  void commit_preset_update(PreparedPresetUpdate update) noexcept;
 
  private:
   ControlSession(PresetDocument preset,

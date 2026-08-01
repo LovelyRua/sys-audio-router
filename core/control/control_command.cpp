@@ -144,6 +144,11 @@ ControlCommandValidationResult validate_command(const ControlCommand& command) {
       }
       break;
     }
+
+    default:
+      errors.push_back({"unknown_command_type",
+                        "Control command type is not supported."});
+      break;
   }
 
   if (!errors.empty()) {

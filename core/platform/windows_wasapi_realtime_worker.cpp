@@ -459,11 +459,16 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     if (!result.ok()) {
       process_error_cycles_.fetch_add(1);
       WasapiRealtimeErrorBatch errors;
-      for (const auto& error : result.errors()) {
-        static_cast<void>(errors.push(map_wasapi_realtime_error(
-            error.code, error.message, error.native_hresult.has_value(),
-            error.native_hresult.value_or(0), error.native_win32_code.has_value(),
-            error.native_win32_code.value_or(0))));
+      const auto realtime_error = result.realtime_error();
+      if (realtime_error.code != 0) {
+        static_cast<void>(errors.push(realtime_error));
+      } else {
+        for (const auto& error : result.errors()) {
+          static_cast<void>(errors.push(map_wasapi_realtime_error(
+              error.code, error.message, error.native_hresult.has_value(),
+              error.native_hresult.value_or(0), error.native_win32_code.has_value(),
+              error.native_win32_code.value_or(0))));
+        }
       }
       realtime_errors_.publish(errors);
       stop_requested_.store(true);
