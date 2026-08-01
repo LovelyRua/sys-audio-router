@@ -17,7 +17,7 @@ if errorlevel 1 exit /b %errorlevel%
 exit /b %errorlevel%
 
 :execute
-shift
+shift /1
 if not defined SAR_ALPHA_UNINSTALL_TEMP exit /b 1
 if not exist "%SAR_ALPHA_UNINSTALL_TEMP%\.system-audio-route-uninstall-relay" exit /b 1
 if not "%~1"=="" goto execute_arguments
