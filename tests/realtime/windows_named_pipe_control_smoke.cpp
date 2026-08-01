@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -61,6 +62,10 @@ int main() {
     auto expected = request;
     std::reverse(expected.begin(), expected.end());
     auto response = sar::service::transact_named_pipe_control(config, request);
+    if (!response.ok()) {
+      std::cerr << "Named-pipe request failed: " << response.error().code
+                << " native=" << response.error().native_error << '\n';
+    }
     assert(response.ok());
     assert(response.payload() == expected);
   }

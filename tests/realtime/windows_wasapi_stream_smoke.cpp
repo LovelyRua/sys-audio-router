@@ -30,6 +30,11 @@ bool has_error_code(const sar::platform::WasapiStreamResult& result,
 
 bool has_error_code(const sar::platform::WasapiStreamIoResult& result,
                     const std::string& code) {
+  const auto realtime_error = result.realtime_error();
+  if (realtime_error.code != 0 &&
+      code == sar::platform::wasapi_realtime_error_code(realtime_error)) {
+    return true;
+  }
   for (const auto& error : result.errors()) {
     if (error.code == code) {
       return true;

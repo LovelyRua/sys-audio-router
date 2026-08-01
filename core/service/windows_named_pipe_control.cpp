@@ -22,6 +22,8 @@ namespace {
 
 constexpr std::uint32_t kFrameHeaderBytes = 4;
 constexpr std::size_t kMaximumClientWorkers = 16;
+constexpr DWORD kMaximumPipeInstances =
+    static_cast<DWORD>(kMaximumClientWorkers + 1U);
 
 std::wstring full_pipe_name(const std::wstring& pipe_name) {
   constexpr wchar_t kPrefix[] = L"\\\\.\\pipe\\";
@@ -523,7 +525,7 @@ void WindowsNamedPipeControlServer::run() noexcept {
         path.c_str(), PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
         PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT |
             PIPE_REJECT_REMOTE_CLIENTS,
-        1,
+        kMaximumPipeInstances,
         config_.maximum_message_bytes + kFrameHeaderBytes,
         config_.maximum_message_bytes + kFrameHeaderBytes, 0,
         static_cast<SECURITY_ATTRIBUTES*>(security->native_attributes()));
