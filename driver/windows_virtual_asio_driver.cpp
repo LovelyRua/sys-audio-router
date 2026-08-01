@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <condition_variable>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -144,13 +145,21 @@ class VirtualAsioDriver final : public IASIO {
   }
 
   ASIOError start() override {
-    std::scoped_lock lock(control_mutex_);
+    std::unique_lock lock(control_mutex_);
+    runtime_operation_cv_.wait(lock, [this] { return !runtime_operation_; });
     if (!initialized_ || !buffers_created_ || runtime_ == nullptr) {
       return fail(ASE_InvalidMode,
                   "The driver must be initialized and buffers created before start.");
     }
+    runtime_operation_ = true;
+    auto* runtime = runtime_.get();
+    lock.unlock();
     std::string error;
-    if (!runtime_->start(error)) {
+    const auto started = runtime->start(error);
+    lock.lock();
+    runtime_operation_ = false;
+    runtime_operation_cv_.notify_all();
+    if (!started) {
       return fail(ASE_HWMalfunction, error.c_str());
     }
     running_.store(true, std::memory_order_release);
@@ -159,15 +168,18 @@ class VirtualAsioDriver final : public IASIO {
   }
 
   ASIOError stop() override {
-    WindowsVirtualAsioRuntime* runtime = nullptr;
-    {
-      std::scoped_lock lock(control_mutex_);
-      runtime = runtime_.get();
-    }
+    std::unique_lock lock(control_mutex_);
+    runtime_operation_cv_.wait(lock, [this] { return !runtime_operation_; });
+    auto* runtime = runtime_.get();
+    runtime_operation_ = true;
+    running_.store(false, std::memory_order_release);
+    lock.unlock();
     if (runtime != nullptr) {
       runtime->stop();
     }
-    running_.store(false, std::memory_order_release);
+    lock.lock();
+    runtime_operation_ = false;
+    runtime_operation_cv_.notify_all();
     return ASE_OK;
   }
 
@@ -283,6 +295,7 @@ class VirtualAsioDriver final : public IASIO {
       return fail_thread_safe(ASE_InvalidParameter,
                               "Sample position output pointers must not be null.");
     }
+    std::scoped_lock lock(control_mutex_);
     auto* runtime = runtime_.get();
     write_u64(runtime == nullptr ? 0 : runtime->sample_position(),
               sample_position);
@@ -331,7 +344,8 @@ class VirtualAsioDriver final : public IASIO {
                               "The requested buffer size is not supported.");
     }
 
-    std::scoped_lock lock(control_mutex_);
+    std::unique_lock lock(control_mutex_);
+    runtime_operation_cv_.wait(lock, [this] { return !runtime_operation_; });
     if (!initialized_ || running_.load(std::memory_order_acquire) ||
         buffers_created_) {
       return fail(ASE_InvalidMode,
@@ -403,15 +417,22 @@ class VirtualAsioDriver final : public IASIO {
   }
 
   ASIOError disposeBuffers() override {
-    std::scoped_lock lock(control_mutex_);
-    if (running_.load(std::memory_order_acquire)) {
-      return fail(ASE_InvalidMode,
-                  "Streaming must be stopped before buffers are disposed.");
-    }
+    std::unique_lock lock(control_mutex_);
+    runtime_operation_cv_.wait(lock, [this] { return !runtime_operation_; });
     if (!buffers_created_) {
       return ASE_InvalidMode;
     }
+    running_.store(false, std::memory_order_release);
+    runtime_operation_ = true;
+    auto runtime = std::move(runtime_);
+    lock.unlock();
+    // Runtime destruction owns the full stop/disconnect sequence. Keeping it
+    // in one place prevents a second stop from racing a concurrent callback.
+    runtime.reset();
+    lock.lock();
     reset_buffers();
+    runtime_operation_ = false;
+    runtime_operation_cv_.notify_all();
     return ASE_OK;
   }
 
@@ -469,10 +490,6 @@ class VirtualAsioDriver final : public IASIO {
   }
 
   void reset_buffers() noexcept {
-    if (runtime_ != nullptr) {
-      runtime_->disconnect();
-      runtime_.reset();
-    }
     buffers_.clear();
     active_channels_.clear();
     callbacks_ = nullptr;
@@ -482,6 +499,7 @@ class VirtualAsioDriver final : public IASIO {
 
   std::atomic_ulong references_ = 1;
   std::mutex control_mutex_;
+  std::condition_variable runtime_operation_cv_;
   void* system_handle_ = nullptr;
   ASIOCallbacks* callbacks_ = nullptr;
   std::vector<std::vector<float>> buffers_;
@@ -494,6 +512,7 @@ class VirtualAsioDriver final : public IASIO {
   bool initialized_ = false;
   bool buffers_created_ = false;
   bool format_discovered_ = false;
+  bool runtime_operation_ = false;
   std::atomic_bool running_ = false;
 };
 

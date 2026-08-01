@@ -93,18 +93,22 @@ class WindowsVirtualAsioRuntime {
   WindowsVirtualAsioRuntime(
       WindowsVirtualAsioRuntimeConfig config,
       std::unique_ptr<service::WindowsVirtualAsioBrokerClient> broker,
+      void* broker_process_handle,
       std::uint64_t qpc_frequency,
       std::uint64_t period_qpc);
 
   void run(std::uint64_t first_deadline_qpc) noexcept;
-  void process_cycle(std::uint32_t buffer_index) noexcept;
+  [[nodiscard]] bool process_cycle(std::uint32_t buffer_index) noexcept;
+  [[nodiscard]] bool broker_process_exited() const noexcept;
   [[nodiscard]] bool arm_timer(std::uint64_t deadline_qpc,
                                std::uint64_t now_qpc) noexcept;
 
   WindowsVirtualAsioRuntimeConfig config_;
   std::unique_ptr<service::WindowsVirtualAsioBrokerClient> broker_;
+  void* broker_process_handle_ = nullptr;
   realtime::AudioBuffer host_output_;
   realtime::AudioBuffer host_input_;
+  realtime::AudioBuffer output_scratch_;
   void* stop_event_ = nullptr;
   void* timer_ = nullptr;
   std::thread worker_;

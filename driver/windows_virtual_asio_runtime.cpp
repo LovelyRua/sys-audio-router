@@ -113,18 +113,21 @@ void* create_callback_timer() noexcept {
 WindowsVirtualAsioRuntime::WindowsVirtualAsioRuntime(
     WindowsVirtualAsioRuntimeConfig config,
     std::unique_ptr<service::WindowsVirtualAsioBrokerClient> broker,
+    void* broker_process_handle,
     std::uint64_t qpc_frequency,
     std::uint64_t period_qpc)
     : config_(std::move(config)),
       broker_(std::move(broker)),
+      broker_process_handle_(broker_process_handle),
       host_output_(config_.input_channels, config_.frames_per_block),
       host_input_(config_.output_channels, config_.frames_per_block),
+      output_scratch_(config_.output_channels, config_.frames_per_block),
       qpc_frequency_(qpc_frequency),
       period_qpc_(period_qpc) {}
 
 WindowsVirtualAsioRuntime::~WindowsVirtualAsioRuntime() {
-  stop();
   disconnect();
+  close_handle(broker_process_handle_);
 }
 
 service::WindowsVirtualAsioBrokerFormatResult
@@ -192,16 +195,28 @@ WindowsVirtualAsioRuntimeOpenResult WindowsVirtualAsioRuntime::open(
                                     : errors.front().message};
   }
 
+  auto broker = connected.take_client();
+  const auto broker_process_id = broker->header().owner_process_id;
+  // Process synchronization is an optional early-death signal. The broker's
+  // shutdown event remains authoritative when the service DACL denies opening
+  // its process handle.
+  HANDLE broker_process = broker_process_id == 0
+                              ? nullptr
+                              : OpenProcess(SYNCHRONIZE, FALSE, broker_process_id);
+
   try {
     return {
         std::unique_ptr<WindowsVirtualAsioRuntime>(
             new WindowsVirtualAsioRuntime(
-                std::move(config), connected.take_client(),
+                std::move(config), std::move(broker), broker_process,
                 static_cast<std::uint64_t>(qpc_frequency_value.QuadPart),
                 period_qpc)),
         {},
     };
   } catch (const std::bad_alloc&) {
+    if (broker_process != nullptr) {
+      CloseHandle(broker_process);
+    }
     return {nullptr, "Could not allocate the preconfigured ASIO runtime."};
   }
 }
@@ -210,6 +225,14 @@ bool WindowsVirtualAsioRuntime::start(std::string& error) {
   if (running_.load(std::memory_order_acquire)) {
     return true;
   }
+  if (broker_ == nullptr || broker_process_exited()) {
+    error = "The ASIO engine broker is no longer available.";
+    return false;
+  }
+
+  // A broker-loss exit leaves the worker joinable. Reap that worker and its
+  // scheduler handles before a later start creates a replacement thread.
+  stop();
   stop_event_ = CreateEventW(nullptr, TRUE, FALSE, nullptr);
   timer_ = create_callback_timer();
   LARGE_INTEGER now{};
@@ -259,6 +282,7 @@ void WindowsVirtualAsioRuntime::stop() noexcept {
 }
 
 void WindowsVirtualAsioRuntime::disconnect() noexcept {
+  stop();
   if (broker_ != nullptr) {
     static_cast<void>(broker_->disconnect(250));
     broker_.reset();
@@ -308,18 +332,28 @@ void WindowsVirtualAsioRuntime::run(std::uint64_t first_deadline_qpc) noexcept {
   const HANDLE waits[] = {
       static_cast<HANDLE>(stop_event_),
       static_cast<HANDLE>(timer_),
+      static_cast<HANDLE>(broker_process_handle_),
   };
+  const auto wait_count = broker_process_handle_ == nullptr ? 2UL : 3UL;
   std::uint32_t buffer_index = 0;
   auto deadline_qpc = first_deadline_qpc;
   while (running_.load(std::memory_order_acquire)) {
-    const auto wait = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+    if (broker_process_exited()) {
+      break;
+    }
+    const auto wait = WaitForMultipleObjects(wait_count, waits, FALSE, INFINITE);
     if (wait == WAIT_OBJECT_0) {
+      break;
+    }
+    if (broker_process_handle_ != nullptr && wait == WAIT_OBJECT_0 + 2) {
       break;
     }
     if (wait != WAIT_OBJECT_0 + 1) {
       break;
     }
-    process_cycle(buffer_index);
+    if (!process_cycle(buffer_index)) {
+      break;
+    }
     buffer_index ^= 1U;
     LARGE_INTEGER now{};
     if (!QueryPerformanceCounter(&now)) {
@@ -336,16 +370,40 @@ void WindowsVirtualAsioRuntime::run(std::uint64_t first_deadline_qpc) noexcept {
   running_.store(false, std::memory_order_release);
 }
 
-void WindowsVirtualAsioRuntime::process_cycle(
+bool WindowsVirtualAsioRuntime::process_cycle(
     std::uint32_t buffer_index) noexcept {
+  if (broker_ == nullptr) {
+    return false;
+  }
+  const auto broker_wait = broker_->wait_output_or_shutdown(0);
+  if (broker_wait.status ==
+          platform::WindowsVirtualAsioEventWaitStatus::Shutdown ||
+      broker_wait.status ==
+          platform::WindowsVirtualAsioEventWaitStatus::Failed) {
+    return false;
+  }
   const auto position = sample_position_.load(std::memory_order_relaxed);
   const auto timestamp_100ns = qpc_100ns(qpc_frequency_);
 
   // Inputs must be visible to the host in the half named by this callback.
   host_input_.clear();
   platform::VirtualAsioSharedBlockMetadata received{};
-  if (broker_ != nullptr) {
-    static_cast<void>(broker_->pop_output(host_input_, received));
+  const auto capacity = std::max<std::uint32_t>(
+      1, std::min<std::uint32_t>(broker_->header().queue_capacity_blocks,
+                                 kQueueCapacityBlocks));
+  for (std::uint32_t index = 0; index < capacity; ++index) {
+    const auto status = broker_->pop_output(output_scratch_, received);
+    if (status == platform::VirtualAsioSharedQueueStatus::Empty) {
+      break;
+    }
+    if (status != platform::VirtualAsioSharedQueueStatus::Completed) {
+      return false;
+    }
+    for (std::size_t channel = 0; channel < host_input_.channels(); ++channel) {
+      std::memcpy(host_input_.channel(channel).data(),
+                  output_scratch_.channel(channel).data(),
+                  config_.frames_per_block * sizeof(float));
+    }
   }
   for (const auto& binding : config_.bindings) {
     if (!binding.host_input || binding.channel >= host_input_.channels() ||
@@ -390,14 +448,22 @@ void WindowsVirtualAsioRuntime::process_cycle(
       .qpc_position_100ns = timestamp_100ns,
       .flags = 0,
   };
-  if (broker_ != nullptr &&
-      broker_->push_input(host_output_, sent) ==
-          platform::VirtualAsioSharedQueueStatus::Completed) {
+  const auto input_status = broker_->push_input(host_output_, sent);
+  if (input_status == platform::VirtualAsioSharedQueueStatus::Completed) {
     static_cast<void>(broker_->signal_input());
+  } else if (input_status != platform::VirtualAsioSharedQueueStatus::Full) {
+    return false;
   }
   ++sequence_;
   sample_position_.fetch_add(config_.frames_per_block,
                              std::memory_order_release);
+  return true;
+}
+
+bool WindowsVirtualAsioRuntime::broker_process_exited() const noexcept {
+  return broker_process_handle_ != nullptr &&
+         WaitForSingleObject(static_cast<HANDLE>(broker_process_handle_), 0) ==
+             WAIT_OBJECT_0;
 }
 
 }  // namespace sar::driver
