@@ -11,6 +11,12 @@ installed at `C:\Qt\6.8.3\msvc2022_64`:
 scripts\windows-alpha-package.cmd
 ```
 
+The same package is built without a local Qt SDK by the `Windows GUI Package`
+GitHub Actions workflow. Every push to `main` and every manually dispatched
+run uploads a 30-day Windows x64 ZIP artifact. This is the preferred path for
+sharing a reproducible test build; download the artifact from the workflow run,
+extract it, and run `install-alpha.cmd`.
+
 Set `SAR_QT_PREFIX` before invoking the helper when Qt is installed elsewhere.
 The ZIP is written below `build-alpha`. Extract it, enter the package directory,
 and install for the current user:

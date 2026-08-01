@@ -1,0 +1,58 @@
+name: Windows GUI Package
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-gui-package:
+    name: Windows Qt GUI package
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt 6.8.3
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.8.3
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          modules: qtdeclarative
+          cache: true
+
+      - name: Configure GUI build
+        shell: pwsh
+        run: >-
+          cmake -S . -B build-alpha
+          -G "Visual Studio 17 2022"
+          -A x64
+          -DSAR_BUILD_GUI=ON
+          -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
+
+      - name: Build package targets
+        run: >-
+          cmake --build build-alpha --config Release --target
+          sar_engine_service sar_control_cli sar_virtual_asio_driver
+          sar_virtual_asio_register sar_gui
+
+      - name: Run tests
+        run: ctest --test-dir build-alpha -C Release --output-on-failure
+
+      - name: Create Windows ZIP package
+        run: cpack --config build-alpha/CPackConfig.cmake -C Release -B build-alpha/package-output
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: SystemAudioRoute-windows-x64-${{ github.sha }}
+          path: build-alpha/package-output/*.zip
+          if-no-files-found: error
+          retention-days: 30
