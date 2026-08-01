@@ -29,6 +29,10 @@ class EngineController final : public QObject {
   Q_PROPERTY(QString lastError READ lastError NOTIFY feedbackChanged)
   Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY feedbackChanged)
   Q_PROPERTY(bool runtimeRunning READ runtimeRunning NOTIFY runtimeChanged)
+  Q_PROPERTY(bool runtimeConfigured READ runtimeConfigured NOTIFY runtimeChanged)
+  Q_PROPERTY(QString runtimeMode READ runtimeMode NOTIFY runtimeChanged)
+  Q_PROPERTY(QString runtimeCaptureDeviceId READ runtimeCaptureDeviceId NOTIFY runtimeChanged)
+  Q_PROPERTY(QString runtimeRenderDeviceId READ runtimeRenderDeviceId NOTIFY runtimeChanged)
   Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
   Q_PROPERTY(int sampleRate READ sampleRate NOTIFY sessionChanged)
   Q_PROPERTY(int blockSize READ blockSize NOTIFY sessionChanged)
@@ -54,6 +58,10 @@ class EngineController final : public QObject {
   [[nodiscard]] QString lastError() const;
   [[nodiscard]] QString statusMessage() const;
   [[nodiscard]] bool runtimeRunning() const noexcept;
+  [[nodiscard]] bool runtimeConfigured() const noexcept;
+  [[nodiscard]] QString runtimeMode() const;
+  [[nodiscard]] QString runtimeCaptureDeviceId() const;
+  [[nodiscard]] QString runtimeRenderDeviceId() const;
   [[nodiscard]] bool busy() const noexcept;
   [[nodiscard]] int sampleRate() const noexcept;
   [[nodiscard]] int blockSize() const noexcept;
@@ -78,6 +86,9 @@ class EngineController final : public QObject {
   Q_INVOKABLE void clearFeedback();
   Q_INVOKABLE void startRuntime();
   Q_INVOKABLE void stopRuntime();
+  Q_INVOKABLE void configureAudioRuntime(const QString& mode,
+                                         const QString& capture_device_id,
+                                         const QString& render_device_id);
   Q_INVOKABLE bool routeEnabled(const QString& input_id,
                                 const QString& output_id) const;
   Q_INVOKABLE double routeGain(const QString& input_id,
@@ -122,6 +133,10 @@ class EngineController final : public QObject {
   std::uint32_t poll_sequence_ = 0;
   bool connected_ = false;
   bool runtime_running_ = false;
+  bool runtime_configured_ = false;
+  control::AudioRuntimeMode runtime_mode_ = control::AudioRuntimeMode::None;
+  QString runtime_capture_device_id_;
+  QString runtime_render_device_id_;
   bool busy_ = false;
   QString last_error_;
   QString status_message_;

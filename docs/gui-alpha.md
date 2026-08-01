@@ -66,7 +66,8 @@ crosses into the realtime path.
 
 ## Delivery order
 
-1. Live session, matrix, route gain, devices, diagnostics, engine start/stop.
+1. Live session, matrix, route gain, devices, WASAPI runtime configuration,
+   diagnostics, engine start/stop.
 2. Preset browse/save/load and persistent command acknowledgement feedback.
 3. Device configuration and reconnect backoff.
 4. Virtual endpoint creation, matrix keyboard editing, route groups, and

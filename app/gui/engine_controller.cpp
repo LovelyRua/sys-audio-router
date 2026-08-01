@@ -103,6 +103,26 @@ QString EngineController::connectionLabel() const {
 QString EngineController::lastError() const { return last_error_; }
 QString EngineController::statusMessage() const { return status_message_; }
 bool EngineController::runtimeRunning() const noexcept { return runtime_running_; }
+bool EngineController::runtimeConfigured() const noexcept {
+  return runtime_configured_;
+}
+QString EngineController::runtimeMode() const {
+  switch (runtime_mode_) {
+    case control::AudioRuntimeMode::WasapiRender:
+      return QStringLiteral("render");
+    case control::AudioRuntimeMode::WasapiDuplex:
+      return QStringLiteral("duplex");
+    case control::AudioRuntimeMode::None:
+      return QStringLiteral("none");
+  }
+  return QStringLiteral("none");
+}
+QString EngineController::runtimeCaptureDeviceId() const {
+  return runtime_capture_device_id_;
+}
+QString EngineController::runtimeRenderDeviceId() const {
+  return runtime_render_device_id_;
+}
 bool EngineController::busy() const noexcept { return busy_; }
 int EngineController::sampleRate() const noexcept { return sample_rate_; }
 int EngineController::blockSize() const noexcept { return block_size_; }
@@ -198,6 +218,34 @@ void EngineController::stopRuntime() {
   dispatch(std::move(command));
 }
 
+void EngineController::configureAudioRuntime(const QString& mode,
+                                             const QString& capture_device_id,
+                                             const QString& render_device_id) {
+  control::AudioRuntimeMode runtime_mode = control::AudioRuntimeMode::None;
+  if (mode == QStringLiteral("render")) {
+    runtime_mode = control::AudioRuntimeMode::WasapiRender;
+  } else if (mode == QStringLiteral("duplex")) {
+    runtime_mode = control::AudioRuntimeMode::WasapiDuplex;
+  } else {
+    setError(QStringLiteral("Choose a WASAPI runtime mode"));
+    return;
+  }
+
+  if (render_device_id.trimmed().isEmpty() ||
+      (runtime_mode == control::AudioRuntimeMode::WasapiDuplex &&
+       capture_device_id.trimmed().isEmpty())) {
+    setError(QStringLiteral("Select the required audio devices"));
+    return;
+  }
+
+  control::ControlCommand command;
+  command.type = control::ControlCommandType::ConfigureAudioRuntime;
+  command.audio_runtime.mode = runtime_mode;
+  command.audio_runtime.capture_device_id = capture_device_id.toStdString();
+  command.audio_runtime.render_device_id = render_device_id.toStdString();
+  dispatch(std::move(command));
+}
+
 bool EngineController::routeEnabled(const QString& input_id,
                                     const QString& output_id) const {
   return std::ranges::any_of(routes_, [&](const QVariant& value) {
@@ -285,6 +333,12 @@ void EngineController::applyReply(const EngineReply& reply) {
   }
   if (reply.response.has_audio_runtime_state) {
     runtime_running_ = reply.response.audio_runtime.running;
+    runtime_configured_ = reply.response.audio_runtime.configured;
+    runtime_mode_ = reply.response.audio_runtime.configuration.mode;
+    runtime_capture_device_id_ =
+        text(reply.response.audio_runtime.configuration.capture_device_id);
+    runtime_render_device_id_ =
+        text(reply.response.audio_runtime.configuration.render_device_id);
     graph_version_ = reply.response.audio_runtime.graph_version;
     emit runtimeChanged();
     emit sessionChanged();

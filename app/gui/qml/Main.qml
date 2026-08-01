@@ -677,6 +677,122 @@ ApplicationWindow {
                     Text { text: "Audio devices"; color: colors.text; font.pixelSize: 18; font.weight: Font.DemiBold }
                     Text { text: engine.devices.length + " endpoints reported by the engine"; color: colors.muted; font.pixelSize: 12 }
                     Rectangle { Layout.fillWidth: true; height: 1; color: colors.line }
+                    Rectangle {
+                        Layout.fillWidth: true
+                        color: colors.surface
+                        border.color: colors.line
+                        radius: 4
+                        implicitHeight: runtimeConfigColumn.implicitHeight + 28
+
+                        ColumnLayout {
+                            id: runtimeConfigColumn
+                            anchors.fill: parent
+                            anchors.margins: 14
+                            spacing: 10
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text {
+                                    text: "WASAPI runtime"
+                                    color: colors.text
+                                    font.pixelSize: 13
+                                    font.weight: Font.DemiBold
+                                }
+                                Item { Layout.fillWidth: true }
+                                Text {
+                                    text: engine.runtimeConfigured ?
+                                              (engine.runtimeMode === "duplex" ? "DUPLEX" : "RENDER") :
+                                          "NOT CONFIGURED"
+                                    color: engine.runtimeConfigured ? colors.healthy : colors.warning
+                                    font.pixelSize: 10
+                                    font.weight: Font.DemiBold
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Text { text: "Mode"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
+                                ConsoleCombo {
+                                    id: runtimeModeCombo
+                                    Layout.fillWidth: true
+                                    model: ["WASAPI render", "WASAPI duplex"]
+                                    currentIndex: engine.runtimeMode === "duplex" ? 1 : 0
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Text { text: "Render"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
+                                ConsoleCombo {
+                                    id: renderDeviceCombo
+                                    Layout.fillWidth: true
+                                    textRole: "label"
+                                    model: engine.devices.filter(function (device) {
+                                        return device.direction === 1 || device.direction === 2
+                                    })
+                                    currentIndex: {
+                                        for (var index = 0; index < model.length; ++index) {
+                                            if (model[index].id === engine.runtimeRenderDeviceId)
+                                                return index
+                                        }
+                                        return model.length > 0 ? 0 : -1
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                visible: runtimeModeCombo.currentIndex === 1
+                                Text { text: "Capture"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
+                                ConsoleCombo {
+                                    id: captureDeviceCombo
+                                    Layout.fillWidth: true
+                                    textRole: "label"
+                                    model: engine.devices.filter(function (device) {
+                                        return device.direction === 0 || device.direction === 2
+                                    })
+                                    currentIndex: {
+                                        for (var index = 0; index < model.length; ++index) {
+                                            if (model[index].id === engine.runtimeCaptureDeviceId)
+                                                return index
+                                        }
+                                        return model.length > 0 ? 0 : -1
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Text {
+                                    text: engine.runtimeConfigured ? "Configured runtime can be restarted from the header" : "Select devices, then apply the runtime"
+                                    color: colors.muted
+                                    font.pixelSize: 10
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+                                FlatButton {
+                                    text: "Apply"
+                                    highlighted: true
+                                    enabled: engine.connected && !engine.busy &&
+                                             renderDeviceCombo.currentIndex >= 0 &&
+                                             (runtimeModeCombo.currentIndex === 0 || captureDeviceCombo.currentIndex >= 0)
+                                    onClicked: {
+                                        var renderDevice = renderDeviceCombo.model[renderDeviceCombo.currentIndex]
+                                        var captureDevice = captureDeviceCombo.currentIndex >= 0
+                                                ? captureDeviceCombo.model[captureDeviceCombo.currentIndex] : null
+                                        engine.configureAudioRuntime(
+                                            runtimeModeCombo.currentIndex === 0 ? "render" : "duplex",
+                                            captureDevice === null ? "" : captureDevice.id,
+                                            renderDevice.id)
+                                    }
+                                }
+                            }
+                        }
+                    }
                     ListView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
