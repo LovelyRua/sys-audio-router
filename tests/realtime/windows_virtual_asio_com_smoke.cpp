@@ -249,12 +249,13 @@ int wmain(int argc, wchar_t** argv) {
   ASIOSamples sample_position{};
   ASIOTimeStamp timestamp{};
   assert(asio->getSamplePosition(&sample_position, &timestamp) == ASE_OK);
-  assert(asio->disposeBuffers() == ASE_InvalidMode);
+  // Host shutdown may skip stop(). Buffer disposal must own the stop/join
+  // sequence rather than leaving the broker callback thread behind.
+  assert(asio->disposeBuffers() == ASE_OK);
   assert(asio->stop() == ASE_OK);
   const auto callbacks_after_stop = callback_count.load(std::memory_order_acquire);
   std::this_thread::sleep_for(std::chrono::milliseconds(20));
   assert(callback_count.load(std::memory_order_acquire) == callbacks_after_stop);
-  assert(asio->disposeBuffers() == ASE_OK);
   assert(asio->disposeBuffers() == ASE_InvalidMode);
 
   assert(factory->Release() == 0);
