@@ -146,8 +146,8 @@ try {
     "bin\qt.conf",
     "bin\sar_virtual_asio_register.exe",
     "bin\SystemAudioRouteVirtualASIO.dll",
-    "bin\plugins\platforms\qwindows.dll",
-    "bin\qml\QtQuick\qtquick2plugin.dll",
+    "plugins\platforms\qwindows.dll",
+    "qml\QtQuick\qtquick2plugin.dll",
     ".system-audio-route-alpha",
     "uninstall-alpha.cmd"
   )

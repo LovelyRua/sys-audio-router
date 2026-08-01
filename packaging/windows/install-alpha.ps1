@@ -117,7 +117,7 @@ try {
   Copy-Item -LiteralPath $sourceBin -Destination $stagingPath -Recurse
   foreach ($directoryName in @("plugins", "qml")) {
     Copy-Item -LiteralPath (Join-Path $packageRoot $directoryName) `
-        -Destination (Join-Path $stagingPath "bin") -Recurse
+        -Destination $stagingPath -Recurse
   }
   Set-Content -LiteralPath (Join-Path $stagingPath $markerName) `
       -Value "System Audio Route Alpha 0.1.0" -Encoding ASCII
