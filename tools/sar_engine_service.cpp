@@ -11,12 +11,14 @@
 #endif
 
 #include <Windows.h>
+#include <sddl.h>
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cwchar>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -108,6 +110,86 @@ class SessionFileLock final {
  private:
   HANDLE handle_ = INVALID_HANDLE_VALUE;
 };
+
+class EngineProcessLock final {
+ public:
+  explicit EngineProcessLock(const std::wstring& name) noexcept {
+    handle_ = CreateMutexW(nullptr, TRUE, name.c_str());
+    error_ = handle_ == nullptr ? GetLastError() : ERROR_SUCCESS;
+    already_running_ = handle_ != nullptr && GetLastError() == ERROR_ALREADY_EXISTS;
+  }
+  EngineProcessLock(const EngineProcessLock&) = delete;
+  EngineProcessLock& operator=(const EngineProcessLock&) = delete;
+  ~EngineProcessLock() {
+    if (handle_ != nullptr) {
+      CloseHandle(handle_);
+    }
+  }
+
+  [[nodiscard]] bool acquired() const noexcept {
+    return handle_ != nullptr && !already_running_;
+  }
+  [[nodiscard]] DWORD error() const noexcept {
+    return handle_ == nullptr ? error_ : ERROR_ALREADY_EXISTS;
+  }
+
+ private:
+  HANDLE handle_ = nullptr;
+  DWORD error_ = ERROR_SUCCESS;
+  bool already_running_ = false;
+};
+
+bool current_user_sid(std::wstring& value) noexcept {
+  HANDLE token = nullptr;
+  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+    return false;
+  }
+  DWORD required = 0;
+  static_cast<void>(GetTokenInformation(token, TokenUser, nullptr, 0, &required));
+  if (required == 0 || GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+    CloseHandle(token);
+    return false;
+  }
+  std::vector<std::byte> storage(required);
+  const bool read = GetTokenInformation(token, TokenUser, storage.data(), required,
+                                        &required) != FALSE;
+  CloseHandle(token);
+  if (!read) {
+    return false;
+  }
+  const auto* user = reinterpret_cast<const TOKEN_USER*>(storage.data());
+  LPWSTR text = nullptr;
+  if (!ConvertSidToStringSidW(user->User.Sid, &text) || text == nullptr) {
+    return false;
+  }
+  value.assign(text);
+  LocalFree(text);
+  return true;
+}
+
+std::uint64_t hash_pipe_name(const std::wstring& pipe_name) noexcept {
+  std::uint64_t hash = 1469598103934665603ULL;
+  for (const auto character : pipe_name) {
+    hash ^= static_cast<std::uint16_t>(character);
+    hash *= 1099511628211ULL;
+  }
+  return hash;
+}
+
+bool make_engine_lock_name(const std::wstring& pipe_name,
+                           std::wstring& name) noexcept {
+  std::wstring sid;
+  if (!current_user_sid(sid)) {
+    return false;
+  }
+  wchar_t suffix[17] = {};
+  if (std::swprintf(suffix, 17, L"%016llx",
+                    static_cast<unsigned long long>(hash_pipe_name(pipe_name))) != 16) {
+    return false;
+  }
+  name = L"Global\\SystemAudioRoute.EngineService." + sid + L"." + suffix;
+  return true;
+}
 
 SessionLoadResult load_session_file(const std::wstring& path) {
   const HANDLE file = CreateFileW(path.c_str(),
@@ -396,6 +478,26 @@ int main(int argc, char** argv) {
                            has_render_id)) {
     std::cerr << "--session cannot be combined with WASAPI startup options.\n";
     return 2;
+  }
+
+  std::wstring engine_lock_name;
+  if (!make_engine_lock_name(pipe_config.pipe_name, engine_lock_name)) {
+    std::cerr << "engine_service_lock_name_failed: Could not create the "
+                 "per-user engine lock name.\n";
+    return 1;
+  }
+  EngineProcessLock engine_lock(engine_lock_name);
+  if (!engine_lock.acquired()) {
+    const auto error = engine_lock.error();
+    if (error == ERROR_ALREADY_EXISTS) {
+      std::cerr << "engine_service_already_running: Another System Audio Route "
+                   "engine already owns this control pipe.\n";
+    } else {
+      std::cerr << "engine_service_lock_failed: Could not acquire the per-user "
+                   "engine lock (win32="
+                << error << ").\n";
+    }
+    return 1;
   }
 
   auto desired_session = default_session();
