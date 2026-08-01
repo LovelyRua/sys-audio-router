@@ -429,15 +429,15 @@ try {
       $executables = @{}
       if ($Mode -eq "render" -or $Mode -eq "both" -or $Mode -eq "all") {
         $targets += "sar_measure_wasapi_render_loop"
-        $executables.render = Join-Path $repoDir "$buildDir\sar_measure_wasapi_render_loop.exe"
+        $executables.render = Join-Path $repoDir "$buildDir\Debug\sar_measure_wasapi_render_loop.exe"
       }
       if ($Mode -eq "duplex" -or $Mode -eq "both" -or $Mode -eq "all") {
         $targets += "sar_measure_wasapi_duplex_loop"
-        $executables.duplex = Join-Path $repoDir "$buildDir\sar_measure_wasapi_duplex_loop.exe"
+        $executables.duplex = Join-Path $repoDir "$buildDir\Debug\sar_measure_wasapi_duplex_loop.exe"
       }
       if ($Mode -eq "loopback" -or $Mode -eq "all") {
         $targets += "sar_measure_wasapi_loopback_loop"
-        $executables.loopback = Join-Path $repoDir "$buildDir\sar_measure_wasapi_loopback_loop.exe"
+        $executables.loopback = Join-Path $repoDir "$buildDir\Debug\sar_measure_wasapi_loopback_loop.exe"
       }
       if ($targets.Count -eq 0) {
         throw "No measurement targets selected for mode '$Mode'."
@@ -449,12 +449,12 @@ try {
         "setlocal EnableExtensions",
         "call `"$vsDevCmd`" -arch=x64 -host_arch=x64",
         "if errorlevel 1 exit /b 1",
-        "set `"PATH=$vsInstall\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;$vsInstall\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;%PATH%`"",
+        "if exist `"C:\\Tools\\cmake-4.4.0-windows-x86_64\\bin\\cmake.exe`" set `"PATH=C:\\Tools\\cmake-4.4.0-windows-x86_64\\bin;$vsInstall\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;$vsInstall\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;%PATH%`"",
+        "if not exist `"C:\\Tools\\cmake-4.4.0-windows-x86_64\\bin\\cmake.exe`" set `"PATH=$vsInstall\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;$vsInstall\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;%PATH%`"",
         "cd /d `"$repoDir`"",
-        "where ninja >nul 2>nul",
-        "if errorlevel 1 (cmake -S . -B `"$buildDir`") else (cmake -S . -B `"$buildDir`" -G Ninja)",
+        "cmake -S . -B `"$buildDir`" -G `"Visual Studio 17 2022`" -A x64",
         "if errorlevel 1 exit /b 1",
-        "cmake --build `"$buildDir`" --target $targetArgs",
+        "cmake --build `"$buildDir`" --config Debug --target $targetArgs",
         "if errorlevel 1 exit /b 1"
       )
       $lines += "exit /b 0"
