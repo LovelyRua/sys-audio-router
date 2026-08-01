@@ -827,7 +827,8 @@ ApplicationWindow {
                                             (window.runtimeDraftMode === "render" || captureDeviceCombo.currentIndex >= 0)
                                     onClicked: {
                                         var renderDevice = renderDeviceCombo.model[renderDeviceCombo.currentIndex]
-                                        var captureDevice = captureDeviceCombo.currentIndex >= 0
+                                        var captureDevice = window.runtimeDraftMode === "duplex" &&
+                                                captureDeviceCombo.currentIndex >= 0
                                                 ? captureDeviceCombo.model[captureDeviceCombo.currentIndex] : null
                                         engine.configureAudioRuntime(window.runtimeDraftMode,
                                             captureDevice === null ? "" : captureDevice.id,

@@ -290,7 +290,10 @@ void EngineController::configureAudioRuntime(const QString& mode,
   control::ControlCommand command;
   command.type = control::ControlCommandType::ConfigureAudioRuntime;
   command.audio_runtime.mode = runtime_mode;
-  command.audio_runtime.capture_device_id = capture_device_id.toStdString();
+  command.audio_runtime.capture_device_id =
+      runtime_mode == control::AudioRuntimeMode::WasapiDuplex
+          ? capture_device_id.toStdString()
+          : std::string{};
   command.audio_runtime.render_device_id = render_device_id.toStdString();
   if (runtime_running_) {
     pending_runtime_reconfigure_ = command.audio_runtime;
