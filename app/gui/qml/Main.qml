@@ -560,6 +560,7 @@ ApplicationWindow {
                                                     width: matrixColumn.cellSize
                                                     height: matrixColumn.cellSize
                                                     padding: 0
+                                                    enabled: engine.connected && !engine.busy
                                                     background: Rectangle {
                                                         radius: 3
                                                         color: routeCell.active ? "#245a49"
@@ -633,13 +634,14 @@ ApplicationWindow {
                         Switch {
                             id: routeSwitch
                             text: "Route enabled"
-                            enabled: selectedInputId.length > 0 && !engine.busy
+                            enabled: selectedInputId.length > 0 &&
+                                     engine.connected && !engine.busy
                             checked: {
                                 engine.routeRevision;
                                 return selectedInputId.length > 0 &&
                                        engine.routeEnabled(selectedInputId, selectedOutputId)
                             }
-                            onToggled: engine.setRoute(selectedInputId, selectedOutputId, checked)
+                            onClicked: engine.setRoute(selectedInputId, selectedOutputId, checked)
                             contentItem: Text {
                                 text: routeSwitch.text
                                 color: routeSwitch.enabled ? colors.text : colors.muted
@@ -658,13 +660,21 @@ ApplicationWindow {
                                 from: 0
                                 to: 2
                                 stepSize: 0.01
-                                enabled: selectedInputId.length > 0 && routeSwitch.checked && engine.connected
+                                enabled: selectedInputId.length > 0 &&
+                                         routeSwitch.checked &&
+                                         engine.connected && !engine.busy
                                 value: {
                                     engine.routeRevision;
                                     return selectedInputId.length > 0
                                            ? engine.routeGain(selectedInputId, selectedOutputId) : 0
                                 }
-                                onMoved: engine.setRouteGain(selectedInputId, selectedOutputId, value)
+                                onPressedChanged: {
+                                    if (!pressed) {
+                                        engine.setRouteGain(selectedInputId,
+                                                            selectedOutputId,
+                                                            value)
+                                    }
+                                }
                             }
                             Text {
                                 text: gainSlider.value.toFixed(2)

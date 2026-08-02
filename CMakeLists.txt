@@ -324,6 +324,15 @@ if(WIN32)
 
   target_link_libraries(sar_engine_service PRIVATE sar_core)
 
+  add_executable(sar_bootstrap_launcher WIN32
+    tools/sar_bootstrap_launcher.cpp
+  )
+  target_compile_features(sar_bootstrap_launcher PRIVATE cxx_std_20)
+  target_link_libraries(sar_bootstrap_launcher PRIVATE user32)
+  set_target_properties(sar_bootstrap_launcher PROPERTIES
+    OUTPUT_NAME "SystemAudioRouteLauncher"
+  )
+
   add_executable(sar_control_cli
     tools/sar_control_cli.cpp
   )
@@ -961,6 +970,7 @@ endforeach()
 
 if(WIN32 AND SAR_BUILD_GUI)
   install(TARGETS
+    sar_bootstrap_launcher
     sar_engine_service
     sar_control_cli
     sar_virtual_asio_driver
@@ -997,12 +1007,70 @@ if(WIN32 AND SAR_BUILD_GUI)
     DESTINATION .
   )
 
-  set(CPACK_GENERATOR ZIP)
+  set(CPACK_GENERATOR "ZIP;NSIS")
+  set(CPACK_VERBATIM_VARIABLES ON)
   set(CPACK_PACKAGE_NAME "SystemAudioRoute")
   set(CPACK_PACKAGE_VENDOR "System Audio Route contributors")
   set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+  set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+      "Low-latency Windows audio routing engine and control panel")
+  set(CPACK_PACKAGE_HOMEPAGE_URL
+      "https://github.com/LovelyRua/sys-audio-router")
+  set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
   set(CPACK_PACKAGE_FILE_NAME
       "SystemAudioRoute-${PROJECT_VERSION}-windows-x64")
   set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY ON)
+  set(CPACK_PACKAGE_INSTALL_DIRECTORY "System Audio Route")
+  set(CPACK_PACKAGE_EXECUTABLES
+      "SystemAudioRouteLauncher" "System Audio Route")
+  set(CPACK_CREATE_DESKTOP_LINKS "SystemAudioRouteLauncher")
+
+  set(CPACK_NSIS_INSTALL_ROOT "$PROGRAMFILES64")
+  set(CPACK_NSIS_DISPLAY_NAME "System Audio Route")
+  set(CPACK_NSIS_PACKAGE_NAME "System Audio Route")
+  set(CPACK_NSIS_EXECUTABLES_DIRECTORY "bin")
+  set(CPACK_NSIS_INSTALLED_ICON_NAME
+      "bin\\\\SystemAudioRouteLauncher.exe")
+  set(CPACK_NSIS_MUI_FINISHPAGE_RUN
+      "bin\\\\SystemAudioRouteLauncher.exe")
+  set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+  set(CPACK_NSIS_MANIFEST_DPI_AWARE ON)
+  set(CPACK_NSIS_EXTRA_PREINSTALL_COMMANDS [[
+    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM SystemAudioRoute.exe'
+    Pop $0
+    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM sar_engine_service.exe'
+    Pop $0
+  ]])
+  set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS [[
+    ExecWait '"$INSTDIR\bin\vc_redist.x64.exe" /install /passive /norestart' $1
+    StrCmp $1 "0" sar_vc_runtime_ok
+    StrCmp $1 "1638" sar_vc_runtime_ok
+    StrCmp $1 "3010" sar_vc_runtime_ok
+    DetailPrint "Microsoft VC++ Runtime installation failed with exit code $1."
+    SetErrorLevel 1
+    Abort
+    sar_vc_runtime_ok:
+    ExecWait '"$INSTDIR\bin\sar_virtual_asio_register.exe" --register "$INSTDIR\bin\SystemAudioRouteVirtualASIO.dll" --user --x64' $0
+    StrCmp $0 "0" sar_asio_registration_ok
+    DetailPrint "Virtual ASIO registration failed with exit code $0."
+    SetErrorLevel 1
+    Abort
+    sar_asio_registration_ok:
+  ]])
+  set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS [[
+    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM SystemAudioRoute.exe'
+    Pop $0
+    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM sar_engine_service.exe'
+    Pop $0
+    ExecWait '"$INSTDIR\bin\sar_virtual_asio_register.exe" --verify "$INSTDIR\bin\SystemAudioRouteVirtualASIO.dll" --user --x64' $0
+    StrCmp $0 "0" sar_uninstall_owns_asio sar_skip_asio_unregistration
+    sar_uninstall_owns_asio:
+    ExecWait '"$INSTDIR\bin\sar_virtual_asio_register.exe" --unregister --user --x64' $0
+    StrCmp $0 "0" sar_skip_asio_unregistration
+    DetailPrint "Virtual ASIO unregistration failed with exit code $0."
+    SetErrorLevel 1
+    Abort
+    sar_skip_asio_unregistration:
+  ]])
   include(CPack)
 endif()

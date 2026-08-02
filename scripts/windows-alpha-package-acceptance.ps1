@@ -41,6 +41,30 @@ function Write-CommandOutput {
   }
 }
 
+function Get-InstalledProcess {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Name,
+
+    [Parameter(Mandatory = $true)]
+    [string]$Directory
+  )
+
+  $prefix = [IO.Path]::GetFullPath($Directory).TrimEnd(
+      [IO.Path]::DirectorySeparatorChar,
+      [IO.Path]::AltDirectorySeparatorChar) +
+      [IO.Path]::DirectorySeparatorChar
+  return @(Get-Process -Name $Name -ErrorAction SilentlyContinue |
+      Where-Object {
+        try {
+          [IO.Path]::GetFullPath($_.Path).StartsWith(
+              $prefix, [StringComparison]::OrdinalIgnoreCase)
+        } catch {
+          $false
+        }
+      })
+}
+
 $resolvedPackagePath = [IO.Path]::GetFullPath($PackagePath.Trim().Trim('"'))
 if (!(Test-Path -LiteralPath $resolvedPackagePath -PathType Leaf)) {
   throw "Alpha package was not found: $resolvedPackagePath"
@@ -66,11 +90,10 @@ $suffix = [guid]::NewGuid().ToString("N").Substring(0, 8)
 $workPath = Join-Path ([IO.Path]::GetTempPath()) "sar-alpha-acceptance-$suffix"
 $negativeInstallPath = "$installPath.missing-runtime-$suffix"
 $ownershipInstallPath = "$installPath.ownership-$suffix"
-$guiStdoutPath = Join-Path $workPath "gui.stdout.txt"
-$guiStderrPath = Join-Path $workPath "gui.stderr.txt"
 $primaryInstalled = $false
 $ownershipInstalled = $false
 $guiProcess = $null
+$engineProcess = $null
 $packageRoot = $null
 $packageHash = (Get-FileHash -Algorithm SHA256 `
     -LiteralPath $resolvedPackagePath).Hash
@@ -140,6 +163,8 @@ try {
   $primaryInstalled = $true
 
   $installedFiles = @(
+    "bin\SystemAudioRouteLauncher.exe",
+    "bin\sar_engine_service.exe",
     "bin\SystemAudioRoute.exe",
     "bin\Qt6Core.dll",
     "bin\Qt6Quick.dll",
@@ -174,24 +199,41 @@ try {
   [Environment]::SetEnvironmentVariable(
       "QT_QUICK_BACKEND", "software", [EnvironmentVariableTarget]::Process)
 
-  $guiPath = Join-Path $installPath "bin\SystemAudioRoute.exe"
-  $guiProcess = Start-Process -FilePath $guiPath `
+  $launcherPath = Join-Path $installPath `
+      "bin\SystemAudioRouteLauncher.exe"
+  $launcherProcess = Start-Process -FilePath $launcherPath `
       -WorkingDirectory (Join-Path $installPath "bin") `
-      -RedirectStandardOutput $guiStdoutPath `
-      -RedirectStandardError $guiStderrPath `
-      -PassThru
-  Start-Sleep -Seconds $GuiHealthSeconds
-  if ($guiProcess.HasExited) {
-    $stderr = if (Test-Path -LiteralPath $guiStderrPath) {
-      (Get-Content -LiteralPath $guiStderrPath -Raw).Trim()
-    } else {
-      ""
+      -Wait -PassThru
+  if ($launcherProcess.ExitCode -ne 0) {
+    throw "Installed bootstrap launcher failed with exit code $($launcherProcess.ExitCode)."
+  }
+
+  $launchDeadline = [DateTime]::UtcNow.AddSeconds($GuiHealthSeconds)
+  do {
+    $guiProcesses = Get-InstalledProcess -Name "SystemAudioRoute" `
+        -Directory $installPath
+    $engineProcesses = Get-InstalledProcess -Name "sar_engine_service" `
+        -Directory $installPath
+    if ($guiProcesses.Count -eq 1 -and $engineProcesses.Count -eq 1) {
+      break
     }
-    throw "Installed GUI exited early with code $($guiProcess.ExitCode): $stderr"
+    Start-Sleep -Milliseconds 100
+  } while ([DateTime]::UtcNow -lt $launchDeadline)
+  if ($guiProcesses.Count -ne 1 -or $engineProcesses.Count -ne 1) {
+    throw "Bootstrap launcher did not leave exactly one GUI and one engine process."
+  }
+  $guiProcess = $guiProcesses[0]
+  $engineProcess = $engineProcesses[0]
+  Start-Sleep -Seconds $GuiHealthSeconds
+  if ($guiProcess.HasExited -or $engineProcess.HasExited) {
+    throw "A bootstrapped process exited before the health window completed."
   }
   Stop-Process -Id $guiProcess.Id -Force
   Wait-Process -Id $guiProcess.Id -Timeout 5 -ErrorAction SilentlyContinue
   $guiProcess = $null
+  Stop-Process -Id $engineProcess.Id -Force
+  Wait-Process -Id $engineProcess.Id -Timeout 5 -ErrorAction SilentlyContinue
+  $engineProcess = $null
 
   $registerPath = Join-Path $installPath `
       "bin\sar_virtual_asio_register.exe"
@@ -235,16 +277,32 @@ try {
     throw "Second install did not take Virtual ASIO registration ownership."
   }
 
-  $guiProcess = Start-Process `
-      -FilePath (Join-Path $ownershipInstallPath "bin\SystemAudioRoute.exe") `
+  $ownershipLauncher = Start-Process `
+      -FilePath (Join-Path $ownershipInstallPath `
+          "bin\SystemAudioRouteLauncher.exe") `
       -WorkingDirectory (Join-Path $ownershipInstallPath "bin") `
-      -RedirectStandardOutput (Join-Path $workPath "ownership-gui.stdout.txt") `
-      -RedirectStandardError (Join-Path $workPath "ownership-gui.stderr.txt") `
-      -PassThru
-  Start-Sleep -Seconds 1
-  if ($guiProcess.HasExited) {
-    throw "Second installed GUI exited before the path-boundary test."
+      -Wait -PassThru
+  if ($ownershipLauncher.ExitCode -ne 0) {
+    throw "Second installed bootstrap launcher failed."
   }
+  $ownershipDeadline = [DateTime]::UtcNow.AddSeconds(4)
+  do {
+    $ownershipGuiProcesses = Get-InstalledProcess -Name "SystemAudioRoute" `
+        -Directory $ownershipInstallPath
+    $ownershipEngineProcesses = Get-InstalledProcess `
+        -Name "sar_engine_service" -Directory $ownershipInstallPath
+    if ($ownershipGuiProcesses.Count -eq 1 -and
+        $ownershipEngineProcesses.Count -eq 1) {
+      break
+    }
+    Start-Sleep -Milliseconds 100
+  } while ([DateTime]::UtcNow -lt $ownershipDeadline)
+  if ($ownershipGuiProcesses.Count -ne 1 -or
+      $ownershipEngineProcesses.Count -ne 1) {
+    throw "Second launcher did not start exactly one GUI and one engine."
+  }
+  $guiProcess = $ownershipGuiProcesses[0]
+  $engineProcess = $ownershipEngineProcesses[0]
 
   $primaryUninstallResult = Invoke-CommandScript `
       -Path (Join-Path $installPath "uninstall-alpha.cmd")
@@ -257,8 +315,8 @@ try {
     throw "Primary uninstall did not preserve the second install's registration."
   }
   $primaryInstalled = $false
-  if ($guiProcess.HasExited) {
-    throw "Primary uninstall disturbed the same-prefix sibling GUI."
+  if ($guiProcess.HasExited -or $engineProcess.HasExited) {
+    throw "Primary uninstall disturbed a same-prefix sibling process."
   }
   if (Test-Path -LiteralPath $installPath) {
     throw "Primary uninstaller left the installation directory behind."
@@ -273,6 +331,9 @@ try {
   Stop-Process -Id $guiProcess.Id -Force
   Wait-Process -Id $guiProcess.Id -Timeout 5 -ErrorAction SilentlyContinue
   $guiProcess = $null
+  Stop-Process -Id $engineProcess.Id -Force
+  Wait-Process -Id $engineProcess.Id -Timeout 5 -ErrorAction SilentlyContinue
+  $engineProcess = $null
 
   $ownershipUninstallResult = Invoke-CommandScript `
       -Path (Join-Path $ownershipInstallPath "uninstall-alpha.cmd")
@@ -300,6 +361,9 @@ try {
 } finally {
   if ($null -ne $guiProcess -and !$guiProcess.HasExited) {
     Stop-Process -Id $guiProcess.Id -Force -ErrorAction SilentlyContinue
+  }
+  if ($null -ne $engineProcess -and !$engineProcess.HasExited) {
+    Stop-Process -Id $engineProcess.Id -Force -ErrorAction SilentlyContinue
   }
   foreach ($name in $savedEnvironment.Keys) {
     [Environment]::SetEnvironmentVariable(

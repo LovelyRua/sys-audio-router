@@ -34,6 +34,16 @@ if errorlevel 1 (
   exit /b 2
 )
 
+where makensis >nul 2>nul
+if errorlevel 1 if exist "%ProgramFiles(x86)%\NSIS\makensis.exe" (
+  set "PATH=%ProgramFiles(x86)%\NSIS;%PATH%"
+)
+where makensis >nul 2>nul
+if errorlevel 1 (
+  echo NSIS 3.03 or newer was not found. Install NSIS before packaging. 1>&2
+  exit /b 2
+)
+
 if not defined SAR_QT_PREFIX set "SAR_QT_PREFIX=C:\Qt\6.8.3\msvc2022_64"
 if not exist "%SAR_QT_PREFIX%\lib\cmake\Qt6\Qt6Config.cmake" (
   echo Qt 6.8 was not found below SAR_QT_PREFIX="%SAR_QT_PREFIX%". 1>&2
@@ -46,6 +56,7 @@ cmake -S "%SOURCE_DIR%" -B "%BUILD_DIR%" -G "Visual Studio 17 2022" -A x64 ^
 if errorlevel 1 exit /b %errorlevel%
 
 cmake --build "%BUILD_DIR%" --config Release --target ^
+  sar_bootstrap_launcher ^
   sar_engine_service ^
   sar_control_cli ^
   sar_virtual_asio_driver ^

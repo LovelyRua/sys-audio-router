@@ -32,6 +32,7 @@ $requiredPayload = @(
   "sar_engine_service.exe",
   "sar_control_cli.exe",
   "sar_virtual_asio_register.exe",
+  "SystemAudioRouteLauncher.exe",
   "SystemAudioRouteVirtualASIO.dll",
   "SystemAudioRoute.exe",
   "Qt6Core.dll",

@@ -153,42 +153,53 @@ EngineAudioRuntimeResult EngineControlService::start_audio_runtime_locked(
 }
 
 EngineAudioRuntimeResult EngineControlService::rebuild_audio_runtime_locked() {
+  auto rebuilt = build_audio_runtime_locked(session_->current_graph());
+  if (!rebuilt.ok()) {
+    return EngineAudioRuntimeResult::failure(rebuilt.errors());
+  }
+  audio_runtime_ = rebuilt.take_runtime();
+  return EngineAudioRuntimeResult::success();
+}
+
+EngineAudioRuntimeBuildResult
+EngineControlService::build_audio_runtime_locked(
+    std::shared_ptr<graph::Graph> graph) {
   if (!audio_runtime_builder_) {
-    return EngineAudioRuntimeResult::failure({
+    return EngineAudioRuntimeBuildResult::failure({
         {"audio_runtime_graph_stale",
          "Rebuild the audio runtime for the current graph before starting it."},
     });
   }
 
   try {
-    auto rebuilt = audio_runtime_builder_(session_->current_graph());
+    auto rebuilt = audio_runtime_builder_(std::move(graph));
     if (!rebuilt.ok()) {
       if (rebuilt.errors().empty()) {
-        return EngineAudioRuntimeResult::failure({
+        return EngineAudioRuntimeBuildResult::failure({
             {"audio_runtime_builder_returned_null",
              "Audio runtime builder returned no runtime."},
         });
       }
-      return EngineAudioRuntimeResult::failure(rebuilt.errors());
+      return EngineAudioRuntimeBuildResult::failure(rebuilt.errors());
     }
-    audio_runtime_ = rebuilt.take_runtime();
-    if (!audio_runtime_) {
-      return EngineAudioRuntimeResult::failure({
+    auto runtime = rebuilt.take_runtime();
+    if (!runtime) {
+      return EngineAudioRuntimeBuildResult::failure({
           {"audio_runtime_builder_returned_null",
            "Audio runtime builder returned no runtime."},
       });
     }
+    return EngineAudioRuntimeBuildResult::success(std::move(runtime));
   } catch (const std::exception& error) {
-    return EngineAudioRuntimeResult::failure({
+    return EngineAudioRuntimeBuildResult::failure({
         {"audio_runtime_builder_exception", error.what()},
     });
   } catch (...) {
-    return EngineAudioRuntimeResult::failure({
+    return EngineAudioRuntimeBuildResult::failure({
         {"audio_runtime_builder_exception",
          "Audio runtime builder raised an unknown exception."},
     });
   }
-  return EngineAudioRuntimeResult::success();
 }
 
 void EngineControlService::stop_audio_runtime() noexcept {
@@ -307,20 +318,21 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
     return control::encode_control_response(
         audio_runtime_state_response_locked(decoded.command.command_id));
   }
-  if (audio_runtime_ && audio_runtime_->running() &&
-      control::control_command_mutates_preset(decoded.command.type)) {
+  const auto mutates_preset =
+      control::control_command_mutates_preset(decoded.command.type);
+  const bool restart_runtime_after_preset_commit =
+      mutates_preset && audio_runtime_ && audio_runtime_->running();
+  if (restart_runtime_after_preset_commit && !audio_runtime_builder_) {
     return control::encode_control_response(control::command_rejected(
         decoded.command.command_id,
         {{"audio_runtime_graph_change_requires_restart",
-          "Stop the audio runtime before changing the active graph."}}));
+          "The running audio runtime cannot rebuild its graph automatically."}}));
   }
   diagnostics::EngineDiagnostics diagnostics;
   if (decoded.command.type == control::ControlCommandType::QueryDiagnostics &&
       audio_runtime_) {
     diagnostics = audio_runtime_->diagnostics();
   }
-  const auto mutates_preset =
-      control::control_command_mutates_preset(decoded.command.type);
   if (mutates_preset && preset_commit_in_progress_) {
     return control::encode_control_response(control::command_rejected(
         decoded.command.command_id,
@@ -329,7 +341,7 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
           "commit is pending."}}));
   }
 
-  if (mutates_preset && preset_commit_observer_) {
+  if (mutates_preset) {
     auto prepared = session_->prepare_preset_update(decoded.command);
     if (!prepared.ok()) {
       return control::encode_control_response(control::command_rejected(
@@ -337,30 +349,113 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
     }
 
     auto update = prepared.take_update();
-    std::vector<control::PresetError> observer_errors;
-    preset_commit_in_progress_ = true;
-    try {
-      observer_errors = preset_commit_observer_(
-          update.preset, update.graph_version);
-    } catch (const std::exception& error) {
-      observer_errors.push_back({
-          "preset_commit_observer_exception",
-          std::string("The preset commit observer threw an exception: ") +
-              error.what(),
-      });
-    } catch (...) {
-      observer_errors.push_back({
-          "preset_commit_observer_exception",
-          "The preset commit observer threw an unknown exception.",
-      });
+    std::unique_ptr<EngineAudioRuntime> previous_runtime;
+    if (restart_runtime_after_preset_commit) {
+      stop_audio_runtime_locked();
+      previous_runtime = std::move(audio_runtime_);
+
+      auto rebuilt = build_audio_runtime_locked(update.graph);
+      if (!rebuilt.ok()) {
+        std::vector<control::PresetError> errors;
+        errors.reserve(rebuilt.errors().size());
+        for (const auto& error : rebuilt.errors()) {
+          errors.push_back({
+              "audio_runtime_rebuild_failed_" + error.code,
+              "The preset change was not committed because the replacement "
+              "audio runtime could not be built: " + error.message,
+          });
+        }
+        audio_runtime_ = std::move(previous_runtime);
+        const auto restored = start_audio_runtime_locked(10);
+        for (const auto& error : restored.errors()) {
+          errors.push_back({
+              "audio_runtime_restore_failed_" + error.code,
+              "The preset change was rejected and the previous audio runtime "
+              "could not be restored: " + error.message,
+          });
+        }
+        return control::encode_control_response(control::command_rejected(
+            decoded.command.command_id, std::move(errors)));
+      }
+
+      audio_runtime_ = rebuilt.take_runtime();
+      const auto started = audio_runtime_->start(10);
+      if (!started.ok()) {
+        std::vector<control::PresetError> errors;
+        errors.reserve(started.errors().size());
+        for (const auto& error : started.errors()) {
+          errors.push_back({
+              "audio_runtime_replacement_start_failed_" + error.code,
+              "The preset change was not committed because the replacement "
+              "audio runtime could not start: " + error.message,
+          });
+        }
+        audio_runtime_->stop();
+        audio_runtime_ = std::move(previous_runtime);
+        const auto restored = start_audio_runtime_locked(10);
+        for (const auto& error : restored.errors()) {
+          errors.push_back({
+              "audio_runtime_restore_failed_" + error.code,
+              "The preset change was rejected and the previous audio runtime "
+              "could not be restored: " + error.message,
+          });
+        }
+        return control::encode_control_response(control::command_rejected(
+            decoded.command.command_id, std::move(errors)));
+      }
     }
-    preset_commit_in_progress_ = false;
+
+    const auto reject_and_restore_runtime =
+        [&](std::vector<control::PresetError> errors) {
+          if (restart_runtime_after_preset_commit) {
+            audio_runtime_->stop();
+            audio_runtime_ = std::move(previous_runtime);
+            const auto restored = start_audio_runtime_locked(10);
+            for (const auto& error : restored.errors()) {
+              errors.push_back({
+                  "audio_runtime_restore_failed_" + error.code,
+                  "The preset change was rejected and the previous audio "
+                  "runtime could not be restored: " + error.message,
+              });
+            }
+          }
+          return control::encode_control_response(control::command_rejected(
+              decoded.command.command_id, std::move(errors)));
+        };
+
+    std::vector<control::PresetError> observer_errors;
+    if (preset_commit_observer_) {
+      preset_commit_in_progress_ = true;
+      try {
+        observer_errors = preset_commit_observer_(
+            update.preset, update.graph_version);
+      } catch (const std::exception& error) {
+        observer_errors.push_back({
+            "preset_commit_observer_exception",
+            std::string("The preset commit observer threw an exception: ") +
+                error.what(),
+        });
+      } catch (...) {
+        observer_errors.push_back({
+            "preset_commit_observer_exception",
+            "The preset commit observer threw an unknown exception.",
+        });
+      }
+      preset_commit_in_progress_ = false;
+    }
     if (!observer_errors.empty()) {
-      return control::encode_control_response(control::command_rejected(
-          decoded.command.command_id, std::move(observer_errors)));
+      return reject_and_restore_runtime(std::move(observer_errors));
     }
     session_->commit_preset_update(std::move(update));
-    auto response = control::command_accepted(decoded.command.command_id);
+
+    auto response = control::preset_response(
+        decoded.command.command_id, session_->current_preset());
+    if (audio_runtime_) {
+      const auto runtime =
+          audio_runtime_state_response_locked(decoded.command.command_id);
+      response.audio_runtime = runtime.audio_runtime;
+      response.has_audio_runtime_state = true;
+    }
     return control::encode_control_response(response);
   }
   auto response = session_->handle(decoded.command, diagnostics);

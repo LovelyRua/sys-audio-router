@@ -49,19 +49,30 @@ jobs:
       - name: Run tests
         run: ctest --test-dir build-alpha -C Release --output-on-failure
 
-      - name: Create Windows ZIP package
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
+
+      - name: Create Windows packages
         run: cpack --config build-alpha/CPackConfig.cmake -C Release -B build-alpha/package-output
 
-      - name: Validate installed package
+      - name: Validate ZIP package
         shell: pwsh
         run: >-
           scripts/windows-alpha-package-acceptance.ps1
           -PackagePath (Get-ChildItem build-alpha/package-output/*.zip | Select-Object -First 1).FullName
 
+      - name: Validate installer package
+        shell: pwsh
+        run: >-
+          scripts/windows-installer-acceptance.ps1
+          -PackagePath (Get-ChildItem build-alpha/package-output/*.exe | Select-Object -First 1).FullName
+
       - name: Upload Windows package
         uses: actions/upload-artifact@v4
         with:
           name: SystemAudioRoute-windows-x64-${{ github.sha }}
-          path: build-alpha/package-output/*.zip
+          path: |
+            build-alpha/package-output/*.zip
+            build-alpha/package-output/*.exe
           if-no-files-found: error
           retention-days: 30

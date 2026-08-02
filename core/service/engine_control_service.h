@@ -69,6 +69,8 @@ class EngineControlService {
       std::unique_ptr<control::ControlSession> session) noexcept;
   [[nodiscard]] EngineAudioRuntimeResult start_audio_runtime_locked(
       std::uint32_t timeout_ms);
+  [[nodiscard]] EngineAudioRuntimeBuildResult build_audio_runtime_locked(
+      std::shared_ptr<graph::Graph> graph);
   [[nodiscard]] EngineAudioRuntimeResult rebuild_audio_runtime_locked();
   [[nodiscard]] EngineAudioRuntimeResult configure_audio_runtime_locked(
       control::AudioRuntimeConfiguration configuration);

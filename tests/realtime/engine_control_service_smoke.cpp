@@ -168,6 +168,8 @@ int main() {
 
   const auto applied = send(*service, gain);
   assert(applied.status == sar::control::ControlResponseStatus::Accepted);
+  assert(applied.has_preset);
+  assert(applied.preset.matrix.routes[0].gain == 0.25F);
 
   runtime_start.command_id = "runtime-start-4";
   const auto stale_runtime = send(*service, runtime_start);
@@ -179,6 +181,57 @@ int main() {
   const auto after = send(*service, state);
   assert(after.next_graph_version == 12);
   assert(after.preset.matrix.routes[0].gain == 0.25F);
+
+  auto live_create =
+      sar::service::EngineControlService::create(make_preset(), 12);
+  assert(live_create.ok());
+  auto live_service = live_create.take_service();
+  std::uint32_t live_rebuild_calls = 0;
+  bool fail_live_rebuild = false;
+  auto live_runtime = std::make_unique<FakeAudioRuntime>(12);
+  const auto live_installed = live_service->install_audio_runtime(
+      std::move(live_runtime),
+      [&](std::shared_ptr<sar::graph::Graph> graph) {
+        ++live_rebuild_calls;
+        if (fail_live_rebuild) {
+          return sar::service::EngineAudioRuntimeBuildResult::failure({
+              {"injected_live_rebuild_failure",
+               "Injected live rebuild failure."},
+          });
+        }
+        return sar::service::EngineAudioRuntimeBuildResult::success(
+            std::make_unique<FakeAudioRuntime>(graph->version()));
+      });
+  assert(live_installed.ok());
+  assert(live_service->start_audio_runtime().ok());
+  gain.command_id = "gain-while-running-with-builder";
+  gain.gain = 0.5F;
+  const auto live_applied = send(*live_service, gain);
+  assert(live_applied.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  assert(live_applied.has_preset);
+  assert(live_applied.preset.matrix.routes[0].gain == 0.5F);
+  assert(live_applied.has_audio_runtime_state);
+  assert(live_applied.audio_runtime.running);
+  assert(live_applied.audio_runtime.graph_version == 13);
+  assert(live_rebuild_calls == 1);
+
+  fail_live_rebuild = true;
+  gain.command_id = "gain-while-running-rebuild-fails";
+  gain.gain = 0.75F;
+  const auto live_rejected = send(*live_service, gain);
+  assert(live_rejected.status ==
+         sar::control::ControlResponseStatus::Rejected);
+  assert(live_rejected.errors[0].code ==
+         "audio_runtime_rebuild_failed_injected_live_rebuild_failure");
+  assert(live_service->audio_runtime_running());
+  assert(live_service->session().current_preset().matrix.routes[0].gain ==
+         0.5F);
+  runtime_state.command_id = "runtime-after-live-rebuild-failure";
+  const auto live_restored = send(*live_service, runtime_state);
+  assert(live_restored.audio_runtime.running);
+  assert(live_restored.audio_runtime.graph_version == 13);
+  assert(live_rebuild_calls == 2);
 
   auto observer_create =
       sar::service::EngineControlService::create(make_preset(), 15);
