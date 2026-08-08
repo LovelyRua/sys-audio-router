@@ -2,11 +2,12 @@
 
 #include "core/diagnostics/engine_diagnostics.h"
 #include "core/graph/graph.h"
-#include "core/realtime/clock_drift_estimator.h"
-#include "core/platform/windows_wasapi_realtime_worker.h"
+#include "core/platform/realtime_audio_source.h"
 #include "core/platform/windows_wasapi_duplex_supervisor.h"
+#include "core/platform/windows_wasapi_realtime_worker.h"
 #include "core/platform/windows_wasapi_runtime_summary.h"
 #include "core/platform/windows_wasapi_stream.h"
+#include "core/realtime/clock_drift_estimator.h"
 
 #include <cstddef>
 #include <atomic>
@@ -111,12 +112,14 @@ class WindowsWasapiDuplexLoop : public WasapiDuplexRuntime {
   friend struct WindowsWasapiDuplexLoopTestAccess;
   friend WasapiDuplexLoopOpenResult open_default_wasapi_duplex_loop(
       graph::Graph& graph,
-      diagnostics::EngineDiagnostics& diagnostics);
+      diagnostics::EngineDiagnostics& diagnostics,
+      RealtimeAudioSource* external_input);
   friend WasapiDuplexLoopOpenResult open_wasapi_duplex_loop(
       const std::string& capture_device_id,
       const std::string& render_device_id,
       graph::Graph& graph,
-      diagnostics::EngineDiagnostics& diagnostics);
+      diagnostics::EngineDiagnostics& diagnostics,
+      RealtimeAudioSource* external_input);
 
   using ProbeStreamFunction = WasapiStreamProbeResult (*)(
       const std::string* device_id,
@@ -134,12 +137,14 @@ class WindowsWasapiDuplexLoop : public WasapiDuplexRuntime {
       diagnostics::EngineDiagnostics& diagnostics,
       ProbeStreamFunction probe_stream,
       OpenStreamFunction open_stream,
-      void* context);
+      void* context,
+      RealtimeAudioSource* external_input);
 
   WindowsWasapiDuplexLoop(WindowsWasapiStream capture_stream,
                           WindowsWasapiStream render_stream,
                           graph::Graph& graph,
-                          diagnostics::EngineDiagnostics& diagnostics);
+                          diagnostics::EngineDiagnostics& diagnostics,
+                          RealtimeAudioSource* external_input);
   void establish_capture_clock_baseline(std::uint32_t timeout_ms) noexcept;
   void run_clock_observer() noexcept;
   void stop_clock_observer() noexcept;
@@ -181,12 +186,14 @@ class WasapiDuplexLoopOpenResult {
 
 [[nodiscard]] WasapiDuplexLoopOpenResult open_default_wasapi_duplex_loop(
     graph::Graph& graph,
-    diagnostics::EngineDiagnostics& diagnostics);
+    diagnostics::EngineDiagnostics& diagnostics,
+    RealtimeAudioSource* external_input = nullptr);
 
 [[nodiscard]] WasapiDuplexLoopOpenResult open_wasapi_duplex_loop(
     const std::string& capture_device_id,
     const std::string& render_device_id,
     graph::Graph& graph,
-    diagnostics::EngineDiagnostics& diagnostics);
+    diagnostics::EngineDiagnostics& diagnostics,
+    RealtimeAudioSource* external_input = nullptr);
 
 }  // namespace sar::platform

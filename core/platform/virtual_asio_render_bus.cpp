@@ -236,6 +236,12 @@ std::size_t VirtualAsioRenderBus::frames() const noexcept {
   return frames_;
 }
 
+bool VirtualAsioRenderBus::accepts_consumer_format(
+    std::size_t channels,
+    std::size_t frames) const noexcept {
+  return channels == channels_ && frames == frames_;
+}
+
 bool VirtualAsioRenderBus::push(
     std::size_t slot_index,
     std::uint64_t generation,

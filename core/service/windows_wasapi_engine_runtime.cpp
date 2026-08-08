@@ -108,7 +108,8 @@ WindowsWasapiEngineRuntimeOpenResult WindowsWasapiEngineRuntime::open_render(
 
 WindowsWasapiEngineRuntimeOpenResult
 WindowsWasapiEngineRuntime::open_default_duplex(
-    std::shared_ptr<graph::Graph> graph) {
+    std::shared_ptr<graph::Graph> graph,
+    platform::RealtimeAudioSource* external_input) {
   if (!graph) {
     return WindowsWasapiEngineRuntimeOpenResult::failure({
         {"null_runtime_graph", "WASAPI engine runtime requires a graph."},
@@ -116,7 +117,7 @@ WindowsWasapiEngineRuntime::open_default_duplex(
   }
 
   auto runtime = std::unique_ptr<WindowsWasapiEngineRuntime>(
-      new WindowsWasapiEngineRuntime(std::move(graph)));
+      new WindowsWasapiEngineRuntime(std::move(graph), external_input));
   runtime->duplex_configured_ = true;
   return WindowsWasapiEngineRuntimeOpenResult::success(std::move(runtime));
 }
@@ -124,7 +125,8 @@ WindowsWasapiEngineRuntime::open_default_duplex(
 WindowsWasapiEngineRuntimeOpenResult WindowsWasapiEngineRuntime::open_duplex(
     std::string capture_device_id,
     std::string render_device_id,
-    std::shared_ptr<graph::Graph> graph) {
+    std::shared_ptr<graph::Graph> graph,
+    platform::RealtimeAudioSource* external_input) {
   if (!graph) {
     return WindowsWasapiEngineRuntimeOpenResult::failure({
         {"null_runtime_graph", "WASAPI engine runtime requires a graph."},
@@ -138,7 +140,7 @@ WindowsWasapiEngineRuntimeOpenResult WindowsWasapiEngineRuntime::open_duplex(
   }
 
   auto runtime = std::unique_ptr<WindowsWasapiEngineRuntime>(
-      new WindowsWasapiEngineRuntime(std::move(graph)));
+      new WindowsWasapiEngineRuntime(std::move(graph), external_input));
   runtime->duplex_endpoint_policy_ = platform::WasapiEndpointSelectionPolicy(
       platform::WasapiEndpointSelection::pinned_device_id(
           std::move(capture_device_id)),
@@ -175,7 +177,8 @@ EngineAudioRuntimeResult WindowsWasapiEngineRuntime::start(
   std::lock_guard lock(duplex_supervisor_mutex_);
   duplex_supervisor_ =
       std::make_unique<platform::WindowsWasapiDuplexSupervisor>(
-          *graph_, realtime_diagnostics_, timeout_ms, duplex_endpoint_policy_);
+          *graph_, realtime_diagnostics_, timeout_ms, duplex_endpoint_policy_,
+          external_input_);
   duplex_supervisor_->start(monotonic_milliseconds());
   if (duplex_supervisor_->state() == platform::WasapiRecoveryState::Faulted) {
     auto errors = convert_errors(duplex_supervisor_->last_errors());

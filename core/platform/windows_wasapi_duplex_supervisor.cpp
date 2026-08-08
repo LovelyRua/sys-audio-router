@@ -31,9 +31,11 @@ std::vector<WasapiRealtimeWorkerError> convert_selection_errors(
 WasapiDuplexRuntimeFactory make_selected_duplex_factory(
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics,
-    WasapiEndpointSelectionPolicy endpoint_selection_policy) {
+    WasapiEndpointSelectionPolicy endpoint_selection_policy,
+    RealtimeAudioSource* external_input) {
   return [&graph,
           &diagnostics,
+          external_input,
           endpoint_selection_policy = std::move(endpoint_selection_policy)] {
     WindowsWasapiDeviceProvider provider;
     auto resolution =
@@ -47,7 +49,8 @@ WasapiDuplexRuntimeFactory make_selected_duplex_factory(
     auto result = open_wasapi_duplex_loop(selected.capture_device_id,
                                           selected.render_device_id,
                                           graph,
-                                          diagnostics);
+                                          diagnostics,
+                                          external_input);
     if (!result.ok()) {
       return WasapiDuplexRuntimeOpenResult::failure(result.errors());
     }
@@ -145,23 +148,27 @@ WindowsWasapiDuplexSupervisor::WindowsWasapiDuplexSupervisor(
 WindowsWasapiDuplexSupervisor::WindowsWasapiDuplexSupervisor(
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics,
-    std::uint32_t timeout_ms)
+    std::uint32_t timeout_ms,
+    RealtimeAudioSource* external_input)
     : WindowsWasapiDuplexSupervisor(graph,
                                     diagnostics,
                                     timeout_ms,
-                                    WasapiEndpointSelectionPolicy{}) {}
+                                    WasapiEndpointSelectionPolicy{},
+                                    external_input) {}
 
 WindowsWasapiDuplexSupervisor::WindowsWasapiDuplexSupervisor(
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics,
     std::uint32_t timeout_ms,
-    WasapiEndpointSelectionPolicy endpoint_selection_policy)
+    WasapiEndpointSelectionPolicy endpoint_selection_policy,
+    RealtimeAudioSource* external_input)
     // Both consumers must copy the intact policy. Moving it in this delegating
     // call makes the factory argument depend on unspecified argument order.
     : WindowsWasapiDuplexSupervisor(
           make_selected_duplex_factory(graph,
                                        diagnostics,
-                                       endpoint_selection_policy),
+                                       endpoint_selection_policy,
+                                       external_input),
           timeout_ms,
           endpoint_selection_policy) {}
 

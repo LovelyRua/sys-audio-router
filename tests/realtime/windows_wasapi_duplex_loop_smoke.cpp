@@ -38,7 +38,8 @@ struct WindowsWasapiDuplexLoopTestAccess {
                                          diagnostics,
                                          probe_stream,
                                          open_stream,
-                                         context);
+                                         context,
+                                         nullptr);
   }
 };
 

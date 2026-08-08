@@ -346,7 +346,7 @@ void merge_successful_command(
   if (command.type ==
       sar::control::ControlCommandType::ConfigureAudioRuntime) {
     desired_session.audio_runtime = command.audio_runtime;
-    desired_session.auto_start = false;
+    desired_session.auto_start = service.audio_runtime_running();
   } else if (command.type ==
              sar::control::ControlCommandType::StartAudioRuntime) {
     desired_session.auto_start = true;
@@ -405,11 +405,12 @@ sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator(
             sar::service::WindowsWasapiEngineRuntime::open_duplex(
                 configuration.capture_device_id,
                 configuration.render_device_id,
-                std::move(graph)));
+                std::move(graph),
+                external_render_input));
       }
       return convert_runtime_result(
           sar::service::WindowsWasapiEngineRuntime::open_default_duplex(
-              std::move(graph)));
+              std::move(graph), external_render_input));
     }
     return sar::service::EngineAudioRuntimeBuildResult::failure({
         {"unsupported_audio_runtime_mode",
@@ -530,6 +531,13 @@ int main(int argc, char** argv) {
     }
   }
 
+  if (desired_session.preset.matrix.inputs.size() != 2 ||
+      desired_session.preset.matrix.outputs.size() != 2) {
+    std::cerr << "virtual_asio_driver_topology_unsupported: The Alpha ASIO "
+                 "driver requires a 2-input, 2-output preset.\n";
+    return 1;
+  }
+
   const auto render_bus_channels = std::max(
       desired_session.preset.matrix.inputs.size(),
       desired_session.preset.matrix.outputs.size());
@@ -608,8 +616,24 @@ int main(int argc, char** argv) {
       .wait_timeout_ms = 20,
   }, &asio_render_bus);
   service->set_preset_commit_observer(
-      [&asio_host](const sar::control::PresetDocument& preset,
-                   std::uint64_t graph_version) {
+      [&asio_host, &asio_render_bus](
+          const sar::control::PresetDocument& preset,
+          std::uint64_t graph_version) {
+        if (preset.matrix.inputs.size() != 2 ||
+            preset.matrix.outputs.size() != 2) {
+          return std::vector<sar::control::PresetError>{{
+              "virtual_asio_driver_topology_unsupported",
+              "The Alpha Virtual ASIO driver supports exactly two inputs and "
+              "two outputs.",
+          }};
+        }
+        if (!asio_render_bus.accepts_consumer_format(
+                2, preset.frames_per_block)) {
+          return std::vector<sar::control::PresetError>{{
+              "virtual_asio_render_bus_format_requires_restart",
+              "Changing frames per block requires restarting the engine service.",
+          }};
+        }
         const auto refreshed = asio_host.refresh_graphs(
             [&preset, graph_version](
                 const sar::platform::VirtualAsioFormat& format) {
@@ -685,12 +709,8 @@ int main(int argc, char** argv) {
                   sar::control::ControlResponseStatus::Accepted) {
             merge_successful_command(
                 command.command, *service, desired_session);
-            if (!save_session_file_atomic(session_path, desired_session)) {
-              return sar::service::NamedPipeControlResult::failure(
-                  {"session_persist_failed",
-                   "The engine applied the command but could not persist the session.",
-                   ERROR_WRITE_FAULT});
-            }
+            static_cast<void>(
+                save_session_file_atomic(session_path, desired_session));
           }
         }
         return sar::service::NamedPipeControlResult::success(

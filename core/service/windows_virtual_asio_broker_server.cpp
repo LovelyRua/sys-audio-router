@@ -12,6 +12,7 @@ namespace {
 constexpr std::uint16_t kConnectRequestType = 1;
 constexpr std::uint16_t kDisconnectRequestType = 2;
 constexpr std::uint16_t kFormatRequestType = 5;
+constexpr std::size_t kMaximumGraphBuildAttempts = 3;
 
 std::uint16_t message_type(std::span<const std::byte> bytes) noexcept {
   if (bytes.size() < 8) {
@@ -193,22 +194,6 @@ NamedPipeControlResult WindowsVirtualAsioBrokerServer::handle_connect(
                           "Requested queue capacity does not match the host.")));
   }
 
-  std::unique_ptr<graph::Graph> graph;
-  try {
-    graph = graph_factory_(decoded.value.format);
-  } catch (...) {
-    return encoded(control::encode_virtual_asio_broker_connect_response(
-        connect_rejection(decoded.value.request_id,
-                          "virtual_asio_graph_build_failed",
-                          "Could not build a graph for the requested format.")));
-  }
-  if (graph == nullptr) {
-    return encoded(control::encode_virtual_asio_broker_connect_response(
-        connect_rejection(decoded.value.request_id,
-                          "virtual_asio_graph_build_failed",
-                          "Could not build a graph for the requested format.")));
-  }
-
   WindowsVirtualAsioHostConnectRequest host_request{
       .client = {.client_id = decoded.value.client_id,
                  .process_id = peer.process_id,
@@ -216,23 +201,53 @@ NamedPipeControlResult WindowsVirtualAsioBrokerServer::handle_connect(
       .client_nonce_low = decoded.value.client_nonce_low,
       .client_nonce_high = decoded.value.client_nonce_high,
   };
-  auto connected = host_.connect(std::move(host_request), std::move(graph));
-  if (!connected.ok()) {
-    const auto& error = connected.errors().front();
-    return encoded(control::encode_virtual_asio_broker_connect_response(
-        connect_rejection(decoded.value.request_id, error.code,
-                          error.message)));
-  }
+  for (std::size_t attempt = 0; attempt < kMaximumGraphBuildAttempts;
+       ++attempt) {
+    const auto graph_generation = host_.graph_generation();
+    std::unique_ptr<graph::Graph> graph;
+    try {
+      graph = graph_factory_(decoded.value.format);
+    } catch (...) {
+      return encoded(control::encode_virtual_asio_broker_connect_response(
+          connect_rejection(
+              decoded.value.request_id, "virtual_asio_graph_build_failed",
+              "Could not build a graph for the requested format.")));
+    }
+    if (graph == nullptr) {
+      return encoded(control::encode_virtual_asio_broker_connect_response(
+          connect_rejection(
+              decoded.value.request_id, "virtual_asio_graph_build_failed",
+              "Could not build a graph for the requested format.")));
+    }
 
-  const auto& connection = connected.connection();
-  return encoded(control::encode_virtual_asio_broker_connect_response({
-      .request_id = decoded.value.request_id,
-      .accepted = true,
-      .connection_generation = connection.client.connection_generation,
-      .names = connection.names,
-      .server_nonce_low = connection.server_nonce_low,
-      .server_nonce_high = connection.server_nonce_high,
-  }));
+    auto connected =
+        host_.connect(host_request, std::move(graph), graph_generation);
+    if (!connected.ok()) {
+      const auto& error = connected.errors().front();
+      if (error.code == "virtual_asio_graph_generation_stale" &&
+          attempt + 1 < kMaximumGraphBuildAttempts) {
+        continue;
+      }
+      return encoded(control::encode_virtual_asio_broker_connect_response(
+          connect_rejection(decoded.value.request_id, error.code,
+                            error.message)));
+    }
+
+    const auto& connection = connected.connection();
+    return encoded(control::encode_virtual_asio_broker_connect_response({
+        .request_id = decoded.value.request_id,
+        .accepted = true,
+        .connection_generation = connection.client.connection_generation,
+        .names = connection.names,
+        .server_nonce_low = connection.server_nonce_low,
+        .server_nonce_high = connection.server_nonce_high,
+    }));
+  }
+  return encoded(control::encode_virtual_asio_broker_connect_response(
+      connect_rejection(decoded.value.request_id,
+                        "virtual_asio_graph_generation_stale",
+                        "The routing graph kept changing; retry the Virtual "
+                        "ASIO connection.")));
 }
 
 NamedPipeControlResult WindowsVirtualAsioBrokerServer::handle_disconnect(

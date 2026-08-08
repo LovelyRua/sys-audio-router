@@ -78,7 +78,8 @@ class WindowsVirtualAsioTransportHost {
 
   [[nodiscard]] WindowsVirtualAsioHostConnectResult connect(
       WindowsVirtualAsioHostConnectRequest request,
-      std::unique_ptr<graph::Graph> graph);
+      std::unique_ptr<graph::Graph> graph,
+      std::uint64_t graph_generation);
   [[nodiscard]] platform::VirtualAsioClientDisconnectResult disconnect(
       const std::string& client_id,
       std::uint64_t connection_generation);
@@ -89,6 +90,7 @@ class WindowsVirtualAsioTransportHost {
 
   [[nodiscard]] std::vector<WindowsVirtualAsioHostConnection> connections() const;
   [[nodiscard]] std::size_t active_session_count() const noexcept;
+  [[nodiscard]] std::uint64_t graph_generation() const noexcept;
   [[nodiscard]] const WindowsVirtualAsioHostConfig& config() const noexcept;
 
  private:
@@ -104,6 +106,7 @@ class WindowsVirtualAsioTransportHost {
   platform::VirtualAsioRenderBus* render_bus_ = nullptr;
   mutable std::mutex mutex_;
   std::vector<SessionRecord> sessions_;
+  std::uint64_t graph_generation_ = 1;
 };
 
 }  // namespace sar::service

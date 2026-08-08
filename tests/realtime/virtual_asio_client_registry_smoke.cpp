@@ -76,9 +76,11 @@ int main() {
   expect_error(registry.connect(request("cubase-mismatch", 102, 44100)),
                "asio_session_format_mismatch");
 
-  auto cubase = registry.connect(request("cubase", 102));
+  auto cubase = registry.connect(request("cubase", 102, 48000, 256));
   assert(cubase.ok());
   assert(cubase.client().connection_generation == 2);
+  assert(cubase.client().format.frames_per_block == 256);
+  assert(registry.active_format()->frames_per_block == 128);
   assert(registry.clients().size() == 2);
   expect_error(registry.connect(request("live", 103)),
                "asio_client_capacity_reached");

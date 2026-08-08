@@ -265,7 +265,13 @@ WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(
           prime_render_silence ||
           (capture_stream == nullptr && render_stream != nullptr &&
            external_input != nullptr)),
-      external_input_(external_input) {
+      external_input_(external_input),
+      external_input_buffer_(external_input != nullptr
+                                 ? std::optional<realtime::AudioBuffer>(
+                                       std::in_place,
+                                       input_channels,
+                                       graph_block_frames)
+                                 : std::nullopt) {
   if (fifo_capacity_frames < graph_block_frames ||
       (capture_stream != nullptr && capture_packet_capacity_frames == 0) ||
       (render_stream != nullptr && render_packet_capacity_frames == 0)) {
@@ -419,6 +425,38 @@ void WindowsWasapiGraphRunner::set_capture_clock_feed_forward_ppm(
 
 double WindowsWasapiGraphRunner::capture_clock_feed_forward_ppm() const noexcept {
   return capture_clock_feed_forward_ppm_.load(std::memory_order_relaxed);
+}
+
+void WindowsWasapiGraphRunner::mix_external_input(
+    WasapiGraphRunnerStats& stats) noexcept {
+  if (external_input_ == nullptr || !external_input_buffer_) {
+    return;
+  }
+
+  external_input_buffer_->clear();
+  if (!external_input_->read(*external_input_buffer_)) {
+    return;
+  }
+
+  stats.external_input_mixed = true;
+  for (std::size_t channel = 0; channel < input_.channels(); ++channel) {
+    auto destination = input_.channel(channel);
+    const auto external = external_input_buffer_->channel(channel);
+    for (std::size_t frame = 0; frame < input_.frames(); ++frame) {
+      const auto capture_sample = std::isfinite(destination[frame])
+                                      ? destination[frame]
+                                      : 0.0F;
+      const auto external_sample = std::isfinite(external[frame])
+                                       ? external[frame]
+                                       : 0.0F;
+      stats.external_input_non_finite_samples +=
+          !std::isfinite(destination[frame]) + !std::isfinite(external[frame]);
+      const auto mixed = capture_sample + external_sample;
+      const auto clipped = std::clamp(mixed, -1.0F, 1.0F);
+      stats.external_input_clipped_samples += clipped != mixed;
+      destination[frame] = clipped;
+    }
+  }
 }
 
 WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
@@ -839,6 +877,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
         }
         static_cast<void>(capture_path_->fifo.pop(input_, graph_block_frames_));
       }
+      mix_external_input(stats);
     } else if (external_input_ != nullptr && !external_input_->read(input_)) {
       break;
     }

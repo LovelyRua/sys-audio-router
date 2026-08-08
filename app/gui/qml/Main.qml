@@ -37,6 +37,41 @@ ApplicationWindow {
     property string runtimeDraftMode: "render"
     property string runtimeDraftRenderDeviceId: ""
     property string runtimeDraftCaptureDeviceId: ""
+    property string pendingRouteInputId: ""
+    property string pendingRouteOutputId: ""
+    property bool pendingRouteEnabled: false
+
+    function clearRouteSelection() {
+        selectedInputId = ""
+        selectedInputLabel = "No input selected"
+        selectedOutputId = ""
+        selectedOutputLabel = "No output selected"
+    }
+
+    function validateRouteSelection() {
+        var inputLabel = ""
+        var outputLabel = ""
+        for (var inputIndex = 0; inputIndex < engine.inputs.length; ++inputIndex) {
+            if (engine.inputs[inputIndex].id === selectedInputId)
+                inputLabel = engine.inputs[inputIndex].label
+        }
+        for (var outputIndex = 0; outputIndex < engine.outputs.length; ++outputIndex) {
+            if (engine.outputs[outputIndex].id === selectedOutputId)
+                outputLabel = engine.outputs[outputIndex].label
+        }
+        if (inputLabel.length === 0 || outputLabel.length === 0) {
+            clearRouteSelection()
+            return
+        }
+        selectedInputLabel = inputLabel
+        selectedOutputLabel = outputLabel
+    }
+
+    function routeDisplayEnabled(inputId, outputId) {
+        if (pendingRouteInputId === inputId && pendingRouteOutputId === outputId)
+            return pendingRouteEnabled
+        return engine.routeEnabled(inputId, outputId)
+    }
 
     function syncRuntimeDraft() {
         var engineMode = engine.runtimeMode === "duplex" ? "duplex" : "render"
@@ -63,6 +98,17 @@ ApplicationWindow {
     Connections {
         target: engine
         function onRuntimeChanged() { window.syncRuntimeDraft() }
+        function onSessionChanged() {
+            window.pendingRouteInputId = ""
+            window.pendingRouteOutputId = ""
+            window.validateRouteSelection()
+        }
+        function onBusyChanged() {
+            if (!engine.busy) {
+                window.pendingRouteInputId = ""
+                window.pendingRouteOutputId = ""
+            }
+        }
     }
 
     Component.onCompleted: syncRuntimeDraft()
@@ -109,13 +155,14 @@ ApplicationWindow {
 
     component ConsoleCombo: ComboBox {
         id: control
+        property string emptyText: "No options"
         implicitHeight: 34
         leftPadding: 10
         rightPadding: 28
         font.pixelSize: 12
         contentItem: Text {
             text: control.displayText.length > 0 ? control.displayText
-                                                 : "No saved presets"
+                                                 : control.emptyText
             color: control.displayText.length > 0 ? colors.text : colors.muted
             font: control.font
             verticalAlignment: Text.AlignVCenter
@@ -354,6 +401,7 @@ ApplicationWindow {
                     id: presetBrowser
                     Layout.fillWidth: true
                     model: engine.presetNames
+                    emptyText: "No saved presets"
                     currentIndex: engine.activePresetName.length > 0
                                   ? engine.presetNames.indexOf(engine.activePresetName)
                                   : -1
@@ -555,7 +603,7 @@ ApplicationWindow {
                                                     property string outputId: outputRow.modelData.id
                                                     property bool active: {
                                                         revision;
-                                                        return engine.routeEnabled(inputId, outputId)
+                                                        return window.routeDisplayEnabled(inputId, outputId)
                                                     }
                                                     width: matrixColumn.cellSize
                                                     height: matrixColumn.cellSize
@@ -584,7 +632,11 @@ ApplicationWindow {
                                                         selectedInputLabel = modelData.label
                                                         selectedOutputId = outputId
                                                         selectedOutputLabel = outputRow.modelData.label
-                                                        engine.setRoute(inputId, outputId, !active)
+                                                        window.pendingRouteInputId = inputId
+                                                        window.pendingRouteOutputId = outputId
+                                                        window.pendingRouteEnabled = !active
+                                                        engine.setRoute(inputId, outputId,
+                                                                        window.pendingRouteEnabled)
                                                     }
                                                 }
                                             }
@@ -639,9 +691,15 @@ ApplicationWindow {
                             checked: {
                                 engine.routeRevision;
                                 return selectedInputId.length > 0 &&
-                                       engine.routeEnabled(selectedInputId, selectedOutputId)
+                                       window.routeDisplayEnabled(selectedInputId,
+                                                                  selectedOutputId)
                             }
-                            onClicked: engine.setRoute(selectedInputId, selectedOutputId, checked)
+                            onClicked: {
+                                window.pendingRouteInputId = selectedInputId
+                                window.pendingRouteOutputId = selectedOutputId
+                                window.pendingRouteEnabled = checked
+                                engine.setRoute(selectedInputId, selectedOutputId, checked)
+                            }
                             contentItem: Text {
                                 text: routeSwitch.text
                                 color: routeSwitch.enabled ? colors.text : colors.muted
@@ -778,8 +836,10 @@ ApplicationWindow {
                                     id: renderDeviceCombo
                                     Layout.fillWidth: true
                                     textRole: "label"
+                                    emptyText: "No render devices"
                                     model: engine.devices.filter(function (device) {
-                                        return device.direction === 1 || device.direction === 2
+                                        return device.isWasapi &&
+                                               (device.direction === 1 || device.direction === 2)
                                     })
                                     currentIndex: window.indexForDevice(
                                                       renderDeviceCombo.model,
@@ -802,8 +862,10 @@ ApplicationWindow {
                                     id: captureDeviceCombo
                                     Layout.fillWidth: true
                                     textRole: "label"
+                                    emptyText: "No capture devices"
                                     model: engine.devices.filter(function (device) {
-                                        return device.direction === 0 || device.direction === 2
+                                        return device.isWasapi &&
+                                               (device.direction === 0 || device.direction === 2)
                                     })
                                     currentIndex: window.indexForDevice(
                                                       captureDeviceCombo.model,

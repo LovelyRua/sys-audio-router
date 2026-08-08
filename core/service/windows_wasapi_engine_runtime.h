@@ -37,11 +37,13 @@ class WindowsWasapiEngineRuntime final : public EngineAudioRuntime {
       std::shared_ptr<graph::Graph> graph,
       platform::RealtimeAudioSource* external_input = nullptr);
   [[nodiscard]] static WindowsWasapiEngineRuntimeOpenResult open_default_duplex(
-      std::shared_ptr<graph::Graph> graph);
+      std::shared_ptr<graph::Graph> graph,
+      platform::RealtimeAudioSource* external_input = nullptr);
   [[nodiscard]] static WindowsWasapiEngineRuntimeOpenResult open_duplex(
       std::string capture_device_id,
       std::string render_device_id,
-      std::shared_ptr<graph::Graph> graph);
+      std::shared_ptr<graph::Graph> graph,
+      platform::RealtimeAudioSource* external_input = nullptr);
 
   [[nodiscard]] EngineAudioRuntimeResult start(
       std::uint32_t timeout_ms) override;

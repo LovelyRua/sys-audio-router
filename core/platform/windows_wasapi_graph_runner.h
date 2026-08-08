@@ -29,6 +29,8 @@ struct WasapiGraphRunnerStats {
   std::uint32_t render_startup_silence_frames = 0;
   std::uint32_t render_capture_starvation_silence_frames = 0;
   std::uint32_t render_recovery_silence_frames = 0;
+  std::uint32_t external_input_clipped_samples = 0;
+  std::uint32_t external_input_non_finite_samples = 0;
   double capture_rate_correction_ppm = 0.0;
   double capture_clock_feed_forward_ppm = 0.0;
   double capture_fifo_correction_ppm = 0.0;
@@ -51,6 +53,7 @@ struct WasapiGraphRunnerStats {
   bool capture_silent = false;
   bool capture_data_discontinuity = false;
   bool capture_timestamp_error = false;
+  bool external_input_mixed = false;
 };
 
 class WasapiGraphRunnerResult {
@@ -150,6 +153,7 @@ class WindowsWasapiGraphRunner {
       graph::Graph& graph,
       diagnostics::EngineDiagnostics& diagnostics,
       std::uint32_t timeout_ms) noexcept;
+  void mix_external_input(WasapiGraphRunnerStats& stats) noexcept;
 
   WasapiStreamIo* capture_stream_ = nullptr;
   WasapiStreamIo* render_stream_ = nullptr;
@@ -163,6 +167,7 @@ class WindowsWasapiGraphRunner {
   std::optional<BufferedPath> render_path_;
   std::optional<CaptureRateAdapter> capture_rate_adapter_;
   RealtimeAudioSource* external_input_ = nullptr;
+  std::optional<realtime::AudioBuffer> external_input_buffer_;
   std::atomic<double> capture_clock_feed_forward_ppm_ = 0.0;
 };
 

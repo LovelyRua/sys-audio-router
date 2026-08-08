@@ -23,6 +23,7 @@ struct EngineReply {
   control::ControlResponse response;
   QString error;
   bool transport_ok = false;
+  bool delivery_uncertain = false;
 };
 
 class EngineController final : public QObject {
@@ -120,18 +121,10 @@ class EngineController final : public QObject {
     Load,
   };
 
-  enum class RuntimeApplyStage {
-    None,
-    StopForReconfigure,
-    ConfigureForReconfigure,
-    RestartAfterReconfigure,
-  };
-
   struct QueuedCommand {
     control::ControlCommand command;
     PendingPresetAction preset_action = PendingPresetAction::None;
     QString preset_name;
-    RuntimeApplyStage runtime_stage = RuntimeApplyStage::None;
     bool poll = false;
   };
 
@@ -156,8 +149,6 @@ class EngineController final : public QObject {
   PresetStore preset_store_;
   std::deque<QueuedCommand> queued_commands_;
   std::optional<QueuedCommand> active_command_;
-  std::optional<control::AudioRuntimeConfiguration>
-      pending_runtime_reconfigure_;
   std::uint64_t command_sequence_ = 0;
   std::uint32_t poll_sequence_ = 0;
   bool connected_ = false;

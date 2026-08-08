@@ -56,6 +56,9 @@ int main() {
   sar::platform::VirtualAsioRenderBus bus(2, 16, 2, 2);
   assert(bus.channels() == 2);
   assert(bus.frames() == 16);
+  assert(bus.accepts_consumer_format(2, 16));
+  assert(!bus.accepts_consumer_format(1, 16));
+  assert(!bus.accepts_consumer_format(2, 32));
 
   auto first = bus.attach();
   auto second = bus.attach();

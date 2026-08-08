@@ -71,12 +71,6 @@ void EngineControlService::add_audio_device_provider(
 
 EngineAudioRuntimeResult EngineControlService::configure_audio_runtime_locked(
     control::AudioRuntimeConfiguration configuration) {
-  if (audio_runtime_ && audio_runtime_->running()) {
-    return EngineAudioRuntimeResult::failure({
-        {"audio_runtime_running",
-         "Stop the active audio runtime before changing its configuration."},
-    });
-  }
   if (!audio_runtime_configurator_) {
     return EngineAudioRuntimeResult::failure({
         {"audio_runtime_configurator_not_installed",
@@ -84,24 +78,73 @@ EngineAudioRuntimeResult EngineControlService::configure_audio_runtime_locked(
     });
   }
 
+  const bool restart_after_configure =
+      audio_runtime_ && audio_runtime_->running();
+  std::unique_ptr<EngineAudioRuntime> previous_runtime;
+  if (restart_after_configure) {
+    audio_runtime_->stop();
+    previous_runtime = std::move(audio_runtime_);
+  }
+
+  const auto restore_previous_runtime =
+      [&](std::vector<EngineAudioRuntimeError> errors) {
+        if (!restart_after_configure) {
+          return EngineAudioRuntimeResult::failure(std::move(errors));
+        }
+        audio_runtime_ = std::move(previous_runtime);
+        try {
+          const auto restored = audio_runtime_->start(10);
+          for (const auto& error : restored.errors()) {
+            errors.push_back({
+                "audio_runtime_restore_failed_" + error.code,
+                "The audio configuration was rejected and the previous "
+                "runtime could not be restored: " + error.message,
+                error.native_hresult,
+                error.native_win32_code,
+            });
+          }
+        } catch (const std::exception& error) {
+          errors.push_back({
+              "audio_runtime_restore_exception",
+              std::string("The previous audio runtime threw while being "
+                          "restored: ") + error.what(),
+          });
+        } catch (...) {
+          errors.push_back({
+              "audio_runtime_restore_exception",
+              "The previous audio runtime threw an unknown exception while "
+              "being restored.",
+          });
+        }
+        return EngineAudioRuntimeResult::failure(std::move(errors));
+      };
+
   try {
     auto rebuilt =
         audio_runtime_configurator_(configuration, session_->current_graph());
     if (!rebuilt.ok()) {
       if (rebuilt.errors().empty()) {
-        return EngineAudioRuntimeResult::failure({
+        return restore_previous_runtime({
             {"audio_runtime_configurator_returned_null",
              "Audio runtime configurator returned no runtime."},
         });
       }
-      return EngineAudioRuntimeResult::failure(rebuilt.errors());
+      return restore_previous_runtime(rebuilt.errors());
     }
     auto runtime = rebuilt.take_runtime();
     if (!runtime) {
-      return EngineAudioRuntimeResult::failure({
+      return restore_previous_runtime({
           {"audio_runtime_configurator_returned_null",
            "Audio runtime configurator returned no runtime."},
       });
+    }
+
+    if (restart_after_configure) {
+      const auto started = runtime->start(10);
+      if (!started.ok()) {
+        runtime->stop();
+        return restore_previous_runtime(started.errors());
+      }
     }
 
     const auto configurator = audio_runtime_configurator_;
@@ -112,11 +155,11 @@ EngineAudioRuntimeResult EngineControlService::configure_audio_runtime_locked(
     audio_runtime_ = std::move(runtime);
     audio_runtime_configuration_ = std::move(configuration);
   } catch (const std::exception& error) {
-    return EngineAudioRuntimeResult::failure({
+    return restore_previous_runtime({
         {"audio_runtime_configurator_exception", error.what()},
     });
   } catch (...) {
-    return EngineAudioRuntimeResult::failure({
+    return restore_previous_runtime({
         {"audio_runtime_configurator_exception",
          "Audio runtime configurator raised an unknown exception."},
     });

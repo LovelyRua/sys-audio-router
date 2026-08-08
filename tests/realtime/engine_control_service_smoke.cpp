@@ -20,12 +20,18 @@ sar::control::PresetDocument make_preset() {
 
 class FakeAudioRuntime final : public sar::service::EngineAudioRuntime {
  public:
-  explicit FakeAudioRuntime(std::uint64_t graph_version = 10)
-      : graph_version_(graph_version) {}
+  explicit FakeAudioRuntime(std::uint64_t graph_version = 10,
+                            bool fail_start = false)
+      : graph_version_(graph_version), fail_start_(fail_start) {}
 
   sar::service::EngineAudioRuntimeResult start(std::uint32_t) override {
-    running_ = true;
     ++start_calls;
+    if (fail_start_) {
+      return sar::service::EngineAudioRuntimeResult::failure({
+          {"injected_start_failure", "Injected runtime start failure."},
+      });
+    }
+    running_ = true;
     return sar::service::EngineAudioRuntimeResult::success();
   }
 
@@ -48,6 +54,7 @@ class FakeAudioRuntime final : public sar::service::EngineAudioRuntime {
 
   bool running_ = false;
   std::uint64_t graph_version_ = 10;
+  bool fail_start_ = false;
   std::uint32_t start_calls = 0;
   std::uint32_t stop_calls = 0;
 };
@@ -393,14 +400,26 @@ int main() {
          "audio_runtime_configurator_not_installed");
 
   std::uint32_t configure_calls = 0;
+  bool fail_configure = false;
+  bool fail_configured_start = false;
+  FakeAudioRuntime* configured_runtime_observer = nullptr;
   sar::control::AudioRuntimeConfiguration observed_configuration;
   configure_service->set_audio_runtime_configurator(
       [&](const sar::control::AudioRuntimeConfiguration& configuration,
           std::shared_ptr<sar::graph::Graph> graph) {
         ++configure_calls;
         observed_configuration = configuration;
+        if (fail_configure) {
+          return sar::service::EngineAudioRuntimeBuildResult::failure({
+              {"injected_configure_failure",
+               "Injected audio configuration failure."},
+          });
+        }
+        auto runtime = std::make_unique<FakeAudioRuntime>(
+            graph->version(), fail_configured_start);
+        configured_runtime_observer = runtime.get();
         return sar::service::EngineAudioRuntimeBuildResult::success(
-            std::make_unique<FakeAudioRuntime>(graph->version()));
+            std::move(runtime));
       });
   const auto configured = send(*configure_service, configure);
   assert(configured.status == sar::control::ControlResponseStatus::Accepted);
@@ -444,13 +463,34 @@ int main() {
   const auto configured_start = send(*configure_service, runtime_start);
   assert(configured_start.status ==
          sar::control::ControlResponseStatus::Accepted);
-  configure.command_id = "configure-while-running";
-  const auto configure_running = send(*configure_service, configure);
-  assert(configure_running.status ==
+  assert(configured_runtime_observer != nullptr);
+  auto* previous_runtime_observer = configured_runtime_observer;
+  fail_configure = true;
+  configure.command_id = "configure-while-running-fails";
+  const auto configure_failed = send(*configure_service, configure);
+  assert(configure_failed.status ==
          sar::control::ControlResponseStatus::Rejected);
-  assert(configure_running.errors[0].code == "audio_runtime_running");
+  assert(configure_failed.errors[0].code == "injected_configure_failure");
+  assert(previous_runtime_observer->running());
+  assert(previous_runtime_observer->start_calls == 3);
+  assert(previous_runtime_observer->stop_calls == 2);
+  const auto restored_configuration = configure_service->session_document();
+  assert(restored_configuration.audio_runtime.mode ==
+         sar::control::AudioRuntimeMode::WasapiDuplex);
+  assert(restored_configuration.auto_start);
 
-  configure_service->stop_audio_runtime();
+  fail_configure = false;
+  fail_configured_start = true;
+  configure.command_id = "configure-while-running-start-fails";
+  const auto configure_start_failed = send(*configure_service, configure);
+  assert(configure_start_failed.status ==
+         sar::control::ControlResponseStatus::Rejected);
+  assert(configure_start_failed.errors[0].code == "injected_start_failure");
+  assert(previous_runtime_observer->running());
+  assert(previous_runtime_observer->start_calls == 4);
+  assert(previous_runtime_observer->stop_calls == 3);
+
+  fail_configured_start = false;
   configure.command_id = "configure-render-default";
   configure.audio_runtime = {};
   configure.audio_runtime.mode =
@@ -458,7 +498,8 @@ int main() {
   const auto render_configured = send(*configure_service, configure);
   assert(render_configured.status ==
          sar::control::ControlResponseStatus::Accepted);
-  assert(configure_calls == 2);
+  assert(configure_calls == 4);
+  assert(render_configured.audio_runtime.running);
   assert(render_configured.audio_runtime.configuration.mode ==
          sar::control::AudioRuntimeMode::WasapiRender);
   assert(render_configured.audio_runtime.configuration.render_device_id.empty());

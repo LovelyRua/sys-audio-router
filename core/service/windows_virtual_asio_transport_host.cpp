@@ -37,6 +37,40 @@ std::string random_token(std::uint64_t low, std::uint64_t high) {
   return text.data();
 }
 
+std::uint64_t next_generation(std::uint64_t current) noexcept {
+  ++current;
+  return current == 0 ? 1 : current;
+}
+
+class RegistryAdmissionGuard {
+ public:
+  RegistryAdmissionGuard(
+      platform::VirtualAsioClientRegistry& registry,
+      const platform::VirtualAsioClientDescriptor& client) noexcept
+      : registry_(registry), client_(client) {}
+
+  RegistryAdmissionGuard(const RegistryAdmissionGuard&) = delete;
+  RegistryAdmissionGuard& operator=(const RegistryAdmissionGuard&) = delete;
+
+  ~RegistryAdmissionGuard() {
+    if (!active_) {
+      return;
+    }
+    try {
+      static_cast<void>(registry_.disconnect(
+          client_.client_id, client_.connection_generation));
+    } catch (...) {
+    }
+  }
+
+  void release() noexcept { active_ = false; }
+
+ private:
+  platform::VirtualAsioClientRegistry& registry_;
+  const platform::VirtualAsioClientDescriptor& client_;
+  bool active_ = true;
+};
+
 }  // namespace
 
 WindowsVirtualAsioHostConnectResult WindowsVirtualAsioHostConnectResult::success(
@@ -86,8 +120,15 @@ WindowsVirtualAsioTransportHost::~WindowsVirtualAsioTransportHost() {
 
 WindowsVirtualAsioHostConnectResult WindowsVirtualAsioTransportHost::connect(
     WindowsVirtualAsioHostConnectRequest request,
-    std::unique_ptr<graph::Graph> graph) {
+    std::unique_ptr<graph::Graph> graph,
+    std::uint64_t graph_generation) {
   std::lock_guard lock(mutex_);
+  if (graph_generation != graph_generation_) {
+    return failure(
+        "virtual_asio_graph_generation_stale",
+        "The Virtual ASIO routing graph changed while the client connected; "
+        "retry the connection.");
+  }
   static_cast<void>(reap_stopped_sessions_locked());
 
   auto admitted = registry_.connect(request.client);
@@ -99,22 +140,17 @@ WindowsVirtualAsioHostConnectResult WindowsVirtualAsioTransportHost::connect(
     return WindowsVirtualAsioHostConnectResult::failure(std::move(errors));
   }
   const auto client = admitted.client();
-  const auto rollback = [&] {
-    static_cast<void>(registry_.disconnect(
-        client.client_id, client.connection_generation));
-  };
+  RegistryAdmissionGuard admission_guard(registry_, client);
 
   platform::VirtualAsioRenderProducer render_producer;
   if (render_bus_ != nullptr) {
     if (client.format.output_channels != render_bus_->channels()) {
-      rollback();
       return failure("virtual_asio_render_bus_format_mismatch",
                      "Virtual ASIO client output channels do not match the "
                      "render bus.");
     }
     render_producer = render_bus_->attach();
     if (!render_producer.valid()) {
-      rollback();
       return failure("virtual_asio_render_bus_full",
                      "Virtual ASIO render bus has no free client slots.");
     }
@@ -126,7 +162,6 @@ WindowsVirtualAsioHostConnectResult WindowsVirtualAsioTransportHost::connect(
   std::uint64_t server_nonce_high = 0;
   if (!random_u64(token_low) || !random_u64(token_high) ||
       !random_u64(server_nonce_low) || !random_u64(server_nonce_high)) {
-    rollback();
     return failure("virtual_asio_random_failed",
                    "Could not generate Virtual ASIO session identity.");
   }
@@ -135,7 +170,6 @@ WindowsVirtualAsioHostConnectResult WindowsVirtualAsioTransportHost::connect(
       config_.endpoint_token, random_token(token_low, token_high),
       client.connection_generation);
   if (!names_result.ok()) {
-    rollback();
     std::vector<WindowsVirtualAsioTransportError> errors;
     for (const auto& error : names_result.errors()) {
       errors.push_back({error.code, error.message, 0});
@@ -160,13 +194,11 @@ WindowsVirtualAsioHostConnectResult WindowsVirtualAsioTransportHost::connect(
       names_result.names(), memory_config, identity, std::move(graph),
       config_.wait_timeout_ms, std::move(render_producer));
   if (!session_result.ok()) {
-    rollback();
     return WindowsVirtualAsioHostConnectResult::failure(
         session_result.errors());
   }
   auto session = session_result.take_session();
   if (!session->start()) {
-    rollback();
     return failure("virtual_asio_session_start_failed",
                    "Could not start the Virtual ASIO transport session.");
   }
@@ -180,13 +212,13 @@ WindowsVirtualAsioHostConnectResult WindowsVirtualAsioTransportHost::connect(
   try {
     auto response_connection = connection;
     sessions_.push_back({std::move(connection), std::move(session)});
+    admission_guard.release();
     return WindowsVirtualAsioHostConnectResult::success(
         std::move(response_connection));
   } catch (const std::bad_alloc&) {
     if (session != nullptr) {
       session->stop();
     }
-    rollback();
     return failure("virtual_asio_host_allocation_failed",
                    "Could not retain the Virtual ASIO host session.");
   }
@@ -277,6 +309,7 @@ WindowsVirtualAsioTransportHost::refresh_graphs(
       };
     }
   }
+  graph_generation_ = next_generation(graph_generation_);
   return {.updated_sessions = sessions_.size()};
 }
 
@@ -306,6 +339,12 @@ std::size_t WindowsVirtualAsioTransportHost::active_session_count()
     const noexcept {
   std::lock_guard lock(mutex_);
   return sessions_.size();
+}
+
+std::uint64_t WindowsVirtualAsioTransportHost::graph_generation() const
+    noexcept {
+  std::lock_guard lock(mutex_);
+  return graph_generation_;
 }
 
 const WindowsVirtualAsioHostConfig& WindowsVirtualAsioTransportHost::config()

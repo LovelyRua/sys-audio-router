@@ -6,6 +6,7 @@
 #include "tests/realtime/test_helpers.h"
 
 #include <cassert>
+#include <limits>
 #include <iostream>
 
 namespace {
@@ -27,9 +28,83 @@ sar::platform::WasapiStreamProbe render_probe() {
   return probe;
 }
 
+sar::platform::WasapiStreamProbe capture_probe() {
+  auto probe = render_probe();
+  probe.device_id = "capture";
+  probe.device_label = "Capture";
+  probe.direction = sar::platform::WasapiStreamDirection::Capture;
+  probe.buffer_frames = 4;
+  return probe;
+}
+
+class SingleBlockSource final : public sar::platform::RealtimeAudioSource {
+ public:
+  explicit SingleBlockSource(sar::realtime::AudioBuffer block)
+      : block_(std::move(block)) {}
+
+  [[nodiscard]] bool read(
+      sar::realtime::AudioBuffer& destination) noexcept override {
+    if (consumed_) {
+      destination.clear();
+      return false;
+    }
+    destination.copy_from(block_);
+    consumed_ = true;
+    return true;
+  }
+
+ private:
+  sar::realtime::AudioBuffer block_;
+  bool consumed_ = false;
+};
+
 }  // namespace
 
 int main() {
+  {
+    sar::tests::ScriptedWasapiStream capture(capture_probe());
+    capture.enqueue_capture({
+        .frames = 4,
+        .samples = {{0.75F,
+                     -0.75F,
+                     std::numeric_limits<float>::quiet_NaN(),
+                     0.5F},
+                    {0.1F, 0.1F, 0.1F, 0.1F}},
+    });
+    assert(capture.start().ok());
+
+    sar::realtime::AudioBuffer external_block(2, 4);
+    external_block.channel(0)[0] = 0.5F;
+    external_block.channel(0)[1] = -0.5F;
+    external_block.channel(0)[2] = 0.25F;
+    external_block.channel(0)[3] = std::numeric_limits<float>::infinity();
+    for (std::size_t frame = 0; frame < external_block.frames(); ++frame) {
+      external_block.channel(1)[frame] = 0.2F;
+    }
+    SingleBlockSource external(std::move(external_block));
+
+    sar::platform::WindowsWasapiGraphRunner duplex_runner(
+        &capture, nullptr, 2, 2, 4, 4, 0, 12, false, false, &external);
+    sar::graph::Graph duplex_graph(2, 2, 4, 48000);
+    sar::diagnostics::EngineDiagnostics duplex_diagnostics;
+    const auto duplex_result =
+        duplex_runner.process_once(duplex_graph, duplex_diagnostics, 0);
+
+    assert(duplex_result.ok());
+    assert(duplex_result.stats().graph_processed);
+    assert(duplex_result.stats().external_input_mixed);
+    assert(duplex_result.stats().external_input_clipped_samples == 2);
+    assert(duplex_result.stats().external_input_non_finite_samples == 2);
+    const auto& mixed = duplex_runner.output_buffer();
+    assert(sar::tests::nearly_equal(mixed.channel(0)[0], 1.0F));
+    assert(sar::tests::nearly_equal(mixed.channel(0)[1], -1.0F));
+    assert(sar::tests::nearly_equal(mixed.channel(0)[2], 0.25F));
+    assert(sar::tests::nearly_equal(mixed.channel(0)[3], 0.5F));
+    for (std::size_t frame = 0; frame < mixed.frames(); ++frame) {
+      assert(sar::tests::nearly_equal(mixed.channel(1)[frame], 0.3F));
+    }
+  }
+
   sar::platform::VirtualAsioRenderBus bus(2, 4, 1, 4);
   auto producer = bus.attach();
   assert(producer.valid());

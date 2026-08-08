@@ -6,6 +6,17 @@
 
 namespace sar::platform {
 
+namespace {
+
+bool shares_clock_domain(const VirtualAsioFormat& active,
+                         const VirtualAsioFormat& candidate) noexcept {
+  return active.sample_rate == candidate.sample_rate &&
+         active.input_channels == candidate.input_channels &&
+         active.output_channels == candidate.output_channels;
+}
+
+}  // namespace
+
 std::vector<VirtualAsioClientError> validate_virtual_asio_client_request(
     const VirtualAsioClientRequest& request) {
   std::vector<VirtualAsioClientError> errors;
@@ -123,7 +134,8 @@ VirtualAsioClientConnectResult VirtualAsioClientRegistry::connect(
          "ASIO client registry has reached its configured capacity."},
     });
   }
-  if (active_format_.has_value() && *active_format_ != request.format) {
+  if (active_format_.has_value() &&
+      !shares_clock_domain(*active_format_, request.format)) {
     return VirtualAsioClientConnectResult::failure({
         {"asio_session_format_mismatch",
          "ASIO client format does not match the active session clock domain."},

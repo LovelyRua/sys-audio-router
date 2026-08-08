@@ -82,18 +82,23 @@ start or stop an installed runtime; or apply gain and mute
 commands. Control wire version 5 carries installed/running/runtime graph-version
 state plus the active runtime mode and endpoint selection in lifecycle
 responses. A stopped service can configure default or pinned WASAPI render and
-default or pinned-pair duplex runtimes through the same protocol; configuration
-is rejected while audio is running. The pipe path is control-plane only; audio data is
-not copied through it. The service can now own a live WASAPI render or duplex
+default or pinned-pair duplex runtimes through the same protocol. A running
+runtime can be reconfigured transactionally: the candidate must start before it
+replaces the old configuration, and a failure restores the previous runtime.
+The pipe path is control-plane only; audio data is not copied through it. The
+service can now own a live WASAPI render or duplex
 runtime, select an explicit capture/render endpoint pair for duplex operation,
 start and stop it through an injectable runtime contract, and serve its realtime
-diagnostics over the same control protocol. Graph mutations
-are rejected while the runtime is active, and a stopped runtime cannot restart
-after its bound graph version becomes stale unless it has an installed runtime
-builder. The Windows service retains its render/duplex endpoint configuration in
-such a builder, reconstructs a stale stopped runtime against the current graph on
-the next start command, and preserves the previous stopped runtime if rebuilding
-fails. The Qt Quick GUI now binds to control wire v5 from a separate process.
+diagnostics over the same control protocol. Graph mutations now prepare a new
+graph and runtime, stop the previous runtime, start the candidate, refresh active
+Virtual ASIO client graphs, and commit only after every step succeeds. A failed
+candidate restores the previous running runtime and leaves the preset unchanged.
+The Alpha Virtual ASIO DLL and service currently enforce exactly two input and
+two output channels. The service-owned render bus also keeps a fixed physical
+render quantum for its lifetime, so preset block-size changes are rejected with
+a restart-required error instead of committing an unusable format. A stopped
+runtime can rebuild against a newer graph through its retained endpoint
+configuration. The Qt Quick GUI now binds to control wire v5 from a separate process.
 Service installation and concurrent control-client authorization remain future
 work.
 
@@ -612,7 +617,8 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 - The first Qt Quick GUI exists and controls route state, gain, runtime
   lifecycle, device listing, diagnostics, and preset browsing with atomic
   save/load. Undo/redo, large-matrix virtualization, and seed-user feedback
-  remain. CMake/CPack now produces the first per-user Windows x64 ZIP payload.
+  remain. CMake/CPack now produces per-user Windows x64 ZIP and NSIS installer
+  payloads, with a launcher that starts the engine and then opens the GUI.
   Its install scripts validate the engine, ASIO, Qt DLL, QML, and platform
   plugin payloads, verify Virtual ASIO registration, preserve and restore an
   existing install on failure, and provide a bounded uninstall path that refuses

@@ -39,6 +39,17 @@ QString text(const std::string& value) {
   return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size()));
 }
 
+std::uint32_t transaction_timeout_ms(
+    control::ControlCommandType command_type) noexcept {
+  if (control::control_command_mutates_preset(command_type) ||
+      command_type == control::ControlCommandType::ConfigureAudioRuntime ||
+      command_type == control::ControlCommandType::StartAudioRuntime ||
+      command_type == control::ControlCommandType::StopAudioRuntime) {
+    return 5000;
+  }
+  return 2000;
+}
+
 EngineReply transact(control::ControlCommand command) {
   EngineReply reply;
   reply.request_type = command.type;
@@ -50,24 +61,37 @@ EngineReply transact(control::ControlCommand command) {
 
   service::NamedPipeControlConfig config;
   const auto transaction = service::transact_named_pipe_control(
-      config, as_bytes(encoded.bytes), 500);
+      config, as_bytes(encoded.bytes), transaction_timeout_ms(command.type));
   if (!transaction.ok()) {
-    reply.error = text(transaction.error().message);
+    reply.delivery_uncertain =
+        transaction.error().code == "pipe_read_timeout";
+    reply.error = reply.delivery_uncertain
+                      ? QStringLiteral(
+                            "The engine response timed out; confirming the "
+                            "current state")
+                      : text(transaction.error().message);
     return reply;
   }
-  reply.transport_ok = true;
-
   const auto decoded =
       control::decode_control_response(as_u8(transaction.payload()));
   if (!decoded.ok()) {
     reply.error = QStringLiteral("The engine returned an invalid response");
     return reply;
   }
+  reply.transport_ok = true;
   reply.response = decoded.response;
   if (reply.response.status == control::ControlResponseStatus::Rejected) {
-    reply.error = reply.response.errors.empty()
-                      ? QStringLiteral("The engine rejected the request")
-                      : text(reply.response.errors.front().message);
+    if (reply.response.errors.empty()) {
+      reply.error = QStringLiteral("The engine rejected the request");
+    } else {
+      QStringList errors;
+      errors.reserve(static_cast<qsizetype>(reply.response.errors.size()));
+      for (const auto& error : reply.response.errors) {
+        errors.push_back(QStringLiteral("%1: %2")
+                             .arg(text(error.code), text(error.message)));
+      }
+      reply.error = errors.join(QStringLiteral("; "));
+    }
   }
   return reply;
 }
@@ -295,14 +319,6 @@ void EngineController::configureAudioRuntime(const QString& mode,
           ? capture_device_id.toStdString()
           : std::string{};
   command.audio_runtime.render_device_id = render_device_id.toStdString();
-  if (runtime_running_) {
-    pending_runtime_reconfigure_ = command.audio_runtime;
-    command.type = control::ControlCommandType::StopAudioRuntime;
-    enqueue({std::move(command), PendingPresetAction::None, {},
-             RuntimeApplyStage::StopForReconfigure});
-    setStatus(QStringLiteral("Stopping the engine to apply the new audio devices"));
-    return;
-  }
   dispatch(std::move(command));
 }
 
@@ -411,7 +427,9 @@ void EngineController::applyReply(const EngineReply& reply,
       reply.error.isEmpty() &&
       reply.response.status != control::ControlResponseStatus::Rejected;
   const bool was_connected = connected_;
-  connected_ = reply.transport_ok;
+  if (!reply.delivery_uncertain) {
+    connected_ = reply.transport_ok;
+  }
   if (was_connected != connected_) {
     emit connectionChanged();
   }
@@ -419,10 +437,9 @@ void EngineController::applyReply(const EngineReply& reply,
     setError(reply.error);
   }
   if (!command_succeeded) {
-    if (command.runtime_stage != RuntimeApplyStage::None) {
-      pending_runtime_reconfigure_.reset();
-    }
-    if (!reply.transport_ok) {
+    if (reply.delivery_uncertain) {
+      QTimer::singleShot(0, this, &EngineController::refresh);
+    } else if (!reply.transport_ok) {
       ensureEngineService();
     }
     return;
@@ -475,23 +492,6 @@ void EngineController::applyReply(const EngineReply& reply,
     setStatus(QStringLiteral("Loaded preset \"%1\"")
                   .arg(active_preset_name_));
   }
-  if (command.runtime_stage == RuntimeApplyStage::StopForReconfigure &&
-      pending_runtime_reconfigure_.has_value()) {
-    control::ControlCommand configure;
-    configure.type = control::ControlCommandType::ConfigureAudioRuntime;
-    configure.audio_runtime = *pending_runtime_reconfigure_;
-    enqueue({std::move(configure), PendingPresetAction::None, {},
-             RuntimeApplyStage::ConfigureForReconfigure});
-  } else if (command.runtime_stage == RuntimeApplyStage::ConfigureForReconfigure) {
-    control::ControlCommand start;
-    start.type = control::ControlCommandType::StartAudioRuntime;
-    enqueue({std::move(start), PendingPresetAction::None, {},
-             RuntimeApplyStage::RestartAfterReconfigure});
-  } else if (command.runtime_stage == RuntimeApplyStage::RestartAfterReconfigure) {
-    pending_runtime_reconfigure_.reset();
-    setStatus(QStringLiteral("Audio runtime restarted with the new configuration"));
-  }
-
   if (reply.request_type == control::ControlCommandType::ConnectRoute ||
       reply.request_type == control::ControlCommandType::DisconnectRoute ||
       reply.request_type == control::ControlCommandType::SetGain ||
@@ -534,6 +534,8 @@ void EngineController::updateSession(const control::ControlResponse& response) {
           {QStringLiteral("label"), text(device.label)},
           {QStringLiteral("isDefault"), device.is_default},
           {QStringLiteral("isVirtual"), device.is_virtual},
+          {QStringLiteral("isWasapi"),
+           device.backend == platform::AudioBackendKind::Wasapi},
           {QStringLiteral("direction"), static_cast<int>(device.direction)},
       });
     }
@@ -580,8 +582,7 @@ void EngineController::schedulePoll() {
   } else {
     command.type = control::ControlCommandType::QueryDiagnostics;
   }
-  enqueue({std::move(command), PendingPresetAction::None, {},
-           RuntimeApplyStage::None, true});
+  enqueue({std::move(command), PendingPresetAction::None, {}, true});
 }
 
 void EngineController::ensureEngineService() {

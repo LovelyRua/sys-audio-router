@@ -68,6 +68,9 @@ class VirtualAsioRenderBus final : public RealtimeAudioSource {
   [[nodiscard]] VirtualAsioRenderBusStats stats() const noexcept;
   [[nodiscard]] std::size_t channels() const noexcept;
   [[nodiscard]] std::size_t frames() const noexcept;
+  [[nodiscard]] bool accepts_consumer_format(
+      std::size_t channels,
+      std::size_t frames) const noexcept;
 
  private:
   friend class VirtualAsioRenderProducer;

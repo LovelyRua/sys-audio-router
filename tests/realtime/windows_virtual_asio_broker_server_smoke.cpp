@@ -9,6 +9,7 @@
 #include <Windows.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -135,10 +136,56 @@ int main() {
   assert(disconnected.accepted);
   assert(host.active_session_count() == 0);
 
+  server.stop();
+  assert(!server.running());
+
+  std::atomic<std::size_t> graph_builds = 0;
+  std::atomic<bool> force_refresh = false;
+  sar::service::WindowsVirtualAsioTransportHost retry_host({
+      .endpoint_token = "broker-retry-smoke",
+      .maximum_clients = 1,
+      .queue_capacity_blocks = 4,
+      .wait_timeout_ms = 10,
+  });
+  sar::service::WindowsVirtualAsioBrokerServer retry_server(
+      L"sys-audio-route-asio-broker-retry-smoke-" +
+          std::to_wstring(GetCurrentProcessId()),
+      retry_host,
+      [&](const sar::platform::VirtualAsioFormat& format) {
+        const auto build = ++graph_builds;
+        auto graph = make_graph(format);
+        if (build == 1 || force_refresh.load()) {
+          const auto refresh = retry_host.refresh_graphs(
+              [](const sar::platform::VirtualAsioFormat& candidate) {
+                return make_graph(candidate);
+              });
+          assert(refresh.ok());
+        }
+        return graph;
+      });
+  assert(retry_server.start().ok());
+  auto retry_request = request;
+  retry_request.request_id = 301;
+  retry_request.client_id = "broker-retry-daw";
+  const auto retried = connect(retry_server, retry_request);
+  assert(retried.accepted);
+  assert(graph_builds == 2);
+  assert(retry_host.active_session_count() == 1);
+  retry_host.stop_all();
+
+  graph_builds = 0;
+  force_refresh = true;
+  retry_request.request_id = 302;
+  retry_request.client_id = "broker-contended-daw";
+  const auto contended = connect(retry_server, retry_request);
+  assert(!contended.accepted);
+  assert(contended.error_code == "virtual_asio_graph_generation_stale");
+  assert(graph_builds == 3);
+  assert(retry_host.active_session_count() == 0);
+  retry_server.stop();
+
   const auto stats = server.stats();
   assert(stats.completed_requests == 4);
   assert(stats.handler_errors == 0);
   assert(stats.protocol_errors == 0);
-  server.stop();
-  assert(!server.running());
 }

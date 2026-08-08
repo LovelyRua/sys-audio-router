@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
@@ -127,10 +128,52 @@ void test_format_lock_lifetime() {
          peer.client().connection_generation);
 }
 
+void test_mixed_block_sizes_share_clock_domain() {
+  constexpr VirtualAsioFormat block_64{48000, 64, 2, 2};
+  constexpr VirtualAsioFormat block_128{48000, 128, 2, 2};
+  constexpr VirtualAsioFormat block_256{48000, 256, 2, 2};
+  VirtualAsioClientRegistry registry(5);
+
+  auto first = registry.connect(request("block-64", 2101, block_64));
+  auto second = registry.connect(request("block-128", 2102, block_128));
+  auto third = registry.connect(request("block-256", 2103, block_256));
+  assert(first.ok());
+  assert(second.ok());
+  assert(third.ok());
+  assert(registry.clients().size() == 3);
+  assert(registry.clients()[0].format.frames_per_block == 64);
+  assert(registry.clients()[1].format.frames_per_block == 128);
+  assert(registry.clients()[2].format.frames_per_block == 256);
+  assert(registry.active_format() == block_64);
+
+  expect_connect_error(
+      registry.connect(
+          request("rate-mismatch", 2104, VirtualAsioFormat{44100, 128, 2, 2})),
+      "asio_session_format_mismatch");
+  expect_connect_error(
+      registry.connect(
+          request("input-mismatch", 2105, VirtualAsioFormat{48000, 128, 1, 2})),
+      "asio_session_format_mismatch");
+  expect_connect_error(
+      registry.connect(
+          request("output-mismatch", 2106, VirtualAsioFormat{48000, 128, 2, 4})),
+      "asio_session_format_mismatch");
+  assert(registry.clients().size() == 3);
+
+  assert(registry.disconnect("block-64", first.client().connection_generation)
+             .ok());
+  assert(registry.disconnect("block-128", second.client().connection_generation)
+             .ok());
+  assert(registry.disconnect("block-256", third.client().connection_generation)
+             .ok());
+  assert(!registry.active_format().has_value());
+}
+
 void stress_capacity_reuse() {
   constexpr std::size_t kCapacity = 32;
   constexpr std::size_t kCycles = 500;
-  const VirtualAsioFormat format{48000, 64, 16, 16};
+  constexpr std::uint32_t kBlockSizes[]{64, 128, 256};
+  constexpr VirtualAsioFormat kActiveFormat{48000, 64, 16, 16};
   VirtualAsioClientRegistry registry(kCapacity);
   std::uint64_t previous_generation = 0;
 
@@ -139,6 +182,8 @@ void stress_capacity_reuse() {
     generations.reserve(kCapacity);
 
     for (std::size_t slot = 0; slot < kCapacity; ++slot) {
+      const VirtualAsioFormat format{
+          48000, kBlockSizes[slot % std::size(kBlockSizes)], 16, 16};
       auto connected = registry.connect(request(
           "capacity-client-" + std::to_string(slot),
           static_cast<std::uint32_t>(3000 + slot),
@@ -150,8 +195,9 @@ void stress_capacity_reuse() {
     }
 
     assert(registry.clients().size() == kCapacity);
+    const VirtualAsioFormat over_capacity_format{48000, 512, 16, 16};
     expect_connect_error(
-        registry.connect(request("over-capacity", 9999, format)),
+        registry.connect(request("over-capacity", 9999, over_capacity_format)),
         "asio_client_capacity_reached");
 
     for (std::size_t slot = 0; slot < kCapacity; slot += 2) {
@@ -161,9 +207,11 @@ void stress_capacity_reuse() {
                  .ok());
     }
     assert(registry.clients().size() == kCapacity / 2);
-    assert(registry.active_format() == format);
+    assert(registry.active_format() == kActiveFormat);
 
     for (std::size_t slot = 0; slot < kCapacity; slot += 2) {
+      const VirtualAsioFormat format{
+          48000, kBlockSizes[slot % std::size(kBlockSizes)], 16, 16};
       auto reconnected = registry.connect(request(
           "capacity-client-" + std::to_string(slot),
           static_cast<std::uint32_t>(6000 + slot),
@@ -197,5 +245,6 @@ int main() {
   stress_generation_and_stale_disconnect();
   test_single_direction_channel_layouts();
   test_format_lock_lifetime();
+  test_mixed_block_sizes_share_clock_domain();
   stress_capacity_reuse();
 }
