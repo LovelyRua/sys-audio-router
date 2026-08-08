@@ -60,4 +60,11 @@ unregister_windows_virtual_asio_driver(
     WindowsVirtualAsioRegistrationScope scope =
         WindowsVirtualAsioRegistrationScope::LocalMachine);
 
+[[nodiscard]] WindowsVirtualAsioRegistrationResult
+unregister_windows_virtual_asio_driver_if_owned(
+    std::wstring dll_path,
+    WindowsVirtualAsioRegistryView view = WindowsVirtualAsioRegistryView::X64,
+    WindowsVirtualAsioRegistrationScope scope =
+        WindowsVirtualAsioRegistrationScope::LocalMachine);
+
 }  // namespace sar::driver

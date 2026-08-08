@@ -203,7 +203,11 @@ try {
       "bin\SystemAudioRouteLauncher.exe"
   $launcherProcess = Start-Process -FilePath $launcherPath `
       -WorkingDirectory (Join-Path $installPath "bin") `
-      -Wait -PassThru
+      -PassThru
+  if (!$launcherProcess.WaitForExit(10000)) {
+    Stop-Process -Id $launcherProcess.Id -Force -ErrorAction SilentlyContinue
+    throw "Installed bootstrap launcher did not exit within ten seconds."
+  }
   if ($launcherProcess.ExitCode -ne 0) {
     throw "Installed bootstrap launcher failed with exit code $($launcherProcess.ExitCode)."
   }
@@ -281,7 +285,11 @@ try {
       -FilePath (Join-Path $ownershipInstallPath `
           "bin\SystemAudioRouteLauncher.exe") `
       -WorkingDirectory (Join-Path $ownershipInstallPath "bin") `
-      -Wait -PassThru
+      -PassThru
+  if (!$ownershipLauncher.WaitForExit(10000)) {
+    Stop-Process -Id $ownershipLauncher.Id -Force -ErrorAction SilentlyContinue
+    throw "Second installed bootstrap launcher did not exit within ten seconds."
+  }
   if ($ownershipLauncher.ExitCode -ne 0) {
     throw "Second installed bootstrap launcher failed."
   }

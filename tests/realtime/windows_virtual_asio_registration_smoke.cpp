@@ -47,6 +47,15 @@ std::wstring absolute_path(const wchar_t* path) {
   return result;
 }
 
+std::wstring executable_path() {
+  std::wstring result(32768, L'\0');
+  const auto written = GetModuleFileNameW(
+      nullptr, result.data(), static_cast<DWORD>(result.size()));
+  assert(written != 0 && written < result.size());
+  result.resize(written);
+  return result;
+}
+
 void exercise_scope(
     const wchar_t* dll_path,
     sar::driver::WindowsVirtualAsioRegistrationScope scope) {
@@ -95,6 +104,25 @@ void exercise_scope(
   assert(sar::driver::register_windows_virtual_asio_driver(
              dll_path, WindowsVirtualAsioRegistryView::ProcessDefault, scope)
              .ok());
+
+  assert(sar::driver::unregister_windows_virtual_asio_driver_if_owned(
+             executable_path(), WindowsVirtualAsioRegistryView::ProcessDefault,
+             scope)
+             .ok());
+  assert(sar::driver::verify_windows_virtual_asio_driver_registration(
+             dll_path, WindowsVirtualAsioRegistryView::ProcessDefault, scope)
+             .ok());
+
+  assert(RegOpenKeyExW(root, kAsio, 0, KEY_SET_VALUE, &asio) == ERROR_SUCCESS);
+  assert(RegSetValueExW(asio, L"Description", 0, REG_SZ,
+                        reinterpret_cast<const BYTE*>(invalid),
+                        sizeof(invalid)) == ERROR_SUCCESS);
+  RegCloseKey(asio);
+  assert(sar::driver::unregister_windows_virtual_asio_driver_if_owned(
+             dll_path, WindowsVirtualAsioRegistryView::ProcessDefault, scope)
+             .ok());
+  assert(key_missing(root, kClsid));
+  assert(key_missing(root, kAsio));
 
   assert(sar::driver::unregister_windows_virtual_asio_driver(
              WindowsVirtualAsioRegistryView::ProcessDefault, scope)

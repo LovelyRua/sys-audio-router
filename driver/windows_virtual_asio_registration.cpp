@@ -132,7 +132,8 @@ LSTATUS read_string(HKEY root,
     RegCloseKey(key);
     return native;
   }
-  if (type != REG_SZ || bytes < sizeof(wchar_t)) {
+  if (type != REG_SZ || bytes < sizeof(wchar_t) ||
+      bytes % sizeof(wchar_t) != 0) {
     RegCloseKey(key);
     return ERROR_INVALID_DATA;
   }
@@ -315,6 +316,35 @@ WindowsVirtualAsioRegistrationResult unregister_windows_virtual_asio_driver(
                           "Could not remove the COM class key.", native);
   }
   return WindowsVirtualAsioRegistrationResult::success();
+}
+
+WindowsVirtualAsioRegistrationResult
+unregister_windows_virtual_asio_driver_if_owned(
+    std::wstring dll_path,
+    WindowsVirtualAsioRegistryView view,
+    WindowsVirtualAsioRegistrationScope scope) {
+  std::wstring expected;
+  const auto resolved = resolve_driver_path(dll_path, expected);
+  if (!resolved.ok()) {
+    return resolved;
+  }
+
+  std::wstring registered;
+  const auto native = read_string(
+      registry_root(scope), kInprocKey, nullptr, view_access(view), registered);
+  if (native == ERROR_FILE_NOT_FOUND || native == ERROR_PATH_NOT_FOUND) {
+    return WindowsVirtualAsioRegistrationResult::success();
+  }
+  if (native != ERROR_SUCCESS) {
+    return native_failure(
+        "virtual_asio_ownership_read_failed",
+        "Could not determine ownership of the Virtual ASIO registration.",
+        native);
+  }
+  if (!equal_path(registered, expected)) {
+    return WindowsVirtualAsioRegistrationResult::success();
+  }
+  return unregister_windows_virtual_asio_driver(view, scope);
 }
 
 }  // namespace sar::driver

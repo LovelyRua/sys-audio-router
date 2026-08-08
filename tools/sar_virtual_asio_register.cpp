@@ -14,7 +14,8 @@ namespace {
 void print_usage() {
   std::cerr
       << "Usage: sar_virtual_asio_register "
-         "(--register [DLL]|--verify [DLL]|--unregister) "
+         "(--register [DLL]|--verify [DLL]|--unregister|"
+         "--unregister-owned [DLL]) "
          "[--user|--machine] [--x64|--x86]\n"
          "DLL defaults to SystemAudioRouteVirtualASIO.dll beside this tool.\n";
 }
@@ -48,6 +49,7 @@ int wmain(int argc, wchar_t** argv) {
   bool register_driver = false;
   bool verify_driver = false;
   bool unregister_driver = false;
+  bool unregister_owned_driver = false;
   WindowsVirtualAsioRegistryView view = WindowsVirtualAsioRegistryView::X64;
   WindowsVirtualAsioRegistrationScope scope =
       WindowsVirtualAsioRegistrationScope::LocalMachine;
@@ -67,6 +69,11 @@ int wmain(int argc, wchar_t** argv) {
       }
     } else if (argument == L"--unregister") {
       unregister_driver = true;
+    } else if (argument == L"--unregister-owned") {
+      unregister_owned_driver = true;
+      if (index + 1 < argc && !is_option(argv[index + 1])) {
+        dll_path = argv[++index];
+      }
     } else if (argument == L"--x86") {
       view = WindowsVirtualAsioRegistryView::X86;
     } else if (argument == L"--x64") {
@@ -85,12 +92,14 @@ int wmain(int argc, wchar_t** argv) {
   }
   const int action_count = static_cast<int>(register_driver) +
                            static_cast<int>(verify_driver) +
-                           static_cast<int>(unregister_driver);
+                           static_cast<int>(unregister_driver) +
+                           static_cast<int>(unregister_owned_driver);
   if (action_count != 1) {
-    std::cerr << "Choose exactly one of --register, --verify, or --unregister.\n";
+    std::cerr << "Choose exactly one registration action.\n";
     return 2;
   }
-  if (!unregister_driver && dll_path.empty()) {
+  if ((register_driver || verify_driver || unregister_owned_driver) &&
+      dll_path.empty()) {
     dll_path = adjacent_driver_path();
   }
 
@@ -100,7 +109,11 @@ int wmain(int argc, wchar_t** argv) {
       : verify_driver
           ? sar::driver::verify_windows_virtual_asio_driver_registration(
                 std::move(dll_path), view, scope)
-          : sar::driver::unregister_windows_virtual_asio_driver(view, scope);
+          : unregister_owned_driver
+              ? sar::driver::unregister_windows_virtual_asio_driver_if_owned(
+                    std::move(dll_path), view, scope)
+              : sar::driver::unregister_windows_virtual_asio_driver(
+                    view, scope);
   if (!result.ok()) {
     for (const auto& error : result.errors()) {
       std::cerr << error.code << ": " << error.message
@@ -110,7 +123,8 @@ int wmain(int argc, wchar_t** argv) {
   }
   std::cout << "virtual_asio_registration="
             << (register_driver ? "registered"
-                                : verify_driver ? "verified" : "unregistered")
+                                : verify_driver ? "verified"
+                                                : "unregistered")
             << " scope="
             << (scope == WindowsVirtualAsioRegistrationScope::CurrentUser
                     ? "user" : "machine")

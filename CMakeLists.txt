@@ -1062,10 +1062,7 @@ if(WIN32 AND SAR_BUILD_GUI)
     Pop $0
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM sar_engine_service.exe'
     Pop $0
-    ExecWait '"$INSTDIR\bin\sar_virtual_asio_register.exe" --verify "$INSTDIR\bin\SystemAudioRouteVirtualASIO.dll" --user --x64' $0
-    StrCmp $0 "0" sar_uninstall_owns_asio sar_skip_asio_unregistration
-    sar_uninstall_owns_asio:
-    ExecWait '"$INSTDIR\bin\sar_virtual_asio_register.exe" --unregister --user --x64' $0
+    ExecWait '"$INSTDIR\bin\sar_virtual_asio_register.exe" --unregister-owned "$INSTDIR\bin\SystemAudioRouteVirtualASIO.dll" --user --x64' $0
     StrCmp $0 "0" sar_skip_asio_unregistration
     DetailPrint "Virtual ASIO unregistration failed with exit code $0."
     SetErrorLevel 1

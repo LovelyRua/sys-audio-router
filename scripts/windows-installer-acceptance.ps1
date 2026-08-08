@@ -158,7 +158,11 @@ try {
   $launcher = Start-Process `
       -FilePath (Join-Path $installPath "bin\SystemAudioRouteLauncher.exe") `
       -WorkingDirectory (Join-Path $installPath "bin") `
-      -Wait -PassThru
+      -PassThru
+  if (!$launcher.WaitForExit(10000)) {
+    Stop-Process -Id $launcher.Id -Force -ErrorAction SilentlyContinue
+    throw "Bootstrap launcher did not exit within ten seconds."
+  }
   if ($launcher.ExitCode -ne 0) {
     throw "Bootstrap launcher failed with exit code $($launcher.ExitCode)."
   }
