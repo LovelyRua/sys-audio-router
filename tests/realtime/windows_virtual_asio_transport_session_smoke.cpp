@@ -152,6 +152,7 @@ int main() {
   assert(stats.output_queue_errors == 0);
   assert(stats.wait_failures == 0);
   assert(stats.output_signal_failures == 0);
+  assert(stats.client_disconnects == 0);
   assert(stats.last_sequence == kBlocks - 1);
   assert(stats.graph_updates == 1);
   assert(stats.current_graph_version == 3);
@@ -195,4 +196,35 @@ int main() {
   assert(crash_session->stats().client_process_exits == 1);
   CloseHandle(child.hThread);
   CloseHandle(child.hProcess);
+
+  const auto disconnect_name_result = make_windows_virtual_asio_object_names(
+      "transport-smoke", "disconnect-client", kGeneration + 2);
+  assert(disconnect_name_result.ok());
+  auto disconnect_identity = identity;
+  disconnect_identity.connection_generation = kGeneration + 2;
+  auto disconnect_graph =
+      std::make_unique<sar::graph::Graph>(4, kChannels, kFrames, 48000);
+  disconnect_graph->add_node(std::make_unique<sar::graph::PassthroughNode>());
+  auto disconnect_created = WindowsVirtualAsioTransportSession::create(
+      disconnect_name_result.names(), config, disconnect_identity,
+      std::move(disconnect_graph), 1000);
+  assert(disconnect_created.ok());
+  auto disconnect_session = disconnect_created.take_session();
+  auto disconnect_events_result =
+      WindowsVirtualAsioEvents::open(disconnect_name_result.names());
+  assert(disconnect_events_result.ok());
+  auto disconnect_events = disconnect_events_result.take_events();
+  assert(disconnect_session->start());
+  assert(disconnect_events->signal_client_disconnect());
+  const auto disconnect_deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (disconnect_session->running() &&
+         std::chrono::steady_clock::now() < disconnect_deadline) {
+    Sleep(1);
+  }
+  assert(!disconnect_session->running());
+  assert(disconnect_session->shared_state() ==
+         VirtualAsioSharedMemoryState::Stopping);
+  assert(disconnect_session->stats().client_disconnects == 1);
+  disconnect_session->stop();
 }

@@ -6,13 +6,16 @@
 #include "core/platform/audio_device_registry.h"
 #include "core/service/engine_audio_runtime.h"
 
+#include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace sar::service {
@@ -79,6 +82,19 @@ class EngineControlService {
       std::string command_id) const;
   [[nodiscard]] control::ControlResponse append_platform_devices_locked(
       control::ControlResponse response) const;
+  [[nodiscard]] const control::ControlWireEncodeResult*
+  find_replayed_response_locked(std::string_view command_id) const noexcept;
+  void remember_response_locked(
+      std::string command_id,
+      const control::ControlWireEncodeResult& response);
+
+  struct ReplayedResponse {
+    std::string command_id;
+    control::ControlWireEncodeResult response;
+  };
+
+  static constexpr std::size_t kMaxReplayedResponses = 64;
+  static constexpr std::size_t kMaxReplayedResponseBytes = 4 * 1024 * 1024;
 
   std::unique_ptr<control::ControlSession> session_;
   std::unique_ptr<EngineAudioRuntime> audio_runtime_;
@@ -89,6 +105,8 @@ class EngineControlService {
   std::optional<control::AudioRuntimeConfiguration>
       audio_runtime_configuration_;
   platform::AudioDeviceRegistry audio_device_registry_;
+  std::deque<ReplayedResponse> replayed_responses_;
+  std::size_t replayed_response_bytes_ = 0;
   // The preset observer is a service extension point. It may query service
   // state while a commit is in progress, so this lock must permit same-thread
   // re-entry without blocking the single control-pipe request.

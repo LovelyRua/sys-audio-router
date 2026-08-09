@@ -18,6 +18,7 @@ struct WindowsVirtualAsioEventError {
 enum class WindowsVirtualAsioEventWaitStatus {
   Ready,
   Shutdown,
+  ClientDisconnected,
   TimedOut,
   Failed,
 };
@@ -76,6 +77,7 @@ class WindowsVirtualAsioEvents {
   [[nodiscard]] bool signal_input() noexcept;
   [[nodiscard]] bool signal_output() noexcept;
   [[nodiscard]] bool signal_shutdown() noexcept;
+  [[nodiscard]] bool signal_client_disconnect() noexcept;
   [[nodiscard]] bool reset_shutdown() noexcept;
 
   [[nodiscard]] WindowsVirtualAsioEventWaitResult wait_input_or_shutdown(
@@ -90,6 +92,7 @@ class WindowsVirtualAsioEvents {
                            void* input_event,
                            void* output_event,
                            void* shutdown_event,
+                           void* client_disconnect_event,
                            bool owner) noexcept;
   [[nodiscard]] WindowsVirtualAsioEventWaitResult wait_ready_or_shutdown(
       void* ready_event,
@@ -99,6 +102,7 @@ class WindowsVirtualAsioEvents {
   void* input_event_ = nullptr;
   void* output_event_ = nullptr;
   void* shutdown_event_ = nullptr;
+  void* client_disconnect_event_ = nullptr;
   bool owner_ = false;
 };
 

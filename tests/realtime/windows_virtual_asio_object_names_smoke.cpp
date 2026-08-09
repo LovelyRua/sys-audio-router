@@ -45,10 +45,14 @@ int main() {
   assert(names.names().shutdown_event ==
          L"Local\\SAR.VirtualASIO.v1.endpoint.studio-main.client.reaper_1."
          L"generation.0123456789abcdef.shutdown-event");
+  assert(names.names().client_disconnect_event ==
+         L"Local\\SAR.VirtualASIO.v1.endpoint.studio-main.client.reaper_1."
+         L"generation.0123456789abcdef.client-disconnect-event");
   expect_local_object_name(names.names().mapping);
   expect_local_object_name(names.names().input_event);
   expect_local_object_name(names.names().output_event);
   expect_local_object_name(names.names().shutdown_event);
+  expect_local_object_name(names.names().client_disconnect_event);
 
   const auto repeated = sar::platform::make_windows_virtual_asio_object_names(
       "studio-main", "reaper_1", 0x0123456789abcdefULL);

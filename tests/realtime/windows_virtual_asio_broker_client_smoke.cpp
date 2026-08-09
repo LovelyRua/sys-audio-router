@@ -199,5 +199,25 @@ int main() {
   expect_gain(output_b, 0.8F);
   assert(client_b->disconnect().ok());
   assert(host.active_session_count() == 0);
+
+  auto request_orphan = request;
+  request_orphan.request_id = 901;
+  request_orphan.client_id = "asio-orphan-cleanup";
+  request_orphan.client_nonce_low = 0xC1;
+  request_orphan.client_nonce_high = 0xC2;
+  auto connected_orphan =
+      sar::service::WindowsVirtualAsioBrokerClient::connect(
+          server.pipe_config(), request_orphan);
+  assert(connected_orphan.ok());
+  auto orphan_client = connected_orphan.take_client();
+  assert(host.active_session_count() == 1);
   server.stop();
+  assert(!orphan_client->disconnect(25).ok());
+  assert(!orphan_client->connected());
+  for (std::size_t attempt = 0;
+       attempt < 200 && host.active_session_count() != 0; ++attempt) {
+    static_cast<void>(host.reap_stopped_sessions());
+    Sleep(1);
+  }
+  assert(host.active_session_count() == 0);
 }

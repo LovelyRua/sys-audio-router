@@ -74,6 +74,10 @@ int main() {
   waiter.join();
   assert(threaded_status.load() == WindowsVirtualAsioEventWaitStatus::Ready);
 
+  assert(client->signal_client_disconnect());
+  assert(owner->wait_input_or_shutdown(0).status ==
+         WindowsVirtualAsioEventWaitStatus::ClientDisconnected);
+
   owner->close();
   assert(!owner->valid());
   assert(client->signal_input());

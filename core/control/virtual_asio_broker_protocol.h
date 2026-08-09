@@ -11,7 +11,7 @@
 
 namespace sar::control {
 
-inline constexpr std::uint16_t kVirtualAsioBrokerVersion = 1;
+inline constexpr std::uint16_t kVirtualAsioBrokerVersion = 2;
 inline constexpr std::size_t kVirtualAsioBrokerHeaderBytes = 20;
 inline constexpr std::size_t kVirtualAsioBrokerMaxMessageBytes = 16 * 1024;
 inline constexpr std::size_t kVirtualAsioBrokerMaxStringBytes = 512;

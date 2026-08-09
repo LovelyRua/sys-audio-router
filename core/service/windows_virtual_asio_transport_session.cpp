@@ -237,6 +237,7 @@ WindowsVirtualAsioTransportSession::stats() const noexcept {
       output_signal_failures_.load(std::memory_order_relaxed),
       realtime_thread_failures_.load(std::memory_order_relaxed),
       client_process_exits_.load(std::memory_order_relaxed),
+      client_disconnects_.load(std::memory_order_relaxed),
       last_sequence_.load(std::memory_order_relaxed),
       dropped_render_bus_blocks_.load(std::memory_order_relaxed),
       graph_updates_.load(std::memory_order_relaxed),
@@ -304,6 +305,12 @@ void WindowsVirtualAsioTransportSession::run() noexcept {
     }
     const auto wait = events_->wait_input_or_shutdown(wait_timeout_ms_);
     if (wait.status == platform::WindowsVirtualAsioEventWaitStatus::Shutdown) {
+      break;
+    }
+    if (wait.status ==
+        platform::WindowsVirtualAsioEventWaitStatus::ClientDisconnected) {
+      client_disconnects_.fetch_add(1, std::memory_order_relaxed);
+      mapping_->set_state(platform::VirtualAsioSharedMemoryState::Stopping);
       break;
     }
     if (wait.status == platform::WindowsVirtualAsioEventWaitStatus::TimedOut) {

@@ -13,6 +13,7 @@
 
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <optional>
 
 namespace sar::gui {
@@ -25,6 +26,9 @@ struct EngineReply {
   bool transport_ok = false;
   bool delivery_uncertain = false;
 };
+
+using EngineTransport =
+    std::function<EngineReply(control::ControlCommand command)>;
 
 class EngineController final : public QObject {
   Q_OBJECT
@@ -56,6 +60,9 @@ class EngineController final : public QObject {
 
  public:
   explicit EngineController(QObject* parent = nullptr);
+  EngineController(EngineTransport transport,
+                   bool automatic_activity,
+                   QObject* parent = nullptr);
   ~EngineController() override;
 
   [[nodiscard]] bool connected() const noexcept;
@@ -144,6 +151,7 @@ class EngineController final : public QObject {
   void setStatus(QString status);
 
   QFutureWatcher<EngineReply> watcher_;
+  EngineTransport transport_;
   QTimer poll_timer_;
   QProcess engine_service_;
   PresetStore preset_store_;

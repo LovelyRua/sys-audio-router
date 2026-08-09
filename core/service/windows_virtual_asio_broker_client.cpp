@@ -334,9 +334,10 @@ NamedPipeControlResult WindowsVirtualAsioBrokerClient::disconnect(
     }
   } catch (...) {
   }
-  if (result.ok()) {
-    close_local();
+  if (events_ != nullptr) {
+    static_cast<void>(events_->signal_client_disconnect());
   }
+  close_local();
   return result;
 }
 

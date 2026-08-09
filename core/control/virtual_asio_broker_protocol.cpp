@@ -302,6 +302,7 @@ VirtualAsioBrokerEncodeResult encode_virtual_asio_broker_connect_response(
   writer.wide_ascii(response.names.input_event);
   writer.wide_ascii(response.names.output_event);
   writer.wide_ascii(response.names.shutdown_event);
+  writer.wide_ascii(response.names.client_disconnect_event);
   writer.scalar(response.server_nonce_low);
   writer.scalar(response.server_nonce_high);
   return writer.finish();
@@ -321,6 +322,7 @@ decode_virtual_asio_broker_connect_response(
   value.names.input_event = reader.wide_ascii();
   value.names.output_event = reader.wide_ascii();
   value.names.shutdown_event = reader.wide_ascii();
+  value.names.client_disconnect_event = reader.wide_ascii();
   value.server_nonce_low = reader.scalar<std::uint64_t>();
   value.server_nonce_high = reader.scalar<std::uint64_t>();
   reader.finish();

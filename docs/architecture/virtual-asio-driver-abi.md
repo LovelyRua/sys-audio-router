@@ -186,6 +186,9 @@ must not silently change this v1 behavior.
 2. The service removes the client from graph routing before releasing its
    transport. It keeps the mapping alive until its own handles close; the
    driver closes mapped views and handles without deleting named objects.
+   The driver also signals the per-generation client-disconnect event before
+   closing local handles, so cleanup does not depend on a successful broker
+   pipe response.
 3. A host crash is detected by pipe loss and/or the duplicated process-liveness
    handle owned by the service. The service silences and removes that client
    without stopping other clients.
@@ -212,6 +215,7 @@ Local\SAR.VirtualASIO.v1.endpoint.<endpoint>.client.<client>.generation.<generat
 Local\SAR.VirtualASIO.v1.endpoint.<endpoint>.client.<client>.generation.<generation>.input-event
 Local\SAR.VirtualASIO.v1.endpoint.<endpoint>.client.<client>.generation.<generation>.output-event
 Local\SAR.VirtualASIO.v1.endpoint.<endpoint>.client.<client>.generation.<generation>.shutdown-event
+Local\SAR.VirtualASIO.v1.endpoint.<endpoint>.client.<client>.generation.<generation>.client-disconnect-event
 ```
 
 Endpoint and client tokens are bounded lowercase ASCII identifiers, and the
@@ -229,7 +233,9 @@ before dereference, and malformed peers are disconnected. Handles are created
 non-inheritable. Audio memory is zeroed before publication and before reuse
 where stale audio could cross client lifetimes.
 
-The protocol major version is incompatible and must reject mismatches. Minor
+Broker wire protocol v2 adds the client-disconnect event name to the connect
+response. The protocol major version is incompatible and must reject
+mismatches. Minor
 versions negotiate feature bits and cannot reinterpret existing fields. A
 connection generation and both nonces prevent a stale or guessed mapping from
 joining a new session.

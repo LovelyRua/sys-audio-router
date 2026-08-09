@@ -75,6 +75,89 @@ sar::control::ControlResponse send(
 }  // namespace
 
 int main() {
+  auto replay_create =
+      sar::service::EngineControlService::create(make_preset(), 100);
+  assert(replay_create.ok());
+  auto replay_service = replay_create.take_service();
+  std::uint32_t replay_observer_calls = 0;
+  bool reject_replay_command = false;
+  replay_service->set_preset_commit_observer(
+      [&](const sar::control::PresetDocument&, std::uint64_t) {
+        ++replay_observer_calls;
+        if (reject_replay_command) {
+          return std::vector<sar::control::PresetError>{
+              {"injected_replay_rejection", "Injected replay rejection."},
+          };
+        }
+        return std::vector<sar::control::PresetError>{};
+      });
+
+  sar::control::ControlCommand replay_gain;
+  replay_gain.command_id = "replay-gain";
+  replay_gain.type = sar::control::ControlCommandType::SetGain;
+  replay_gain.input_id = "input";
+  replay_gain.output_id = "output";
+  replay_gain.gain = 0.25F;
+  const auto replay_request = sar::control::encode_control_command(replay_gain);
+  assert(replay_request.ok());
+  const auto replay_first =
+      replay_service->handle_wire_request(replay_request.bytes);
+  assert(replay_first.ok());
+  assert(replay_observer_calls == 1);
+
+  replay_gain.gain = 0.75F;
+  const auto replay_changed_request =
+      sar::control::encode_control_command(replay_gain);
+  assert(replay_changed_request.ok());
+  const auto replay_second =
+      replay_service->handle_wire_request(replay_changed_request.bytes);
+  assert(replay_second.ok());
+  assert(replay_second.bytes == replay_first.bytes);
+  assert(replay_observer_calls == 1);
+  assert(replay_service->session().current_preset().matrix.routes[0].gain ==
+         0.25F);
+  assert(replay_service->session().next_graph_version() == 102);
+
+  reject_replay_command = true;
+  replay_gain.command_id = "replay-rejected";
+  replay_gain.gain = 0.5F;
+  const auto rejected_replay_request =
+      sar::control::encode_control_command(replay_gain);
+  assert(rejected_replay_request.ok());
+  const auto rejected_replay_first =
+      replay_service->handle_wire_request(rejected_replay_request.bytes);
+  assert(rejected_replay_first.ok());
+  assert(replay_observer_calls == 2);
+
+  reject_replay_command = false;
+  replay_gain.gain = 0.75F;
+  const auto rejected_replay_changed_request =
+      sar::control::encode_control_command(replay_gain);
+  assert(rejected_replay_changed_request.ok());
+  const auto rejected_replay_second =
+      replay_service->handle_wire_request(rejected_replay_changed_request.bytes);
+  assert(rejected_replay_second.ok());
+  assert(rejected_replay_second.bytes == rejected_replay_first.bytes);
+  assert(replay_observer_calls == 2);
+  assert(replay_service->session().current_preset().matrix.routes[0].gain ==
+         0.25F);
+
+  sar::control::ControlCommand replay_filler;
+  replay_filler.type = sar::control::ControlCommandType::QueryDiagnostics;
+  for (std::uint32_t index = 0; index < 64; ++index) {
+    replay_filler.command_id = "replay-filler-" + std::to_string(index);
+    const auto filler = send(*replay_service, replay_filler);
+    assert(filler.status == sar::control::ControlResponseStatus::Accepted);
+  }
+  replay_gain.command_id = "replay-gain";
+  replay_gain.gain = 0.75F;
+  const auto replay_after_eviction = send(*replay_service, replay_gain);
+  assert(replay_after_eviction.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  assert(replay_observer_calls == 3);
+  assert(replay_service->session().current_preset().matrix.routes[0].gain ==
+         0.75F);
+
   auto create = sar::service::EngineControlService::create(make_preset(), 10);
   assert(create.ok());
   auto service = create.take_service();
@@ -173,6 +256,7 @@ int main() {
   assert(!service->audio_runtime_running());
   assert(runtime_observer->stop_calls == 1);
 
+  gain.command_id = "gain-2";
   const auto applied = send(*service, gain);
   assert(applied.status == sar::control::ControlResponseStatus::Accepted);
   assert(applied.has_preset);
@@ -421,6 +505,7 @@ int main() {
         return sar::service::EngineAudioRuntimeBuildResult::success(
             std::move(runtime));
       });
+  configure.command_id = "configure-duplex-2";
   const auto configured = send(*configure_service, configure);
   assert(configured.status == sar::control::ControlResponseStatus::Accepted);
   assert(configure_calls == 1);

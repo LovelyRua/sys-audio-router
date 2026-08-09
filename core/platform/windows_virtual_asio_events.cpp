@@ -29,9 +29,14 @@ bool valid_names(const WindowsVirtualAsioObjectNames& names) noexcept {
   return valid_object_name(names.input_event, L".input-event") &&
          valid_object_name(names.output_event, L".output-event") &&
          valid_object_name(names.shutdown_event, L".shutdown-event") &&
+         valid_object_name(names.client_disconnect_event,
+                           L".client-disconnect-event") &&
          names.input_event != names.output_event &&
          names.input_event != names.shutdown_event &&
-         names.output_event != names.shutdown_event;
+         names.output_event != names.shutdown_event &&
+         names.client_disconnect_event != names.input_event &&
+         names.client_disconnect_event != names.output_event &&
+         names.client_disconnect_event != names.shutdown_event;
 }
 
 void close_handle(void*& handle) noexcept {
@@ -90,6 +95,8 @@ WindowsVirtualAsioEvents::WindowsVirtualAsioEvents(
       input_event_(std::exchange(other.input_event_, nullptr)),
       output_event_(std::exchange(other.output_event_, nullptr)),
       shutdown_event_(std::exchange(other.shutdown_event_, nullptr)),
+      client_disconnect_event_(
+          std::exchange(other.client_disconnect_event_, nullptr)),
       owner_(std::exchange(other.owner_, false)) {}
 
 WindowsVirtualAsioEvents& WindowsVirtualAsioEvents::operator=(
@@ -100,6 +107,8 @@ WindowsVirtualAsioEvents& WindowsVirtualAsioEvents::operator=(
     input_event_ = std::exchange(other.input_event_, nullptr);
     output_event_ = std::exchange(other.output_event_, nullptr);
     shutdown_event_ = std::exchange(other.shutdown_event_, nullptr);
+    client_disconnect_event_ =
+        std::exchange(other.client_disconnect_event_, nullptr);
     owner_ = std::exchange(other.owner_, false);
   }
   return *this;
@@ -179,9 +188,31 @@ WindowsVirtualAsioEventsOpenResult WindowsVirtualAsioEvents::create(
                           error);
   }
 
+  HANDLE client_disconnect = CreateEventW(
+      attributes, TRUE, FALSE, names.client_disconnect_event.c_str());
+  const auto client_disconnect_error = GetLastError();
+  if (client_disconnect == nullptr ||
+      client_disconnect_error == ERROR_ALREADY_EXISTS) {
+    const auto error = client_disconnect == nullptr
+                           ? client_disconnect_error
+                           : ERROR_ALREADY_EXISTS;
+    if (client_disconnect != nullptr) {
+      CloseHandle(client_disconnect);
+    }
+    CloseHandle(shutdown);
+    CloseHandle(output);
+    CloseHandle(input);
+    return native_failure(
+        client_disconnect == nullptr
+            ? "virtual_asio_client_disconnect_event_create_failed"
+            : "virtual_asio_event_already_exists",
+        "Could not exclusively create Virtual ASIO client disconnect event.",
+        error);
+  }
+
   return WindowsVirtualAsioEventsOpenResult::success(
       std::unique_ptr<WindowsVirtualAsioEvents>(new WindowsVirtualAsioEvents(
-          std::move(names), input, output, shutdown, true)));
+          std::move(names), input, output, shutdown, client_disconnect, true)));
 }
 
 WindowsVirtualAsioEventsOpenResult WindowsVirtualAsioEvents::open(
@@ -214,14 +245,26 @@ WindowsVirtualAsioEventsOpenResult WindowsVirtualAsioEvents::open(
     return native_failure("virtual_asio_shutdown_event_open_failed",
                           "Could not open Virtual ASIO shutdown event.", error);
   }
+  HANDLE client_disconnect =
+      OpenEventW(access, FALSE, names.client_disconnect_event.c_str());
+  if (client_disconnect == nullptr) {
+    const auto error = GetLastError();
+    CloseHandle(shutdown);
+    CloseHandle(output);
+    CloseHandle(input);
+    return native_failure("virtual_asio_client_disconnect_event_open_failed",
+                          "Could not open Virtual ASIO client disconnect event.",
+                          error);
+  }
   return WindowsVirtualAsioEventsOpenResult::success(
       std::unique_ptr<WindowsVirtualAsioEvents>(new WindowsVirtualAsioEvents(
-          std::move(names), input, output, shutdown, false)));
+          std::move(names), input, output, shutdown, client_disconnect,
+          false)));
 }
 
 bool WindowsVirtualAsioEvents::valid() const noexcept {
   return input_event_ != nullptr && output_event_ != nullptr &&
-         shutdown_event_ != nullptr;
+         shutdown_event_ != nullptr && client_disconnect_event_ != nullptr;
 }
 
 bool WindowsVirtualAsioEvents::owner() const noexcept {
@@ -246,6 +289,11 @@ bool WindowsVirtualAsioEvents::signal_shutdown() noexcept {
          SetEvent(static_cast<HANDLE>(shutdown_event_));
 }
 
+bool WindowsVirtualAsioEvents::signal_client_disconnect() noexcept {
+  return client_disconnect_event_ != nullptr &&
+         SetEvent(static_cast<HANDLE>(client_disconnect_event_));
+}
+
 bool WindowsVirtualAsioEvents::reset_shutdown() noexcept {
   return shutdown_event_ != nullptr &&
          ResetEvent(static_cast<HANDLE>(shutdown_event_));
@@ -264,6 +312,7 @@ WindowsVirtualAsioEvents::wait_output_or_shutdown(
 }
 
 void WindowsVirtualAsioEvents::close() noexcept {
+  close_handle(client_disconnect_event_);
   close_handle(shutdown_event_);
   close_handle(output_event_);
   close_handle(input_event_);
@@ -275,22 +324,26 @@ WindowsVirtualAsioEvents::WindowsVirtualAsioEvents(
     void* input_event,
     void* output_event,
     void* shutdown_event,
+    void* client_disconnect_event,
     bool owner) noexcept
     : names_(std::move(names)),
       input_event_(input_event),
       output_event_(output_event),
       shutdown_event_(shutdown_event),
+      client_disconnect_event_(client_disconnect_event),
       owner_(owner) {}
 
 WindowsVirtualAsioEventWaitResult
 WindowsVirtualAsioEvents::wait_ready_or_shutdown(
     void* ready_event,
     std::uint32_t timeout_ms) noexcept {
-  if (ready_event == nullptr || shutdown_event_ == nullptr) {
+  if (ready_event == nullptr || shutdown_event_ == nullptr ||
+      client_disconnect_event_ == nullptr) {
     return {WindowsVirtualAsioEventWaitStatus::Failed, ERROR_INVALID_HANDLE};
   }
-  const std::array<HANDLE, 2> handles{
+  const std::array<HANDLE, 3> handles{
       static_cast<HANDLE>(shutdown_event_),
+      static_cast<HANDLE>(client_disconnect_event_),
       static_cast<HANDLE>(ready_event),
   };
   const auto result = WaitForMultipleObjects(
@@ -299,6 +352,9 @@ WindowsVirtualAsioEvents::wait_ready_or_shutdown(
     return {WindowsVirtualAsioEventWaitStatus::Shutdown, 0};
   }
   if (result == WAIT_OBJECT_0 + 1) {
+    return {WindowsVirtualAsioEventWaitStatus::ClientDisconnected, 0};
+  }
+  if (result == WAIT_OBJECT_0 + 2) {
     return {WindowsVirtualAsioEventWaitStatus::Ready, 0};
   }
   if (result == WAIT_TIMEOUT) {

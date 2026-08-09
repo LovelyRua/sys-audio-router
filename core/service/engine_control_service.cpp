@@ -317,6 +317,14 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
   }
 
   std::lock_guard lock(control_mutex_);
+  if (!decoded.command.command_id.empty()) {
+    if (const auto* replayed =
+            find_replayed_response_locked(decoded.command.command_id)) {
+      return *replayed;
+    }
+  }
+
+  const auto execute = [&]() -> control::ControlWireEncodeResult {
   const auto validation = control::validate_command(decoded.command);
   if (!validation.ok()) {
     return control::encode_control_response(control::command_rejected(
@@ -507,6 +515,43 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
     response = append_platform_devices_locked(std::move(response));
   }
   return control::encode_control_response(response);
+  };
+
+  auto response = execute();
+  if (!decoded.command.command_id.empty()) {
+    remember_response_locked(decoded.command.command_id, response);
+  }
+  return response;
+}
+
+const control::ControlWireEncodeResult*
+EngineControlService::find_replayed_response_locked(
+    std::string_view command_id) const noexcept {
+  for (const auto& replayed : replayed_responses_) {
+    if (replayed.command_id == command_id) {
+      return &replayed.response;
+    }
+  }
+  return nullptr;
+}
+
+void EngineControlService::remember_response_locked(
+    std::string command_id,
+    const control::ControlWireEncodeResult& response) {
+  if (response.bytes.size() > kMaxReplayedResponseBytes) {
+    return;
+  }
+
+  while (!replayed_responses_.empty() &&
+         (replayed_responses_.size() >= kMaxReplayedResponses ||
+          replayed_response_bytes_ + response.bytes.size() >
+              kMaxReplayedResponseBytes)) {
+    replayed_response_bytes_ -= replayed_responses_.front().response.bytes.size();
+    replayed_responses_.pop_front();
+  }
+
+  replayed_response_bytes_ += response.bytes.size();
+  replayed_responses_.push_back({std::move(command_id), response});
 }
 
 control::ControlResponse EngineControlService::audio_runtime_state_response_locked(

@@ -90,7 +90,7 @@ int main() {
       .accepted = true,
       .connection_generation = 42,
       .names = {L"Local\\mapping", L"Local\\input", L"Local\\output",
-                L"Local\\shutdown"},
+                L"Local\\shutdown", L"Local\\client-disconnect"},
       .server_nonce_low = 71,
       .server_nonce_high = 72,
   };

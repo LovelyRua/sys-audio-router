@@ -104,7 +104,13 @@ QVariantMap endpoint(const graph::RouteEndpointDescriptor& value) {
 }  // namespace
 
 EngineController::EngineController(QObject* parent)
+    : EngineController(transact, true, parent) {}
+
+EngineController::EngineController(EngineTransport transport,
+                                   bool automatic_activity,
+                                   QObject* parent)
     : QObject(parent),
+      transport_(std::move(transport)),
       preset_store_(QStandardPaths::writableLocation(
                         QStandardPaths::AppDataLocation) +
                     QStringLiteral("/presets")) {
@@ -157,9 +163,13 @@ EngineController::EngineController(QObject* parent)
   poll_timer_.setInterval(250);
   connect(&poll_timer_, &QTimer::timeout, this,
           &EngineController::schedulePoll);
-  poll_timer_.start();
+  if (automatic_activity) {
+    poll_timer_.start();
+  }
   refreshPresets();
-  QTimer::singleShot(0, this, &EngineController::refresh);
+  if (automatic_activity) {
+    QTimer::singleShot(0, this, &EngineController::refresh);
+  }
 }
 
 EngineController::~EngineController() {
@@ -395,8 +405,10 @@ void EngineController::startNextCommand() {
   queued_commands_.pop_front();
   auto command = std::move(active_command_->command);
   command.command_id = "gui-" + std::to_string(++command_sequence_);
-  watcher_.setFuture(QtConcurrent::run([command = std::move(command)] {
-    return transact(command);
+  auto transport = transport_;
+  watcher_.setFuture(QtConcurrent::run(
+      [transport = std::move(transport), command = std::move(command)]() mutable {
+    return transport(std::move(command));
   }));
 }
 

@@ -41,3 +41,27 @@ set_tests_properties(gui_preset_store_smoke PROPERTIES
   ENVIRONMENT_MODIFICATION
     "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
 )
+
+add_executable(sar_gui_engine_controller_smoke
+  engine_controller.cpp
+  engine_controller.h
+  preset_store.cpp
+  preset_store.h
+  tests/engine_controller_smoke.cpp
+)
+target_link_libraries(sar_gui_engine_controller_smoke PRIVATE
+  Qt6::Concurrent
+  Qt6::Core
+  sar_core
+)
+if(MSVC)
+  target_compile_options(sar_gui_engine_controller_smoke PRIVATE /UNDEBUG)
+else()
+  target_compile_options(sar_gui_engine_controller_smoke PRIVATE -UNDEBUG)
+endif()
+add_test(NAME gui_engine_controller_smoke COMMAND sar_gui_engine_controller_smoke)
+set_tests_properties(gui_engine_controller_smoke PROPERTIES
+  ENVIRONMENT_MODIFICATION
+    "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+  TIMEOUT 10
+)

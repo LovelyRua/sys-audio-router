@@ -16,6 +16,7 @@ struct WindowsVirtualAsioObjectNames {
   std::wstring input_event;
   std::wstring output_event;
   std::wstring shutdown_event;
+  std::wstring client_disconnect_event;
 
   bool operator==(const WindowsVirtualAsioObjectNames&) const noexcept = default;
 };

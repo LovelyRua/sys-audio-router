@@ -138,6 +138,7 @@ WindowsVirtualAsioObjectNamesResult make_windows_virtual_asio_object_names(
       .input_event = base + L".input-event",
       .output_event = base + L".output-event",
       .shutdown_event = base + L".shutdown-event",
+      .client_disconnect_event = base + L".client-disconnect-event",
   });
 }
 

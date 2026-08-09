@@ -32,6 +32,7 @@ struct WindowsVirtualAsioTransportStats {
   std::uint64_t output_signal_failures = 0;
   std::uint64_t realtime_thread_failures = 0;
   std::uint64_t client_process_exits = 0;
+  std::uint64_t client_disconnects = 0;
   std::uint64_t last_sequence = 0;
   std::uint64_t dropped_render_bus_blocks = 0;
   std::uint64_t graph_updates = 0;
@@ -130,6 +131,7 @@ class WindowsVirtualAsioTransportSession {
   std::atomic<std::uint64_t> output_signal_failures_ = 0;
   std::atomic<std::uint64_t> realtime_thread_failures_ = 0;
   std::atomic<std::uint64_t> client_process_exits_ = 0;
+  std::atomic<std::uint64_t> client_disconnects_ = 0;
   std::atomic<std::uint64_t> last_sequence_ = 0;
   std::atomic<std::uint64_t> dropped_render_bus_blocks_ = 0;
   std::atomic<std::uint64_t> graph_updates_ = 0;
