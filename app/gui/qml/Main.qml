@@ -1292,6 +1292,8 @@ ApplicationWindow {
                             model: [
                                 { label: "XRUNS", value: engine.xrunCount, tone: engine.xrunCount > 0 ? colors.warning : colors.healthy },
                                 { label: "DROPPED BLOCKS", value: engine.droppedBlocks, tone: engine.droppedBlocks > 0 ? colors.danger : colors.healthy },
+                                { label: "PRODUCER UNDERFLOWS", value: engine.virtualAsioProducerUnderflows, tone: engine.virtualAsioProducerUnderflows > 0 ? colors.warning : colors.healthy },
+                                { label: "PRODUCER OVERFLOWS", value: engine.virtualAsioProducerOverflows, tone: engine.virtualAsioProducerOverflows > 0 ? colors.danger : colors.healthy },
                                 { label: "ASIO CLIENTS", value: engine.activeClients, tone: colors.cyan },
                                 { label: "CALLBACK PEAK", value: engine.callbackPeakUs.toFixed(1) + " us", tone: colors.text }
                             ]

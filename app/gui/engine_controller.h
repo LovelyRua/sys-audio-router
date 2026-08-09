@@ -48,6 +48,8 @@ class EngineController final : public QObject {
   Q_PROPERTY(qulonglong graphVersion READ graphVersion NOTIFY sessionChanged)
   Q_PROPERTY(qulonglong xrunCount READ xrunCount NOTIFY diagnosticsChanged)
   Q_PROPERTY(qulonglong droppedBlocks READ droppedBlocks NOTIFY diagnosticsChanged)
+  Q_PROPERTY(qulonglong virtualAsioProducerUnderflows READ virtualAsioProducerUnderflows NOTIFY diagnosticsChanged)
+  Q_PROPERTY(qulonglong virtualAsioProducerOverflows READ virtualAsioProducerOverflows NOTIFY diagnosticsChanged)
   Q_PROPERTY(int activeClients READ activeClients NOTIFY diagnosticsChanged)
   Q_PROPERTY(double peak READ peak NOTIFY diagnosticsChanged)
   Q_PROPERTY(double callbackPeakUs READ callbackPeakUs NOTIFY diagnosticsChanged)
@@ -93,6 +95,8 @@ class EngineController final : public QObject {
   [[nodiscard]] qulonglong graphVersion() const noexcept;
   [[nodiscard]] qulonglong xrunCount() const noexcept;
   [[nodiscard]] qulonglong droppedBlocks() const noexcept;
+  [[nodiscard]] qulonglong virtualAsioProducerUnderflows() const noexcept;
+  [[nodiscard]] qulonglong virtualAsioProducerOverflows() const noexcept;
   [[nodiscard]] int activeClients() const noexcept;
   [[nodiscard]] double peak() const noexcept;
   [[nodiscard]] double callbackPeakUs() const noexcept;
@@ -225,6 +229,8 @@ class EngineController final : public QObject {
   qulonglong graph_version_ = 0;
   qulonglong xrun_count_ = 0;
   qulonglong dropped_blocks_ = 0;
+  qulonglong virtual_asio_producer_underflows_ = 0;
+  qulonglong virtual_asio_producer_overflows_ = 0;
   int active_clients_ = 0;
   double peak_ = 0.0;
   double callback_peak_us_ = 0.0;

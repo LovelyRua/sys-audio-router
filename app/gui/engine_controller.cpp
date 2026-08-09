@@ -213,6 +213,12 @@ int EngineController::blockSize() const noexcept { return block_size_; }
 qulonglong EngineController::graphVersion() const noexcept { return graph_version_; }
 qulonglong EngineController::xrunCount() const noexcept { return xrun_count_; }
 qulonglong EngineController::droppedBlocks() const noexcept { return dropped_blocks_; }
+qulonglong EngineController::virtualAsioProducerUnderflows() const noexcept {
+  return virtual_asio_producer_underflows_;
+}
+qulonglong EngineController::virtualAsioProducerOverflows() const noexcept {
+  return virtual_asio_producer_overflows_;
+}
 int EngineController::activeClients() const noexcept { return active_clients_; }
 double EngineController::peak() const noexcept { return peak_; }
 double EngineController::callbackPeakUs() const noexcept { return callback_peak_us_; }
@@ -664,6 +670,10 @@ void EngineController::applyReply(const EngineReply& reply,
     const auto& diagnostics = reply.response.diagnostics;
     xrun_count_ = diagnostics.xrun_count;
     dropped_blocks_ = diagnostics.virtual_asio_dropped_blocks;
+    virtual_asio_producer_underflows_ =
+        diagnostics.virtual_asio_producer_underflows;
+    virtual_asio_producer_overflows_ =
+        diagnostics.virtual_asio_producer_overflows;
     active_clients_ =
         static_cast<int>(diagnostics.virtual_asio_active_producers);
     peak_ = diagnostics.virtual_asio_peak;

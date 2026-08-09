@@ -61,6 +61,8 @@ EngineReply confirmed_state(const ControlCommand &command) {
   reply.response.audio_runtime.configuration.render_device_id = "render-1";
   reply.response.has_diagnostics = true;
   reply.response.diagnostics.xrun_count = 3;
+  reply.response.diagnostics.virtual_asio_producer_underflows = 17;
+  reply.response.diagnostics.virtual_asio_producer_overflows = 5;
   reply.response.has_wasapi_recovery = true;
   reply.response.wasapi_recovery.state =
       sar::control::WasapiRecoveryState::Backoff;
@@ -119,6 +121,12 @@ int main(int argc, char **argv) {
   assert(controller.runtimeCaptureDeviceId() == QStringLiteral("capture-1"));
   assert(controller.runtimeRenderDeviceId() == QStringLiteral("render-1"));
   assert(controller.xrunCount() == 3);
+  assert(controller.virtualAsioProducerUnderflows() == 17);
+  assert(controller.virtualAsioProducerOverflows() == 5);
+  assert(controller.property("virtualAsioProducerUnderflows").toULongLong() ==
+         17);
+  assert(controller.property("virtualAsioProducerOverflows").toULongLong() ==
+         5);
   assert(controller.wasapiRecoveryAvailable());
   assert(controller.wasapiRecoveryState() == QStringLiteral("Backoff"));
   assert(controller.wasapiRecoveryEpisodes() == 7);
