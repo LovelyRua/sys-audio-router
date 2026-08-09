@@ -76,7 +76,9 @@ try {
       }
       foreach ($name in @(
           "processed_blocks", "xruns", "asio_active_producers",
-          "asio_pushed_blocks", "asio_dropped_blocks", "asio_consumed_blocks",
+          "asio_pushed_blocks", "asio_dropped_blocks",
+          "asio_producer_underflows", "asio_producer_overflows",
+          "asio_consumed_blocks",
           "asio_mixed_blocks", "asio_clipped_samples",
           "asio_non_finite_samples", "callback_peak_us")) {
         if (!$fields.ContainsKey($name)) {
@@ -90,6 +92,8 @@ try {
         ActiveProducers = [uint64]$fields.asio_active_producers
         PushedBlocks = [uint64]$fields.asio_pushed_blocks
         DroppedBlocks = [uint64]$fields.asio_dropped_blocks
+        ProducerUnderflows = [uint64]$fields.asio_producer_underflows
+        ProducerOverflows = [uint64]$fields.asio_producer_overflows
         ConsumedBlocks = [uint64]$fields.asio_consumed_blocks
         MixedBlocks = [uint64]$fields.asio_mixed_blocks
         ClippedSamples = [uint64]$fields.asio_clipped_samples
@@ -216,6 +220,10 @@ try {
 
       $pushedDelta = $final.PushedBlocks - $initial.PushedBlocks
       $droppedDelta = $final.DroppedBlocks - $initial.DroppedBlocks
+      $producerUnderflowDelta =
+          $final.ProducerUnderflows - $initial.ProducerUnderflows
+      $producerOverflowDelta =
+          $final.ProducerOverflows - $initial.ProducerOverflows
       $consumedDelta = $final.ConsumedBlocks - $initial.ConsumedBlocks
       $mixedDelta = $final.MixedBlocks - $initial.MixedBlocks
       $processedDelta = $final.ProcessedBlocks - $initial.ProcessedBlocks
@@ -234,18 +242,21 @@ try {
           $consumedDelta -lt $minimumProducerBlocks -or
           $mixedDelta -lt $minimumMixedBlocks -or
           $processedDelta -lt $minimumMixedBlocks -or
-          $droppedDelta -ne 0 -or $xrunDelta -ne 0 -or
+          $droppedDelta -ne 0 -or $producerUnderflowDelta -ne 0 -or
+          $producerOverflowDelta -ne 0 -or $xrunDelta -ne 0 -or
           $clippedDelta -ne 0 -or $nonFiniteDelta -ne 0 -or
           $final.CallbackPeakMicroseconds -gt $MaximumCallbackUs) {
         throw ((("Cross-DAW duration acceptance failed: duration={0} " +
             "pushed_delta={1}/{2} consumed_delta={3}/{2} " +
             "mixed_delta={4}/{5} processed_delta={6}/{5} " +
-            "dropped_delta={7} xrun_delta={8} clipped_delta={9} " +
-            "non_finite_delta={10} callback_peak_us={11}/{12}. " +
-            "Final diagnostics: {13}") -f
+            "dropped_delta={7} producer_underflow_delta={8} " +
+            "producer_overflow_delta={9} xrun_delta={10} clipped_delta={11} " +
+            "non_finite_delta={12} callback_peak_us={13}/{14}. " +
+            "Final diagnostics: {15}") -f
             $RequestedDurationSeconds, $pushedDelta, $minimumProducerBlocks,
             $consumedDelta, $mixedDelta, $minimumMixedBlocks, $processedDelta,
-            $droppedDelta, $xrunDelta, $clippedDelta, $nonFiniteDelta,
+            $droppedDelta, $producerUnderflowDelta, $producerOverflowDelta,
+            $xrunDelta, $clippedDelta, $nonFiniteDelta,
             $final.CallbackPeakMicroseconds, $MaximumCallbackUs, $final.Text))
       }
 
@@ -261,6 +272,8 @@ try {
         PushedDelta = $pushedDelta
         MinimumProducerBlocks = $minimumProducerBlocks
         DroppedDelta = $droppedDelta
+        ProducerUnderflowDelta = $producerUnderflowDelta
+        ProducerOverflowDelta = $producerOverflowDelta
         ConsumedDelta = $consumedDelta
         MixedDelta = $mixedDelta
         MinimumMixedBlocks = $minimumMixedBlocks
