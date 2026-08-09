@@ -117,13 +117,15 @@ int wmain(int argc, wchar_t** argv) {
 
   using sar::driver::detail::WindowsVirtualAsioRationalClock;
   constexpr std::uint64_t qpc_frequency = 10'000'000;
-  constexpr std::uint64_t sample_rate = 48'000;
+  constexpr std::uint64_t scheduler_sample_rate = 48'000;
   WindowsVirtualAsioRationalClock clock_128(
-      (128 * qpc_frequency) / sample_rate,
-      (128 * qpc_frequency) % sample_rate, sample_rate);
+      (128 * qpc_frequency) / scheduler_sample_rate,
+      (128 * qpc_frequency) % scheduler_sample_rate,
+      scheduler_sample_rate);
   WindowsVirtualAsioRationalClock clock_256(
-      (256 * qpc_frequency) / sample_rate,
-      (256 * qpc_frequency) % sample_rate, sample_rate);
+      (256 * qpc_frequency) / scheduler_sample_rate,
+      (256 * qpc_frequency) % scheduler_sample_rate,
+      scheduler_sample_rate);
   auto deadline_128 = clock_128.reset(1'000);
   auto deadline_256 = clock_256.reset(1'000);
   deadline_128 = clock_128.advance(deadline_128.deadline_qpc);
@@ -136,7 +138,7 @@ int wmain(int argc, wchar_t** argv) {
   }
   const auto expected_elapsed =
       (static_cast<std::uint64_t>(200'000) * 128 * qpc_frequency) /
-      sample_rate;
+      scheduler_sample_rate;
   assert(deadline_128.deadline_qpc == 1'000 + expected_elapsed);
 
   const auto late_now = deadline_128.deadline_qpc + 1'000'000;
