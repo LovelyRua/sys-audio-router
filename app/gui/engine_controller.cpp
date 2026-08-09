@@ -416,7 +416,9 @@ void EngineController::setRoute(const QString& input_id,
   command.gain = 1.0F;
   QueuedCommand queued{command};
   if (current_preset_.has_value()) {
-    auto applied = control::apply_command(*current_preset_, command);
+    auto preview = command;
+    preview.command_id = "gui-history-preview";
+    auto applied = control::apply_command(*current_preset_, preview);
     if (applied.ok()) {
       queued.history_action = HistoryAction::Record;
       queued.history_entry = HistoryEntry{*current_preset_,
@@ -440,7 +442,9 @@ void EngineController::setRouteGain(const QString& input_id,
   command.gain = static_cast<float>(std::clamp(gain, 0.0, 2.0));
   QueuedCommand queued{command};
   if (current_preset_.has_value()) {
-    auto applied = control::apply_command(*current_preset_, command);
+    auto preview = command;
+    preview.command_id = "gui-history-preview";
+    auto applied = control::apply_command(*current_preset_, preview);
     if (applied.ok()) {
       queued.history_action = HistoryAction::Record;
       queued.history_entry = HistoryEntry{*current_preset_,
