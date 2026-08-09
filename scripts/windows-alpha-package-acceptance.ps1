@@ -94,6 +94,7 @@ $primaryInstalled = $false
 $ownershipInstalled = $false
 $guiProcess = $null
 $engineProcess = $null
+$concurrentLauncherProcess = $null
 $packageRoot = $null
 $packageHash = (Get-FileHash -Algorithm SHA256 `
     -LiteralPath $resolvedPackagePath).Hash
@@ -205,13 +206,19 @@ try {
   $launcherProcess = Start-Process -FilePath $launcherPath `
       -WorkingDirectory (Join-Path $installPath "bin") `
       -PassThru
-  if (!$launcherProcess.WaitForExit(10000)) {
-    Stop-Process -Id $launcherProcess.Id -Force -ErrorAction SilentlyContinue
-    throw "Installed bootstrap launcher did not exit within ten seconds."
+  $concurrentLauncherProcess = Start-Process -FilePath $launcherPath `
+      -WorkingDirectory (Join-Path $installPath "bin") `
+      -PassThru
+  foreach ($candidate in @($launcherProcess, $concurrentLauncherProcess)) {
+    if (!$candidate.WaitForExit(10000)) {
+      Stop-Process -Id $candidate.Id -Force -ErrorAction SilentlyContinue
+      throw "Concurrent bootstrap launcher did not exit within ten seconds."
+    }
+    if ($candidate.ExitCode -ne 0) {
+      throw "Concurrent bootstrap launcher failed with exit code $($candidate.ExitCode)."
+    }
   }
-  if ($launcherProcess.ExitCode -ne 0) {
-    throw "Installed bootstrap launcher failed with exit code $($launcherProcess.ExitCode)."
-  }
+  $concurrentLauncherProcess = $null
 
   $launchDeadline = [DateTime]::UtcNow.AddSeconds($GuiHealthSeconds)
   do {
@@ -391,7 +398,7 @@ try {
       " sha256=$packageHash" +
       " gui_health_seconds=$GuiHealthSeconds" +
       " missing_runtime_guard=passed" +
-      " install=passed update=passed gui_launch=passed control=passed diagnostics=passed asio=passed" +
+      " install=passed update=passed gui_launch=passed concurrent_launch=passed control=passed diagnostics=passed asio=passed" +
       " path_boundary=passed ownership=passed uninstall=passed")
 } finally {
   if ($null -ne $guiProcess -and !$guiProcess.HasExited) {
@@ -399,6 +406,11 @@ try {
   }
   if ($null -ne $engineProcess -and !$engineProcess.HasExited) {
     Stop-Process -Id $engineProcess.Id -Force -ErrorAction SilentlyContinue
+  }
+  if ($null -ne $concurrentLauncherProcess -and
+      !$concurrentLauncherProcess.HasExited) {
+    Stop-Process -Id $concurrentLauncherProcess.Id -Force `
+        -ErrorAction SilentlyContinue
   }
   foreach ($name in $savedEnvironment.Keys) {
     [Environment]::SetEnvironmentVariable(

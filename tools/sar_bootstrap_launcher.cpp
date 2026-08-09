@@ -15,6 +15,8 @@
 namespace {
 
 constexpr wchar_t kControlPipe[] = L"\\\\.\\pipe\\sys-audio-route-control";
+constexpr wchar_t kLauncherMutex[] =
+    L"Local\\SystemAudioRoute.Launcher.{A53F02CB-86B7-4B63-A3EE-8C742498E60D}";
 
 class UniqueHandle final {
  public:
@@ -50,6 +52,31 @@ class UniqueHandle final {
 
  private:
   HANDLE handle_ = nullptr;
+};
+
+class MutexLock final {
+ public:
+  MutexLock(const wchar_t* name, std::uint32_t timeout_ms) noexcept
+      : handle_(CreateMutexW(nullptr, FALSE, name)) {
+    if (!handle_) {
+      return;
+    }
+    const auto result = WaitForSingleObject(handle_.get(), timeout_ms);
+    owns_ = result == WAIT_OBJECT_0 || result == WAIT_ABANDONED;
+  }
+  MutexLock(const MutexLock&) = delete;
+  MutexLock& operator=(const MutexLock&) = delete;
+  ~MutexLock() {
+    if (owns_) {
+      ReleaseMutex(handle_.get());
+    }
+  }
+
+  [[nodiscard]] bool owns() const noexcept { return owns_; }
+
+ private:
+  UniqueHandle handle_;
+  bool owns_ = false;
 };
 
 std::filesystem::path executable_directory() {
@@ -142,6 +169,11 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
   if (!std::filesystem::is_regular_file(engine) ||
       !std::filesystem::is_regular_file(gui)) {
     return fail(L"The installation is incomplete. Reinstall System Audio Route.");
+  }
+
+  MutexLock launcher_lock(kLauncherMutex, 10000);
+  if (!launcher_lock.owns()) {
+    return fail(L"Another System Audio Route launch did not finish in time.");
   }
 
   UniqueHandle engine_process;

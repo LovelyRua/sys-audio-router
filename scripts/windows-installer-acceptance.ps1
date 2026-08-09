@@ -159,12 +159,18 @@ try {
       -FilePath (Join-Path $installPath "bin\SystemAudioRouteLauncher.exe") `
       -WorkingDirectory (Join-Path $installPath "bin") `
       -PassThru
-  if (!$launcher.WaitForExit(10000)) {
-    Stop-Process -Id $launcher.Id -Force -ErrorAction SilentlyContinue
-    throw "Bootstrap launcher did not exit within ten seconds."
-  }
-  if ($launcher.ExitCode -ne 0) {
-    throw "Bootstrap launcher failed with exit code $($launcher.ExitCode)."
+  $concurrentLauncher = Start-Process `
+      -FilePath (Join-Path $installPath "bin\SystemAudioRouteLauncher.exe") `
+      -WorkingDirectory (Join-Path $installPath "bin") `
+      -PassThru
+  foreach ($candidate in @($launcher, $concurrentLauncher)) {
+    if (!$candidate.WaitForExit(10000)) {
+      Stop-Process -Id $candidate.Id -Force -ErrorAction SilentlyContinue
+      throw "Concurrent bootstrap launcher did not exit within ten seconds."
+    }
+    if ($candidate.ExitCode -ne 0) {
+      throw "Concurrent bootstrap launcher failed with exit code $($candidate.ExitCode)."
+    }
   }
 
   $deadline = [DateTime]::UtcNow.AddSeconds($GuiHealthSeconds)
@@ -261,7 +267,7 @@ try {
       " package=`"$resolvedPackagePath`"" +
       " sha256=$packageHash" +
       " install=passed update=passed launcher=passed control=passed" +
-      " single_instance=passed" +
+      " concurrent_launch=passed single_instance=passed" +
       " gui=passed engine=passed asio=passed uninstall=passed")
 } finally {
   foreach ($processName in @("SystemAudioRoute", "sar_engine_service")) {
