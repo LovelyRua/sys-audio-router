@@ -28,6 +28,46 @@ void expect(const sar::realtime::AudioBuffer& buffer,
 }  // namespace
 
 int main() {
+  sar::realtime::AudioBuffer lifecycle_output(2, 128);
+  sar::realtime::AudioBuffer lifecycle_half_block(2, 64);
+  sar::realtime::AudioBuffer lifecycle_wrong_format(1, 128);
+  fill(lifecycle_half_block, 0.1F, -0.1F);
+
+  sar::platform::VirtualAsioRenderBus lifecycle_bus(2, 128, 1, 2);
+  auto awaiting_first_push = lifecycle_bus.attach();
+  assert(!lifecycle_bus.read(lifecycle_output));
+  assert(lifecycle_bus.stats().producer_underflows == 0);
+
+  assert(!awaiting_first_push.push(lifecycle_wrong_format));
+  assert(!lifecycle_bus.read(lifecycle_output));
+  auto lifecycle_stats = lifecycle_bus.stats();
+  assert(lifecycle_stats.producer_underflows == 0);
+  assert(lifecycle_stats.producer_overflows == 0);
+
+  assert(awaiting_first_push.push(lifecycle_half_block));
+  assert(!lifecycle_bus.read(lifecycle_output));
+  lifecycle_stats = lifecycle_bus.stats();
+  assert(lifecycle_stats.producer_underflows == 1);
+  assert(lifecycle_stats.producer_overflows == 0);
+
+  awaiting_first_push.reset();
+  const auto rejected_push_drops = lifecycle_bus.stats().dropped_blocks;
+  assert(!awaiting_first_push.push(lifecycle_half_block));
+  assert(!lifecycle_bus.read(lifecycle_output));
+  lifecycle_stats = lifecycle_bus.stats();
+  assert(lifecycle_stats.dropped_blocks == rejected_push_drops);
+  assert(lifecycle_stats.producer_underflows == 1);
+  assert(lifecycle_stats.producer_overflows == 0);
+  assert(lifecycle_stats.active_producers == 0);
+
+  auto next_generation = lifecycle_bus.attach();
+  assert(next_generation.valid());
+  assert(!lifecycle_bus.read(lifecycle_output));
+  lifecycle_stats = lifecycle_bus.stats();
+  assert(lifecycle_stats.producer_underflows == 1);
+  assert(lifecycle_stats.producer_overflows == 0);
+  assert(lifecycle_stats.active_producers == 1);
+
   sar::platform::VirtualAsioRenderBus adapter_bus(2, 128, 1, 8);
   auto adapter = adapter_bus.attach();
   sar::realtime::AudioBuffer half_a(2, 64);
@@ -152,6 +192,9 @@ int main() {
   sar::platform::VirtualAsioRenderBus drift_bus(2, 16, 2, 2);
   auto faster_clock = drift_bus.attach();
   auto slower_clock = drift_bus.attach();
+  assert(faster_clock.push(first_block));
+  assert(slower_clock.push(second_block));
+  assert(drift_bus.read(mixed));
   constexpr std::size_t kDriftCycles = 100'000;
   constexpr std::size_t kSlowClockSlipInterval = 1'000;
   for (std::size_t cycle = 0; cycle < kDriftCycles; ++cycle) {

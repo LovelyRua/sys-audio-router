@@ -119,6 +119,7 @@ VirtualAsioRenderProducer VirtualAsioRenderBus::attach() {
     slot.read_index.store(0, std::memory_order_relaxed);
     slot.write_index.store(0, std::memory_order_relaxed);
     slot.pending.clear();
+    slot.producer_started.store(false, std::memory_order_relaxed);
     const auto generation =
         next_generation_.fetch_add(1, std::memory_order_relaxed);
     slot.generation.store(generation, std::memory_order_relaxed);
@@ -163,7 +164,7 @@ bool VirtualAsioRenderBus::read(
                             std::memory_order_release);
       consumed_blocks_.fetch_add(1, std::memory_order_relaxed);
       mixed = true;
-    } else {
+    } else if (slot.producer_started.load(std::memory_order_acquire)) {
       producer_underflows_.fetch_add(1, std::memory_order_relaxed);
     }
     slot.consumer_reading.store(false, std::memory_order_release);
@@ -283,6 +284,7 @@ bool VirtualAsioRenderBus::push(
     return false;
   }
   drain_pending(slot);
+  slot.producer_started.store(true, std::memory_order_release);
   return true;
 }
 
@@ -337,6 +339,7 @@ void VirtualAsioRenderBus::detach(std::size_t slot_index,
   slot.read_index.store(0, std::memory_order_relaxed);
   slot.write_index.store(0, std::memory_order_relaxed);
   slot.pending.clear();
+  slot.producer_started.store(false, std::memory_order_relaxed);
   slot.state.store(kIdle, std::memory_order_release);
   active_producers_.fetch_sub(1, std::memory_order_relaxed);
 }

@@ -96,6 +96,8 @@ class VirtualAsioRenderBus final : public RealtimeAudioSource {
     std::atomic<std::size_t> write_index = 0;
     std::atomic<std::uint64_t> generation = 0;
     std::atomic<std::uint8_t> state = 0;
+    // Starvation is meaningful only after this attachment has supplied audio.
+    std::atomic_bool producer_started = false;
     std::atomic_bool consumer_reading = false;
   };
 
