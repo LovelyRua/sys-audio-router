@@ -18,6 +18,8 @@ struct EngineDiagnostics {
   std::uint64_t render_fifo_underflow_frames = 0;
   std::uint64_t virtual_asio_pushed_blocks = 0;
   std::uint64_t virtual_asio_dropped_blocks = 0;
+  std::uint64_t virtual_asio_producer_underflows = 0;
+  std::uint64_t virtual_asio_producer_overflows = 0;
   std::uint64_t virtual_asio_consumed_blocks = 0;
   std::uint64_t virtual_asio_mixed_blocks = 0;
   std::uint64_t virtual_asio_silent_reads = 0;

@@ -10,6 +10,8 @@ namespace sar::platform {
 struct RealtimeAudioSourceDiagnostics {
   std::uint64_t pushed_blocks = 0;
   std::uint64_t dropped_blocks = 0;
+  std::uint64_t producer_underflows = 0;
+  std::uint64_t producer_overflows = 0;
   std::uint64_t consumed_blocks = 0;
   std::uint64_t mixed_blocks = 0;
   std::uint64_t silent_reads = 0;

@@ -326,6 +326,8 @@ void encode_diagnostics(Writer& writer,
   writer.scalar(diagnostics.render_fifo_underflow_frames);
   writer.scalar(diagnostics.virtual_asio_pushed_blocks);
   writer.scalar(diagnostics.virtual_asio_dropped_blocks);
+  writer.scalar(diagnostics.virtual_asio_producer_underflows);
+  writer.scalar(diagnostics.virtual_asio_producer_overflows);
   writer.scalar(diagnostics.virtual_asio_consumed_blocks);
   writer.scalar(diagnostics.virtual_asio_mixed_blocks);
   writer.scalar(diagnostics.virtual_asio_silent_reads);
@@ -368,6 +370,8 @@ diagnostics::EngineDiagnostics decode_diagnostics(Reader& reader) {
   diagnostics.render_fifo_underflow_frames = reader.scalar<std::uint64_t>();
   diagnostics.virtual_asio_pushed_blocks = reader.scalar<std::uint64_t>();
   diagnostics.virtual_asio_dropped_blocks = reader.scalar<std::uint64_t>();
+  diagnostics.virtual_asio_producer_underflows = reader.scalar<std::uint64_t>();
+  diagnostics.virtual_asio_producer_overflows = reader.scalar<std::uint64_t>();
   diagnostics.virtual_asio_consumed_blocks = reader.scalar<std::uint64_t>();
   diagnostics.virtual_asio_mixed_blocks = reader.scalar<std::uint64_t>();
   diagnostics.virtual_asio_silent_reads = reader.scalar<std::uint64_t>();

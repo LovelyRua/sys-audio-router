@@ -65,6 +65,8 @@ int main() {
   response.diagnostics.graph_version = 6;
   response.diagnostics.processed_blocks = 123;
   response.diagnostics.virtual_asio_pushed_blocks = 456;
+  response.diagnostics.virtual_asio_producer_underflows = 12;
+  response.diagnostics.virtual_asio_producer_overflows = 3;
   response.diagnostics.virtual_asio_peak = 0.75;
   response.has_wasapi_recovery = true;
   response.wasapi_recovery.state = sar::control::WasapiRecoveryState::Backoff;
@@ -105,6 +107,10 @@ int main() {
   assert(decoded_response.response.devices[0].is_virtual);
   assert(decoded_response.response.diagnostics.processed_blocks == 123);
   assert(decoded_response.response.diagnostics.virtual_asio_pushed_blocks == 456);
+  assert(decoded_response.response.diagnostics.virtual_asio_producer_underflows ==
+         12);
+  assert(decoded_response.response.diagnostics.virtual_asio_producer_overflows ==
+         3);
   assert(decoded_response.response.diagnostics.virtual_asio_peak == 0.75);
   assert(decoded_response.response.has_wasapi_recovery);
   assert(decoded_response.response.wasapi_recovery.state ==

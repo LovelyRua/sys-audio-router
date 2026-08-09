@@ -163,6 +163,8 @@ bool VirtualAsioRenderBus::read(
                             std::memory_order_release);
       consumed_blocks_.fetch_add(1, std::memory_order_relaxed);
       mixed = true;
+    } else {
+      producer_underflows_.fetch_add(1, std::memory_order_relaxed);
     }
     slot.consumer_reading.store(false, std::memory_order_release);
   }
@@ -200,6 +202,8 @@ VirtualAsioRenderBusStats VirtualAsioRenderBus::stats() const noexcept {
   return {
       pushed_blocks_.load(std::memory_order_relaxed),
       dropped_blocks_.load(std::memory_order_relaxed),
+      producer_underflows_.load(std::memory_order_relaxed),
+      producer_overflows_.load(std::memory_order_relaxed),
       consumed_blocks_.load(std::memory_order_relaxed),
       mixed_blocks_.load(std::memory_order_relaxed),
       silent_reads_.load(std::memory_order_relaxed),
@@ -217,6 +221,8 @@ RealtimeAudioSourceDiagnostics VirtualAsioRenderBus::diagnostics()
   return {
       snapshot.pushed_blocks,
       snapshot.dropped_blocks,
+      snapshot.producer_underflows,
+      snapshot.producer_overflows,
       snapshot.consumed_blocks,
       snapshot.mixed_blocks,
       snapshot.silent_reads,
@@ -267,11 +273,13 @@ bool VirtualAsioRenderBus::push(
   if (queue_full &&
       slot.pending.available_frames() + source.frames() >= frames_) {
     dropped_blocks_.fetch_add(1, std::memory_order_relaxed);
+    producer_overflows_.fetch_add(1, std::memory_order_relaxed);
     return false;
   }
   if (slot.pending.free_frames() < source.frames() ||
       slot.pending.push(source, source.frames()) != source.frames()) {
     dropped_blocks_.fetch_add(1, std::memory_order_relaxed);
+    producer_overflows_.fetch_add(1, std::memory_order_relaxed);
     return false;
   }
   drain_pending(slot);

@@ -325,6 +325,8 @@ diagnostics::EngineDiagnostics WindowsWasapiEngineRuntime::diagnostics() const {
     const auto input = external_input_->diagnostics();
     result.virtual_asio_pushed_blocks = input.pushed_blocks;
     result.virtual_asio_dropped_blocks = input.dropped_blocks;
+    result.virtual_asio_producer_underflows = input.producer_underflows;
+    result.virtual_asio_producer_overflows = input.producer_overflows;
     result.virtual_asio_consumed_blocks = input.consumed_blocks;
     result.virtual_asio_mixed_blocks = input.mixed_blocks;
     result.virtual_asio_silent_reads = input.silent_reads;

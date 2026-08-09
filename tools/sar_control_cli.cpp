@@ -346,6 +346,10 @@ int main(int argc, char** argv) {
               << response.response.diagnostics.virtual_asio_pushed_blocks
               << " asio_dropped_blocks="
               << response.response.diagnostics.virtual_asio_dropped_blocks
+              << " asio_producer_underflows="
+              << response.response.diagnostics.virtual_asio_producer_underflows
+              << " asio_producer_overflows="
+              << response.response.diagnostics.virtual_asio_producer_overflows
               << " asio_consumed_blocks="
               << response.response.diagnostics.virtual_asio_consumed_blocks
               << " asio_mixed_blocks="
