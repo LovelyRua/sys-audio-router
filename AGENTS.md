@@ -8,6 +8,13 @@ backend, graph runner, and realtime worker.
 
 - On Windows, avoid PowerShell for ordinary shell commands. Prefer `cmd /c`.
 - Use CMake 3.24 or newer and an MSVC C++20 toolchain on Windows.
+- Treat the development host as an edit-only machine. Do not install or update
+  host software with `winget`, `choco`, `scoop`, `msiexec`, Visual Studio
+  Installer, or another package manager unless the user explicitly approves the
+  package, version, and target machine.
+- If a local build dependency is missing, report it instead of provisioning it.
+  Run Windows builds and hardware validation through GitHub Actions or the
+  designated WinRM test machine.
 - Do not commit credentials, machine passwords, private tokens, generated build
   directories, or local RDP/WinRM artifacts.
 - Keep changes small and testable. This project is optimized for audio stability,
@@ -33,7 +40,7 @@ Use a unique slot for concurrent test runs, for example `engineer-a`,
 `engineer-b`, or `engineer-c`. The slot isolates the remote checkout, build
 directory, and bootstrap file.
 
-The current Windows smoke suite has 41 CTest targets. If a change touches
+The current Windows smoke suite has 124 CTest targets. If a change touches
 realtime, WASAPI, thread lifecycle, sample conversion, graph execution, or
 diagnostics, run the Windows test script before pushing or merging.
 
