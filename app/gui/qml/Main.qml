@@ -979,6 +979,52 @@ ApplicationWindow {
                             }
                         }
                     }
+                    Text {
+                        text: "WASAPI recovery"
+                        color: colors.text
+                        font.pixelSize: 12
+                        font.weight: Font.DemiBold
+                        Layout.topMargin: 8
+                    }
+                    GridLayout {
+                        columns: width > 900 ? 4 : 2
+                        columnSpacing: 1
+                        rowSpacing: 1
+                        Layout.fillWidth: true
+
+                        Repeater {
+                            model: [
+                                {
+                                    label: "STATE",
+                                    value: engine.wasapiRecoveryAvailable ? engine.wasapiRecoveryState : "Unavailable",
+                                    tone: !engine.wasapiRecoveryAvailable ? colors.muted
+                                          : engine.wasapiRecoveryState === "Running" ? colors.healthy
+                                          : engine.wasapiRecoveryState === "Stopped" ? colors.muted
+                                          : engine.wasapiRecoveryState === "Faulted" ? colors.danger
+                                          : colors.warning
+                                },
+                                { label: "RECOVERED", value: engine.wasapiSuccessfulRecoveries + " / " + engine.wasapiRecoveryEpisodes, tone: colors.healthy },
+                                { label: "FAILED", value: engine.wasapiFailedRecoveries, tone: engine.wasapiFailedRecoveries > 0 ? colors.danger : colors.healthy },
+                                { label: "LAST / MAX", value: engine.wasapiLastRecoveryMs + " / " + engine.wasapiMaximumRecoveryMs + " ms", tone: colors.text },
+                                { label: "ENDPOINT REOPENS", value: engine.wasapiEndpointReopens, tone: colors.cyan },
+                                { label: "RESET FAILURES", value: engine.wasapiEndpointResetFailures, tone: engine.wasapiEndpointResetFailures > 0 ? colors.danger : colors.healthy },
+                                { label: "REOPEN REQUEST", value: engine.wasapiEndpointReopenPending ? "Pending" : "Idle", tone: engine.wasapiEndpointReopenPending ? colors.warning : colors.muted }
+                            ]
+                            delegate: Rectangle {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 80
+                                color: colors.surface
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 14
+                                    Text { text: modelData.label; color: colors.muted; font.pixelSize: 9; font.weight: Font.DemiBold }
+                                    Item { Layout.fillHeight: true }
+                                    Text { text: modelData.value; color: modelData.tone; font.pixelSize: 17; font.weight: Font.DemiBold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                }
+                            }
+                        }
+                    }
                     Item { Layout.fillHeight: true }
                 }
             }

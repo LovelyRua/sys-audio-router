@@ -215,6 +215,50 @@ qulonglong EngineController::droppedBlocks() const noexcept { return dropped_blo
 int EngineController::activeClients() const noexcept { return active_clients_; }
 double EngineController::peak() const noexcept { return peak_; }
 double EngineController::callbackPeakUs() const noexcept { return callback_peak_us_; }
+bool EngineController::wasapiRecoveryAvailable() const noexcept {
+  return wasapi_recovery_available_;
+}
+QString EngineController::wasapiRecoveryState() const {
+  switch (wasapi_recovery_.state) {
+    case control::WasapiRecoveryState::Stopped:
+      return QStringLiteral("Stopped");
+    case control::WasapiRecoveryState::Opening:
+      return QStringLiteral("Opening");
+    case control::WasapiRecoveryState::Running:
+      return QStringLiteral("Running");
+    case control::WasapiRecoveryState::Quiescing:
+      return QStringLiteral("Quiescing");
+    case control::WasapiRecoveryState::Backoff:
+      return QStringLiteral("Backoff");
+    case control::WasapiRecoveryState::Faulted:
+      return QStringLiteral("Faulted");
+  }
+  return QStringLiteral("Unknown");
+}
+qulonglong EngineController::wasapiRecoveryEpisodes() const noexcept {
+  return wasapi_recovery_.recovery_episode_count;
+}
+qulonglong EngineController::wasapiSuccessfulRecoveries() const noexcept {
+  return wasapi_recovery_.successful_recovery_count;
+}
+qulonglong EngineController::wasapiFailedRecoveries() const noexcept {
+  return wasapi_recovery_.failed_recovery_count;
+}
+qulonglong EngineController::wasapiLastRecoveryMs() const noexcept {
+  return wasapi_recovery_.last_recovery_duration_ms;
+}
+qulonglong EngineController::wasapiMaximumRecoveryMs() const noexcept {
+  return wasapi_recovery_.maximum_recovery_duration_ms;
+}
+qulonglong EngineController::wasapiEndpointReopens() const noexcept {
+  return wasapi_recovery_.endpoint_notification_reopen_count;
+}
+qulonglong EngineController::wasapiEndpointResetFailures() const noexcept {
+  return wasapi_recovery_.endpoint_notification_reset_failure_count;
+}
+bool EngineController::wasapiEndpointReopenPending() const noexcept {
+  return wasapi_recovery_.endpoint_notification_reopen_pending;
+}
 QVariantList EngineController::inputs() const { return inputs_; }
 QVariantList EngineController::outputs() const { return outputs_; }
 QVariantList EngineController::routes() const { return routes_; }
@@ -473,6 +517,7 @@ void EngineController::applyReply(const EngineReply& reply,
     emit runtimeChanged();
     emit sessionChanged();
   }
+  bool diagnostics_changed = false;
   if (reply.response.has_diagnostics) {
     const auto& diagnostics = reply.response.diagnostics;
     xrun_count_ = diagnostics.xrun_count;
@@ -481,6 +526,18 @@ void EngineController::applyReply(const EngineReply& reply,
         static_cast<int>(diagnostics.virtual_asio_active_producers);
     peak_ = diagnostics.virtual_asio_peak;
     callback_peak_us_ = diagnostics.peak_callback_seconds * 1'000'000.0;
+    diagnostics_changed = true;
+  }
+  if (reply.response.has_wasapi_recovery) {
+    wasapi_recovery_available_ = true;
+    wasapi_recovery_ = reply.response.wasapi_recovery;
+    diagnostics_changed = true;
+  } else if (reply.response.has_diagnostics && wasapi_recovery_available_) {
+    wasapi_recovery_available_ = false;
+    wasapi_recovery_ = {};
+    diagnostics_changed = true;
+  }
+  if (diagnostics_changed) {
     emit diagnosticsChanged();
   }
 

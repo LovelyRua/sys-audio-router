@@ -5,6 +5,8 @@
 #include <QEventLoop>
 #include <QThread>
 
+#include <array>
+#include <atomic>
 #include <cassert>
 #include <mutex>
 #include <vector>
@@ -50,6 +52,19 @@ EngineReply confirmed_state(const ControlCommand &command) {
       AudioRuntimeMode::WasapiDuplex;
   reply.response.audio_runtime.configuration.capture_device_id = "capture-1";
   reply.response.audio_runtime.configuration.render_device_id = "render-1";
+  reply.response.has_diagnostics = true;
+  reply.response.diagnostics.xrun_count = 3;
+  reply.response.has_wasapi_recovery = true;
+  reply.response.wasapi_recovery.state =
+      sar::control::WasapiRecoveryState::Backoff;
+  reply.response.wasapi_recovery.recovery_episode_count = 7;
+  reply.response.wasapi_recovery.successful_recovery_count = 5;
+  reply.response.wasapi_recovery.failed_recovery_count = 2;
+  reply.response.wasapi_recovery.last_recovery_duration_ms = 84;
+  reply.response.wasapi_recovery.maximum_recovery_duration_ms = 311;
+  reply.response.wasapi_recovery.endpoint_notification_reopen_count = 4;
+  reply.response.wasapi_recovery.endpoint_notification_reset_failure_count = 1;
+  reply.response.wasapi_recovery.endpoint_notification_reopen_pending = true;
   return reply;
 }
 
@@ -96,6 +111,17 @@ int main(int argc, char **argv) {
   assert(controller.runtimeMode() == QStringLiteral("duplex"));
   assert(controller.runtimeCaptureDeviceId() == QStringLiteral("capture-1"));
   assert(controller.runtimeRenderDeviceId() == QStringLiteral("render-1"));
+  assert(controller.xrunCount() == 3);
+  assert(controller.wasapiRecoveryAvailable());
+  assert(controller.wasapiRecoveryState() == QStringLiteral("Backoff"));
+  assert(controller.wasapiRecoveryEpisodes() == 7);
+  assert(controller.wasapiSuccessfulRecoveries() == 5);
+  assert(controller.wasapiFailedRecoveries() == 2);
+  assert(controller.wasapiLastRecoveryMs() == 84);
+  assert(controller.wasapiMaximumRecoveryMs() == 311);
+  assert(controller.wasapiEndpointReopens() == 4);
+  assert(controller.wasapiEndpointResetFailures() == 1);
+  assert(controller.wasapiEndpointReopenPending());
   assert(controller.lastError().contains(QStringLiteral("timed out")));
 
   {
@@ -125,5 +151,50 @@ int main(int argc, char **argv) {
     assert(requests[2].type == ControlCommandType::ConnectRoute);
     assert(requests[3].type == ControlCommandType::QuerySessionState);
   }
+
+  const std::array recovery_states{
+      std::pair{sar::control::WasapiRecoveryState::Stopped,
+                QStringLiteral("Stopped")},
+      std::pair{sar::control::WasapiRecoveryState::Opening,
+                QStringLiteral("Opening")},
+      std::pair{sar::control::WasapiRecoveryState::Running,
+                QStringLiteral("Running")},
+      std::pair{sar::control::WasapiRecoveryState::Quiescing,
+                QStringLiteral("Quiescing")},
+      std::pair{sar::control::WasapiRecoveryState::Backoff,
+                QStringLiteral("Backoff")},
+      std::pair{sar::control::WasapiRecoveryState::Faulted,
+                QStringLiteral("Faulted")},
+  };
+  std::atomic_size_t recovery_reply_index = 0;
+  const auto recovery_transport = [&](ControlCommand command) {
+    assert(command.type == ControlCommandType::QuerySessionState);
+    auto reply = confirmed_state(command);
+    const auto index = recovery_reply_index.fetch_add(1);
+    if (index < recovery_states.size()) {
+      reply.response.wasapi_recovery.state = recovery_states[index].first;
+    } else {
+      reply.response.has_wasapi_recovery = false;
+    }
+    return reply;
+  };
+  sar::gui::EngineController recovery_controller(recovery_transport, false);
+  for (const auto &[state, label] : recovery_states) {
+    (void)state;
+    recovery_controller.refresh();
+    assert(wait_until([&] {
+      return !recovery_controller.busy() &&
+             recovery_controller.wasapiRecoveryState() == label;
+    }));
+    assert(recovery_controller.wasapiRecoveryAvailable());
+  }
+  recovery_controller.refresh();
+  assert(wait_until([&] {
+    return !recovery_controller.busy() &&
+           !recovery_controller.wasapiRecoveryAvailable();
+  }));
+  assert(recovery_controller.wasapiRecoveryState() ==
+         QStringLiteral("Stopped"));
+  assert(recovery_controller.wasapiRecoveryEpisodes() == 0);
   return 0;
 }

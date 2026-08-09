@@ -50,6 +50,16 @@ class EngineController final : public QObject {
   Q_PROPERTY(int activeClients READ activeClients NOTIFY diagnosticsChanged)
   Q_PROPERTY(double peak READ peak NOTIFY diagnosticsChanged)
   Q_PROPERTY(double callbackPeakUs READ callbackPeakUs NOTIFY diagnosticsChanged)
+  Q_PROPERTY(bool wasapiRecoveryAvailable READ wasapiRecoveryAvailable NOTIFY diagnosticsChanged)
+  Q_PROPERTY(QString wasapiRecoveryState READ wasapiRecoveryState NOTIFY diagnosticsChanged)
+  Q_PROPERTY(qulonglong wasapiRecoveryEpisodes READ wasapiRecoveryEpisodes NOTIFY diagnosticsChanged)
+  Q_PROPERTY(qulonglong wasapiSuccessfulRecoveries READ wasapiSuccessfulRecoveries NOTIFY diagnosticsChanged)
+  Q_PROPERTY(qulonglong wasapiFailedRecoveries READ wasapiFailedRecoveries NOTIFY diagnosticsChanged)
+  Q_PROPERTY(qulonglong wasapiLastRecoveryMs READ wasapiLastRecoveryMs NOTIFY diagnosticsChanged)
+  Q_PROPERTY(qulonglong wasapiMaximumRecoveryMs READ wasapiMaximumRecoveryMs NOTIFY diagnosticsChanged)
+  Q_PROPERTY(qulonglong wasapiEndpointReopens READ wasapiEndpointReopens NOTIFY diagnosticsChanged)
+  Q_PROPERTY(qulonglong wasapiEndpointResetFailures READ wasapiEndpointResetFailures NOTIFY diagnosticsChanged)
+  Q_PROPERTY(bool wasapiEndpointReopenPending READ wasapiEndpointReopenPending NOTIFY diagnosticsChanged)
   Q_PROPERTY(QVariantList inputs READ inputs NOTIFY sessionChanged)
   Q_PROPERTY(QVariantList outputs READ outputs NOTIFY sessionChanged)
   Q_PROPERTY(QVariantList routes READ routes NOTIFY sessionChanged)
@@ -83,6 +93,16 @@ class EngineController final : public QObject {
   [[nodiscard]] int activeClients() const noexcept;
   [[nodiscard]] double peak() const noexcept;
   [[nodiscard]] double callbackPeakUs() const noexcept;
+  [[nodiscard]] bool wasapiRecoveryAvailable() const noexcept;
+  [[nodiscard]] QString wasapiRecoveryState() const;
+  [[nodiscard]] qulonglong wasapiRecoveryEpisodes() const noexcept;
+  [[nodiscard]] qulonglong wasapiSuccessfulRecoveries() const noexcept;
+  [[nodiscard]] qulonglong wasapiFailedRecoveries() const noexcept;
+  [[nodiscard]] qulonglong wasapiLastRecoveryMs() const noexcept;
+  [[nodiscard]] qulonglong wasapiMaximumRecoveryMs() const noexcept;
+  [[nodiscard]] qulonglong wasapiEndpointReopens() const noexcept;
+  [[nodiscard]] qulonglong wasapiEndpointResetFailures() const noexcept;
+  [[nodiscard]] bool wasapiEndpointReopenPending() const noexcept;
   [[nodiscard]] QVariantList inputs() const;
   [[nodiscard]] QVariantList outputs() const;
   [[nodiscard]] QVariantList routes() const;
@@ -179,6 +199,8 @@ class EngineController final : public QObject {
   int active_clients_ = 0;
   double peak_ = 0.0;
   double callback_peak_us_ = 0.0;
+  bool wasapi_recovery_available_ = false;
+  control::WasapiRecoveryDiagnostics wasapi_recovery_;
   QVariantList inputs_;
   QVariantList outputs_;
   QVariantList routes_;
