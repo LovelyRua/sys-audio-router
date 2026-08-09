@@ -637,7 +637,10 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   Its install scripts validate the engine, ASIO, Qt DLL, QML, and platform
   plugin payloads, verify Virtual ASIO registration, preserve and restore an
   existing install on failure, and provide a bounded uninstall path that refuses
-  to remove running installed processes. A clean-machine acceptance installed
+  to remove running installed processes. The GUI establishes a process-lifetime
+  named instance guard before Qt initialization, and installer acceptance
+  relaunches the bootstrap executable while requiring exactly one GUI and one
+  engine process. A clean-machine acceptance installed
   the final ZIP, launched its GUI without Qt development paths, verified ASIO
   ownership, rejected a deliberately incomplete runtime before changing the
   target, and removed the installation and registration through its packaged

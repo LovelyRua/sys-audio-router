@@ -391,7 +391,10 @@ requires an installed control-protocol handshake in addition to live GUI and
 engine processes. A 2026-08-09 test-machine run migrated the ownership-marked
 ZIP alpha, then passed install, in-place update, launcher, GUI, engine, control,
 ASIO registration, and uninstall acceptance before leaving the same verified
-installer deployed under the user's local Programs directory. Large-matrix
+installer deployed under the user's local Programs directory. The installer
+gate now launches the bootstrap executable twice and requires exactly one GUI
+and one engine process; the 2026-08-09 test-machine acceptance passed the same
+single-instance check before deploying package `f4708e1`. Large-matrix
 virtualization, undo/redo, and seed-user workflow testing remain.
 
 Deliverables:
