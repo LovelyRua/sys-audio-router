@@ -190,6 +190,22 @@ try {
     throw "A bootstrapped process exited before the health window completed."
   }
 
+  $controlCli = Join-Path $installPath "bin\sar_control_cli.exe"
+  $previousErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $controlOutput = @(& $controlCli devices 2>&1 |
+        ForEach-Object { [string]$_ })
+    $controlExitCode = [int]$LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+  if ($controlExitCode -ne 0 -or $controlOutput.Count -eq 0 -or
+      $controlOutput[0] -notmatch
+          '^control_response status=accepted command_id=cli-1(?:\s|$)') {
+    throw "Installed control-plane handshake failed with exit code $controlExitCode`: $([string]::Join('; ', $controlOutput))"
+  }
+
   $uninstallerPath = Join-Path $installPath "Uninstall.exe"
   Invoke-NsisExecutable -Path $uninstallerPath -Argument @("/S")
 
@@ -218,7 +234,7 @@ try {
       "windows_installer_acceptance passed=1" +
       " package=`"$resolvedPackagePath`"" +
       " sha256=$packageHash" +
-      " install=passed update=passed launcher=passed" +
+      " install=passed update=passed launcher=passed control=passed" +
       " gui=passed engine=passed asio=passed uninstall=passed")
 } finally {
   foreach ($processName in @("SystemAudioRoute", "sar_engine_service")) {
