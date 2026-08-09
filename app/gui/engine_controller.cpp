@@ -113,7 +113,8 @@ EngineController::EngineController(EngineTransport transport,
       transport_(std::move(transport)),
       preset_store_(QStandardPaths::writableLocation(
                         QStandardPaths::AppDataLocation) +
-                    QStringLiteral("/presets")) {
+                    QStringLiteral("/presets")),
+      service_management_enabled_(automatic_activity) {
   connect(&watcher_, &QFutureWatcher<EngineReply>::finished, this, [this] {
     const auto reply = watcher_.result();
     if (!active_command_.has_value()) {
@@ -409,10 +410,33 @@ void EngineController::setRoute(const QString& input_id,
     return;
   }
   control::ControlCommand command;
-  command.type = enabled ? control::ControlCommandType::ConnectRoute
-                         : control::ControlCommandType::DisconnectRoute;
-  command.input_id = input_id.toStdString();
-  command.output_id = output_id.toStdString();
+  auto input = input_id.toStdString();
+  auto output = output_id.toStdString();
+  const control::PresetRoute* existing_route = nullptr;
+  if (current_preset_.has_value()) {
+    const auto route = std::ranges::find_if(
+        current_preset_->matrix.routes, [&](const auto& candidate) {
+          return candidate.input_id == input && candidate.output_id == output;
+        });
+    if (route != current_preset_->matrix.routes.end()) {
+      existing_route = &*route;
+    }
+  }
+
+  if (enabled && existing_route != nullptr) {
+    if (!existing_route->muted) {
+      return;
+    }
+    command.type = control::ControlCommandType::SetMute;
+    command.mute = false;
+  } else if (!enabled && existing_route == nullptr) {
+    return;
+  } else {
+    command.type = enabled ? control::ControlCommandType::ConnectRoute
+                           : control::ControlCommandType::DisconnectRoute;
+  }
+  command.input_id = std::move(input);
+  command.output_id = std::move(output);
   command.gain = 1.0F;
   QueuedCommand queued{command};
   if (current_preset_.has_value()) {
@@ -597,13 +621,21 @@ void EngineController::applyReply(const EngineReply& reply,
   if (was_connected != connected_) {
     emit connectionChanged();
   }
+  if (!reply.delivery_uncertain && !reply.transport_ok) {
+    connection_error_active_ = true;
+  } else if (!was_connected && connected_ && connection_error_active_) {
+    connection_error_active_ = false;
+    if (reply.error.isEmpty()) {
+      clearFeedback();
+    }
+  }
   if (!reply.error.isEmpty()) {
     setError(reply.error);
   }
   if (!command_succeeded) {
     if (reply.delivery_uncertain) {
       QTimer::singleShot(0, this, &EngineController::refresh);
-    } else if (!reply.transport_ok) {
+    } else if (!reply.transport_ok && service_management_enabled_) {
       ensureEngineService();
     }
     return;
@@ -674,6 +706,7 @@ void EngineController::applyReply(const EngineReply& reply,
   if (reply.request_type == control::ControlCommandType::ConnectRoute ||
       reply.request_type == control::ControlCommandType::DisconnectRoute ||
       reply.request_type == control::ControlCommandType::SetGain ||
+      reply.request_type == control::ControlCommandType::SetMute ||
       reply.request_type == control::ControlCommandType::LoadPreset ||
       reply.request_type == control::ControlCommandType::StartAudioRuntime ||
       reply.request_type == control::ControlCommandType::StopAudioRuntime) {
@@ -778,12 +811,14 @@ void EngineController::ensureEngineService() {
   const auto executable = QDir(QCoreApplication::applicationDirPath())
                               .filePath(QStringLiteral("sar_engine_service.exe"));
   if (!QFileInfo::exists(executable)) {
+    engine_service_start_attempted_ = false;
     setError(QStringLiteral("The engine service executable is missing from this installation"));
     return;
   }
   const auto data_path = QStandardPaths::writableLocation(
       QStandardPaths::AppDataLocation);
   if (data_path.isEmpty() || !QDir().mkpath(data_path)) {
+    engine_service_start_attempted_ = false;
     setError(QStringLiteral("Could not create the engine service data directory"));
     return;
   }

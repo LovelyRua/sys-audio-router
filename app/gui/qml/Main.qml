@@ -92,7 +92,13 @@ ApplicationWindow {
             if (model[index].id === deviceId)
                 return index
         }
-        return deviceId.length === 0 && model.length > 0 && !runtimeDraftDirty ? 0 : -1
+        if (deviceId.length !== 0 || model.length === 0)
+            return -1
+        for (var defaultIndex = 0; defaultIndex < model.length; ++defaultIndex) {
+            if (model[defaultIndex].isDefault)
+                return defaultIndex
+        }
+        return 0
     }
 
     Connections {
@@ -194,14 +200,27 @@ ApplicationWindow {
     component ConsoleCombo: ComboBox {
         id: control
         property string emptyText: "No options"
+        function optionText(value) {
+            if (value === undefined || value === null)
+                return ""
+            if (control.textRole.length > 0 && typeof value === "object") {
+                var roleValue = value[control.textRole]
+                return roleValue === undefined || roleValue === null
+                        ? "" : String(roleValue)
+            }
+            return String(value)
+        }
+        readonly property string selectedText:
+            currentIndex >= 0 && currentIndex < model.length
+            ? optionText(model[currentIndex]) : ""
         implicitHeight: 34
         leftPadding: 10
         rightPadding: 28
         font.pixelSize: 12
         contentItem: Text {
-            text: control.displayText.length > 0 ? control.displayText
-                                                 : control.emptyText
-            color: control.displayText.length > 0 ? colors.text : colors.muted
+            text: control.selectedText.length > 0 ? control.selectedText
+                                                  : control.emptyText
+            color: control.selectedText.length > 0 ? colors.text : colors.muted
             font: control.font
             verticalAlignment: Text.AlignVCenter
             elide: Text.ElideRight
@@ -224,9 +243,7 @@ ApplicationWindow {
             height: 34
             leftPadding: 10
             contentItem: Text {
-                text: control.textRole.length > 0 && modelData !== null
-                      && typeof modelData === "object"
-                      ? modelData[control.textRole] : modelData
+                text: control.optionText(modelData)
                 color: colors.text
                 font.pixelSize: 12
                 verticalAlignment: Text.AlignVCenter

@@ -35,6 +35,13 @@ EngineReply uncertain(const ControlCommand &command) {
   return reply;
 }
 
+EngineReply disconnected(const ControlCommand &command) {
+  EngineReply reply;
+  reply.request_type = command.type;
+  reply.error = QStringLiteral("The engine is offline");
+  return reply;
+}
+
 EngineReply confirmed_state(const ControlCommand &command) {
   auto reply = accepted(command);
   reply.response.has_session_state = true;
@@ -196,5 +203,62 @@ int main(int argc, char **argv) {
   assert(recovery_controller.wasapiRecoveryState() ==
          QStringLiteral("Stopped"));
   assert(recovery_controller.wasapiRecoveryEpisodes() == 0);
+
+  std::atomic_int reconnect_attempt = 0;
+  const auto reconnect_transport = [&](ControlCommand command) {
+    assert(command.type == ControlCommandType::QuerySessionState);
+    if (reconnect_attempt.fetch_add(1) == 0) {
+      return disconnected(command);
+    }
+    return confirmed_state(command);
+  };
+  sar::gui::EngineController reconnect_controller(reconnect_transport, false);
+  reconnect_controller.refresh();
+  assert(wait_until([&] { return !reconnect_controller.busy(); }));
+  assert(!reconnect_controller.connected());
+  assert(!reconnect_controller.lastError().isEmpty());
+  reconnect_controller.refresh();
+  assert(wait_until([&] {
+    return !reconnect_controller.busy() && reconnect_controller.connected();
+  }));
+  assert(reconnect_controller.lastError().isEmpty());
+
+  auto muted_state = confirmed_state(ControlCommand{});
+  muted_state.response.preset.matrix.routes.front().muted = true;
+  std::mutex muted_mutex;
+  std::vector<ControlCommand> muted_requests;
+  const auto muted_transport = [&](ControlCommand command) {
+    const std::scoped_lock lock(muted_mutex);
+    muted_requests.push_back(command);
+    if (command.type == ControlCommandType::QuerySessionState) {
+      auto state = muted_state;
+      state.request_type = command.type;
+      state.response.command_id = command.command_id;
+      return state;
+    }
+    assert(command.type == ControlCommandType::SetMute);
+    assert(!command.mute);
+    muted_state.response.preset.matrix.routes.front().muted = false;
+    return accepted(command);
+  };
+  sar::gui::EngineController muted_controller(muted_transport, false);
+  muted_controller.refresh();
+  assert(wait_until([&] { return !muted_controller.busy(); }));
+  assert(!muted_controller.routeEnabled(QStringLiteral("daw"),
+                                        QStringLiteral("monitor")));
+  muted_controller.setRoute(QStringLiteral("daw"),
+                            QStringLiteral("monitor"), true);
+  assert(wait_until([&] {
+    return !muted_controller.busy() &&
+           muted_controller.routeEnabled(QStringLiteral("daw"),
+                                         QStringLiteral("monitor"));
+  }));
+  {
+    const std::scoped_lock lock(muted_mutex);
+    assert(muted_requests.size() == 3);
+    assert(muted_requests[0].type == ControlCommandType::QuerySessionState);
+    assert(muted_requests[1].type == ControlCommandType::SetMute);
+    assert(muted_requests[2].type == ControlCommandType::QuerySessionState);
+  }
   return 0;
 }

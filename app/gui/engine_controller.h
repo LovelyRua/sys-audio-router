@@ -214,6 +214,8 @@ class EngineController final : public QObject {
   QString runtime_render_device_id_;
   bool engine_service_owned_ = false;
   bool engine_service_start_attempted_ = false;
+  bool service_management_enabled_ = true;
+  bool connection_error_active_ = false;
   bool shutting_down_ = false;
   bool busy_ = false;
   QString last_error_;
