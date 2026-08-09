@@ -81,7 +81,7 @@ function Assert-AcceptedHeader {
     throw "$Step exited with code $($Result.ExitCode): $($Result.Text)"
   }
   if ($Result.Lines.Count -eq 0 -or
-      $Result.Lines[0] -notmatch '^control_response status=accepted command_id=cli-1(?:\s|$)') {
+      $Result.Lines[0] -notmatch '^control_response status=accepted command_id=cli-\d+-\d+(?:\s|$)') {
     throw "$Step did not return an accepted machine-readable response: $($Result.Text)"
   }
 }

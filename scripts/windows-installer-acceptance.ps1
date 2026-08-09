@@ -202,7 +202,7 @@ try {
   }
   if ($controlExitCode -ne 0 -or $controlOutput.Count -eq 0 -or
       $controlOutput[0] -notmatch
-          '^control_response status=accepted command_id=cli-1(?:\s|$)') {
+          '^control_response status=accepted command_id=cli-\d+-\d+(?:\s|$)') {
     throw "Installed control-plane handshake failed with exit code $controlExitCode`: $([string]::Join('; ', $controlOutput))"
   }
 

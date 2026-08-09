@@ -241,7 +241,7 @@ try {
   if ($controlResult.ExitCode -ne 0 -or
       $controlResult.Output.Count -eq 0 -or
       $controlResult.Output[0] -notmatch
-          '^control_response status=accepted command_id=cli-1(?:\s|$)') {
+          '^control_response status=accepted command_id=cli-\d+-\d+(?:\s|$)') {
     throw "Installed control-plane handshake failed with exit code $($controlResult.ExitCode): $([string]::Join('; ', $controlResult.Output))"
   }
 
@@ -252,7 +252,7 @@ try {
   if ($diagnosticsResult.ExitCode -ne 0 -or
       $diagnosticsResult.Output.Count -eq 0 -or
       $diagnosticsResult.Output[0] -notmatch
-          '^control_response status=accepted command_id=cli-1\s' -or
+          '^control_response status=accepted command_id=cli-\d+-\d+\s' -or
       $diagnosticsResult.Output[0] -notmatch '\sprocessed_blocks=\d+(?:\s|$)' -or
       $diagnosticsResult.Output[0] -notmatch '\sxruns=\d+(?:\s|$)' -or
       $diagnosticsResult.Output[0] -notmatch '\scallback_peak_us=') {

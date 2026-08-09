@@ -58,7 +58,7 @@ function Assert-Accepted {
   param([pscustomobject]$Result, [string]$Step)
 
   if ($Result.ExitCode -ne 0 -or $Result.Lines.Count -eq 0 -or
-      $Result.Lines[0] -notmatch '^control_response status=accepted command_id=cli-1(?:\s|$)') {
+      $Result.Lines[0] -notmatch '^control_response status=accepted command_id=cli-\d+-\d+(?:\s|$)') {
     throw "$Step did not return an accepted response: $($Result.Text)"
   }
 }

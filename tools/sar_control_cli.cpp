@@ -7,6 +7,7 @@
 #endif
 #include <Windows.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -231,7 +232,9 @@ int main(int argc, char** argv) {
   }
 
   sar::control::ControlCommand command;
-  command.command_id = "cli-1";
+  command.command_id =
+      "cli-" + std::to_string(GetCurrentProcessId()) + "-" +
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
   std::string preset_file_name;
   const std::string operation = argv[index++];
   if (operation == "state") {
