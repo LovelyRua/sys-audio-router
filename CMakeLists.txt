@@ -318,6 +318,23 @@ if(WIN32)
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_link_libraries(sar_virtual_asio_host_probe PRIVATE ole32)
 
+  add_executable(sar_virtual_asio_soak
+    tools/sar_virtual_asio_soak.cpp
+    tools/virtual_asio_soak_options.cpp
+  )
+  target_link_libraries(sar_virtual_asio_soak PRIVATE sar_core)
+
+  add_executable(sar_virtual_asio_soak_options_smoke
+    tests/realtime/virtual_asio_soak_options_smoke.cpp
+    tools/virtual_asio_soak_options.cpp
+  )
+  target_link_libraries(sar_virtual_asio_soak_options_smoke PRIVATE sar_core)
+
+  add_executable(sar_windows_virtual_asio_soak_smoke
+    tests/realtime/windows_virtual_asio_soak_smoke.cpp
+  )
+  target_link_libraries(sar_windows_virtual_asio_soak_smoke PRIVATE sar_core)
+
   add_executable(sar_engine_service
     tools/sar_engine_service.cpp
   )
@@ -761,6 +778,20 @@ if(WIN32)
            COMMAND sar_windows_virtual_asio_broker_client_smoke)
   set_tests_properties(windows_virtual_asio_broker_client_smoke
                        PROPERTIES TIMEOUT 10)
+  add_test(NAME virtual_asio_soak_options_smoke
+           COMMAND sar_virtual_asio_soak_options_smoke)
+  add_test(NAME windows_virtual_asio_soak_help
+           COMMAND sar_virtual_asio_soak --help)
+  set_tests_properties(windows_virtual_asio_soak_help
+                       PROPERTIES PASS_REGULAR_EXPRESSION "--block-sizes")
+  add_test(NAME windows_virtual_asio_soak_bad_clients
+           COMMAND sar_virtual_asio_soak --clients 33)
+  set_tests_properties(windows_virtual_asio_soak_bad_clients
+                       PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME windows_virtual_asio_soak_smoke
+           COMMAND sar_windows_virtual_asio_soak_smoke
+                   $<TARGET_FILE:sar_virtual_asio_soak>)
+  set_tests_properties(windows_virtual_asio_soak_smoke PROPERTIES TIMEOUT 15)
   add_test(NAME windows_virtual_asio_restart_recovery_smoke
            COMMAND sar_windows_virtual_asio_restart_recovery_smoke)
   set_tests_properties(windows_virtual_asio_restart_recovery_smoke
