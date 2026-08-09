@@ -26,8 +26,17 @@ enum class WasapiRecoveryState {
   Faulted,
 };
 
+enum class WasapiRuntimeHealth {
+  Stopped,
+  Healthy,
+  Degraded,
+  Faulted,
+};
+
 struct WasapiRecoveryDiagnostics {
   WasapiRecoveryState state = WasapiRecoveryState::Stopped;
+  WasapiRuntimeHealth runtime_health = WasapiRuntimeHealth::Stopped;
+  std::string runtime_reason_code;
   std::uint64_t recovery_episode_count = 0;
   std::uint64_t successful_recovery_count = 0;
   std::uint64_t failed_recovery_count = 0;
@@ -36,6 +45,11 @@ struct WasapiRecoveryDiagnostics {
   std::uint64_t endpoint_notification_reopen_count = 0;
   std::uint64_t endpoint_notification_reset_failure_count = 0;
   bool endpoint_notification_reopen_pending = false;
+  std::uint64_t wait_timeout_cycles = 0;
+  std::uint64_t capture_discontinuity_cycles = 0;
+  std::uint64_t render_fifo_underflow_frames = 0;
+  std::uint64_t maximum_render_recovery_silence_frames = 0;
+  std::uint64_t maximum_consecutive_capture_rate_clamped_frames = 0;
 };
 
 struct ControlResponse {

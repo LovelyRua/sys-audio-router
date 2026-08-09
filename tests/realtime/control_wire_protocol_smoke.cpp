@@ -70,6 +70,9 @@ int main() {
   response.diagnostics.virtual_asio_peak = 0.75;
   response.has_wasapi_recovery = true;
   response.wasapi_recovery.state = sar::control::WasapiRecoveryState::Backoff;
+  response.wasapi_recovery.runtime_health =
+      sar::control::WasapiRuntimeHealth::Degraded;
+  response.wasapi_recovery.runtime_reason_code = "capture_discontinuity";
   response.wasapi_recovery.recovery_episode_count = 9;
   response.wasapi_recovery.successful_recovery_count = 7;
   response.wasapi_recovery.failed_recovery_count = 2;
@@ -78,6 +81,11 @@ int main() {
   response.wasapi_recovery.endpoint_notification_reopen_count = 4;
   response.wasapi_recovery.endpoint_notification_reset_failure_count = 1;
   response.wasapi_recovery.endpoint_notification_reopen_pending = true;
+  response.wasapi_recovery.wait_timeout_cycles = 11;
+  response.wasapi_recovery.capture_discontinuity_cycles = 12;
+  response.wasapi_recovery.render_fifo_underflow_frames = 2048;
+  response.wasapi_recovery.maximum_render_recovery_silence_frames = 1024;
+  response.wasapi_recovery.maximum_consecutive_capture_rate_clamped_frames = 512;
   response.has_audio_runtime_state = true;
   response.audio_runtime.installed = true;
   response.audio_runtime.running = true;
@@ -115,6 +123,10 @@ int main() {
   assert(decoded_response.response.has_wasapi_recovery);
   assert(decoded_response.response.wasapi_recovery.state ==
          sar::control::WasapiRecoveryState::Backoff);
+  assert(decoded_response.response.wasapi_recovery.runtime_health ==
+         sar::control::WasapiRuntimeHealth::Degraded);
+  assert(decoded_response.response.wasapi_recovery.runtime_reason_code ==
+         "capture_discontinuity");
   assert(decoded_response.response.wasapi_recovery.recovery_episode_count == 9);
   assert(decoded_response.response.wasapi_recovery.successful_recovery_count == 7);
   assert(decoded_response.response.wasapi_recovery.failed_recovery_count == 2);
@@ -128,6 +140,15 @@ int main() {
              .endpoint_notification_reset_failure_count == 1);
   assert(decoded_response.response.wasapi_recovery
              .endpoint_notification_reopen_pending);
+  assert(decoded_response.response.wasapi_recovery.wait_timeout_cycles == 11);
+  assert(decoded_response.response.wasapi_recovery.capture_discontinuity_cycles ==
+         12);
+  assert(decoded_response.response.wasapi_recovery.render_fifo_underflow_frames ==
+         2048);
+  assert(decoded_response.response.wasapi_recovery
+             .maximum_render_recovery_silence_frames == 1024);
+  assert(decoded_response.response.wasapi_recovery
+             .maximum_consecutive_capture_rate_clamped_frames == 512);
   assert(decoded_response.response.has_audio_runtime_state);
   assert(decoded_response.response.audio_runtime.installed);
   assert(decoded_response.response.audio_runtime.running);

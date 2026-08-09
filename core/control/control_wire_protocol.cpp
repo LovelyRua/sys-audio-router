@@ -345,6 +345,8 @@ void encode_diagnostics(Writer& writer,
 void encode_wasapi_recovery(Writer& writer,
                             const WasapiRecoveryDiagnostics& diagnostics) {
   writer.scalar(static_cast<std::uint32_t>(diagnostics.state));
+  writer.scalar(static_cast<std::uint32_t>(diagnostics.runtime_health));
+  writer.string(diagnostics.runtime_reason_code);
   writer.scalar(diagnostics.recovery_episode_count);
   writer.scalar(diagnostics.successful_recovery_count);
   writer.scalar(diagnostics.failed_recovery_count);
@@ -353,6 +355,11 @@ void encode_wasapi_recovery(Writer& writer,
   writer.scalar(diagnostics.endpoint_notification_reopen_count);
   writer.scalar(diagnostics.endpoint_notification_reset_failure_count);
   writer.boolean(diagnostics.endpoint_notification_reopen_pending);
+  writer.scalar(diagnostics.wait_timeout_cycles);
+  writer.scalar(diagnostics.capture_discontinuity_cycles);
+  writer.scalar(diagnostics.render_fifo_underflow_frames);
+  writer.scalar(diagnostics.maximum_render_recovery_silence_frames);
+  writer.scalar(diagnostics.maximum_consecutive_capture_rate_clamped_frames);
 }
 
 diagnostics::EngineDiagnostics decode_diagnostics(Reader& reader) {
@@ -391,6 +398,9 @@ WasapiRecoveryDiagnostics decode_wasapi_recovery(Reader& reader) {
   WasapiRecoveryDiagnostics diagnostics;
   diagnostics.state = reader.enumeration<WasapiRecoveryState>(
       static_cast<std::uint32_t>(WasapiRecoveryState::Faulted));
+  diagnostics.runtime_health = reader.enumeration<WasapiRuntimeHealth>(
+      static_cast<std::uint32_t>(WasapiRuntimeHealth::Faulted));
+  diagnostics.runtime_reason_code = reader.string();
   diagnostics.recovery_episode_count = reader.scalar<std::uint64_t>();
   diagnostics.successful_recovery_count = reader.scalar<std::uint64_t>();
   diagnostics.failed_recovery_count = reader.scalar<std::uint64_t>();
@@ -401,6 +411,13 @@ WasapiRecoveryDiagnostics decode_wasapi_recovery(Reader& reader) {
   diagnostics.endpoint_notification_reset_failure_count =
       reader.scalar<std::uint64_t>();
   diagnostics.endpoint_notification_reopen_pending = reader.boolean();
+  diagnostics.wait_timeout_cycles = reader.scalar<std::uint64_t>();
+  diagnostics.capture_discontinuity_cycles = reader.scalar<std::uint64_t>();
+  diagnostics.render_fifo_underflow_frames = reader.scalar<std::uint64_t>();
+  diagnostics.maximum_render_recovery_silence_frames =
+      reader.scalar<std::uint64_t>();
+  diagnostics.maximum_consecutive_capture_rate_clamped_frames =
+      reader.scalar<std::uint64_t>();
   return diagnostics;
 }
 

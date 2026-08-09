@@ -219,6 +219,8 @@ int main() {
 
   runtime_observer->recovery = sar::service::EngineAudioRecoveryDiagnostics{
       .state = sar::service::EngineAudioRecoveryState::Opening,
+      .runtime_health = sar::service::EngineAudioRuntimeHealth::Degraded,
+      .runtime_reason_code = "capture_discontinuity",
       .recovery_episode_count = 5,
       .successful_recovery_count = 3,
       .failed_recovery_count = 1,
@@ -227,6 +229,11 @@ int main() {
       .endpoint_notification_reopen_count = 2,
       .endpoint_notification_reset_failure_count = 1,
       .endpoint_notification_reopen_pending = true,
+      .wait_timeout_cycles = 2,
+      .capture_discontinuity_cycles = 4,
+      .render_fifo_underflow_frames = 960,
+      .maximum_render_recovery_silence_frames = 480,
+      .maximum_consecutive_capture_rate_clamped_frames = 240,
   };
 
   runtime_start.command_id = "runtime-start-3";
@@ -247,6 +254,10 @@ int main() {
   assert(diagnostic_response.has_wasapi_recovery);
   assert(diagnostic_response.wasapi_recovery.state ==
          sar::control::WasapiRecoveryState::Opening);
+  assert(diagnostic_response.wasapi_recovery.runtime_health ==
+         sar::control::WasapiRuntimeHealth::Degraded);
+  assert(diagnostic_response.wasapi_recovery.runtime_reason_code ==
+         "capture_discontinuity");
   assert(diagnostic_response.wasapi_recovery.recovery_episode_count == 5);
   assert(diagnostic_response.wasapi_recovery.successful_recovery_count == 3);
   assert(diagnostic_response.wasapi_recovery.failed_recovery_count == 1);
@@ -259,6 +270,13 @@ int main() {
              .endpoint_notification_reset_failure_count == 1);
   assert(diagnostic_response.wasapi_recovery
              .endpoint_notification_reopen_pending);
+  assert(diagnostic_response.wasapi_recovery.wait_timeout_cycles == 2);
+  assert(diagnostic_response.wasapi_recovery.capture_discontinuity_cycles == 4);
+  assert(diagnostic_response.wasapi_recovery.render_fifo_underflow_frames == 960);
+  assert(diagnostic_response.wasapi_recovery
+             .maximum_render_recovery_silence_frames == 480);
+  assert(diagnostic_response.wasapi_recovery
+             .maximum_consecutive_capture_rate_clamped_frames == 240);
 
   runtime_observer->recovery.reset();
   service->set_wasapi_recovery_diagnostics_provider(

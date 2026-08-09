@@ -27,6 +27,21 @@ control::WasapiRecoveryState convert_recovery_state(
   return control::WasapiRecoveryState::Faulted;
 }
 
+control::WasapiRuntimeHealth convert_runtime_health(
+    EngineAudioRuntimeHealth health) noexcept {
+  switch (health) {
+    case EngineAudioRuntimeHealth::Stopped:
+      return control::WasapiRuntimeHealth::Stopped;
+    case EngineAudioRuntimeHealth::Healthy:
+      return control::WasapiRuntimeHealth::Healthy;
+    case EngineAudioRuntimeHealth::Degraded:
+      return control::WasapiRuntimeHealth::Degraded;
+    case EngineAudioRuntimeHealth::Faulted:
+      return control::WasapiRuntimeHealth::Faulted;
+  }
+  return control::WasapiRuntimeHealth::Faulted;
+}
+
 }  // namespace
 
 EngineControlServiceCreateResult EngineControlService::create(
@@ -547,6 +562,9 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
       const auto recovery = runtime_recovery
           ? std::optional{control::WasapiRecoveryDiagnostics{
                 .state = convert_recovery_state(runtime_recovery->state),
+                .runtime_health =
+                    convert_runtime_health(runtime_recovery->runtime_health),
+                .runtime_reason_code = runtime_recovery->runtime_reason_code,
                 .recovery_episode_count =
                     runtime_recovery->recovery_episode_count,
                 .successful_recovery_count =
@@ -563,6 +581,16 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
                         ->endpoint_notification_reset_failure_count,
                 .endpoint_notification_reopen_pending =
                     runtime_recovery->endpoint_notification_reopen_pending,
+                .wait_timeout_cycles = runtime_recovery->wait_timeout_cycles,
+                .capture_discontinuity_cycles =
+                    runtime_recovery->capture_discontinuity_cycles,
+                .render_fifo_underflow_frames =
+                    runtime_recovery->render_fifo_underflow_frames,
+                .maximum_render_recovery_silence_frames =
+                    runtime_recovery->maximum_render_recovery_silence_frames,
+                .maximum_consecutive_capture_rate_clamped_frames =
+                    runtime_recovery
+                        ->maximum_consecutive_capture_rate_clamped_frames,
             }}
           : wasapi_recovery_diagnostics_provider_
                 ? wasapi_recovery_diagnostics_provider_()

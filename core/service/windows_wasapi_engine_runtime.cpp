@@ -70,6 +70,21 @@ EngineAudioRecoveryState convert_recovery_state(
   return EngineAudioRecoveryState::Faulted;
 }
 
+EngineAudioRuntimeHealth convert_runtime_health(
+    platform::WasapiRuntimeHealth health) noexcept {
+  switch (health) {
+    case platform::WasapiRuntimeHealth::Stopped:
+      return EngineAudioRuntimeHealth::Stopped;
+    case platform::WasapiRuntimeHealth::Healthy:
+      return EngineAudioRuntimeHealth::Healthy;
+    case platform::WasapiRuntimeHealth::Degraded:
+      return EngineAudioRuntimeHealth::Degraded;
+    case platform::WasapiRuntimeHealth::Faulted:
+      return EngineAudioRuntimeHealth::Faulted;
+  }
+  return EngineAudioRuntimeHealth::Faulted;
+}
+
 }  // namespace
 
 WindowsWasapiEngineRuntime::~WindowsWasapiEngineRuntime() {
@@ -350,8 +365,12 @@ WindowsWasapiEngineRuntime::recovery_diagnostics() const {
     return std::nullopt;
   }
   const auto summary = duplex_supervisor_->summary();
+  const auto runtime = duplex_supervisor_->runtime_summary();
+  const auto stats = duplex_supervisor_->runtime_stats();
   return EngineAudioRecoveryDiagnostics{
       .state = convert_recovery_state(summary.state),
+      .runtime_health = convert_runtime_health(runtime.health),
+      .runtime_reason_code = runtime.reason_code,
       .recovery_episode_count = summary.recovery_episode_count,
       .successful_recovery_count = summary.successful_recovery_count,
       .failed_recovery_count = summary.failed_recovery_count,
@@ -363,6 +382,13 @@ WindowsWasapiEngineRuntime::recovery_diagnostics() const {
           summary.endpoint_notification_reset_failure_count,
       .endpoint_notification_reopen_pending =
           summary.endpoint_notification_reopen_pending,
+      .wait_timeout_cycles = runtime.wait_timeout_cycles,
+      .capture_discontinuity_cycles = runtime.capture_discontinuity_cycles,
+      .render_fifo_underflow_frames = runtime.render_fifo_underflow_frames,
+      .maximum_render_recovery_silence_frames =
+          runtime.maximum_render_recovery_silence_frames,
+      .maximum_consecutive_capture_rate_clamped_frames =
+          stats.maximum_consecutive_capture_rate_clamped_frames,
   };
 }
 
