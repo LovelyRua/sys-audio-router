@@ -223,6 +223,34 @@ int main() {
   assert(exhausted_supervisor.summary().successful_recovery_count == 0);
   assert(exhausted_supervisor.summary().failed_recovery_count == 1);
 
+  auto returned_device_runtime = std::make_shared<RuntimeState>();
+  std::uint32_t returned_device_open_count = 0;
+  WindowsWasapiDuplexSupervisor returned_device_supervisor(
+      [&] {
+        ++returned_device_open_count;
+        if (returned_device_open_count < 5) {
+          return WasapiDuplexRuntimeOpenResult::failure(invalidated);
+        }
+        return WasapiDuplexRuntimeOpenResult::success(
+            std::make_unique<ScriptedRuntime>(returned_device_runtime));
+      },
+      10);
+  returned_device_supervisor.start(0);
+  returned_device_supervisor.tick(0);
+  returned_device_supervisor.tick(500);
+  returned_device_supervisor.tick(3500);
+  assert(returned_device_supervisor.state() == WasapiRecoveryState::Backoff);
+  assert(returned_device_supervisor.summary().failed_recovery_count == 0);
+  returned_device_supervisor.tick(8499);
+  assert(returned_device_open_count == 4);
+  returned_device_supervisor.tick(8500);
+  assert(returned_device_supervisor.running());
+  assert(returned_device_open_count == 5);
+  assert(returned_device_supervisor.summary().runtime_open_count == 5);
+  assert(returned_device_supervisor.summary().successful_recovery_count == 1);
+  assert(returned_device_supervisor.summary().failed_recovery_count == 0);
+  returned_device_supervisor.stop(8600);
+
   auto notification_first = std::make_shared<RuntimeState>();
   auto notification_second = std::make_shared<RuntimeState>();
   std::uint32_t notification_open_count = 0;

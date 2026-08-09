@@ -129,10 +129,11 @@ or GUI feedback work after the corresponding short hardware path has passed.
   Long-duration real-device evidence against the bound still remains.
 - **Device invalidation and reopen:** classify
   `AUDCLNT_E_DEVICE_INVALIDATED` separately, leave the realtime worker without a
-  blocked wait or join, and reopen on the control side. A disable/enable or
+  blocked wait or join, and reopen on the control side. A short disable/enable or
   default-device-change test must resume the selected route within five seconds
-  and three open attempts, or terminate with a stable fault reason; it must not
-  spin or continue using the invalid stream. The recovery policy, conservative
+  and three fast open attempts. If the endpoint remains absent, the supervisor
+  must wait at a bounded five-second retry cadence and recover when it returns;
+  it must not spin, permanently fault, or continue using the invalid stream. The recovery policy, conservative
   exact native HRESULT propagation, lock-free endpoint notifications, endpoint
   selection, notification-to-supervisor reopen decisions, error-code classifier,
   whole-duplex-runtime supervisor, and an interactive recovery measurement CLI

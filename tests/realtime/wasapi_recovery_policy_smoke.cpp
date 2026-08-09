@@ -109,8 +109,20 @@ int main() {
       return 1;
     }
     policy.tick(5100);
-    if (expect_state(policy, WasapiRecoveryState::Faulted,
-                     "Pinned recovery must fault at the five-second deadline")) {
+    if (expect_state(policy, WasapiRecoveryState::Backoff,
+                     "Pinned recovery must wait after its fast retry window") ||
+        expect(policy.next_attempt_at_ms() == 10100,
+               "Pinned recovery must continue at a bounded retry rate")) {
+      return 1;
+    }
+    policy.tick(10099);
+    if (expect_state(policy, WasapiRecoveryState::Backoff,
+                     "Persistent device retry must not open early")) {
+      return 1;
+    }
+    policy.tick(10100);
+    if (expect_state(policy, WasapiRecoveryState::Opening,
+                     "Persistent device retry must reopen when due")) {
       return 1;
     }
   }
@@ -203,8 +215,16 @@ int main() {
     }
     policy.tick(3650);
     policy.on_failure(WasapiFailureClass::Transient, 3700);
-    if (expect_state(policy, WasapiRecoveryState::Faulted,
-                     "A fourth recovery request must fault")) {
+    if (expect_state(policy, WasapiRecoveryState::Backoff,
+                     "An invalidated-device episode must remain recoverable") ||
+        expect(policy.next_attempt_at_ms() == 8700,
+               "Persistent retry must use the bounded device delay")) {
+      return 1;
+    }
+    policy.tick(8700);
+    policy.on_open_succeeded(8710);
+    if (expect_state(policy, WasapiRecoveryState::Running,
+                     "A returning device must restore the running state")) {
       return 1;
     }
   }

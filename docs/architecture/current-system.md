@@ -342,8 +342,11 @@ are ready. The refill that follows remains bounded by the configured FIFO target
 
 `WindowsWasapiDuplexSupervisor` is a control-plane owner above the complete
 duplex loop. It classifies failures, synchronously quiesces and destroys the old
-runtime, then rebuilds it with 0/500/3000 ms retry delays and a five-second hard
-recovery deadline. Standalone users can drive it with explicit control-plane
+runtime, then rebuilds it with 0/500/3000 ms fast retry delays. Ordinary
+transient failures retain a five-second hard deadline. Explicit device-loss
+failures continue with one reopen attempt every five seconds after the fast
+window, allowing a service restart or unplugged endpoint to return without
+leaving the engine permanently faulted. Standalone users can drive it with explicit control-plane
 `tick()` calls; the service-owned duplex adapter now supplies a dedicated 20 ms
 control thread and COM endpoint-notification apartment. A lock-free
 `IMMNotificationClient` generation/event source and an

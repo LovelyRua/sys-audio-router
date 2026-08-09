@@ -161,6 +161,9 @@ void WasapiRecoveryPolicy::on_failure(WasapiFailureClass failure_class,
     return;
   }
 
+  if (failure_class == WasapiFailureClass::DeviceInvalidated) {
+    device_retry_active_ = true;
+  }
   begin_recovery(now_ms);
   if (state_ == WasapiRecoveryState::Running) {
     recovery_pending_ = true;
@@ -181,11 +184,13 @@ void WasapiRecoveryPolicy::begin_recovery(std::uint64_t now_ms) noexcept {
 }
 
 void WasapiRecoveryPolicy::schedule_recovery(std::uint64_t now_ms) noexcept {
-  if (now_ms >= recovery_deadline_at_ms_) {
-    fault();
-    return;
-  }
-  if (attempt_count_ >= kMaxAttempts) {
+  if (now_ms >= recovery_deadline_at_ms_ || attempt_count_ >= kMaxAttempts) {
+    if (device_retry_active_) {
+      next_attempt_at_ms_ = saturating_add(now_ms, kDeviceRetryDelayMs);
+      recovery_deadline_at_ms_ = next_attempt_at_ms_;
+      state_ = WasapiRecoveryState::Backoff;
+      return;
+    }
     fault();
     return;
   }
@@ -204,11 +209,19 @@ void WasapiRecoveryPolicy::tick(std::uint64_t now_ms) noexcept {
 
   if (state_ == WasapiRecoveryState::Opening && recovery_active_ &&
       now_ms >= recovery_deadline_at_ms_) {
-    fault();
+    if (device_retry_active_) {
+      schedule_recovery(now_ms);
+    } else {
+      fault();
+    }
     return;
   }
 
   if (state_ != WasapiRecoveryState::Backoff) {
+    return;
+  }
+  if (device_retry_active_ && now_ms >= next_attempt_at_ms_) {
+    state_ = WasapiRecoveryState::Opening;
     return;
   }
   if (now_ms >= recovery_deadline_at_ms_) {
@@ -225,6 +238,7 @@ void WasapiRecoveryPolicy::clear_recovery() noexcept {
   recovery_deadline_at_ms_ = 0;
   next_attempt_at_ms_ = 0;
   recovery_active_ = false;
+  device_retry_active_ = false;
   recovery_pending_ = false;
   stop_requested_ = false;
 }

@@ -30,6 +30,7 @@ class WasapiRecoveryPolicy {
  public:
   static constexpr std::uint32_t kMaxAttempts = 3;
   static constexpr std::uint64_t kRecoveryDeadlineMs = 5000;
+  static constexpr std::uint64_t kDeviceRetryDelayMs = 5000;
   static constexpr std::uint64_t kStabilityWindowMs = 5000;
 
   [[nodiscard]] WasapiRecoveryState state() const noexcept;
@@ -59,6 +60,7 @@ class WasapiRecoveryPolicy {
   std::uint64_t next_attempt_at_ms_ = 0;
   std::uint64_t running_since_ms_ = 0;
   bool recovery_active_ = false;
+  bool device_retry_active_ = false;
   bool recovery_pending_ = false;
   bool stop_requested_ = false;
 };
