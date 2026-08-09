@@ -87,6 +87,11 @@ int main() {
                                     "Expected diagnostics xrun count")) {
       return failure;
     }
+    if (const auto failure = expect(
+            !response.has_wasapi_recovery,
+            "Expected no WASAPI recovery payload without a runtime snapshot")) {
+      return failure;
+    }
   }
 
   {

@@ -27,6 +27,8 @@ using EngineAudioRuntimeConfigurator = std::function<EngineAudioRuntimeBuildResu
     std::shared_ptr<graph::Graph>)>;
 using EnginePresetCommitObserver = std::function<std::vector<control::PresetError>(
     const control::PresetDocument&, std::uint64_t)>;
+using WasapiRecoveryDiagnosticsProvider =
+    std::function<std::optional<control::WasapiRecoveryDiagnostics>()>;
 
 class EngineControlService {
  public:
@@ -43,6 +45,8 @@ class EngineControlService {
   void set_audio_runtime_configurator(
       EngineAudioRuntimeConfigurator configurator);
   void set_preset_commit_observer(EnginePresetCommitObserver observer);
+  void set_wasapi_recovery_diagnostics_provider(
+      WasapiRecoveryDiagnosticsProvider provider);
   [[nodiscard]] EngineAudioRuntimeResult configure_audio_runtime(
       control::AudioRuntimeConfiguration configuration);
   void add_audio_device_provider(
@@ -101,6 +105,7 @@ class EngineControlService {
   EngineAudioRuntimeBuilder audio_runtime_builder_;
   EngineAudioRuntimeConfigurator audio_runtime_configurator_;
   EnginePresetCommitObserver preset_commit_observer_;
+  WasapiRecoveryDiagnosticsProvider wasapi_recovery_diagnostics_provider_;
   bool preset_commit_in_progress_ = false;
   std::optional<control::AudioRuntimeConfiguration>
       audio_runtime_configuration_;

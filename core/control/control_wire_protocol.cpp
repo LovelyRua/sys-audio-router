@@ -340,6 +340,19 @@ void encode_diagnostics(Writer& writer,
   writer.floating(diagnostics.virtual_asio_peak);
 }
 
+void encode_wasapi_recovery(Writer& writer,
+                            const WasapiRecoveryDiagnostics& diagnostics) {
+  writer.scalar(static_cast<std::uint32_t>(diagnostics.state));
+  writer.scalar(diagnostics.recovery_episode_count);
+  writer.scalar(diagnostics.successful_recovery_count);
+  writer.scalar(diagnostics.failed_recovery_count);
+  writer.scalar(diagnostics.last_recovery_duration_ms);
+  writer.scalar(diagnostics.maximum_recovery_duration_ms);
+  writer.scalar(diagnostics.endpoint_notification_reopen_count);
+  writer.scalar(diagnostics.endpoint_notification_reset_failure_count);
+  writer.boolean(diagnostics.endpoint_notification_reopen_pending);
+}
+
 diagnostics::EngineDiagnostics decode_diagnostics(Reader& reader) {
   diagnostics::EngineDiagnostics diagnostics;
   diagnostics.graph_version = reader.scalar<std::uint64_t>();
@@ -367,6 +380,23 @@ diagnostics::EngineDiagnostics decode_diagnostics(Reader& reader) {
   diagnostics.last_callback_seconds = reader.float64();
   diagnostics.peak_callback_seconds = reader.float64();
   diagnostics.virtual_asio_peak = reader.float64();
+  return diagnostics;
+}
+
+WasapiRecoveryDiagnostics decode_wasapi_recovery(Reader& reader) {
+  WasapiRecoveryDiagnostics diagnostics;
+  diagnostics.state = reader.enumeration<WasapiRecoveryState>(
+      static_cast<std::uint32_t>(WasapiRecoveryState::Faulted));
+  diagnostics.recovery_episode_count = reader.scalar<std::uint64_t>();
+  diagnostics.successful_recovery_count = reader.scalar<std::uint64_t>();
+  diagnostics.failed_recovery_count = reader.scalar<std::uint64_t>();
+  diagnostics.last_recovery_duration_ms = reader.scalar<std::uint64_t>();
+  diagnostics.maximum_recovery_duration_ms = reader.scalar<std::uint64_t>();
+  diagnostics.endpoint_notification_reopen_count =
+      reader.scalar<std::uint64_t>();
+  diagnostics.endpoint_notification_reset_failure_count =
+      reader.scalar<std::uint64_t>();
+  diagnostics.endpoint_notification_reopen_pending = reader.boolean();
   return diagnostics;
 }
 
@@ -475,6 +505,10 @@ ControlWireEncodeResult encode_control_response(const ControlResponse& response)
   writer.boolean(response.has_diagnostics);
   if (response.has_diagnostics) {
     encode_diagnostics(writer, response.diagnostics);
+    writer.boolean(response.has_wasapi_recovery);
+    if (response.has_wasapi_recovery) {
+      encode_wasapi_recovery(writer, response.wasapi_recovery);
+    }
   }
   writer.boolean(response.has_devices);
   if (response.has_devices) {
@@ -534,6 +568,10 @@ ControlResponseDecodeResult decode_control_response(
   response.has_diagnostics = reader.boolean();
   if (reader.ok() && response.has_diagnostics) {
     response.diagnostics = decode_diagnostics(reader);
+    response.has_wasapi_recovery = reader.boolean();
+    if (reader.ok() && response.has_wasapi_recovery) {
+      response.wasapi_recovery = decode_wasapi_recovery(reader);
+    }
   }
   response.has_devices = reader.boolean();
   if (reader.ok() && response.has_devices) {

@@ -4,6 +4,7 @@
 #include "core/platform/wasapi_endpoint_selection_policy.h"
 #include "core/platform/wasapi_recovery_policy.h"
 #include "core/platform/windows_wasapi_realtime_worker.h"
+#include "core/platform/windows_wasapi_runtime_summary.h"
 
 #include <cstdint>
 #include <functional>
@@ -26,6 +27,7 @@ class WasapiDuplexRuntime {
   [[nodiscard]] virtual bool running() const noexcept = 0;
   [[nodiscard]] virtual WasapiRealtimeWorkerStats stats() const noexcept = 0;
   [[nodiscard]] virtual std::vector<WasapiRealtimeWorkerError> last_errors() const = 0;
+  [[nodiscard]] virtual WasapiRuntimeSummary runtime_summary() const;
 };
 
 struct WasapiDuplexRuntimeEndpoints {
@@ -118,6 +120,7 @@ class WindowsWasapiDuplexSupervisor {
   [[nodiscard]] bool running() const noexcept;
   [[nodiscard]] WasapiDuplexSupervisorSummary summary() const;
   [[nodiscard]] WasapiRealtimeWorkerStats runtime_stats() const noexcept;
+  [[nodiscard]] WasapiRuntimeSummary runtime_summary() const;
   [[nodiscard]] const std::vector<WasapiRealtimeWorkerError>& last_errors() const noexcept;
 
  private:

@@ -6,6 +6,29 @@
 
 namespace sar::service {
 
+namespace {
+
+control::WasapiRecoveryState convert_recovery_state(
+    EngineAudioRecoveryState state) noexcept {
+  switch (state) {
+    case EngineAudioRecoveryState::Stopped:
+      return control::WasapiRecoveryState::Stopped;
+    case EngineAudioRecoveryState::Opening:
+      return control::WasapiRecoveryState::Opening;
+    case EngineAudioRecoveryState::Running:
+      return control::WasapiRecoveryState::Running;
+    case EngineAudioRecoveryState::Quiescing:
+      return control::WasapiRecoveryState::Quiescing;
+    case EngineAudioRecoveryState::Backoff:
+      return control::WasapiRecoveryState::Backoff;
+    case EngineAudioRecoveryState::Faulted:
+      return control::WasapiRecoveryState::Faulted;
+  }
+  return control::WasapiRecoveryState::Faulted;
+}
+
+}  // namespace
+
 EngineControlServiceCreateResult EngineControlService::create(
     control::PresetDocument initial_preset,
     std::uint64_t initial_graph_version) {
@@ -55,6 +78,12 @@ void EngineControlService::set_preset_commit_observer(
     EnginePresetCommitObserver observer) {
   std::lock_guard lock(control_mutex_);
   preset_commit_observer_ = std::move(observer);
+}
+
+void EngineControlService::set_wasapi_recovery_diagnostics_provider(
+    WasapiRecoveryDiagnosticsProvider provider) {
+  std::lock_guard lock(control_mutex_);
+  wasapi_recovery_diagnostics_provider_ = std::move(provider);
 }
 
 EngineAudioRuntimeResult EngineControlService::configure_audio_runtime(
@@ -510,6 +539,42 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
     return control::encode_control_response(response);
   }
   auto response = session_->handle(decoded.command, diagnostics);
+  if (decoded.command.type == control::ControlCommandType::QueryDiagnostics &&
+      response.has_diagnostics) {
+    try {
+      const auto runtime_recovery =
+          audio_runtime_ ? audio_runtime_->recovery_diagnostics() : std::nullopt;
+      const auto recovery = runtime_recovery
+          ? std::optional{control::WasapiRecoveryDiagnostics{
+                .state = convert_recovery_state(runtime_recovery->state),
+                .recovery_episode_count =
+                    runtime_recovery->recovery_episode_count,
+                .successful_recovery_count =
+                    runtime_recovery->successful_recovery_count,
+                .failed_recovery_count = runtime_recovery->failed_recovery_count,
+                .last_recovery_duration_ms =
+                    runtime_recovery->last_recovery_duration_ms,
+                .maximum_recovery_duration_ms =
+                    runtime_recovery->maximum_recovery_duration_ms,
+                .endpoint_notification_reopen_count =
+                    runtime_recovery->endpoint_notification_reopen_count,
+                .endpoint_notification_reset_failure_count =
+                    runtime_recovery
+                        ->endpoint_notification_reset_failure_count,
+                .endpoint_notification_reopen_pending =
+                    runtime_recovery->endpoint_notification_reopen_pending,
+            }}
+          : wasapi_recovery_diagnostics_provider_
+                ? wasapi_recovery_diagnostics_provider_()
+                : std::nullopt;
+      if (recovery) {
+        response.wasapi_recovery = *recovery;
+        response.has_wasapi_recovery = true;
+      }
+    } catch (...) {
+      // Recovery telemetry must not make the control plane unavailable.
+    }
+  }
   if (decoded.command.type == control::ControlCommandType::ListDevices ||
       decoded.command.type == control::ControlCommandType::QuerySessionState) {
     response = append_platform_devices_locked(std::move(response));

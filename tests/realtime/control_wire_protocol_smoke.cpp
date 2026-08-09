@@ -66,6 +66,16 @@ int main() {
   response.diagnostics.processed_blocks = 123;
   response.diagnostics.virtual_asio_pushed_blocks = 456;
   response.diagnostics.virtual_asio_peak = 0.75;
+  response.has_wasapi_recovery = true;
+  response.wasapi_recovery.state = sar::control::WasapiRecoveryState::Backoff;
+  response.wasapi_recovery.recovery_episode_count = 9;
+  response.wasapi_recovery.successful_recovery_count = 7;
+  response.wasapi_recovery.failed_recovery_count = 2;
+  response.wasapi_recovery.last_recovery_duration_ms = 125;
+  response.wasapi_recovery.maximum_recovery_duration_ms = 850;
+  response.wasapi_recovery.endpoint_notification_reopen_count = 4;
+  response.wasapi_recovery.endpoint_notification_reset_failure_count = 1;
+  response.wasapi_recovery.endpoint_notification_reopen_pending = true;
   response.has_audio_runtime_state = true;
   response.audio_runtime.installed = true;
   response.audio_runtime.running = true;
@@ -96,6 +106,22 @@ int main() {
   assert(decoded_response.response.diagnostics.processed_blocks == 123);
   assert(decoded_response.response.diagnostics.virtual_asio_pushed_blocks == 456);
   assert(decoded_response.response.diagnostics.virtual_asio_peak == 0.75);
+  assert(decoded_response.response.has_wasapi_recovery);
+  assert(decoded_response.response.wasapi_recovery.state ==
+         sar::control::WasapiRecoveryState::Backoff);
+  assert(decoded_response.response.wasapi_recovery.recovery_episode_count == 9);
+  assert(decoded_response.response.wasapi_recovery.successful_recovery_count == 7);
+  assert(decoded_response.response.wasapi_recovery.failed_recovery_count == 2);
+  assert(decoded_response.response.wasapi_recovery.last_recovery_duration_ms ==
+         125);
+  assert(decoded_response.response.wasapi_recovery.maximum_recovery_duration_ms ==
+         850);
+  assert(decoded_response.response.wasapi_recovery
+             .endpoint_notification_reopen_count == 4);
+  assert(decoded_response.response.wasapi_recovery
+             .endpoint_notification_reset_failure_count == 1);
+  assert(decoded_response.response.wasapi_recovery
+             .endpoint_notification_reopen_pending);
   assert(decoded_response.response.has_audio_runtime_state);
   assert(decoded_response.response.audio_runtime.installed);
   assert(decoded_response.response.audio_runtime.running);

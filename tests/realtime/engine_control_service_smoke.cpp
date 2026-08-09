@@ -52,11 +52,17 @@ class FakeAudioRuntime final : public sar::service::EngineAudioRuntime {
     return result;
   }
 
+  std::optional<sar::service::EngineAudioRecoveryDiagnostics>
+  recovery_diagnostics() const override {
+    return recovery;
+  }
+
   bool running_ = false;
   std::uint64_t graph_version_ = 10;
   bool fail_start_ = false;
   std::uint32_t start_calls = 0;
   std::uint32_t stop_calls = 0;
+  std::optional<sar::service::EngineAudioRecoveryDiagnostics> recovery;
 };
 
 sar::control::ControlResponse send(
@@ -211,6 +217,18 @@ int main() {
   assert(service->audio_runtime_running());
   assert(runtime_observer->start_calls == 1);
 
+  runtime_observer->recovery = sar::service::EngineAudioRecoveryDiagnostics{
+      .state = sar::service::EngineAudioRecoveryState::Opening,
+      .recovery_episode_count = 5,
+      .successful_recovery_count = 3,
+      .failed_recovery_count = 1,
+      .last_recovery_duration_ms = 240,
+      .maximum_recovery_duration_ms = 720,
+      .endpoint_notification_reopen_count = 2,
+      .endpoint_notification_reset_failure_count = 1,
+      .endpoint_notification_reopen_pending = true,
+  };
+
   runtime_start.command_id = "runtime-start-3";
   const auto duplicate_start = send(*service, runtime_start);
   assert(duplicate_start.status ==
@@ -226,6 +244,30 @@ int main() {
   assert(diagnostic_response.diagnostics.graph_version == 10);
   assert(diagnostic_response.diagnostics.processed_blocks == 42);
   assert(diagnostic_response.diagnostics.xrun_count == 3);
+  assert(diagnostic_response.has_wasapi_recovery);
+  assert(diagnostic_response.wasapi_recovery.state ==
+         sar::control::WasapiRecoveryState::Opening);
+  assert(diagnostic_response.wasapi_recovery.recovery_episode_count == 5);
+  assert(diagnostic_response.wasapi_recovery.successful_recovery_count == 3);
+  assert(diagnostic_response.wasapi_recovery.failed_recovery_count == 1);
+  assert(diagnostic_response.wasapi_recovery.last_recovery_duration_ms == 240);
+  assert(diagnostic_response.wasapi_recovery.maximum_recovery_duration_ms ==
+         720);
+  assert(diagnostic_response.wasapi_recovery
+             .endpoint_notification_reopen_count == 2);
+  assert(diagnostic_response.wasapi_recovery
+             .endpoint_notification_reset_failure_count == 1);
+  assert(diagnostic_response.wasapi_recovery
+             .endpoint_notification_reopen_pending);
+
+  service->set_wasapi_recovery_diagnostics_provider(
+      []() -> std::optional<sar::control::WasapiRecoveryDiagnostics> {
+        throw std::runtime_error("Injected recovery diagnostics failure.");
+      });
+  diagnostics.command_id = "diagnostics-provider-failure";
+  const auto provider_failure_response = send(*service, diagnostics);
+  assert(provider_failure_response.has_diagnostics);
+  assert(!provider_failure_response.has_wasapi_recovery);
 
   sar::control::ControlCommand gain;
   gain.command_id = "gain-1";

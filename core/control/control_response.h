@@ -17,6 +17,27 @@ enum class ControlResponseStatus {
   Rejected,
 };
 
+enum class WasapiRecoveryState {
+  Stopped,
+  Opening,
+  Running,
+  Quiescing,
+  Backoff,
+  Faulted,
+};
+
+struct WasapiRecoveryDiagnostics {
+  WasapiRecoveryState state = WasapiRecoveryState::Stopped;
+  std::uint64_t recovery_episode_count = 0;
+  std::uint64_t successful_recovery_count = 0;
+  std::uint64_t failed_recovery_count = 0;
+  std::uint64_t last_recovery_duration_ms = 0;
+  std::uint64_t maximum_recovery_duration_ms = 0;
+  std::uint64_t endpoint_notification_reopen_count = 0;
+  std::uint64_t endpoint_notification_reset_failure_count = 0;
+  bool endpoint_notification_reopen_pending = false;
+};
+
 struct ControlResponse {
   std::string command_id;
   ControlResponseStatus status = ControlResponseStatus::Accepted;
@@ -25,6 +46,8 @@ struct ControlResponse {
   bool has_preset = false;
   diagnostics::EngineDiagnostics diagnostics;
   bool has_diagnostics = false;
+  WasapiRecoveryDiagnostics wasapi_recovery;
+  bool has_wasapi_recovery = false;
   std::vector<platform::AudioDeviceDescriptor> devices;
   bool has_devices = false;
   std::uint64_t next_graph_version = 0;

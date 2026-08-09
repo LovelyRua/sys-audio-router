@@ -2,6 +2,10 @@
 #include "core/service/windows_wasapi_engine_runtime.h"
 
 #include <cassert>
+#include <type_traits>
+
+static_assert(std::is_base_of_v<sar::platform::WasapiDuplexRuntime,
+                                sar::platform::WindowsWasapiRenderLoop>);
 
 namespace {
 
@@ -62,4 +66,11 @@ int main() {
           "capture-id", {}, service->session().current_graph());
   assert(!missing_render.ok());
   assert(missing_render.errors()[0].code == "missing_duplex_device_id");
+
+  const auto missing_explicit_render =
+      sar::service::WindowsWasapiEngineRuntime::open_render(
+          {}, service->session().current_graph());
+  assert(!missing_explicit_render.ok());
+  assert(missing_explicit_render.errors()[0].code ==
+         "missing_render_device_id");
 }

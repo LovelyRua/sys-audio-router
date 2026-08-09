@@ -65,6 +65,10 @@ WasapiDuplexRuntimeFactory make_selected_duplex_factory(
 
 }  // namespace
 
+WasapiRuntimeSummary WasapiDuplexRuntime::runtime_summary() const {
+  return summarize_wasapi_runtime(stats(), last_errors(), nullptr, nullptr);
+}
+
 WasapiDuplexRuntimeOpenResult WasapiDuplexRuntimeOpenResult::success(
     std::unique_ptr<WasapiDuplexRuntime> runtime,
     WasapiDuplexRuntimeEndpoints endpoints) {
@@ -337,6 +341,11 @@ WasapiDuplexSupervisorSummary WindowsWasapiDuplexSupervisor::summary() const {
 WasapiRealtimeWorkerStats WindowsWasapiDuplexSupervisor::runtime_stats()
     const noexcept {
   return runtime_ ? runtime_->stats() : WasapiRealtimeWorkerStats{};
+}
+
+WasapiRuntimeSummary WindowsWasapiDuplexSupervisor::runtime_summary() const {
+  return runtime_ ? runtime_->runtime_summary()
+                  : summarize_wasapi_runtime({}, last_errors_, nullptr, nullptr);
 }
 
 const std::vector<WasapiRealtimeWorkerError>&

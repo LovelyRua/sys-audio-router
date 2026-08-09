@@ -3,6 +3,7 @@
 #include "core/diagnostics/engine_diagnostics.h"
 #include "core/graph/graph.h"
 #include "core/platform/realtime_audio_source.h"
+#include "core/platform/windows_wasapi_duplex_supervisor.h"
 #include "core/platform/windows_wasapi_realtime_worker.h"
 #include "core/platform/windows_wasapi_runtime_summary.h"
 #include "core/platform/windows_wasapi_stream.h"
@@ -35,23 +36,26 @@ struct WasapiRenderLoopSummary {
     diagnostics::EngineDiagnostics& diagnostics,
     RealtimeAudioSource* external_input = nullptr);
 
-class WindowsWasapiRenderLoop {
+class WindowsWasapiRenderLoop : public WasapiDuplexRuntime {
  public:
   WindowsWasapiRenderLoop(const WindowsWasapiRenderLoop&) = delete;
   WindowsWasapiRenderLoop& operator=(const WindowsWasapiRenderLoop&) = delete;
   ~WindowsWasapiRenderLoop();
 
-  [[nodiscard]] WasapiRealtimeWorkerResult start(std::uint32_t timeout_ms);
-  void stop() noexcept;
+  [[nodiscard]] WasapiRealtimeWorkerResult start(std::uint32_t timeout_ms) override;
+  void stop() noexcept override;
 
-  [[nodiscard]] bool running() const noexcept;
+  [[nodiscard]] bool running() const noexcept override;
   [[nodiscard]] realtime::AudioBuffer& input_buffer() noexcept;
   [[nodiscard]] const realtime::AudioBuffer& input_buffer() const noexcept;
   [[nodiscard]] const WasapiStreamProbe& probe() const noexcept;
   [[nodiscard]] WasapiStreamDiagnostics diagnostics() const noexcept;
-  [[nodiscard]] WasapiRealtimeWorkerStats stats() const noexcept;
+  [[nodiscard]] WasapiRealtimeWorkerStats stats() const noexcept override;
   [[nodiscard]] WasapiRenderLoopSummary summary() const;
-  [[nodiscard]] std::vector<WasapiRealtimeWorkerError> last_errors() const;
+  [[nodiscard]] WasapiRuntimeSummary runtime_summary() const override {
+    return summary().runtime;
+  }
+  [[nodiscard]] std::vector<WasapiRealtimeWorkerError> last_errors() const override;
 
  private:
   friend class WasapiRenderLoopOpenResult;

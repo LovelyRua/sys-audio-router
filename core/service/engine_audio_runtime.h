@@ -19,6 +19,27 @@ struct EngineAudioRuntimeError {
   std::optional<std::uint32_t> native_win32_code = std::nullopt;
 };
 
+enum class EngineAudioRecoveryState {
+  Stopped,
+  Opening,
+  Running,
+  Quiescing,
+  Backoff,
+  Faulted,
+};
+
+struct EngineAudioRecoveryDiagnostics {
+  EngineAudioRecoveryState state = EngineAudioRecoveryState::Stopped;
+  std::uint64_t recovery_episode_count = 0;
+  std::uint64_t successful_recovery_count = 0;
+  std::uint64_t failed_recovery_count = 0;
+  std::uint64_t last_recovery_duration_ms = 0;
+  std::uint64_t maximum_recovery_duration_ms = 0;
+  std::uint64_t endpoint_notification_reopen_count = 0;
+  std::uint64_t endpoint_notification_reset_failure_count = 0;
+  bool endpoint_notification_reopen_pending = false;
+};
+
 class EngineAudioRuntimeResult {
  public:
   static EngineAudioRuntimeResult success();
@@ -47,6 +68,10 @@ class EngineAudioRuntime {
   [[nodiscard]] virtual bool running() const noexcept = 0;
   [[nodiscard]] virtual std::uint64_t graph_version() const noexcept = 0;
   [[nodiscard]] virtual diagnostics::EngineDiagnostics diagnostics() const = 0;
+  [[nodiscard]] virtual std::optional<EngineAudioRecoveryDiagnostics>
+  recovery_diagnostics() const {
+    return std::nullopt;
+  }
 
  protected:
   EngineAudioRuntime() = default;

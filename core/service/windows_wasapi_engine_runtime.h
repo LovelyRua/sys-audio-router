@@ -51,6 +51,8 @@ class WindowsWasapiEngineRuntime final : public EngineAudioRuntime {
   [[nodiscard]] bool running() const noexcept override;
   [[nodiscard]] std::uint64_t graph_version() const noexcept override;
   [[nodiscard]] diagnostics::EngineDiagnostics diagnostics() const override;
+  [[nodiscard]] std::optional<EngineAudioRecoveryDiagnostics>
+  recovery_diagnostics() const override;
   [[nodiscard]] WindowsWasapiEngineRuntimeMode mode() const noexcept;
   [[nodiscard]] platform::WasapiRuntimeSummary runtime_summary() const;
 
@@ -63,7 +65,8 @@ class WindowsWasapiEngineRuntime final : public EngineAudioRuntime {
   std::shared_ptr<graph::Graph> graph_;
   platform::RealtimeAudioSource* external_input_ = nullptr;
   diagnostics::EngineDiagnostics realtime_diagnostics_;
-  std::unique_ptr<platform::WindowsWasapiRenderLoop> render_loop_;
+  platform::WasapiDuplexRuntimeFactory runtime_factory_;
+  bool render_configured_ = false;
   platform::WasapiEndpointSelectionPolicy duplex_endpoint_policy_;
   std::unique_ptr<platform::WindowsWasapiDuplexSupervisor> duplex_supervisor_;
   mutable std::mutex duplex_supervisor_mutex_;
