@@ -40,6 +40,23 @@ ApplicationWindow {
     property string pendingRouteInputId: ""
     property string pendingRouteOutputId: ""
     property bool pendingRouteEnabled: false
+    property var routeStateCache: ({})
+
+    function routeKey(inputId, outputId) {
+        return inputId.length + ":" + inputId + outputId
+    }
+
+    function rebuildRouteStateCache() {
+        var nextCache = {}
+        for (var index = 0; index < engine.routes.length; ++index) {
+            var route = engine.routes[index]
+            nextCache[routeKey(route.inputId, route.outputId)] = {
+                muted: route.muted,
+                gain: route.gain
+            }
+        }
+        routeStateCache = nextCache
+    }
 
     function clearRouteSelection() {
         selectedInputId = ""
@@ -70,7 +87,67 @@ ApplicationWindow {
     function routeDisplayEnabled(inputId, outputId) {
         if (pendingRouteInputId === inputId && pendingRouteOutputId === outputId)
             return pendingRouteEnabled
-        return engine.routeEnabled(inputId, outputId)
+        var route = routeStateCache[routeKey(inputId, outputId)]
+        return route !== undefined && !route.muted
+    }
+
+    function routeDisplayState(inputId, outputId) {
+        if (pendingRouteInputId === inputId && pendingRouteOutputId === outputId)
+            return pendingRouteEnabled ? "pending-on" : "pending-off"
+        var route = routeStateCache[routeKey(inputId, outputId)]
+        if (route === undefined)
+            return "off"
+        return route.muted ? "muted" : "on"
+    }
+
+    function selectRoute(inputIndex, outputIndex) {
+        if (inputIndex < 0 || inputIndex >= engine.inputs.length ||
+                outputIndex < 0 || outputIndex >= engine.outputs.length)
+            return false
+        var input = engine.inputs[inputIndex]
+        var output = engine.outputs[outputIndex]
+        selectedInputId = input.id
+        selectedInputLabel = input.label
+        selectedOutputId = output.id
+        selectedOutputLabel = output.label
+        return true
+    }
+
+    function endpointIndex(model, endpointId) {
+        for (var index = 0; index < model.length; ++index) {
+            if (model[index].id === endpointId)
+                return index
+        }
+        return -1
+    }
+
+    function moveRouteSelection(inputDelta, outputDelta) {
+        if (engine.inputs.length === 0 || engine.outputs.length === 0)
+            return
+        var inputIndex = endpointIndex(engine.inputs, selectedInputId)
+        var outputIndex = endpointIndex(engine.outputs, selectedOutputId)
+        if (inputIndex < 0 || outputIndex < 0) {
+            inputIndex = 0
+            outputIndex = 0
+        } else {
+            inputIndex = Math.max(0, Math.min(engine.inputs.length - 1,
+                                             inputIndex + inputDelta))
+            outputIndex = Math.max(0, Math.min(engine.outputs.length - 1,
+                                              outputIndex + outputDelta))
+        }
+        selectRoute(inputIndex, outputIndex)
+        matrixGridFlick.ensureCellVisible(inputIndex, outputIndex)
+        matrixGridCanvas.requestPaint()
+    }
+
+    function toggleSelectedRoute() {
+        if (!engine.connected || engine.busy || selectedInputId.length === 0)
+            return
+        var enabled = !routeDisplayEnabled(selectedInputId, selectedOutputId)
+        pendingRouteInputId = selectedInputId
+        pendingRouteOutputId = selectedOutputId
+        pendingRouteEnabled = enabled
+        engine.setRoute(selectedInputId, selectedOutputId, pendingRouteEnabled)
     }
 
     function syncRuntimeDraft() {
@@ -107,17 +184,32 @@ ApplicationWindow {
         function onSessionChanged() {
             window.pendingRouteInputId = ""
             window.pendingRouteOutputId = ""
+            window.rebuildRouteStateCache()
             window.validateRouteSelection()
+            matrixInputHeader.requestPaint()
+            matrixOutputHeader.requestPaint()
+            matrixGridCanvas.requestPaint()
         }
         function onBusyChanged() {
             if (!engine.busy) {
                 window.pendingRouteInputId = ""
                 window.pendingRouteOutputId = ""
             }
+            matrixGridCanvas.requestPaint()
         }
+        function onConnectionChanged() { matrixGridCanvas.requestPaint() }
     }
 
-    Component.onCompleted: syncRuntimeDraft()
+    onSelectedInputIdChanged: matrixGridCanvas.requestPaint()
+    onSelectedOutputIdChanged: matrixGridCanvas.requestPaint()
+    onPendingRouteInputIdChanged: matrixGridCanvas.requestPaint()
+    onPendingRouteOutputIdChanged: matrixGridCanvas.requestPaint()
+    onPendingRouteEnabledChanged: matrixGridCanvas.requestPaint()
+
+    Component.onCompleted: {
+        syncRuntimeDraft()
+        rebuildRouteStateCache()
+    }
 
     Shortcut {
         sequences: ["Ctrl+Z"]
@@ -558,6 +650,13 @@ ApplicationWindow {
                                     color: colors.muted
                                     font.pixelSize: 11
                                 }
+                                Text {
+                                    visible: !engine.connected || engine.busy
+                                    text: !engine.connected ? "OFFLINE" : "APPLYING"
+                                    color: !engine.connected ? colors.danger : colors.warning
+                                    font.pixelSize: 10
+                                    font.weight: Font.DemiBold
+                                }
                                 Item { Layout.fillWidth: true }
                                 IconButton {
                                     text: "↶"
@@ -592,122 +691,287 @@ ApplicationWindow {
                                 font.pixelSize: 13
                             }
 
-                            Flickable {
-                                id: matrixFlick
+                            Item {
+                                id: matrixViewport
                                 anchors.fill: parent
                                 anchors.margins: 18
                                 visible: engine.inputs.length > 0 && engine.outputs.length > 0
-                                contentWidth: matrixColumn.width
-                                contentHeight: matrixColumn.height
                                 clip: true
-                                boundsBehavior: Flickable.StopAtBounds
-                                ScrollBar.horizontal: ScrollBar {}
-                                ScrollBar.vertical: ScrollBar {}
+                                property int labelWidth: window.width < 1100 ? 126 : 164
+                                property int headerHeight: 76
+                                property int cellSize: 44
 
-                                Column {
-                                    id: matrixColumn
-                                    spacing: 3
-                                    property int labelWidth: 154
-                                    property int cellSize: 44
+                                function elideCanvasText(context, value, maximumWidth) {
+                                    var label = String(value)
+                                    if (context.measureText(label).width <= maximumWidth)
+                                        return label
+                                    var suffix = "..."
+                                    while (label.length > 1 &&
+                                           context.measureText(label + suffix).width > maximumWidth)
+                                        label = label.slice(0, -1)
+                                    return label + suffix
+                                }
 
-                                    Row {
-                                        spacing: 3
-                                        Item { width: matrixColumn.labelWidth; height: 72 }
-                                        Repeater {
-                                            model: engine.inputs
-                                            delegate: Item {
-                                                required property var modelData
-                                                width: matrixColumn.cellSize
-                                                height: 72
-                                                Text {
-                                                    anchors.centerIn: parent
-                                                    width: 68
-                                                    text: modelData.label
-                                                    color: colors.muted
-                                                    font.pixelSize: 10
-                                                    horizontalAlignment: Text.AlignHCenter
-                                                    elide: Text.ElideRight
-                                                    rotation: -55
-                                                }
+                                Rectangle {
+                                    width: matrixViewport.labelWidth
+                                    height: matrixViewport.headerHeight
+                                    color: colors.surface
+                                    border.color: colors.line
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "OUTPUT / INPUT"
+                                        color: colors.muted
+                                        font.pixelSize: 9
+                                        font.weight: Font.DemiBold
+                                    }
+                                }
+
+                                Canvas {
+                                    id: matrixInputHeader
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: matrixViewport.labelWidth
+                                    anchors.right: parent.right
+                                    height: matrixViewport.headerHeight
+                                    onPaint: {
+                                        var context = getContext("2d")
+                                        context.clearRect(0, 0, width, height)
+                                        context.font = "10px Segoe UI"
+                                        context.fillStyle = colors.muted
+                                        var cellSize = matrixViewport.cellSize
+                                        var firstColumn = Math.floor(matrixGridFlick.contentX / cellSize)
+                                        var x = firstColumn * cellSize - matrixGridFlick.contentX
+                                        for (var column = firstColumn;
+                                             column < engine.inputs.length && x < width;
+                                             ++column, x += cellSize) {
+                                            context.save()
+                                            context.translate(x + cellSize / 2, height - 8)
+                                            context.rotate(-Math.PI / 3)
+                                            var label = matrixViewport.elideCanvasText(
+                                                        context, engine.inputs[column].label, 96)
+                                            context.fillText(label, 0, 0)
+                                            context.restore()
+                                        }
+                                    }
+                                }
+
+                                Canvas {
+                                    id: matrixOutputHeader
+                                    width: matrixViewport.labelWidth
+                                    anchors.top: parent.top
+                                    anchors.topMargin: matrixViewport.headerHeight
+                                    anchors.bottom: parent.bottom
+                                    onPaint: {
+                                        var context = getContext("2d")
+                                        context.clearRect(0, 0, width, height)
+                                        context.font = "11px Segoe UI"
+                                        var cellSize = matrixViewport.cellSize
+                                        var firstRow = Math.floor(matrixGridFlick.contentY / cellSize)
+                                        var y = firstRow * cellSize - matrixGridFlick.contentY
+                                        for (var row = firstRow;
+                                             row < engine.outputs.length && y < height;
+                                             ++row, y += cellSize) {
+                                            context.fillStyle = colors.surface
+                                            context.fillRect(0, y + 1, width - 3, cellSize - 3)
+                                            context.strokeStyle = colors.line
+                                            context.strokeRect(0.5, y + 1.5, width - 4, cellSize - 4)
+                                            context.fillStyle = colors.text
+                                            context.textBaseline = "middle"
+                                            var label = matrixViewport.elideCanvasText(
+                                                        context, engine.outputs[row].label,
+                                                        width - 18)
+                                            context.fillText(label, 9, y + cellSize / 2)
+                                        }
+                                    }
+                                }
+
+                                Flickable {
+                                    id: matrixGridFlick
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: matrixViewport.labelWidth
+                                    anchors.top: parent.top
+                                    anchors.topMargin: matrixViewport.headerHeight
+                                    anchors.right: parent.right
+                                    anchors.bottom: parent.bottom
+                                    contentWidth: Math.max(width,
+                                                           engine.inputs.length * matrixViewport.cellSize)
+                                    contentHeight: Math.max(height,
+                                                            engine.outputs.length * matrixViewport.cellSize)
+                                    boundsBehavior: Flickable.StopAtBounds
+                                    clip: true
+                                    focus: true
+
+                                    function ensureCellVisible(inputIndex, outputIndex) {
+                                        var left = inputIndex * matrixViewport.cellSize
+                                        var top = outputIndex * matrixViewport.cellSize
+                                        if (left < contentX)
+                                            contentX = left
+                                        else if (left + matrixViewport.cellSize > contentX + width)
+                                            contentX = left + matrixViewport.cellSize - width
+                                        if (top < contentY)
+                                            contentY = top
+                                        else if (top + matrixViewport.cellSize > contentY + height)
+                                            contentY = top + matrixViewport.cellSize - height
+                                    }
+
+                                    onContentXChanged: {
+                                        matrixInputHeader.requestPaint()
+                                        matrixGridCanvas.requestPaint()
+                                    }
+                                    onContentYChanged: {
+                                        matrixOutputHeader.requestPaint()
+                                        matrixGridCanvas.requestPaint()
+                                    }
+                                    onWidthChanged: matrixGridCanvas.requestPaint()
+                                    onHeightChanged: matrixGridCanvas.requestPaint()
+
+                                    Keys.onPressed: function(event) {
+                                        if (event.key === Qt.Key_Left)
+                                            window.moveRouteSelection(-1, 0)
+                                        else if (event.key === Qt.Key_Right)
+                                            window.moveRouteSelection(1, 0)
+                                        else if (event.key === Qt.Key_Up)
+                                            window.moveRouteSelection(0, -1)
+                                        else if (event.key === Qt.Key_Down)
+                                            window.moveRouteSelection(0, 1)
+                                        else if (event.key === Qt.Key_Space ||
+                                                 event.key === Qt.Key_Return ||
+                                                 event.key === Qt.Key_Enter)
+                                            window.toggleSelectedRoute()
+                                        else
+                                            return
+                                        event.accepted = true
+                                    }
+
+                                    Item {
+                                        width: matrixGridFlick.contentWidth
+                                        height: matrixGridFlick.contentHeight
+                                        MouseArea {
+                                            id: matrixMouse
+                                            anchors.fill: parent
+                                            enabled: engine.connected && !engine.busy
+                                            hoverEnabled: true
+                                            preventStealing: false
+                                            property int hoverInput: -1
+                                            property int hoverOutput: -1
+                                            onPositionChanged: function(mouse) {
+                                                hoverInput = Math.floor(mouse.x / matrixViewport.cellSize)
+                                                hoverOutput = Math.floor(mouse.y / matrixViewport.cellSize)
+                                                matrixGridCanvas.requestPaint()
+                                            }
+                                            onExited: {
+                                                hoverInput = -1
+                                                hoverOutput = -1
+                                                matrixGridCanvas.requestPaint()
+                                            }
+                                            onClicked: function(mouse) {
+                                                var inputIndex = Math.floor(mouse.x /
+                                                                          matrixViewport.cellSize)
+                                                var outputIndex = Math.floor(mouse.y /
+                                                                            matrixViewport.cellSize)
+                                                if (!window.selectRoute(inputIndex, outputIndex))
+                                                    return
+                                                matrixGridFlick.forceActiveFocus()
+                                                window.toggleSelectedRoute()
                                             }
                                         }
                                     }
 
-                                    Repeater {
-                                        model: engine.outputs
-                                        delegate: Row {
-                                            id: outputRow
-                                            required property var modelData
-                                            property int outputIndex: index
-                                            spacing: 3
-                                            height: matrixColumn.cellSize
+                                    ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+                                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                                }
 
-                                            Rectangle {
-                                                width: matrixColumn.labelWidth
-                                                height: matrixColumn.cellSize
-                                                color: colors.surface
-                                                border.color: colors.line
-                                                radius: 3
-                                                Text {
-                                                    anchors.fill: parent
-                                                    anchors.leftMargin: 10
-                                                    anchors.rightMargin: 8
-                                                    text: outputRow.modelData.label
-                                                    color: colors.text
-                                                    font.pixelSize: 11
-                                                    verticalAlignment: Text.AlignVCenter
-                                                    elide: Text.ElideRight
+                                Canvas {
+                                    id: matrixGridCanvas
+                                    anchors.fill: matrixGridFlick
+                                    z: -1
+                                    onPaint: {
+                                        var context = getContext("2d")
+                                        context.clearRect(0, 0, width, height)
+                                        var cellSize = matrixViewport.cellSize
+                                        var firstColumn = Math.floor(matrixGridFlick.contentX / cellSize)
+                                        var firstRow = Math.floor(matrixGridFlick.contentY / cellSize)
+                                        var startX = firstColumn * cellSize - matrixGridFlick.contentX
+                                        var startY = firstRow * cellSize - matrixGridFlick.contentY
+                                        for (var row = firstRow, y = startY;
+                                             row < engine.outputs.length && y < height;
+                                             ++row, y += cellSize) {
+                                            for (var column = firstColumn, x = startX;
+                                                 column < engine.inputs.length && x < width;
+                                                 ++column, x += cellSize) {
+                                                var inputId = engine.inputs[column].id
+                                                var outputId = engine.outputs[row].id
+                                                var state = window.routeDisplayState(inputId, outputId)
+                                                var selected = selectedInputId === inputId &&
+                                                               selectedOutputId === outputId
+                                                var hovered = matrixMouse.hoverInput === column &&
+                                                              matrixMouse.hoverOutput === row
+                                                context.fillStyle = state === "on" ? "#245a49"
+                                                                  : state === "muted" ? "#4a3b20"
+                                                                  : hovered && engine.connected && !engine.busy
+                                                                    ? colors.hover : colors.surface
+                                                context.fillRect(x + 1, y + 1,
+                                                                 cellSize - 3, cellSize - 3)
+                                                context.lineWidth = selected ? 2 : 1
+                                                context.strokeStyle = selected ? colors.cyan
+                                                                    : state === "on" ? colors.healthy
+                                                                    : state === "muted" ? colors.warning
+                                                                    : colors.line
+                                                context.strokeRect(x + (selected ? 1 : 1.5),
+                                                                   y + (selected ? 1 : 1.5),
+                                                                   cellSize - (selected ? 3 : 4),
+                                                                   cellSize - (selected ? 3 : 4))
+                                                context.fillStyle = state === "on" ? colors.healthy
+                                                                  : state === "muted" ? colors.warning
+                                                                  : colors.line
+                                                context.beginPath()
+                                                context.arc(x + cellSize / 2,
+                                                            y + cellSize / 2,
+                                                            4, 0, Math.PI * 2)
+                                                context.fill()
+                                                if (state === "muted") {
+                                                    context.strokeStyle = colors.warning
+                                                    context.lineWidth = 2
+                                                    context.beginPath()
+                                                    context.moveTo(x + cellSize / 2 - 7,
+                                                                   y + cellSize / 2 + 7)
+                                                    context.lineTo(x + cellSize / 2 + 7,
+                                                                   y + cellSize / 2 - 7)
+                                                    context.stroke()
                                                 }
-                                            }
-
-                                            Repeater {
-                                                model: engine.inputs
-                                                delegate: Button {
-                                                    id: routeCell
-                                                    required property var modelData
-                                                    property int revision: engine.routeRevision
-                                                    property string inputId: modelData.id
-                                                    property string outputId: outputRow.modelData.id
-                                                    property bool active: {
-                                                        revision;
-                                                        return window.routeDisplayEnabled(inputId, outputId)
-                                                    }
-                                                    width: matrixColumn.cellSize
-                                                    height: matrixColumn.cellSize
-                                                    padding: 0
-                                                    enabled: engine.connected && !engine.busy
-                                                    background: Rectangle {
-                                                        radius: 3
-                                                        color: routeCell.active ? "#245a49"
-                                                                                : routeCell.hovered ? colors.hover : colors.surface
-                                                        border.width: selectedInputId === routeCell.inputId &&
-                                                                      selectedOutputId === routeCell.outputId ? 2 : 1
-                                                        border.color: selectedInputId === routeCell.inputId &&
-                                                                      selectedOutputId === routeCell.outputId
-                                                                      ? colors.cyan
-                                                                      : routeCell.active ? colors.healthy : colors.line
-                                                        Rectangle {
-                                                            width: 8
-                                                            height: 8
-                                                            radius: 4
-                                                            anchors.centerIn: parent
-                                                            color: routeCell.active ? colors.healthy : colors.line
-                                                        }
-                                                    }
-                                                    onClicked: {
-                                                        selectedInputId = inputId
-                                                        selectedInputLabel = modelData.label
-                                                        selectedOutputId = outputId
-                                                        selectedOutputLabel = outputRow.modelData.label
-                                                        window.pendingRouteInputId = inputId
-                                                        window.pendingRouteOutputId = outputId
-                                                        window.pendingRouteEnabled = !active
-                                                        engine.setRoute(inputId, outputId,
-                                                                        window.pendingRouteEnabled)
-                                                    }
+                                                if (state === "pending-on" ||
+                                                        state === "pending-off") {
+                                                    context.strokeStyle = colors.cyan
+                                                    context.lineWidth = 2
+                                                    context.strokeRect(x + 4, y + 4,
+                                                                       cellSize - 9, cellSize - 9)
+                                                }
+                                                if (!engine.connected) {
+                                                    context.fillStyle = "#99101315"
+                                                    context.fillRect(x + 1, y + 1,
+                                                                     cellSize - 3, cellSize - 3)
                                                 }
                                             }
                                         }
+                                    }
+                                }
+
+                                Rectangle {
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    anchors.margins: 8
+                                    width: matrixStateText.implicitWidth + 16
+                                    height: 26
+                                    radius: 3
+                                    visible: !engine.connected || engine.busy
+                                    color: colors.raised
+                                    border.color: !engine.connected ? colors.danger : colors.warning
+                                    Text {
+                                        id: matrixStateText
+                                        anchors.centerIn: parent
+                                        text: !engine.connected ? "Matrix unavailable" : "Applying change..."
+                                        color: !engine.connected ? colors.danger : colors.warning
+                                        font.pixelSize: 10
+                                        font.weight: Font.DemiBold
                                     }
                                 }
                             }
