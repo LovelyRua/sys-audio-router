@@ -150,6 +150,15 @@ int main(int argc, char** argv) {
   }
 
   const auto loop_summary = loop->summary();
+  std::cout << "wasapi_duplex_clock_summary"
+            << " feed_forward_ready_observations="
+            << loop_summary.feed_forward_ready_observations
+            << " feed_forward_invalid_observations="
+            << loop_summary.feed_forward_invalid_observations
+            << " feed_forward_warming_up_observations="
+            << loop_summary.feed_forward_warming_up_observations
+            << " feed_forward_disabled_observations="
+            << loop_summary.feed_forward_disabled_observations << '\n';
   std::cout << "wasapi_duplex_clock"
             << " capture_available=" << (loop_summary.capture_clock_available ? 1 : 0)
             << " capture_position=" << loop_summary.capture_clock.position
@@ -201,6 +210,14 @@ int main(int argc, char** argv) {
             << '\n';
   std::cout << "  Capture clock feed-forward ppm: "
             << loop_summary.capture_clock_feed_forward_ppm << '\n';
+  std::cout << "  Feed-forward ready observations: "
+            << loop_summary.feed_forward_ready_observations << '\n';
+  std::cout << "  Feed-forward invalid observations: "
+            << loop_summary.feed_forward_invalid_observations << '\n';
+  std::cout << "  Feed-forward warming-up observations: "
+            << loop_summary.feed_forward_warming_up_observations << '\n';
+  std::cout << "  Feed-forward disabled observations (invalid after disable): "
+            << loop_summary.feed_forward_disabled_observations << '\n';
   std::cout << "  Captured-rendered frame balance: " << loop_summary.frame_balance
             << '\n';
   sar::tools::print_wasapi_runtime_summary(std::cout, loop_summary.runtime);

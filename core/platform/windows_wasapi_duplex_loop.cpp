@@ -266,6 +266,61 @@ void WasapiDuplexClockFeedForwardEstimator::set_anchor(
   anchor_available_ = true;
 }
 
+WasapiDuplexClockFeedForwardAction
+WasapiDuplexClockFeedForwardTracker::record(
+    const WasapiDuplexClockObservation& observation) noexcept {
+  if (observation.status == WasapiDuplexClockObservationStatus::WarmingUp) {
+    warming_up_observations_.fetch_add(1, std::memory_order_relaxed);
+    return WasapiDuplexClockFeedForwardAction::None;
+  }
+
+  const auto ready =
+      observation.status == WasapiDuplexClockObservationStatus::Ready &&
+      observation.feed_forward.valid &&
+      std::isfinite(observation.feed_forward.correction_ppm) &&
+      std::abs(observation.feed_forward.correction_ppm) <=
+          kMaximumCorrectionPpm;
+  if (ready) {
+    ready_observations_.fetch_add(1, std::memory_order_relaxed);
+    consecutive_invalid_samples_ = 0;
+    disabled_ = false;
+    return WasapiDuplexClockFeedForwardAction::Apply;
+  }
+
+  if (disabled_) {
+    disabled_observations_.fetch_add(1, std::memory_order_relaxed);
+    return WasapiDuplexClockFeedForwardAction::None;
+  }
+
+  invalid_observations_.fetch_add(1, std::memory_order_relaxed);
+  ++consecutive_invalid_samples_;
+  if (consecutive_invalid_samples_ < kInvalidSamplesBeforeDisable) {
+    return WasapiDuplexClockFeedForwardAction::None;
+  }
+
+  disabled_ = true;
+  return WasapiDuplexClockFeedForwardAction::Disable;
+}
+
+void WasapiDuplexClockFeedForwardTracker::reset() noexcept {
+  ready_observations_.store(0, std::memory_order_relaxed);
+  invalid_observations_.store(0, std::memory_order_relaxed);
+  warming_up_observations_.store(0, std::memory_order_relaxed);
+  disabled_observations_.store(0, std::memory_order_relaxed);
+  consecutive_invalid_samples_ = 0;
+  disabled_ = false;
+}
+
+WasapiDuplexClockFeedForwardDiagnostics
+WasapiDuplexClockFeedForwardTracker::diagnostics() const noexcept {
+  return {
+      ready_observations_.load(std::memory_order_relaxed),
+      invalid_observations_.load(std::memory_order_relaxed),
+      warming_up_observations_.load(std::memory_order_relaxed),
+      disabled_observations_.load(std::memory_order_relaxed),
+  };
+}
+
 WindowsWasapiDuplexLoop::~WindowsWasapiDuplexLoop() {
   stop();
 }
@@ -274,6 +329,7 @@ WasapiRealtimeWorkerResult WindowsWasapiDuplexLoop::start(std::uint32_t timeout_
   stop_clock_observer();
   runner_.set_capture_clock_feed_forward_ppm(0.0);
   capture_clock_feed_forward_valid_.store(false, std::memory_order_relaxed);
+  clock_feed_forward_tracker_.reset();
   capture_clock_baseline_available_ = false;
   render_clock_baseline_available_ = false;
   const auto result = worker_.start(timeout_ms);
@@ -360,7 +416,6 @@ void WindowsWasapiDuplexLoop::run_clock_observer() noexcept {
   static_cast<void>(
       estimator.observe(capture_clock_baseline_, render_clock_baseline_));
   double smoothed_correction_ppm = 0.0;
-  std::uint32_t consecutive_invalid_samples = 0;
 
   std::unique_lock lock(clock_observer_mutex_);
   while (!clock_observer_condition_.wait_for(
@@ -379,8 +434,8 @@ void WindowsWasapiDuplexLoop::run_clock_observer() noexcept {
       observation = estimator.observe(capture, render);
     }
 
-    if (observation.status == WasapiDuplexClockObservationStatus::Ready &&
-        std::abs(observation.feed_forward.correction_ppm) <= 2500.0) {
+    const auto action = clock_feed_forward_tracker_.record(observation);
+    if (action == WasapiDuplexClockFeedForwardAction::Apply) {
       constexpr double kSmoothingFactor = 0.2;
       constexpr double kMaximumSlewPerObservationPpm = 125.0;
       const auto filtered_correction_ppm =
@@ -393,12 +448,9 @@ void WindowsWasapiDuplexLoop::run_clock_observer() noexcept {
           -kMaximumSlewPerObservationPpm,
           kMaximumSlewPerObservationPpm);
       smoothed_correction_ppm += correction_step;
-      consecutive_invalid_samples = 0;
       runner_.set_capture_clock_feed_forward_ppm(smoothed_correction_ppm);
       capture_clock_feed_forward_valid_.store(true, std::memory_order_relaxed);
-    } else if (observation.status !=
-                   WasapiDuplexClockObservationStatus::WarmingUp &&
-               ++consecutive_invalid_samples >= 3) {
+    } else if (action == WasapiDuplexClockFeedForwardAction::Disable) {
       runner_.set_capture_clock_feed_forward_ppm(0.0);
       capture_clock_feed_forward_valid_.store(false, std::memory_order_relaxed);
       smoothed_correction_ppm = 0.0;
@@ -453,6 +505,16 @@ WasapiDuplexLoopSummary WindowsWasapiDuplexLoop::summary() const {
       runner_.capture_clock_feed_forward_ppm();
   result.capture_clock_feed_forward_valid =
       capture_clock_feed_forward_valid_.load(std::memory_order_relaxed);
+  const auto feed_forward_diagnostics =
+      clock_feed_forward_tracker_.diagnostics();
+  result.feed_forward_ready_observations =
+      feed_forward_diagnostics.ready_observations;
+  result.feed_forward_invalid_observations =
+      feed_forward_diagnostics.invalid_observations;
+  result.feed_forward_warming_up_observations =
+      feed_forward_diagnostics.warming_up_observations;
+  result.feed_forward_disabled_observations =
+      feed_forward_diagnostics.disabled_observations;
   if (capture_clock_baseline_available_ && result.capture_clock_available) {
     const realtime::ClockDomain domain{1, capture_probe().mix_format.sample_rate};
     std::uint64_t baseline_frames = 0;

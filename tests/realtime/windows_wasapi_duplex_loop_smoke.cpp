@@ -181,6 +181,76 @@ sar::platform::WasapiStreamOpenResult scripted_open(
 }  // namespace
 
 int main() {
+  {
+    sar::platform::WasapiDuplexClockFeedForwardTracker tracker;
+    const sar::platform::WasapiDuplexClockObservation warming_up;
+    sar::platform::WasapiDuplexClockObservation ready{
+        sar::platform::WasapiDuplexClockObservationStatus::Ready};
+    ready.feed_forward.valid = true;
+    ready.feed_forward.correction_ppm = 25.0;
+    const sar::platform::WasapiDuplexClockObservation invalid{
+        sar::platform::WasapiDuplexClockObservationStatus::Invalid};
+
+    static_cast<void>(tracker.record(warming_up));
+    if (const auto failure = expect(
+            tracker.record(ready) ==
+                sar::platform::WasapiDuplexClockFeedForwardAction::Apply,
+            "Expected valid feed-forward observation to apply")) {
+      return failure;
+    }
+    const auto first_invalid = tracker.record(invalid);
+    const auto second_invalid = tracker.record(invalid);
+    const auto third_invalid = tracker.record(invalid);
+    const auto disabled_invalid = tracker.record(invalid);
+    if (const auto failure = expect(
+            first_invalid ==
+                    sar::platform::WasapiDuplexClockFeedForwardAction::None &&
+                second_invalid ==
+                    sar::platform::WasapiDuplexClockFeedForwardAction::None &&
+                third_invalid ==
+                    sar::platform::WasapiDuplexClockFeedForwardAction::Disable &&
+                disabled_invalid ==
+                    sar::platform::WasapiDuplexClockFeedForwardAction::None,
+            "Expected third invalid observation to disable feed-forward")) {
+      return failure;
+    }
+    auto tracker_diagnostics = tracker.diagnostics();
+    if (const auto failure = expect(
+            tracker_diagnostics.ready_observations == 1 &&
+                tracker_diagnostics.invalid_observations == 3 &&
+                tracker_diagnostics.warming_up_observations == 1 &&
+                tracker_diagnostics.disabled_observations == 1,
+            "Expected partitioned feed-forward observation diagnostics")) {
+      return failure;
+    }
+
+    tracker.reset();
+    tracker_diagnostics = tracker.diagnostics();
+    if (const auto failure = expect(
+            tracker_diagnostics.ready_observations == 0 &&
+                tracker_diagnostics.invalid_observations == 0 &&
+                tracker_diagnostics.warming_up_observations == 0 &&
+                tracker_diagnostics.disabled_observations == 0,
+            "Expected feed-forward diagnostics reset at lifecycle start")) {
+      return failure;
+    }
+
+    static_cast<void>(tracker.record(invalid));
+    static_cast<void>(tracker.record(invalid));
+    static_cast<void>(tracker.record(invalid));
+    static_cast<void>(tracker.record(invalid));
+    static_cast<void>(tracker.record(ready));
+    static_cast<void>(tracker.record(invalid));
+    tracker_diagnostics = tracker.diagnostics();
+    if (const auto failure = expect(
+            tracker_diagnostics.ready_observations == 1 &&
+                tracker_diagnostics.invalid_observations == 4 &&
+                tracker_diagnostics.disabled_observations == 1,
+            "Expected ready observation to leave disabled state")) {
+      return failure;
+    }
+  }
+
   const sar::platform::WasapiClockSnapshot plausible_capture_clock{
       3840, 10000000, 384000};
   if (const auto failure = expect(

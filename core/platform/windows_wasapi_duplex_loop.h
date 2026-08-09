@@ -46,6 +46,41 @@ struct WasapiDuplexClockObservation {
   std::uint64_t window_duration_100ns = 0;
 };
 
+struct WasapiDuplexClockFeedForwardDiagnostics {
+  std::uint64_t ready_observations = 0;
+  std::uint64_t invalid_observations = 0;
+  std::uint64_t warming_up_observations = 0;
+  // Invalid samples after three consecutive invalid samples have disabled
+  // feed-forward. The third invalid sample itself remains an invalid sample.
+  std::uint64_t disabled_observations = 0;
+};
+
+enum class WasapiDuplexClockFeedForwardAction {
+  None,
+  Apply,
+  Disable,
+};
+
+class WasapiDuplexClockFeedForwardTracker {
+ public:
+  [[nodiscard]] WasapiDuplexClockFeedForwardAction record(
+      const WasapiDuplexClockObservation& observation) noexcept;
+  void reset() noexcept;
+  [[nodiscard]] WasapiDuplexClockFeedForwardDiagnostics diagnostics()
+      const noexcept;
+
+ private:
+  static constexpr std::uint32_t kInvalidSamplesBeforeDisable = 3;
+  static constexpr double kMaximumCorrectionPpm = 2500.0;
+
+  std::atomic_uint64_t ready_observations_ = 0;
+  std::atomic_uint64_t invalid_observations_ = 0;
+  std::atomic_uint64_t warming_up_observations_ = 0;
+  std::atomic_uint64_t disabled_observations_ = 0;
+  std::uint32_t consecutive_invalid_samples_ = 0;
+  bool disabled_ = false;
+};
+
 class WasapiDuplexClockFeedForwardEstimator {
  public:
   WasapiDuplexClockFeedForwardEstimator(
@@ -84,6 +119,10 @@ struct WasapiDuplexLoopSummary {
   realtime::ClockDriftEstimate render_drift;
   std::int64_t frame_balance = 0;
   double capture_clock_feed_forward_ppm = 0.0;
+  std::uint64_t feed_forward_ready_observations = 0;
+  std::uint64_t feed_forward_invalid_observations = 0;
+  std::uint64_t feed_forward_warming_up_observations = 0;
+  std::uint64_t feed_forward_disabled_observations = 0;
   bool capture_clock_available = false;
   bool render_clock_available = false;
   bool capture_clock_feed_forward_valid = false;
@@ -162,6 +201,7 @@ class WindowsWasapiDuplexLoop : public WasapiDuplexRuntime {
   bool capture_clock_baseline_available_ = false;
   bool render_clock_baseline_available_ = false;
   std::atomic_bool capture_clock_feed_forward_valid_ = false;
+  WasapiDuplexClockFeedForwardTracker clock_feed_forward_tracker_;
   std::mutex clock_observer_mutex_;
   std::condition_variable clock_observer_condition_;
   bool clock_observer_stop_requested_ = false;
