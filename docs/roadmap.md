@@ -67,7 +67,7 @@ capture opening plus internal adaptive resampling now enables a real shared-mode
 duplex path from a 44.1 kHz capture endpoint to a 48 kHz render endpoint without
 first routing capture through Windows Audio Engine SRC.
 
-The Windows suite currently contains 117 CTest targets. A strict-healthy two-second
+The Windows suite currently contains 124 CTest targets. A strict-healthy two-second
 render measurement submitted 96,000 frames with zero xruns, wait timeouts, or
 FIFO faults. A five-second duplex measurement processed approximately 240,000
 render-domain frames, but still exposed capture discontinuity and render
@@ -378,7 +378,7 @@ Exit criteria:
 Purpose: make the engine usable without hiding the system model.
 
 Status: the first Qt Quick control application is merged. It connects to control
-wire v6 without entering the realtime process and provides an operational route
+wire v7 without entering the realtime process and provides an operational route
 matrix, route enable/gain controls, device listing, runtime start/stop, and live
 diagnostics, including WASAPI recovery state and counters. The first per-user
 Windows x64 ZIP package now stages a validated
@@ -394,8 +394,13 @@ ASIO registration, and uninstall acceptance before leaving the same verified
 installer deployed under the user's local Programs directory. The installer
 gate now launches the bootstrap executable twice and requires exactly one GUI
 and one engine process; the 2026-08-09 test-machine acceptance passed the same
-single-instance check before deploying package `f4708e1`. Large-matrix
-virtualization and seed-user workflow testing remain. Route gain and connection
+single-instance check before deploying package `f4708e1`. Package `2b32723`
+then repeated the isolated ZIP install, update, launcher, control handshake,
+15-device enumeration, ASIO ownership, path-boundary, and uninstall acceptance
+while preserving the user's existing registration. The route matrix now draws
+only visible cells with fixed headers, two-axis scrolling, keyboard navigation,
+and explicit pending, muted, busy, and offline states. Seed-user workflow testing
+remains. Route gain and connection
 edits now have a bounded 64-entry undo/redo history; rejected engine commands
 leave the history unchanged, and loading a preset establishes a new history
 baseline.

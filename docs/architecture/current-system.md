@@ -98,7 +98,7 @@ two output channels. The service-owned render bus also keeps a fixed physical
 render quantum for its lifetime, so preset block-size changes are rejected with
 a restart-required error instead of committing an unusable format. A stopped
 runtime can rebuild against a newer graph through its retained endpoint
-configuration. The Qt Quick GUI now binds to control wire v6 from a separate process.
+configuration. The Qt Quick GUI now binds to control wire v7 from a separate process.
 Service installation and concurrent control-client authorization remain future
 work.
 
@@ -202,7 +202,8 @@ opening, queue binding, retryable disconnect, and local handle cleanup. Its
 audio block operations remain bounded wrappers over the mapped SPSC queues.
 
 `core/diagnostics` tracks graph version, processed blocks, callback duration,
-peak callback duration, and xrun count. The worker mirrors per-run xrun totals
+peak callback duration, xrun count, and aggregate plus per-producer Virtual ASIO
+underflow/overflow events. The worker mirrors per-run xrun totals
 and last, peak, total, and average callback duration without cross-thread reads
 of the mutable engine diagnostics. WASAPI worker summaries now classify
 runtime health across stopped, healthy, degraded, and faulted states, including
@@ -633,7 +634,9 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   lifecycle, device listing, diagnostics, and preset browsing with atomic
   save/load. Route edits have a bounded undo/redo history that commits only
   after an accepted engine response and resets when a preset is loaded.
-  Large-matrix virtualization and seed-user feedback remain. CMake/CPack now
+  The route matrix now renders only visible cells with fixed headers, two-axis
+  scrolling, keyboard navigation, and explicit pending, muted, busy, and offline
+  states. Seed-user feedback remains. CMake/CPack now
   produces per-user Windows x64 ZIP and NSIS installer
   payloads, with a launcher that starts the engine and then opens the GUI.
   Its install scripts validate the engine, ASIO, Qt DLL, QML, and platform
@@ -655,7 +658,7 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   recovery; follow-default render and duplex selections consume endpoint
   notifications while pinned selections retain their configured IDs. Recovery
   state, episode counts, success/failure counts, duration, and notification
-  reopen counters are exposed through control wire v6 for GUI diagnostics. It
+  reopen counters are exposed through control wire v7 for GUI diagnostics. It
   accepts
   runtime state/start/stop commands over the named pipe and lazily rebuilds a
   stopped stale runtime on start. Device-list and session-state requests merge
