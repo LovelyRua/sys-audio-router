@@ -66,6 +66,10 @@ EngineReply confirmed_state(const ControlCommand &command) {
   reply.response.has_wasapi_recovery = true;
   reply.response.wasapi_recovery.state =
       sar::control::WasapiRecoveryState::Backoff;
+  reply.response.wasapi_recovery.runtime_health =
+      sar::control::WasapiRuntimeHealth::Degraded;
+  reply.response.wasapi_recovery.runtime_reason_code =
+      "capture_discontinuity";
   reply.response.wasapi_recovery.recovery_episode_count = 7;
   reply.response.wasapi_recovery.successful_recovery_count = 5;
   reply.response.wasapi_recovery.failed_recovery_count = 2;
@@ -74,6 +78,12 @@ EngineReply confirmed_state(const ControlCommand &command) {
   reply.response.wasapi_recovery.endpoint_notification_reopen_count = 4;
   reply.response.wasapi_recovery.endpoint_notification_reset_failure_count = 1;
   reply.response.wasapi_recovery.endpoint_notification_reopen_pending = true;
+  reply.response.wasapi_recovery.wait_timeout_cycles = 13;
+  reply.response.wasapi_recovery.capture_discontinuity_cycles = 8;
+  reply.response.wasapi_recovery.render_fifo_underflow_frames = 1'024;
+  reply.response.wasapi_recovery.maximum_render_recovery_silence_frames = 384;
+  reply.response.wasapi_recovery
+      .maximum_consecutive_capture_rate_clamped_frames = 2'048;
   return reply;
 }
 
@@ -129,6 +139,9 @@ int main(int argc, char **argv) {
          5);
   assert(controller.wasapiRecoveryAvailable());
   assert(controller.wasapiRecoveryState() == QStringLiteral("Backoff"));
+  assert(controller.wasapiRuntimeHealth() == QStringLiteral("Degraded"));
+  assert(controller.wasapiRuntimeReasonCode() ==
+         QStringLiteral("capture_discontinuity"));
   assert(controller.wasapiRecoveryEpisodes() == 7);
   assert(controller.wasapiSuccessfulRecoveries() == 5);
   assert(controller.wasapiFailedRecoveries() == 2);
@@ -137,6 +150,15 @@ int main(int argc, char **argv) {
   assert(controller.wasapiEndpointReopens() == 4);
   assert(controller.wasapiEndpointResetFailures() == 1);
   assert(controller.wasapiEndpointReopenPending());
+  assert(controller.wasapiWaitTimeoutCycles() == 13);
+  assert(controller.wasapiCaptureDiscontinuityCycles() == 8);
+  assert(controller.wasapiRenderFifoUnderflowFrames() == 1'024);
+  assert(controller.wasapiMaximumRenderRecoverySilenceFrames() == 384);
+  assert(controller.wasapiMaximumConsecutiveCaptureRateClampedFrames() ==
+         2'048);
+  assert(controller.property("wasapiRuntimeHealth").toString() ==
+         QStringLiteral("Degraded"));
+  assert(controller.property("wasapiWaitTimeoutCycles").toULongLong() == 13);
   assert(controller.lastError().contains(QStringLiteral("timed out")));
 
   {
@@ -181,6 +203,16 @@ int main(int argc, char **argv) {
       std::pair{sar::control::WasapiRecoveryState::Faulted,
                 QStringLiteral("Faulted")},
   };
+  const std::array runtime_health_states{
+      std::pair{sar::control::WasapiRuntimeHealth::Stopped,
+                QStringLiteral("Stopped")},
+      std::pair{sar::control::WasapiRuntimeHealth::Healthy,
+                QStringLiteral("Healthy")},
+      std::pair{sar::control::WasapiRuntimeHealth::Degraded,
+                QStringLiteral("Degraded")},
+      std::pair{sar::control::WasapiRuntimeHealth::Faulted,
+                QStringLiteral("Faulted")},
+  };
   std::atomic_size_t recovery_reply_index = 0;
   const auto recovery_transport = [&](ControlCommand command) {
     assert(command.type == ControlCommandType::QuerySessionState);
@@ -211,6 +243,36 @@ int main(int argc, char **argv) {
   assert(recovery_controller.wasapiRecoveryState() ==
          QStringLiteral("Stopped"));
   assert(recovery_controller.wasapiRecoveryEpisodes() == 0);
+  assert(recovery_controller.wasapiRuntimeHealth() ==
+         QStringLiteral("Stopped"));
+  assert(recovery_controller.wasapiRuntimeReasonCode().isEmpty());
+  assert(recovery_controller.wasapiWaitTimeoutCycles() == 0);
+  assert(recovery_controller.wasapiCaptureDiscontinuityCycles() == 0);
+  assert(recovery_controller.wasapiRenderFifoUnderflowFrames() == 0);
+  assert(recovery_controller.wasapiMaximumRenderRecoverySilenceFrames() == 0);
+  assert(
+      recovery_controller
+          .wasapiMaximumConsecutiveCaptureRateClampedFrames() == 0);
+
+  std::atomic_size_t health_reply_index = 0;
+  const auto health_transport = [&](ControlCommand command) {
+    assert(command.type == ControlCommandType::QuerySessionState);
+    auto reply = confirmed_state(command);
+    const auto index = health_reply_index.fetch_add(1);
+    assert(index < runtime_health_states.size());
+    reply.response.wasapi_recovery.runtime_health =
+        runtime_health_states[index].first;
+    return reply;
+  };
+  sar::gui::EngineController health_controller(health_transport, false);
+  for (const auto &[health, label] : runtime_health_states) {
+    (void)health;
+    health_controller.refresh();
+    assert(wait_until([&] {
+      return !health_controller.busy() &&
+             health_controller.wasapiRuntimeHealth() == label;
+    }));
+  }
 
   std::atomic_int reconnect_attempt = 0;
   const auto reconnect_transport = [&](ControlCommand command) {

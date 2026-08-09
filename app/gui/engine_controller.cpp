@@ -242,6 +242,22 @@ QString EngineController::wasapiRecoveryState() const {
   }
   return QStringLiteral("Unknown");
 }
+QString EngineController::wasapiRuntimeHealth() const {
+  switch (wasapi_recovery_.runtime_health) {
+    case control::WasapiRuntimeHealth::Stopped:
+      return QStringLiteral("Stopped");
+    case control::WasapiRuntimeHealth::Healthy:
+      return QStringLiteral("Healthy");
+    case control::WasapiRuntimeHealth::Degraded:
+      return QStringLiteral("Degraded");
+    case control::WasapiRuntimeHealth::Faulted:
+      return QStringLiteral("Faulted");
+  }
+  return QStringLiteral("Unknown");
+}
+QString EngineController::wasapiRuntimeReasonCode() const {
+  return text(wasapi_recovery_.runtime_reason_code);
+}
 qulonglong EngineController::wasapiRecoveryEpisodes() const noexcept {
   return wasapi_recovery_.recovery_episode_count;
 }
@@ -265,6 +281,24 @@ qulonglong EngineController::wasapiEndpointResetFailures() const noexcept {
 }
 bool EngineController::wasapiEndpointReopenPending() const noexcept {
   return wasapi_recovery_.endpoint_notification_reopen_pending;
+}
+qulonglong EngineController::wasapiWaitTimeoutCycles() const noexcept {
+  return wasapi_recovery_.wait_timeout_cycles;
+}
+qulonglong EngineController::wasapiCaptureDiscontinuityCycles() const noexcept {
+  return wasapi_recovery_.capture_discontinuity_cycles;
+}
+qulonglong EngineController::wasapiRenderFifoUnderflowFrames() const noexcept {
+  return wasapi_recovery_.render_fifo_underflow_frames;
+}
+qulonglong EngineController::wasapiMaximumRenderRecoverySilenceFrames()
+    const noexcept {
+  return wasapi_recovery_.maximum_render_recovery_silence_frames;
+}
+qulonglong
+EngineController::wasapiMaximumConsecutiveCaptureRateClampedFrames()
+    const noexcept {
+  return wasapi_recovery_.maximum_consecutive_capture_rate_clamped_frames;
 }
 QVariantList EngineController::inputs() const { return inputs_; }
 QVariantList EngineController::outputs() const { return outputs_; }

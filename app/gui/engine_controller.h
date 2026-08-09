@@ -55,6 +55,8 @@ class EngineController final : public QObject {
   Q_PROPERTY(double callbackPeakUs READ callbackPeakUs NOTIFY diagnosticsChanged)
   Q_PROPERTY(bool wasapiRecoveryAvailable READ wasapiRecoveryAvailable NOTIFY diagnosticsChanged)
   Q_PROPERTY(QString wasapiRecoveryState READ wasapiRecoveryState NOTIFY diagnosticsChanged)
+  Q_PROPERTY(QString wasapiRuntimeHealth READ wasapiRuntimeHealth NOTIFY diagnosticsChanged)
+  Q_PROPERTY(QString wasapiRuntimeReasonCode READ wasapiRuntimeReasonCode NOTIFY diagnosticsChanged)
   Q_PROPERTY(qulonglong wasapiRecoveryEpisodes READ wasapiRecoveryEpisodes NOTIFY diagnosticsChanged)
   Q_PROPERTY(qulonglong wasapiSuccessfulRecoveries READ wasapiSuccessfulRecoveries NOTIFY diagnosticsChanged)
   Q_PROPERTY(qulonglong wasapiFailedRecoveries READ wasapiFailedRecoveries NOTIFY diagnosticsChanged)
@@ -63,6 +65,11 @@ class EngineController final : public QObject {
   Q_PROPERTY(qulonglong wasapiEndpointReopens READ wasapiEndpointReopens NOTIFY diagnosticsChanged)
   Q_PROPERTY(qulonglong wasapiEndpointResetFailures READ wasapiEndpointResetFailures NOTIFY diagnosticsChanged)
   Q_PROPERTY(bool wasapiEndpointReopenPending READ wasapiEndpointReopenPending NOTIFY diagnosticsChanged)
+  Q_PROPERTY(qulonglong wasapiWaitTimeoutCycles READ wasapiWaitTimeoutCycles NOTIFY diagnosticsChanged)
+  Q_PROPERTY(qulonglong wasapiCaptureDiscontinuityCycles READ wasapiCaptureDiscontinuityCycles NOTIFY diagnosticsChanged)
+  Q_PROPERTY(qulonglong wasapiRenderFifoUnderflowFrames READ wasapiRenderFifoUnderflowFrames NOTIFY diagnosticsChanged)
+  Q_PROPERTY(qulonglong wasapiMaximumRenderRecoverySilenceFrames READ wasapiMaximumRenderRecoverySilenceFrames NOTIFY diagnosticsChanged)
+  Q_PROPERTY(qulonglong wasapiMaximumConsecutiveCaptureRateClampedFrames READ wasapiMaximumConsecutiveCaptureRateClampedFrames NOTIFY diagnosticsChanged)
   Q_PROPERTY(QVariantList inputs READ inputs NOTIFY sessionChanged)
   Q_PROPERTY(QVariantList outputs READ outputs NOTIFY sessionChanged)
   Q_PROPERTY(QVariantList routes READ routes NOTIFY sessionChanged)
@@ -102,6 +109,8 @@ class EngineController final : public QObject {
   [[nodiscard]] double callbackPeakUs() const noexcept;
   [[nodiscard]] bool wasapiRecoveryAvailable() const noexcept;
   [[nodiscard]] QString wasapiRecoveryState() const;
+  [[nodiscard]] QString wasapiRuntimeHealth() const;
+  [[nodiscard]] QString wasapiRuntimeReasonCode() const;
   [[nodiscard]] qulonglong wasapiRecoveryEpisodes() const noexcept;
   [[nodiscard]] qulonglong wasapiSuccessfulRecoveries() const noexcept;
   [[nodiscard]] qulonglong wasapiFailedRecoveries() const noexcept;
@@ -110,6 +119,12 @@ class EngineController final : public QObject {
   [[nodiscard]] qulonglong wasapiEndpointReopens() const noexcept;
   [[nodiscard]] qulonglong wasapiEndpointResetFailures() const noexcept;
   [[nodiscard]] bool wasapiEndpointReopenPending() const noexcept;
+  [[nodiscard]] qulonglong wasapiWaitTimeoutCycles() const noexcept;
+  [[nodiscard]] qulonglong wasapiCaptureDiscontinuityCycles() const noexcept;
+  [[nodiscard]] qulonglong wasapiRenderFifoUnderflowFrames() const noexcept;
+  [[nodiscard]] qulonglong wasapiMaximumRenderRecoverySilenceFrames() const noexcept;
+  [[nodiscard]] qulonglong
+  wasapiMaximumConsecutiveCaptureRateClampedFrames() const noexcept;
   [[nodiscard]] QVariantList inputs() const;
   [[nodiscard]] QVariantList outputs() const;
   [[nodiscard]] QVariantList routes() const;

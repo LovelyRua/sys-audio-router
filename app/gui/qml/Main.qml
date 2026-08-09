@@ -1104,9 +1104,14 @@ ApplicationWindow {
 
             Rectangle {
                 color: colors.canvas
-                ColumnLayout {
+                ScrollView {
+                    id: diagnosticsScroll
                     anchors.fill: parent
-                    anchors.margins: 24
+                    clip: true
+                ColumnLayout {
+                    x: 24
+                    y: 24
+                    width: Math.max(0, diagnosticsScroll.availableWidth - 48)
                     spacing: 14
                     Text { text: "Audio devices"; color: colors.text; font.pixelSize: 18; font.weight: Font.DemiBold }
                     Text { text: engine.devices.length + " endpoints reported by the engine"; color: colors.muted; font.pixelSize: 12 }
@@ -1328,20 +1333,37 @@ ApplicationWindow {
                         Repeater {
                             model: [
                                 {
+                                    label: "HEALTH",
+                                    value: engine.wasapiRecoveryAvailable ? engine.wasapiRuntimeHealth : "Unavailable",
+                                    detail: engine.wasapiRecoveryAvailable && engine.wasapiRuntimeReasonCode.length > 0
+                                            ? engine.wasapiRuntimeReasonCode : "",
+                                    tone: !engine.wasapiRecoveryAvailable ? colors.muted
+                                          : engine.wasapiRuntimeHealth === "Healthy" ? colors.healthy
+                                          : engine.wasapiRuntimeHealth === "Faulted" ? colors.danger
+                                          : engine.wasapiRuntimeHealth === "Degraded" ? colors.warning
+                                          : colors.muted
+                                },
+                                {
                                     label: "STATE",
                                     value: engine.wasapiRecoveryAvailable ? engine.wasapiRecoveryState : "Unavailable",
+                                    detail: "",
                                     tone: !engine.wasapiRecoveryAvailable ? colors.muted
                                           : engine.wasapiRecoveryState === "Running" ? colors.healthy
                                           : engine.wasapiRecoveryState === "Stopped" ? colors.muted
                                           : engine.wasapiRecoveryState === "Faulted" ? colors.danger
                                           : colors.warning
                                 },
-                                { label: "RECOVERED", value: engine.wasapiSuccessfulRecoveries + " / " + engine.wasapiRecoveryEpisodes, tone: colors.healthy },
-                                { label: "FAILED", value: engine.wasapiFailedRecoveries, tone: engine.wasapiFailedRecoveries > 0 ? colors.danger : colors.healthy },
-                                { label: "LAST / MAX", value: engine.wasapiLastRecoveryMs + " / " + engine.wasapiMaximumRecoveryMs + " ms", tone: colors.text },
-                                { label: "ENDPOINT REOPENS", value: engine.wasapiEndpointReopens, tone: colors.cyan },
-                                { label: "RESET FAILURES", value: engine.wasapiEndpointResetFailures, tone: engine.wasapiEndpointResetFailures > 0 ? colors.danger : colors.healthy },
-                                { label: "REOPEN REQUEST", value: engine.wasapiEndpointReopenPending ? "Pending" : "Idle", tone: engine.wasapiEndpointReopenPending ? colors.warning : colors.muted }
+                                { label: "WAIT TIMEOUTS", value: engine.wasapiWaitTimeoutCycles, detail: "cycles", tone: engine.wasapiWaitTimeoutCycles > 0 ? colors.danger : colors.healthy },
+                                { label: "DISCONTINUITIES", value: engine.wasapiCaptureDiscontinuityCycles, detail: "capture cycles", tone: engine.wasapiCaptureDiscontinuityCycles > 0 ? colors.warning : colors.healthy },
+                                { label: "RENDER UNDERFLOW", value: engine.wasapiRenderFifoUnderflowFrames, detail: "frames", tone: engine.wasapiRenderFifoUnderflowFrames > 0 ? colors.warning : colors.healthy },
+                                { label: "RECOVERY SILENCE", value: engine.wasapiMaximumRenderRecoverySilenceFrames, detail: "max frames", tone: engine.wasapiMaximumRenderRecoverySilenceFrames > 0 ? colors.warning : colors.healthy },
+                                { label: "RATE CLAMP", value: engine.wasapiMaximumConsecutiveCaptureRateClampedFrames, detail: "max frames", tone: engine.wasapiMaximumConsecutiveCaptureRateClampedFrames > 0 ? colors.warning : colors.healthy },
+                                { label: "RECOVERED", value: engine.wasapiSuccessfulRecoveries + " / " + engine.wasapiRecoveryEpisodes, detail: "success / total", tone: colors.healthy },
+                                { label: "FAILED", value: engine.wasapiFailedRecoveries, detail: "recoveries", tone: engine.wasapiFailedRecoveries > 0 ? colors.danger : colors.healthy },
+                                { label: "LAST / MAX", value: engine.wasapiLastRecoveryMs + " / " + engine.wasapiMaximumRecoveryMs + " ms", detail: "recovery time", tone: colors.text },
+                                { label: "ENDPOINT REOPENS", value: engine.wasapiEndpointReopens, detail: "notifications", tone: colors.cyan },
+                                { label: "RESET FAILURES", value: engine.wasapiEndpointResetFailures, detail: "notifications", tone: engine.wasapiEndpointResetFailures > 0 ? colors.danger : colors.healthy },
+                                { label: "REOPEN REQUEST", value: engine.wasapiEndpointReopenPending ? "Pending" : "Idle", detail: "", tone: engine.wasapiEndpointReopenPending ? colors.warning : colors.muted }
                             ]
                             delegate: Rectangle {
                                 required property var modelData
@@ -1354,11 +1376,13 @@ ApplicationWindow {
                                     Text { text: modelData.label; color: colors.muted; font.pixelSize: 9; font.weight: Font.DemiBold }
                                     Item { Layout.fillHeight: true }
                                     Text { text: modelData.value; color: modelData.tone; font.pixelSize: 17; font.weight: Font.DemiBold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                    Text { visible: modelData.detail.length > 0; text: modelData.detail; color: colors.muted; font.pixelSize: 9; elide: Text.ElideRight; Layout.fillWidth: true }
                                 }
                             }
                         }
                     }
-                    Item { Layout.fillHeight: true }
+                    Item { Layout.preferredHeight: 10 }
+                }
                 }
             }
         }
