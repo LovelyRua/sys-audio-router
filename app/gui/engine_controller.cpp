@@ -574,6 +574,10 @@ void EngineController::commitHistory(const QueuedCommand& command) {
   if (had_undo != canUndo() || had_redo != canRedo()) {
     emit historyChanged();
   }
+  if (current_preset_.has_value()) {
+    updatePresetView(*current_preset_);
+    emit sessionChanged();
+  }
 }
 
 void EngineController::applyReply(const EngineReply& reply,
@@ -675,28 +679,7 @@ void EngineController::applyReply(const EngineReply& reply,
 
 void EngineController::updateSession(const control::ControlResponse& response) {
   if (response.has_preset || response.has_session_state) {
-    const auto& preset = response.preset;
-    current_preset_ = preset;
-    sample_rate_ = static_cast<int>(preset.sample_rate);
-    block_size_ = static_cast<int>(preset.frames_per_block);
-    inputs_.clear();
-    outputs_.clear();
-    routes_.clear();
-    for (const auto& input : preset.matrix.inputs) {
-      inputs_.push_back(endpoint(input));
-    }
-    for (const auto& output : preset.matrix.outputs) {
-      outputs_.push_back(endpoint(output));
-    }
-    for (const auto& route : preset.matrix.routes) {
-      routes_.push_back(QVariantMap{
-          {QStringLiteral("inputId"), text(route.input_id)},
-          {QStringLiteral("outputId"), text(route.output_id)},
-          {QStringLiteral("gain"), route.gain},
-          {QStringLiteral("muted"), route.muted},
-      });
-    }
-    ++route_revision_;
+    updatePresetView(response.preset);
   }
   if (response.has_devices || response.has_session_state) {
     devices_.clear();
@@ -716,6 +699,31 @@ void EngineController::updateSession(const control::ControlResponse& response) {
     graph_version_ = response.active_graph.version;
   }
   emit sessionChanged();
+}
+
+void EngineController::updatePresetView(
+    const control::PresetDocument& preset) {
+  current_preset_ = preset;
+  sample_rate_ = static_cast<int>(preset.sample_rate);
+  block_size_ = static_cast<int>(preset.frames_per_block);
+  inputs_.clear();
+  outputs_.clear();
+  routes_.clear();
+  for (const auto& input : preset.matrix.inputs) {
+    inputs_.push_back(endpoint(input));
+  }
+  for (const auto& output : preset.matrix.outputs) {
+    outputs_.push_back(endpoint(output));
+  }
+  for (const auto& route : preset.matrix.routes) {
+    routes_.push_back(QVariantMap{
+        {QStringLiteral("inputId"), text(route.input_id)},
+        {QStringLiteral("outputId"), text(route.output_id)},
+        {QStringLiteral("gain"), route.gain},
+        {QStringLiteral("muted"), route.muted},
+    });
+  }
+  ++route_revision_;
 }
 
 void EngineController::setError(QString error) {

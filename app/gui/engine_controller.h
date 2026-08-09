@@ -187,6 +187,7 @@ class EngineController final : public QObject {
   void updateBusyState();
   void applyReply(const EngineReply& reply, const QueuedCommand& command);
   void updateSession(const control::ControlResponse& response);
+  void updatePresetView(const control::PresetDocument& preset);
   void schedulePoll();
   void ensureEngineService();
   void stopEngineService();
