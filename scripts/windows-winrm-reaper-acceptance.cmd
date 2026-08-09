@@ -24,8 +24,8 @@ set "CLIENT_COUNT=%~7"
 if "%CLIENT_COUNT%"=="" set "CLIENT_COUNT=2"
 set "DURATION_SECONDS=%~8"
 if "%DURATION_SECONDS%"=="" set "DURATION_SECONDS=3"
-set "RECOVER_ARGUMENT=-RecoverUntrackedProcesses:$false"
-if /I "%SAR_REAPER_RECOVER_UNTRACKED%"=="1" set "RECOVER_ARGUMENT=-RecoverUntrackedProcesses:$true"
+set "RECOVER_ARGUMENT="
+if /I "%SAR_REAPER_RECOVER_UNTRACKED%"=="1" set "RECOVER_ARGUMENT=-RecoverUntrackedProcesses"
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0windows-winrm-reaper-acceptance.ps1" ^
   -HostName "%~1" ^
