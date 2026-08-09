@@ -98,7 +98,7 @@ two output channels. The service-owned render bus also keeps a fixed physical
 render quantum for its lifetime, so preset block-size changes are rejected with
 a restart-required error instead of committing an unusable format. A stopped
 runtime can rebuild against a newer graph through its retained endpoint
-configuration. The Qt Quick GUI now binds to control wire v5 from a separate process.
+configuration. The Qt Quick GUI now binds to control wire v6 from a separate process.
 Service installation and concurrent control-client authorization remain future
 work.
 
@@ -593,7 +593,11 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   the already-running first host, owns only the second host task and process,
   and requires the producer count to return to one after disconnect.
   The engine service also reaps stopped transport sessions from its 20 ms
-  control loop. A real two-REAPER teardown regression now requires and passed
+  control loop. A bounded synthetic soak harness can drive up to 32 broker
+  clients with mixed block sizes for as long as 24 hours and fails on configured
+  callback, queue, timeout, dropout, or sequence-discontinuity thresholds. Its
+  three-client 64/128/256 integration smoke is part of the Windows CTest suite.
+  A real two-REAPER teardown regression now requires and passed
   the `2->1->0` active-producer sequence, closing the dead-client render-bus
   slot leak exposed by the first interrupted cross-DAW run.
 - The first ASIO-to-physical-render bridge is wired for exact-format clients.
@@ -601,7 +605,7 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   pinned 48 kHz hardware render endpoint; after 11,301 graph blocks the runtime
   reported zero xruns, FIFO overflow, or FIFO underflow and a 754-microsecond
   callback peak. Production-bus concurrency and WASAPI source injection are
-  covered by dedicated smoke tests. Control-wire v5 now reports producer,
+  covered by dedicated smoke tests. Control-wire v6 now reports producer,
   consumer, queue-waterline, peak, clipping, and non-finite-sample evidence.
   An initial ten-second live delta measured 372.1 ASIO production attempts per
   second but only 105.4 consumed blocks per second on the default shared-mode
@@ -631,8 +635,12 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 - No plugin hosting exists yet.
 - Graph execution is still linear.
 - The named-pipe control service can own a WASAPI render or duplex runtime and
-  select explicit duplex endpoint IDs. Its duplex mode now drives bounded
-  supervisor recovery and follow-default endpoint notifications. It accepts
+  select explicit endpoint IDs. Both modes now drive bounded supervisor
+  recovery; follow-default render and duplex selections consume endpoint
+  notifications while pinned selections retain their configured IDs. Recovery
+  state, episode counts, success/failure counts, duration, and notification
+  reopen counters are exposed through control wire v6 for GUI diagnostics. It
+  accepts
   runtime state/start/stop commands over the named pipe and lazily rebuilds a
   stopped stale runtime on start. Device-list and session-state requests merge
   the control session's virtual endpoints with a fresh control-thread WASAPI
