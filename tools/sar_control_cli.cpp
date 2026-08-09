@@ -46,6 +46,40 @@ void usage() {
                "runtime-configure-duplex [CAPTURE_ID RENDER_ID]\n";
 }
 
+const char* wasapi_recovery_state_name(
+    sar::control::WasapiRecoveryState state) noexcept {
+  switch (state) {
+    case sar::control::WasapiRecoveryState::Stopped:
+      return "stopped";
+    case sar::control::WasapiRecoveryState::Opening:
+      return "opening";
+    case sar::control::WasapiRecoveryState::Running:
+      return "running";
+    case sar::control::WasapiRecoveryState::Quiescing:
+      return "quiescing";
+    case sar::control::WasapiRecoveryState::Backoff:
+      return "backoff";
+    case sar::control::WasapiRecoveryState::Faulted:
+      return "faulted";
+  }
+  return "unknown";
+}
+
+const char* wasapi_runtime_health_name(
+    sar::control::WasapiRuntimeHealth health) noexcept {
+  switch (health) {
+    case sar::control::WasapiRuntimeHealth::Stopped:
+      return "stopped";
+    case sar::control::WasapiRuntimeHealth::Healthy:
+      return "healthy";
+    case sar::control::WasapiRuntimeHealth::Degraded:
+      return "degraded";
+    case sar::control::WasapiRuntimeHealth::Faulted:
+      return "faulted";
+  }
+  return "unknown";
+}
+
 std::filesystem::path utf8_path(std::string_view value) {
   const auto* first = reinterpret_cast<const char8_t*>(value.data());
   return std::filesystem::path(std::u8string(first, first + value.size()));
@@ -368,6 +402,38 @@ int main(int argc, char** argv) {
               << response.response.diagnostics.virtual_asio_peak
               << " callback_peak_us="
               << response.response.diagnostics.peak_callback_seconds * 1'000'000.0;
+  }
+  if (response.response.has_wasapi_recovery) {
+    const auto& wasapi = response.response.wasapi_recovery;
+    std::cout << " wasapi_recovery_state="
+              << wasapi_recovery_state_name(wasapi.state)
+              << " wasapi_runtime_health="
+              << wasapi_runtime_health_name(wasapi.runtime_health)
+              << " wasapi_runtime_reason="
+              << std::quoted(wasapi.runtime_reason_code)
+              << " wasapi_recovery_episodes=" << wasapi.recovery_episode_count
+              << " wasapi_recovery_successes="
+              << wasapi.successful_recovery_count
+              << " wasapi_recovery_failures=" << wasapi.failed_recovery_count
+              << " wasapi_last_recovery_ms="
+              << wasapi.last_recovery_duration_ms
+              << " wasapi_max_recovery_ms="
+              << wasapi.maximum_recovery_duration_ms
+              << " wasapi_notification_reopens="
+              << wasapi.endpoint_notification_reopen_count
+              << " wasapi_notification_reset_failures="
+              << wasapi.endpoint_notification_reset_failure_count
+              << " wasapi_notification_reopen_pending="
+              << (wasapi.endpoint_notification_reopen_pending ? "true" : "false")
+              << " wasapi_wait_timeouts=" << wasapi.wait_timeout_cycles
+              << " wasapi_capture_discontinuities="
+              << wasapi.capture_discontinuity_cycles
+              << " wasapi_render_underflow_frames="
+              << wasapi.render_fifo_underflow_frames
+              << " wasapi_max_recovery_silence_frames="
+              << wasapi.maximum_render_recovery_silence_frames
+              << " wasapi_max_capture_rate_clamp_frames="
+              << wasapi.maximum_consecutive_capture_rate_clamped_frames;
   }
   if (response.response.has_audio_runtime_state) {
     std::cout << " runtime_installed="

@@ -69,6 +69,28 @@ class FakeAudioRuntime final : public sar::service::EngineAudioRuntime {
     return result;
   }
 
+  std::optional<sar::service::EngineAudioRecoveryDiagnostics>
+  recovery_diagnostics() const override {
+    return sar::service::EngineAudioRecoveryDiagnostics{
+        .state = sar::service::EngineAudioRecoveryState::Running,
+        .runtime_health = sar::service::EngineAudioRuntimeHealth::Degraded,
+        .runtime_reason_code = "synthetic_wait_timeout",
+        .recovery_episode_count = 11,
+        .successful_recovery_count = 7,
+        .failed_recovery_count = 4,
+        .last_recovery_duration_ms = 13,
+        .maximum_recovery_duration_ms = 29,
+        .endpoint_notification_reopen_count = 5,
+        .endpoint_notification_reset_failure_count = 2,
+        .endpoint_notification_reopen_pending = true,
+        .wait_timeout_cycles = 17,
+        .capture_discontinuity_cycles = 19,
+        .render_fifo_underflow_frames = 23,
+        .maximum_render_recovery_silence_frames = 31,
+        .maximum_consecutive_capture_rate_clamped_frames = 37,
+    };
+  }
+
  private:
   bool running_ = false;
   std::uint64_t graph_version_ = 0;
@@ -188,6 +210,27 @@ int main() {
   const auto measured = send(config, diagnostics);
   assert(measured.has_diagnostics);
   assert(measured.diagnostics.processed_blocks == 64);
+  assert(measured.has_wasapi_recovery);
+  assert(measured.wasapi_recovery.state ==
+         sar::control::WasapiRecoveryState::Running);
+  assert(measured.wasapi_recovery.runtime_health ==
+         sar::control::WasapiRuntimeHealth::Degraded);
+  assert(measured.wasapi_recovery.runtime_reason_code ==
+         "synthetic_wait_timeout");
+  assert(measured.wasapi_recovery.recovery_episode_count == 11);
+  assert(measured.wasapi_recovery.successful_recovery_count == 7);
+  assert(measured.wasapi_recovery.failed_recovery_count == 4);
+  assert(measured.wasapi_recovery.last_recovery_duration_ms == 13);
+  assert(measured.wasapi_recovery.maximum_recovery_duration_ms == 29);
+  assert(measured.wasapi_recovery.endpoint_notification_reopen_count == 5);
+  assert(measured.wasapi_recovery.endpoint_notification_reset_failure_count == 2);
+  assert(measured.wasapi_recovery.endpoint_notification_reopen_pending);
+  assert(measured.wasapi_recovery.wait_timeout_cycles == 17);
+  assert(measured.wasapi_recovery.capture_discontinuity_cycles == 19);
+  assert(measured.wasapi_recovery.render_fifo_underflow_frames == 23);
+  assert(measured.wasapi_recovery.maximum_render_recovery_silence_frames == 31);
+  assert(measured.wasapi_recovery
+             .maximum_consecutive_capture_rate_clamped_frames == 37);
 
   sar::control::ControlCommand stop;
   stop.command_id = "stop";
