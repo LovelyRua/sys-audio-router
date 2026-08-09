@@ -25,6 +25,7 @@ credentials/
 tmp/
 .codegraph/
 .sar-evidence/
+artifacts/
 .codex/processes.json
 
 # Local collaborator worktrees/clones nested under this coordination checkout

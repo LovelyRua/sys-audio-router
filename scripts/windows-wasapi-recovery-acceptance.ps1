@@ -14,6 +14,8 @@ param(
 
   [switch]$AllowNoSuccessfulRecovery,
 
+  [switch]$AllowEmptyCaptureDeviceId,
+
   [ValidateRange(0, [long]::MaxValue)]
   [long]$MaximumRecoveryAttemptCount = 3,
 
@@ -154,7 +156,9 @@ if ($null -ne $finalSnapshot) {
   foreach ($field in @("active_capture_device_id", "active_render_device_id")) {
     if (!$finalSnapshot.ContainsKey($field)) {
       $failures.Add("missing_$field")
-    } elseif ([string]::IsNullOrWhiteSpace([string]$finalSnapshot[$field])) {
+    } elseif ([string]::IsNullOrWhiteSpace([string]$finalSnapshot[$field]) -and
+        !($AllowEmptyCaptureDeviceId -and
+          $field -eq "active_capture_device_id")) {
       $failures.Add("empty_$field")
     }
   }
@@ -296,6 +300,7 @@ Write-Output (
     " passed=$(if ($passed) { 1 } else { 0 })" +
     " process_exit_code=$toolExitCode" +
     " final_healthy=$(if ($finalHealthy) { 1 } else { 0 })" +
+    " allow_empty_capture_device_id=$(if ($AllowEmptyCaptureDeviceId) { 1 } else { 0 })" +
     " active_capture_device_id=$(ConvertTo-SummaryValue $activeCaptureDeviceId)" +
     " active_render_device_id=$(ConvertTo-SummaryValue $activeRenderDeviceId)" +
     " successful_recovery_count=$(& $numberOrMissing $successfulRecoveryCount)" +

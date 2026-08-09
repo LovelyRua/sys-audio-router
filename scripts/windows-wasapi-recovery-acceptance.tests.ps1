@@ -133,6 +133,18 @@ try {
   Assert-Case -Name "empty-id" -Lines @($emptyId, $stopped, $noLastErrors) -ExpectedExitCode 1 `
       -ExpectedText 'reason="empty_active_capture_device_id"'
 
+  Assert-Case -Name "render-only" `
+      -Lines @($initial, $recovering, $emptyId, $stopped, $noLastErrors) `
+      -ExpectedExitCode 0 -ExpectedText 'allow_empty_capture_device_id=1' `
+      -ExtraArgument @("-AllowEmptyCaptureDeviceId")
+  $emptyRenderId = $emptyId.Replace(
+      'active_render_device_id="render\"endpoint"',
+      'active_render_device_id=""')
+  Assert-Case -Name "render-only-missing-render" `
+      -Lines @($emptyRenderId, $stopped, $noLastErrors) `
+      -ExpectedExitCode 1 -ExpectedText 'reason="empty_active_render_device_id"' `
+      -ExtraArgument @("-AllowEmptyCaptureDeviceId")
+
   Assert-Case -Name "recovery-required" -Lines @($noRecovery, $stopped, $noLastErrors) `
       -ExpectedExitCode 1 -ExpectedText 'reason="successful_recovery_required"'
 

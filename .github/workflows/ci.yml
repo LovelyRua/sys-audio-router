@@ -22,3 +22,7 @@ jobs:
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
 
+      - name: Test Windows automation scripts
+        shell: pwsh
+        timeout-minutes: 10
+        run: scripts/windows-script-self-tests.ps1

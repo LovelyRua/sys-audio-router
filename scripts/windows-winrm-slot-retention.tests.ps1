@@ -32,6 +32,7 @@ function Add-ActiveToken {
   New-Item -ItemType Directory -Path $tokenDirectory -Force | Out-Null
   $token = New-Item -ItemType File -Path (Join-Path $tokenDirectory "run.active") -Force
   $token.LastWriteTimeUtc = $StartedUtc
+  return $token.FullName
 }
 
 function Import-RetentionFunctions {
@@ -81,7 +82,7 @@ foreach ($scriptName in $scripts) {
     Set-Content -LiteralPath (Join-Path $malformedPath ".sar-slot-finished.json") `
         -Value '{"outcome":"unknown","finished_utc":"not-a-time"}' -Encoding ASCII
 
-    Add-ActiveToken $testRoot "active" $nowUtc.AddHours(-1)
+    $activeTokenPath = Add-ActiveToken $testRoot "active" $nowUtc.AddHours(-1)
     $emptyCommandLines = [string[]]@()
     $oldMarker = Get-Content -LiteralPath (Join-Path $oldPath ".sar-slot-finished.json") -Raw |
         ConvertFrom-Json
@@ -121,6 +122,7 @@ foreach ($scriptName in $scripts) {
     $StaleActiveHours = [uint32]24
     Invoke-FinishedSlotRetention -DryRun
     Assert-Equal $true (Test-Path -LiteralPath $oldPath) "Dry-run removed a slot."
+    (Get-Item -LiteralPath $activeTokenPath).LastWriteTimeUtc = [datetime]::UtcNow
     Invoke-FinishedSlotRetention
     Assert-Equal $false (Test-Path -LiteralPath $oldPath) "Live cleanup did not remove the selected slot."
     Assert-Equal $true (Test-Path -LiteralPath $excessPath) "Cleanup exceeded its per-run limit."
@@ -128,9 +130,9 @@ foreach ($scriptName in $scripts) {
     Assert-Equal $true (Test-Path -LiteralPath $currentPath) "Cleanup removed the current slot."
 
     $orphanPath = Add-FinishedSlot $testRoot "sys-audio-router-orphan" $nowUtc.AddDays(-45) "failure"
-    Add-ActiveToken $testRoot "orphan" $nowUtc.AddHours(-48)
+    Add-ActiveToken $testRoot "orphan" $nowUtc.AddHours(-48) | Out-Null
     $matchingPath = Add-FinishedSlot $testRoot "sys-audio-router-building" $nowUtc.AddDays(-45) "failure"
-    Add-ActiveToken $testRoot "building" $nowUtc.AddHours(-48)
+    Add-ActiveToken $testRoot "building" $nowUtc.AddHours(-48) | Out-Null
     $matchingCommandLines = [string[]]@("cmake --build `"$matchingPath\build-building`"")
 
     $staleSelection = @(Get-FinishedSlotRetentionSelection `

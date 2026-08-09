@@ -153,7 +153,10 @@ or GUI feedback work after the corresponding short hardware path has passed.
   follow-default run restarted Windows Audio three seconds into a 25-second
   measurement. One reopen saw the default endpoint unavailable, the following
   reopen restored it in 604 ms, and the run ended with one successful recovery,
-  zero failed recovery, zero retained error, and a running render endpoint.
+  zero failed recovery, zero retained error, and a running render endpoint. The
+  same experiment is now a slot-isolated WinRM acceptance command with retained
+  evidence and CI-covered PowerShell self-tests; its first automated run
+  recovered in 500 ms with two attempts and no retained error.
 - **Render deadline ordering:** when capture and render are both ready, service
   render before draining additional capture packets or producing optional graph
   backlog. A deterministic call-order smoke test must prove the ordering. A

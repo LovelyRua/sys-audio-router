@@ -139,6 +139,22 @@ bound for the selected endpoint pair; zero leaves that optional bound disabled.
 Set `SAR_MEASURE_MIN_FRAME_COVERAGE_BPS=9999` for the roadmap's 99.99% long-soak
 gate. Short diagnostic runs default to 9,900 basis points (99%).
 
+## Windows Audio Service Recovery
+
+After building a reusable WinRM slot, run the render-only service-restart gate:
+
+```bat
+set SAR_TEST_PASSWORD=<password>
+scripts\windows-winrm-audio-service-recovery.cmd 192.168.123.123 codex "" engineer-a
+```
+
+The helper starts `sar_measure_wasapi_recovery`, restarts `Audiosrv` three
+seconds later, requires the render endpoint to recover within five seconds, and
+retains stdout, stderr, acceptance, and result evidence under `.sar-evidence`.
+A per-slot remote lock prevents concurrent service tests
+from using the same build. `SAR_AUDIO_SERVICE_RESTART_DELAY_MS`,
+`SAR_MAX_RECOVERY_MS`, and `SAR_RECOVERY_EVIDENCE_DIR` override the defaults.
+
 The eighth argument enables `--require-healthy`. When enabled, the command fails
 on faulted or degraded runtime summaries. The ninth argument allows endpoint
 unavailability so WinRM-only sessions can still verify upload, configure, build,
