@@ -164,7 +164,7 @@ try {
   Set-Content -LiteralPath $stderrPath -Value @($remoteResult.stderr) `
       -Encoding UTF8
 
-  $powershellPath = Join-Path $PSHOME "powershell.exe"
+  $powershellPath = (Get-Process -Id $PID).Path
   $previousErrorActionPreference = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
   try {

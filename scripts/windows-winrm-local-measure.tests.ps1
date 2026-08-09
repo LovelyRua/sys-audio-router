@@ -33,7 +33,7 @@ foreach ($environmentName in @(
       "CMD wrapper is missing $environmentName."
 }
 
-$powershellPath = Join-Path $PSHOME "powershell.exe"
+$powershellPath = (Get-Process -Id $PID).Path
 $previousErrorActionPreference = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
 try {

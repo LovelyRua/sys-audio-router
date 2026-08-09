@@ -10,10 +10,7 @@ if ($tests.Count -eq 0) {
   throw "No PowerShell script self-tests were found in '$root'."
 }
 
-$powershellPath = Join-Path $PSHOME "powershell.exe"
-if (!(Test-Path -LiteralPath $powershellPath -PathType Leaf)) {
-  $powershellPath = (Get-Process -Id $PID).Path
-}
+$powershellPath = (Get-Process -Id $PID).Path
 $failures = [System.Collections.Generic.List[string]]::new()
 $started = [Diagnostics.Stopwatch]::StartNew()
 foreach ($test in $tests) {

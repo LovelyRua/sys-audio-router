@@ -386,7 +386,12 @@ engine, CLI, Virtual ASIO driver, registration utility, Qt Quick GUI, Qt/QML
 runtime, platform plugins, and compiler runtime. Its installer verifies
 current-user x64 registration and restores the previous payload if installation
 fails; uninstall refuses unrelated directories and registrations. Preset
-browsing and atomic save/load are connected to the engine. Large-matrix
+browsing and atomic save/load are connected to the engine. The NSIS gate now
+requires an installed control-protocol handshake in addition to live GUI and
+engine processes. A 2026-08-09 test-machine run migrated the ownership-marked
+ZIP alpha, then passed install, in-place update, launcher, GUI, engine, control,
+ASIO registration, and uninstall acceptance before leaving the same verified
+installer deployed under the user's local Programs directory. Large-matrix
 virtualization, undo/redo, and seed-user workflow testing remain.
 
 Deliverables:

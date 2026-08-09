@@ -63,10 +63,7 @@ $parseErrors = $null
     [ref]$parseErrors)
 Assert-Equal 0 $parseErrors.Count "Unexpected parser errors in acceptance script."
 
-$powershellPath = Join-Path $PSHOME "powershell.exe"
-if (!(Test-Path -LiteralPath $powershellPath -PathType Leaf)) {
-  $powershellPath = (Get-Process -Id $PID).Path
-}
+$powershellPath = (Get-Process -Id $PID).Path
 $temporaryDirectory = Join-Path ([System.IO.Path]::GetTempPath()) `
     ("sar-recovery-acceptance-" + [guid]::NewGuid().ToString("N"))
 [void](New-Item -ItemType Directory -Path $temporaryDirectory)

@@ -204,7 +204,7 @@ try {
 
   if ($null -ne $processExitCode -and
       (Test-Path -LiteralPath ([string]$config.stdout_path) -PathType Leaf)) {
-    $powershell = Join-Path $PSHOME "powershell.exe"
+    $powershell = (Get-Process -Id $PID).Path
     $previousErrorActionPreference = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {

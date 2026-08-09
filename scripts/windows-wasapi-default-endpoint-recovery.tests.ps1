@@ -123,10 +123,7 @@ Export-ModuleMember -Function Get-AudioDevice, Set-AudioDevice
   $config | ConvertTo-Json -Depth 4 |
       Set-Content -LiteralPath $configPath -Encoding UTF8
 
-  $powershellPath = Join-Path $PSHOME "powershell.exe"
-  if (!(Test-Path -LiteralPath $powershellPath -PathType Leaf)) {
-    $powershellPath = (Get-Process -Id $PID).Path
-  }
+  $powershellPath = (Get-Process -Id $PID).Path
   $oldModulePath = $env:PSModulePath
   $env:PSModulePath = "$temporaryDirectory;$oldModulePath"
   try {
