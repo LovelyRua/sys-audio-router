@@ -631,8 +631,10 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   implementation.
 - The first Qt Quick GUI exists and controls route state, gain, runtime
   lifecycle, device listing, diagnostics, and preset browsing with atomic
-  save/load. Undo/redo, large-matrix virtualization, and seed-user feedback
-  remain. CMake/CPack now produces per-user Windows x64 ZIP and NSIS installer
+  save/load. Route edits have a bounded undo/redo history that commits only
+  after an accepted engine response and resets when a preset is loaded.
+  Large-matrix virtualization and seed-user feedback remain. CMake/CPack now
+  produces per-user Windows x64 ZIP and NSIS installer
   payloads, with a launcher that starts the engine and then opens the GUI.
   Its install scripts validate the engine, ASIO, Qt DLL, QML, and platform
   plugin payloads, verify Virtual ASIO registration, preserve and restore an

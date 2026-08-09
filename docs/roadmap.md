@@ -395,7 +395,10 @@ installer deployed under the user's local Programs directory. The installer
 gate now launches the bootstrap executable twice and requires exactly one GUI
 and one engine process; the 2026-08-09 test-machine acceptance passed the same
 single-instance check before deploying package `f4708e1`. Large-matrix
-virtualization, undo/redo, and seed-user workflow testing remain.
+virtualization and seed-user workflow testing remain. Route gain and connection
+edits now have a bounded 64-entry undo/redo history; rejected engine commands
+leave the history unchanged, and loading a preset establishes a new history
+baseline.
 
 Deliverables:
 
