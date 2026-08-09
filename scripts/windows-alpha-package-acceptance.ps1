@@ -245,6 +245,20 @@ try {
     throw "Installed control-plane handshake failed with exit code $($controlResult.ExitCode): $([string]::Join('; ', $controlResult.Output))"
   }
 
+  $diagnosticsResult = Invoke-CommandScript `
+      -Path (Join-Path $installPath "bin\sar_control_cli.exe") `
+      -Argument @("diagnostics")
+  Write-CommandOutput -Result $diagnosticsResult
+  if ($diagnosticsResult.ExitCode -ne 0 -or
+      $diagnosticsResult.Output.Count -eq 0 -or
+      $diagnosticsResult.Output[0] -notmatch
+          '^control_response status=accepted command_id=cli-1\s' -or
+      $diagnosticsResult.Output[0] -notmatch '\sprocessed_blocks=\d+(?:\s|$)' -or
+      $diagnosticsResult.Output[0] -notmatch '\sxruns=\d+(?:\s|$)' -or
+      $diagnosticsResult.Output[0] -notmatch '\scallback_peak_us=') {
+    throw "Installed diagnostics handshake failed with exit code $($diagnosticsResult.ExitCode): $([string]::Join('; ', $diagnosticsResult.Output))"
+  }
+
   Stop-Process -Id $guiProcess.Id -Force
   Wait-Process -Id $guiProcess.Id -Timeout 5 -ErrorAction SilentlyContinue
   $guiProcess = $null
@@ -377,7 +391,7 @@ try {
       " sha256=$packageHash" +
       " gui_health_seconds=$GuiHealthSeconds" +
       " missing_runtime_guard=passed" +
-      " install=passed update=passed gui_launch=passed control=passed asio=passed" +
+      " install=passed update=passed gui_launch=passed control=passed diagnostics=passed asio=passed" +
       " path_boundary=passed ownership=passed uninstall=passed")
 } finally {
   if ($null -ne $guiProcess -and !$guiProcess.HasExited) {
