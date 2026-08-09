@@ -70,8 +70,8 @@ std::uint64_t qpc_100ns() {
 void fill_input(ClientRuntime& runtime) {
   const auto value = static_cast<float>(runtime.index + 1) * 0.01F;
   for (std::size_t channel = 0; channel < runtime.input.channels(); ++channel) {
-    std::fill(runtime.input.channel(channel),
-              runtime.input.channel(channel) + runtime.input.frames(), value);
+    auto samples = runtime.input.channel(channel);
+    std::fill(samples.begin(), samples.end(), value);
   }
 }
 
