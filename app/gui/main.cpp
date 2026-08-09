@@ -15,11 +15,17 @@ namespace {
 
 class GuiInstanceGuard final {
  public:
-  GuiInstanceGuard() noexcept
-      : mutex_(CreateMutexW(
-            nullptr, TRUE,
-            L"Local\\SystemAudioRoute.Gui.{7F16C8A9-4A0C-4D31-9A5B-2C6E7F8D1042}")),
-        primary_(mutex_ != nullptr && GetLastError() != ERROR_ALREADY_EXISTS) {}
+  GuiInstanceGuard() noexcept {
+    mutex_ = CreateMutexW(
+        nullptr, FALSE,
+        L"Local\\SystemAudioRoute.Gui.{7F16C8A9-4A0C-4D31-9A5B-2C6E7F8D1042}");
+    if (mutex_ == nullptr) {
+      return;
+    }
+
+    const auto wait_result = WaitForSingleObject(mutex_, 0);
+    primary_ = wait_result == WAIT_OBJECT_0 || wait_result == WAIT_ABANDONED;
+  }
   GuiInstanceGuard(const GuiInstanceGuard&) = delete;
   GuiInstanceGuard& operator=(const GuiInstanceGuard&) = delete;
   ~GuiInstanceGuard() {
