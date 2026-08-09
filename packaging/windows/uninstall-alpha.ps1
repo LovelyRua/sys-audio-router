@@ -89,7 +89,25 @@ $removalPath = "$installPath.removing-$suffix"
 $movedInstall = $false
 $removedRegistration = $false
 try {
-  Move-Item -LiteralPath $installPath -Destination $removalPath
+  $moveError = $null
+  for ($attempt = 0; $attempt -lt 30; ++$attempt) {
+    try {
+      Move-Item -LiteralPath $installPath -Destination $removalPath `
+          -ErrorAction Stop
+      $moveError = $null
+      break
+    } catch {
+      $moveError = $_
+      if (!(Test-Path -LiteralPath $installPath -PathType Container) -or
+          (Test-Path -LiteralPath $removalPath)) {
+        break
+      }
+      Start-Sleep -Milliseconds 100
+    }
+  }
+  if ($null -ne $moveError) {
+    throw $moveError
+  }
   $movedInstall = $true
 
   if ($ownsRegistration) {

@@ -68,6 +68,21 @@ scripts\windows-alpha-package-acceptance.cmd ^
   -InstallDirectory "%LOCALAPPDATA%\Programs\SystemAudioRoute-Alpha-Acceptance"
 ```
 
+Run that ZIP acceptance on the designated Windows test machine without
+installing build tools on the development host:
+
+```bat
+scripts\windows-winrm-alpha-package-acceptance.cmd ^
+  build-alpha\package-output\SystemAudioRoute-0.1.0-windows-x64.zip ^
+  192.168.123.123 codex password engineer-a
+```
+
+Remote package acceptance uses slot-specific staging and installation paths,
+but it is globally serialized because it temporarily owns the test user's
+Virtual ASIO registration. It refuses a running REAPER or Cakewalk process,
+exports any existing per-user registration before the gate, and restores those
+exact registry keys on success or failure.
+
 Validate the standard installer, including silent install/update, bootstrap
 startup, ASIO registration ownership, and uninstall, with:
 
