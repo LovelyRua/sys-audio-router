@@ -219,10 +219,22 @@ void print_wasapi_worker_stats(
       << " capture_resampler_ratio=" << stats.capture_resampler_ratio
       << " capture_rate_adapter_active="
       << bool_token(stats.capture_rate_adapter_active)
+      << " capture_rate_correction_clamped="
+      << bool_token(stats.capture_rate_correction_clamped)
       << " capture_rate_adapter_recovering="
       << bool_token(stats.capture_rate_adapter_recovering)
       << " capture_rate_adapter_reset_cycles="
       << stats.capture_rate_adapter_reset_cycles
+      << " capture_rate_clamped_cycles="
+      << stats.capture_rate_clamped_cycles
+      << " current_consecutive_capture_rate_clamped_cycles="
+      << stats.current_consecutive_capture_rate_clamped_cycles
+      << " maximum_consecutive_capture_rate_clamped_cycles="
+      << stats.maximum_consecutive_capture_rate_clamped_cycles
+      << " current_consecutive_capture_rate_clamped_frames="
+      << stats.current_consecutive_capture_rate_clamped_frames
+      << " maximum_consecutive_capture_rate_clamped_frames="
+      << stats.maximum_consecutive_capture_rate_clamped_frames
       << " render_startup_silence_cycles="
       << stats.render_startup_silence_cycles
       << " render_startup_silence_frames="
@@ -309,10 +321,22 @@ void print_wasapi_worker_stats(
   out << "  Capture resampler ratio: " << stats.capture_resampler_ratio << '\n';
   out << "  Capture rate adapter active: "
       << (stats.capture_rate_adapter_active ? "yes" : "no") << '\n';
+  out << "  Capture rate correction clamped: "
+      << (stats.capture_rate_correction_clamped ? "yes" : "no") << '\n';
   out << "  Capture rate adapter recovering: "
       << (stats.capture_rate_adapter_recovering ? "yes" : "no") << '\n';
   out << "  Capture rate adapter reset cycles: "
       << stats.capture_rate_adapter_reset_cycles << '\n';
+  out << "  Capture rate clamped cycles: "
+      << stats.capture_rate_clamped_cycles << '\n';
+  out << "  Current consecutive capture rate clamped cycles: "
+      << stats.current_consecutive_capture_rate_clamped_cycles << '\n';
+  out << "  Maximum consecutive capture rate clamped cycles: "
+      << stats.maximum_consecutive_capture_rate_clamped_cycles << '\n';
+  out << "  Current consecutive capture rate clamped frames: "
+      << stats.current_consecutive_capture_rate_clamped_frames << '\n';
+  out << "  Maximum consecutive capture rate clamped frames: "
+      << stats.maximum_consecutive_capture_rate_clamped_frames << '\n';
   out << "  Render startup silence cycles: "
       << stats.render_startup_silence_cycles << '\n';
   out << "  Render startup silence frames: "

@@ -219,7 +219,17 @@ int main() {
                                         stats.capture_clock_feed_forward_ppm == 0.0 &&
                                         stats.capture_fifo_correction_ppm == 0.0 &&
                                         stats.capture_resampler_ratio == 1.0 &&
+                                        !stats.capture_rate_correction_clamped &&
                                         stats.capture_rate_adapter_reset_cycles == 0 &&
+                                        stats.capture_rate_clamped_cycles == 0 &&
+                                        stats.current_consecutive_capture_rate_clamped_cycles ==
+                                            0 &&
+                                        stats.maximum_consecutive_capture_rate_clamped_cycles ==
+                                            0 &&
+                                        stats.current_consecutive_capture_rate_clamped_frames ==
+                                            0 &&
+                                        stats.maximum_consecutive_capture_rate_clamped_frames ==
+                                            0 &&
                                         stats.render_startup_silence_cycles == 0 &&
                                         stats.render_startup_silence_frames == 0 &&
                                         stats.render_capture_starvation_silence_cycles == 0 &&
@@ -346,7 +356,21 @@ int main() {
                        worker.stats().capture_clock_feed_forward_ppm == 0.0 &&
                        worker.stats().capture_fifo_correction_ppm == 0.0 &&
                        worker.stats().capture_resampler_ratio == 1.0 &&
+                       !worker.stats().capture_rate_correction_clamped &&
                        worker.stats().capture_rate_adapter_reset_cycles == 0 &&
+                       worker.stats().capture_rate_clamped_cycles == 0 &&
+                       worker.stats()
+                               .current_consecutive_capture_rate_clamped_cycles ==
+                           0 &&
+                       worker.stats()
+                               .maximum_consecutive_capture_rate_clamped_cycles ==
+                           0 &&
+                       worker.stats()
+                               .current_consecutive_capture_rate_clamped_frames ==
+                           0 &&
+                       worker.stats()
+                               .maximum_consecutive_capture_rate_clamped_frames ==
+                           0 &&
                        worker.stats().render_startup_silence_cycles == 0 &&
                        worker.stats().render_startup_silence_frames == 0 &&
                        worker.stats().render_capture_starvation_silence_cycles == 0 &&
@@ -381,7 +405,7 @@ int main() {
 
     sar::platform::WindowsWasapiGraphRunner runner(
         &capture, &render, 1, 1, 64, 64, 64, 256, true, true);
-    runner.set_capture_clock_feed_forward_ppm(500.0);
+    runner.set_capture_clock_feed_forward_ppm(2500.0);
     sar::graph::Graph graph(15, 1, 64, 48000);
     graph.add_node(std::make_unique<sar::graph::PassthroughNode>());
     sar::diagnostics::EngineDiagnostics diagnostics;
@@ -410,17 +434,15 @@ int main() {
                                     "Expected last capture rate adapter state")) {
       return failure;
     }
-    if (const auto failure = expect(stats.capture_rate_correction_ppm > 0.0,
-                                    "Expected last capture rate correction")) {
+    if (const auto failure = expect(stats.capture_rate_correction_ppm == 2500.0 &&
+                                        stats.capture_rate_correction_clamped,
+                                    "Expected clamped capture rate correction")) {
       return failure;
     }
     if (const auto failure =
-            expect(stats.capture_clock_feed_forward_ppm == 500.0 &&
-                       stats.capture_fifo_correction_ppm > 0.0 &&
-                       std::abs(stats.capture_rate_correction_ppm -
-                                (stats.capture_clock_feed_forward_ppm +
-                                 stats.capture_fifo_correction_ppm)) < 1.0e-9,
-                   "Expected worker capture correction components")) {
+            expect(stats.capture_clock_feed_forward_ppm == 2500.0 &&
+                       stats.capture_fifo_correction_ppm > 0.0,
+                   "Expected worker clamped correction components")) {
       return failure;
     }
     if (const auto failure = expect(stats.capture_resampler_ratio < 1.0 &&
@@ -431,8 +453,17 @@ int main() {
     if (const auto failure =
             expect(stats.capture_rate_adapter_reset_cycles == 0 &&
                        stats.minimum_capture_rate_correction_ppm == 0.0 &&
-                       stats.maximum_capture_rate_correction_ppm >=
-                           stats.capture_rate_correction_ppm,
+                       stats.maximum_capture_rate_correction_ppm == 2500.0 &&
+                       stats.capture_rate_clamped_cycles > 0 &&
+                       stats.current_consecutive_capture_rate_clamped_cycles ==
+                           stats.capture_rate_clamped_cycles &&
+                       stats.maximum_consecutive_capture_rate_clamped_cycles ==
+                           stats.capture_rate_clamped_cycles &&
+                       stats.current_consecutive_capture_rate_clamped_frames ==
+                           stats.maximum_consecutive_capture_rate_clamped_frames &&
+                       stats.maximum_consecutive_capture_rate_clamped_frames > 0 &&
+                       stats.maximum_consecutive_capture_rate_clamped_frames <=
+                           stats.rendered_frames,
                    "Expected capture rate range without adapter resets")) {
       return failure;
     }

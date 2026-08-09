@@ -36,6 +36,7 @@ struct WasapiGraphRunnerStats {
   double capture_fifo_correction_ppm = 0.0;
   double capture_resampler_ratio = 1.0;
   bool capture_rate_adapter_active = false;
+  bool capture_rate_correction_clamped = false;
   bool capture_rate_adapter_reset = false;
   bool capture_rate_adapter_recovering = false;
   bool render_startup_silence = false;
@@ -142,6 +143,7 @@ class WindowsWasapiGraphRunner {
     std::size_t target_fill_frames = 0;
     std::size_t output_frames_ready = 0;
     double ratio = 1.0;
+    bool correction_clamped = false;
     bool ratio_set_for_block = false;
     bool primed = false;
     bool recovery_active = false;

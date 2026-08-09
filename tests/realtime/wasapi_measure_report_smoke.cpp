@@ -124,8 +124,14 @@ sar::platform::WasapiRealtimeWorkerStats make_stats() {
   stats.capture_fifo_correction_ppm = 8.25;
   stats.capture_resampler_ratio = 0.9999875;
   stats.capture_rate_adapter_active = true;
+  stats.capture_rate_correction_clamped = true;
   stats.capture_rate_adapter_recovering = true;
   stats.capture_rate_adapter_reset_cycles = 4;
+  stats.capture_rate_clamped_cycles = 21;
+  stats.current_consecutive_capture_rate_clamped_cycles = 6;
+  stats.maximum_consecutive_capture_rate_clamped_cycles = 9;
+  stats.current_consecutive_capture_rate_clamped_frames = 768;
+  stats.maximum_consecutive_capture_rate_clamped_frames = 1152;
   stats.render_startup_silence_cycles = 2;
   stats.render_startup_silence_frames = 256;
   stats.render_capture_starvation_silence_cycles = 3;
@@ -433,8 +439,22 @@ int main() {
                        contains(text, "capture_fifo_correction_ppm=8.25") &&
                        contains(text, "capture_resampler_ratio=0.999988") &&
                        contains(text, "capture_rate_adapter_active=1") &&
+                       contains(text, "capture_rate_correction_clamped=1") &&
                        contains(text, "capture_rate_adapter_recovering=1") &&
                        contains(text, "capture_rate_adapter_reset_cycles=4") &&
+                       contains(text, "capture_rate_clamped_cycles=21") &&
+                       contains(
+                           text,
+                           "current_consecutive_capture_rate_clamped_cycles=6") &&
+                       contains(
+                           text,
+                           "maximum_consecutive_capture_rate_clamped_cycles=9") &&
+                       contains(
+                           text,
+                           "current_consecutive_capture_rate_clamped_frames=768") &&
+                       contains(
+                           text,
+                           "maximum_consecutive_capture_rate_clamped_frames=1152") &&
                        contains(text, "render_startup_silence_cycles=2") &&
                        contains(text, "render_startup_silence_frames=256") &&
                        contains(text, "render_capture_starvation_silence_cycles=3") &&
@@ -522,7 +542,21 @@ int main() {
                        contains(text, "Capture clock feed-forward ppm: 4.25") &&
                        contains(text, "Capture FIFO correction ppm: 8.25") &&
                        contains(text, "Capture rate adapter active: yes") &&
+                       contains(text, "Capture rate correction clamped: yes") &&
                        contains(text, "Capture rate adapter reset cycles: 4") &&
+                       contains(text, "Capture rate clamped cycles: 21") &&
+                       contains(
+                           text,
+                           "Current consecutive capture rate clamped cycles: 6") &&
+                       contains(
+                           text,
+                           "Maximum consecutive capture rate clamped cycles: 9") &&
+                       contains(
+                           text,
+                           "Current consecutive capture rate clamped frames: 768") &&
+                       contains(
+                           text,
+                           "Maximum consecutive capture rate clamped frames: 1152") &&
                        contains(text, "Render recovery silence episodes: 4") &&
                        contains(text, "Minimum capture rate correction ppm: -22") &&
                        contains(text, "Maximum capture rate correction ppm: 17"),

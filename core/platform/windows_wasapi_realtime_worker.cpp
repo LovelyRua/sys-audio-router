@@ -184,8 +184,14 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   capture_fifo_correction_bits_.store(double_bits(0.0));
   capture_resampler_ratio_bits_.store(double_bits(1.0));
   capture_rate_adapter_active_.store(false);
+  capture_rate_correction_clamped_.store(false);
   capture_rate_adapter_recovering_.store(false);
   capture_rate_adapter_reset_cycles_.store(0);
+  capture_rate_clamped_cycles_.store(0);
+  current_consecutive_capture_rate_clamped_cycles_.store(0);
+  maximum_consecutive_capture_rate_clamped_cycles_.store(0);
+  current_consecutive_capture_rate_clamped_frames_.store(0);
+  maximum_consecutive_capture_rate_clamped_frames_.store(0);
   render_startup_silence_cycles_.store(0);
   render_startup_silence_frames_.store(0);
   render_capture_starvation_silence_cycles_.store(0);
@@ -328,10 +334,21 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.capture_resampler_ratio =
       bits_double(capture_resampler_ratio_bits_.load());
   result.capture_rate_adapter_active = capture_rate_adapter_active_.load();
+  result.capture_rate_correction_clamped =
+      capture_rate_correction_clamped_.load();
   result.capture_rate_adapter_recovering =
       capture_rate_adapter_recovering_.load();
   result.capture_rate_adapter_reset_cycles =
       capture_rate_adapter_reset_cycles_.load();
+  result.capture_rate_clamped_cycles = capture_rate_clamped_cycles_.load();
+  result.current_consecutive_capture_rate_clamped_cycles =
+      current_consecutive_capture_rate_clamped_cycles_.load();
+  result.maximum_consecutive_capture_rate_clamped_cycles =
+      maximum_consecutive_capture_rate_clamped_cycles_.load();
+  result.current_consecutive_capture_rate_clamped_frames =
+      current_consecutive_capture_rate_clamped_frames_.load();
+  result.maximum_consecutive_capture_rate_clamped_frames =
+      maximum_consecutive_capture_rate_clamped_frames_.load();
   result.render_startup_silence_cycles =
       render_startup_silence_cycles_.load();
   result.render_startup_silence_frames =
@@ -452,6 +469,10 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
 
   std::uint64_t current_render_recovery_silence_frames = 0;
   std::uint64_t maximum_render_recovery_silence_frames = 0;
+  std::uint64_t current_capture_rate_clamped_cycles = 0;
+  std::uint64_t maximum_capture_rate_clamped_cycles = 0;
+  std::uint64_t current_capture_rate_clamped_frames = 0;
+  std::uint64_t maximum_capture_rate_clamped_frames = 0;
   bool render_recovery_episode_active = false;
   bool render_recovery_episode_counted = false;
   while (!stop_requested_.load()) {
@@ -506,8 +527,36 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
     capture_resampler_ratio_bits_.store(
         double_bits(result.stats().capture_resampler_ratio));
     capture_rate_adapter_active_.store(result.stats().capture_rate_adapter_active);
+    capture_rate_correction_clamped_.store(
+        result.stats().capture_rate_correction_clamped);
     capture_rate_adapter_recovering_.store(
         result.stats().capture_rate_adapter_recovering);
+    if (!result.stats().cancelled) {
+      if (result.stats().capture_rate_correction_clamped) {
+        capture_rate_clamped_cycles_.fetch_add(1);
+        ++current_capture_rate_clamped_cycles;
+        current_capture_rate_clamped_frames += result.stats().rendered_frames;
+        maximum_capture_rate_clamped_cycles = std::max(
+            maximum_capture_rate_clamped_cycles,
+            current_capture_rate_clamped_cycles);
+        maximum_capture_rate_clamped_frames = std::max(
+            maximum_capture_rate_clamped_frames,
+            current_capture_rate_clamped_frames);
+        current_consecutive_capture_rate_clamped_cycles_.store(
+            current_capture_rate_clamped_cycles);
+        maximum_consecutive_capture_rate_clamped_cycles_.store(
+            maximum_capture_rate_clamped_cycles);
+        current_consecutive_capture_rate_clamped_frames_.store(
+            current_capture_rate_clamped_frames);
+        maximum_consecutive_capture_rate_clamped_frames_.store(
+            maximum_capture_rate_clamped_frames);
+      } else {
+        current_capture_rate_clamped_cycles = 0;
+        current_capture_rate_clamped_frames = 0;
+        current_consecutive_capture_rate_clamped_cycles_.store(0);
+        current_consecutive_capture_rate_clamped_frames_.store(0);
+      }
+    }
     if (result.stats().capture_rate_adapter_reset) {
       capture_rate_adapter_reset_cycles_.fetch_add(1);
       // A second discontinuity can arrive before recovery completes. Keep the

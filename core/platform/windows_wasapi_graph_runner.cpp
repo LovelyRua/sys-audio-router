@@ -12,6 +12,13 @@ static_assert(std::atomic<double>::is_always_lock_free,
 
 namespace {
 
+constexpr double kMaximumCaptureRateCorrectionPpm = 2500.0;
+
+bool capture_rate_correction_clamped(double unbounded_correction_ppm) noexcept {
+  return unbounded_correction_ppm <= -kMaximumCaptureRateCorrectionPpm ||
+         unbounded_correction_ppm >= kMaximumCaptureRateCorrectionPpm;
+}
+
 std::vector<WasapiStreamError> validate_graph_shape(
     const graph::Graph& graph,
     const realtime::AudioBuffer& input,
@@ -347,6 +354,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::start_streams() noexcept {
     capture_rate_adapter_->controller.reset();
     capture_rate_adapter_->output_frames_ready = 0;
     capture_rate_adapter_->ratio = capture_rate_adapter_->nominal_ratio;
+    capture_rate_adapter_->correction_clamped = false;
     capture_rate_adapter_->ratio_set_for_block = false;
     capture_rate_adapter_->primed = false;
     capture_rate_adapter_->recovery_active = false;
@@ -558,11 +566,15 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
         capture_clock_feed_forward_ppm();
     stats.capture_fifo_correction_ppm =
         capture_rate_adapter_->controller.correction_ppm();
-    stats.capture_rate_correction_ppm = std::clamp(
+    const auto unbounded_correction_ppm =
         stats.capture_clock_feed_forward_ppm +
-            stats.capture_fifo_correction_ppm,
-        -2500.0,
-        2500.0);
+        stats.capture_fifo_correction_ppm;
+    stats.capture_rate_correction_ppm =
+        std::clamp(unbounded_correction_ppm,
+                   -kMaximumCaptureRateCorrectionPpm,
+                   kMaximumCaptureRateCorrectionPpm);
+    stats.capture_rate_correction_clamped =
+        capture_rate_adapter_->correction_clamped;
     stats.capture_resampler_ratio = capture_rate_adapter_->ratio;
     stats.capture_rate_adapter_recovering =
         capture_rate_adapter_->recovery_active;
@@ -684,6 +696,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
           capture_rate_adapter_->output_frames_ready = 0;
           capture_rate_adapter_->ratio =
               capture_rate_adapter_->nominal_ratio;
+          capture_rate_adapter_->correction_clamped = false;
           capture_rate_adapter_->ratio_set_for_block = false;
           capture_rate_adapter_->primed = false;
           capture_rate_adapter_->recovery_active = true;
@@ -802,17 +815,24 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
                 elapsed_seconds);
             const auto clock_feed_forward_ppm =
                 capture_clock_feed_forward_ppm();
-            const auto correction_ppm = std::clamp(
-                clock_feed_forward_ppm + fifo_correction_ppm,
-                -2500.0,
-                2500.0);
+            const auto unbounded_correction_ppm =
+                clock_feed_forward_ppm + fifo_correction_ppm;
+            const auto correction_ppm =
+                std::clamp(unbounded_correction_ppm,
+                           -kMaximumCaptureRateCorrectionPpm,
+                           kMaximumCaptureRateCorrectionPpm);
             adapter.ratio =
                 adapter.nominal_ratio / (1.0 + correction_ppm * 0.000001);
+            adapter.correction_clamped =
+                capture_rate_correction_clamped(unbounded_correction_ppm);
             adapter.ratio_set_for_block = true;
             stats.capture_rate_correction_ppm = correction_ppm;
             stats.capture_clock_feed_forward_ppm = clock_feed_forward_ppm;
             stats.capture_fifo_correction_ppm = fifo_correction_ppm;
             stats.capture_resampler_ratio = adapter.ratio;
+            stats.capture_rate_correction_clamped =
+                stats.capture_rate_correction_clamped ||
+                adapter.correction_clamped;
           }
 
           std::size_t source_frames = 0;

@@ -70,6 +70,8 @@ int main() {
   assert(runner.capture_clock_feed_forward_ppm() == 0.0);
   runner.set_capture_clock_feed_forward_ppm(3000.0);
   assert(runner.capture_clock_feed_forward_ppm() == 2500.0);
+  runner.set_capture_clock_feed_forward_ppm(-3000.0);
+  assert(runner.capture_clock_feed_forward_ppm() == -2500.0);
   runner.set_capture_clock_feed_forward_ppm(500.0);
   assert(runner.capture_clock_feed_forward_ppm() == 500.0);
   sar::graph::Graph graph(1, 1, 64, 48000);
@@ -99,4 +101,25 @@ int main() {
   assert(render.render_submissions().size() == 1);
   assert(render.render_submissions().front().frames == 64);
   assert(diagnostics.capture_fifo_overflow_frames == 0);
+
+  sar::tests::ScriptedWasapiStream clamped_capture(
+      make_probe(sar::platform::WasapiStreamDirection::Capture));
+  sar::tests::ScriptedWasapiStream clamped_render(
+      make_probe(sar::platform::WasapiStreamDirection::Render));
+  for (std::uint32_t packet = 0; packet < 4; ++packet) {
+    clamped_capture.enqueue_capture(
+        {.frames = 64, .samples = {samples(packet * 64)}});
+  }
+  clamped_render.enqueue_render({.writable_frames = 64});
+
+  sar::platform::WindowsWasapiGraphRunner clamped_runner(
+      &clamped_capture, &clamped_render, 1, 1, 64, 64, 64, 256, true, true);
+  clamped_runner.set_capture_clock_feed_forward_ppm(2500.0);
+  sar::diagnostics::EngineDiagnostics clamped_diagnostics;
+  const auto clamped_result =
+      clamped_runner.process_once(graph, clamped_diagnostics, 1);
+  assert(clamped_result.ok());
+  assert(clamped_result.stats().capture_rate_correction_clamped);
+  assert(clamped_result.stats().capture_rate_correction_ppm == 2500.0);
+  assert(clamped_result.stats().rendered_frames == 64);
 }
