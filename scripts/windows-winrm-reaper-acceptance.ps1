@@ -49,6 +49,7 @@ $credential = [pscredential]::new($credentialUserName, $securePassword)
 $session = $null
 $remoteEvidencePath = $null
 $preflight = $null
+$recoverUntracked = $RecoverUntrackedProcesses.IsPresent
 
 try {
   $session = New-PSSession -ComputerName $HostName -Credential $credential
@@ -69,7 +70,7 @@ try {
   $preflight = Invoke-Command -Session $session -ArgumentList `
       $RemoteBuildPath, $ReaperPath, $InteractiveUser, $safeSlot, $runId, `
       $remoteEvidencePath, $remoteStatePath, `
-      [bool]$RecoverUntrackedProcesses -ScriptBlock {
+      $recoverUntracked -ScriptBlock {
     param(
       [string]$BuildPath,
       [string]$RequestedReaperPath,
