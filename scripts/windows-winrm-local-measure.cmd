@@ -16,6 +16,8 @@ set "RENDER_ID=%SAR_MEASURE_RENDER_ID%"
 set "EVIDENCE_DIR=%SAR_MEASURE_EVIDENCE_DIR%"
 set "MAX_RECOVERY_SILENCE_FRAMES=%SAR_MEASURE_MAX_RECOVERY_SILENCE_FRAMES%"
 set "MIN_FRAME_COVERAGE_BPS=%SAR_MEASURE_MIN_FRAME_COVERAGE_BPS%"
+set "MIN_FEED_FORWARD_READY_BPS=%SAR_MEASURE_MIN_FEED_FORWARD_READY_BPS%"
+set "MAX_CONSECUTIVE_CAPTURE_RATE_CLAMPED_FRAMES=%SAR_MEASURE_MAX_CONSECUTIVE_CAPTURE_RATE_CLAMPED_FRAMES%"
 set "CLEANUP=%SAR_SLOT_CLEANUP%"
 set "CLEANUP_DRY_RUN=%SAR_SLOT_CLEANUP_DRY_RUN%"
 set "RETENTION_DAYS=%SAR_SLOT_RETENTION_DAYS%"
@@ -75,9 +77,11 @@ echo Render ID: %RENDER_ID%
 echo Evidence directory: %EVIDENCE_DIR%
 echo Maximum recovery silence frames: %MAX_RECOVERY_SILENCE_FRAMES%
 echo Minimum rendered frame coverage bps: %MIN_FRAME_COVERAGE_BPS%
+echo Minimum feed-forward ready bps: %MIN_FEED_FORWARD_READY_BPS%
+echo Maximum consecutive capture-rate clamped frames: %MAX_CONSECUTIVE_CAPTURE_RATE_CLAMPED_FRAMES%
 echo Slot cleanup: %CLEANUP%
 echo Slot cleanup dry run: %CLEANUP_DRY_RUN%
 echo.
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0windows-winrm-local-measure.ps1" -HostName "%HOST%" -UserName "%USER%" -Password "%PASSWORD%" -Slot "%SLOT%" -RepoRoot "%~dp0.." -Mode "%MODE%" -DurationMs "%DURATION_MS%" -TimeoutMs "%TIMEOUT_MS%" -Iterations "%ITERATIONS%" -CaptureId "%CAPTURE_ID%" -RenderId "%RENDER_ID%" -EvidenceDirectory "%EVIDENCE_DIR%" -MaximumRenderRecoverySilenceFrames "%MAX_RECOVERY_SILENCE_FRAMES%" -MinimumRenderedFrameCoverageBasisPoints "%MIN_FRAME_COVERAGE_BPS%" -RequireHealthyText "%REQUIRE_HEALTHY%" -AllowUnavailableText "%ALLOW_UNAVAILABLE%" -CleanupCompletedSlotsText "%CLEANUP%" -CleanupDryRunText "%CLEANUP_DRY_RUN%" -RetentionDays "%RETENTION_DAYS%" -RetentionCount "%RETENTION_COUNT%" -CleanupLimit "%CLEANUP_LIMIT%" -StaleActiveHours "%STALE_ACTIVE_HOURS%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0windows-winrm-local-measure.ps1" -HostName "%HOST%" -UserName "%USER%" -Password "%PASSWORD%" -Slot "%SLOT%" -RepoRoot "%~dp0.." -Mode "%MODE%" -DurationMs "%DURATION_MS%" -TimeoutMs "%TIMEOUT_MS%" -Iterations "%ITERATIONS%" -CaptureId "%CAPTURE_ID%" -RenderId "%RENDER_ID%" -EvidenceDirectory "%EVIDENCE_DIR%" -MaximumRenderRecoverySilenceFrames "%MAX_RECOVERY_SILENCE_FRAMES%" -MinimumRenderedFrameCoverageBasisPoints "%MIN_FRAME_COVERAGE_BPS%" -MinimumFeedForwardReadyBasisPoints "%MIN_FEED_FORWARD_READY_BPS%" -MaximumConsecutiveCaptureRateClampedFrames "%MAX_CONSECUTIVE_CAPTURE_RATE_CLAMPED_FRAMES%" -RequireHealthyText "%REQUIRE_HEALTHY%" -AllowUnavailableText "%ALLOW_UNAVAILABLE%" -CleanupCompletedSlotsText "%CLEANUP%" -CleanupDryRunText "%CLEANUP_DRY_RUN%" -RetentionDays "%RETENTION_DAYS%" -RetentionCount "%RETENTION_COUNT%" -CleanupLimit "%CLEANUP_LIMIT%" -StaleActiveHours "%STALE_ACTIVE_HOURS%"
 exit /b %errorlevel%

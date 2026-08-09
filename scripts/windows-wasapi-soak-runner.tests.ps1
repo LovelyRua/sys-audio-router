@@ -45,6 +45,26 @@ function New-ValidSummary {
       " ", @($values.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }))
 }
 
+function New-DuplexClockSummary {
+  param(
+    [uint64]$Ready = 999,
+    [uint64]$Invalid = 1,
+    [uint64]$WarmingUp = 10,
+    [uint64]$Disabled = 0
+  )
+  return "wasapi_duplex_clock_summary" +
+      " feed_forward_ready_observations=$Ready" +
+      " feed_forward_invalid_observations=$Invalid" +
+      " feed_forward_warming_up_observations=$WarmingUp" +
+      " feed_forward_disabled_observations=$Disabled"
+}
+
+function New-DuplexWorkerStats {
+  param([uint64]$MaximumConsecutiveCaptureRateClampedFrames = 1200)
+  return "wasapi_worker_stats" +
+      " maximum_consecutive_capture_rate_clamped_frames=$MaximumConsecutiveCaptureRateClampedFrames"
+}
+
 function Invoke-SingleSummary {
   param(
     [ValidateSet("render", "duplex", "loopback")]
@@ -54,12 +74,16 @@ function Invoke-SingleSummary {
     [int]$ExitCode = 0,
     [string[]]$ExtraLines = @(),
     [uint64]$MaximumRenderRecoverySilenceFrames = 0,
-    [uint32]$MinimumRenderedFrameCoverageBasisPoints = 9900
+    [uint32]$MinimumRenderedFrameCoverageBasisPoints = 9900,
+    [Nullable[uint32]]$MinimumFeedForwardReadyBasisPoints = $null,
+    [Nullable[uint64]]$MaximumConsecutiveCaptureRateClampedFrames = $null
   )
 
   return @(Invoke-WasapiSoak -Mode $Mode -Iterations 1 `
       -MaximumRenderRecoverySilenceFrames $MaximumRenderRecoverySilenceFrames `
       -MinimumRenderedFrameCoverageBasisPoints $MinimumRenderedFrameCoverageBasisPoints `
+      -MinimumFeedForwardReadyBasisPoints $MinimumFeedForwardReadyBasisPoints `
+      -MaximumConsecutiveCaptureRateClampedFrames $MaximumConsecutiveCaptureRateClampedFrames `
       -RunMeasurement {
     Write-Host "  Duration ms: $Duration"
     Write-Host $Summary
@@ -260,6 +284,79 @@ $legacySummary = $legacySummary -replace
 $legacyOutput = Invoke-SingleSummary -Mode duplex -Summary $legacySummary
 Assert-Equal 0 $legacyOutput[-1].ParseFailureCount `
     "Legacy output without duplex event timeout telemetry should parse."
+
+$clockGateLines = @(
+  (New-DuplexClockSummary -Ready 98 -Invalid 1 -WarmingUp 1000 -Disabled 1),
+  (New-DuplexWorkerStats -MaximumConsecutiveCaptureRateClampedFrames 1200)
+)
+$clockGatePass = Invoke-SingleSummary -Mode duplex `
+    -Summary (New-ValidSummary -Mode duplex) -ExtraLines $clockGateLines `
+    -MinimumFeedForwardReadyBasisPoints 9800 `
+    -MaximumConsecutiveCaptureRateClampedFrames 1200
+Assert-Equal 0 $clockGatePass[-1].FailureCount `
+    "Warming-up observations must be excluded from ready coverage."
+
+$disabledCoverageFailure = Invoke-SingleSummary -Mode duplex `
+    -Summary (New-ValidSummary -Mode duplex) -ExtraLines $clockGateLines `
+    -MinimumFeedForwardReadyBasisPoints 9900
+$disabledCoverageText = [string]::Join(
+    "`n", $disabledCoverageFailure[0..($disabledCoverageFailure.Count - 2)])
+Assert-Equal 1 $disabledCoverageFailure[-1].GateFailureCount `
+    "Disabled observations must reduce ready coverage."
+Assert-Equal $true $disabledCoverageText.Contains(
+    "reason=feed_forward_ready_coverage_below_minimum") `
+    "Missing feed-forward coverage failure reason."
+
+$clampFailure = Invoke-SingleSummary -Mode duplex `
+    -Summary (New-ValidSummary -Mode duplex) -ExtraLines $clockGateLines `
+    -MaximumConsecutiveCaptureRateClampedFrames 1199
+$clampFailureText = [string]::Join(
+    "`n", $clampFailure[0..($clampFailure.Count - 2)])
+Assert-Equal 1 $clampFailure[-1].GateFailureCount `
+    "A sustained clamp above the configured maximum must fail."
+Assert-Equal $true $clampFailureText.Contains(
+    "reason=maximum_consecutive_capture_rate_clamped_frames_exceeded") `
+    "Missing sustained-clamp failure reason."
+
+$missingClockGate = Invoke-SingleSummary -Mode duplex `
+    -Summary (New-ValidSummary -Mode duplex) `
+    -MinimumFeedForwardReadyBasisPoints 9900
+Assert-Equal 1 $missingClockGate[-1].ParseFailureCount `
+    "An enabled feed-forward gate must require the clock summary."
+
+$missingWarmingField = Invoke-SingleSummary -Mode duplex `
+    -Summary (New-ValidSummary -Mode duplex) `
+    -ExtraLines @((New-DuplexClockSummary) -replace `
+        ' feed_forward_warming_up_observations=10', '') `
+    -MinimumFeedForwardReadyBasisPoints 9900
+Assert-Equal 1 $missingWarmingField[-1].ParseFailureCount `
+    "An enabled feed-forward gate must parse every clock-health counter."
+
+$zeroRatedObservations = Invoke-SingleSummary -Mode duplex `
+    -Summary (New-ValidSummary -Mode duplex) `
+    -ExtraLines @(New-DuplexClockSummary `
+        -Ready 0 -Invalid 0 -WarmingUp 1000 -Disabled 0) `
+    -MinimumFeedForwardReadyBasisPoints 0
+$zeroRatedText = [string]::Join(
+    "`n", $zeroRatedObservations[0..($zeroRatedObservations.Count - 2)])
+Assert-Equal 1 $zeroRatedObservations[-1].GateFailureCount `
+    "Warming-up observations alone must not create a ready-rate denominator."
+Assert-Equal $true $zeroRatedText.Contains(
+    "reason=feed_forward_rated_observations_zero") `
+    "Missing zero rated-observation failure reason."
+
+$missingClampGate = Invoke-SingleSummary -Mode duplex `
+    -Summary (New-ValidSummary -Mode duplex) `
+    -MaximumConsecutiveCaptureRateClampedFrames 240000
+Assert-Equal 1 $missingClampGate[-1].ParseFailureCount `
+    "An enabled clamp gate must require worker stats."
+
+$renderIgnoresDuplexGates = Invoke-SingleSummary -Mode render `
+    -Summary (New-ValidSummary -Mode render) `
+    -MinimumFeedForwardReadyBasisPoints 10000 `
+    -MaximumConsecutiveCaptureRateClampedFrames 0
+Assert-Equal 0 $renderIgnoresDuplexGates[-1].FailureCount `
+    "Render mode must not parse or apply duplex clock-health gates."
 
 $invalidOptionalOutput = Invoke-SingleSummary -Mode duplex `
     -Summary (New-ValidSummary -Mode duplex -Override @{

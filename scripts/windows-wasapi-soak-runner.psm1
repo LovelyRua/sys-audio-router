@@ -89,7 +89,9 @@ function ConvertFrom-WasapiMeasurementOutput {
     [string]$Mode,
     [uint64]$MaximumRenderRecoverySilenceFrames = 0,
     [ValidateRange(0, 10000)]
-    [uint32]$MinimumRenderedFrameCoverageBasisPoints = 9900
+    [uint32]$MinimumRenderedFrameCoverageBasisPoints = 9900,
+    [Nullable[uint32]]$MinimumFeedForwardReadyBasisPoints = $null,
+    [Nullable[uint64]]$MaximumConsecutiveCaptureRateClampedFrames = $null
   )
 
   $durationMatches = @($Lines | Where-Object { $_ -match '^\s*Duration ms:\s*\S+\s*$' })
@@ -123,6 +125,11 @@ function ConvertFrom-WasapiMeasurementOutput {
   }
 
   $renderObservedSampleRate = $null
+  $feedForwardReadyObservations = $null
+  $feedForwardInvalidObservations = $null
+  $feedForwardWarmingUpObservations = $null
+  $feedForwardDisabledObservations = $null
+  $maximumConsecutiveCaptureRateClampedFramesObserved = $null
   if ($Mode -eq "duplex") {
     $clockLines = @($Lines | Where-Object { $_ -match '^wasapi_duplex_clock(?:\s|$)' })
     if ($clockLines.Count -gt 1) {
@@ -157,6 +164,87 @@ function ConvertFrom-WasapiMeasurementOutput {
           $renderObservedSampleRate = $observedRate
         }
       }
+    }
+
+    if ($null -ne $MinimumFeedForwardReadyBasisPoints) {
+      $clockSummaryLines = @($Lines | Where-Object {
+        $_ -match '^wasapi_duplex_clock_summary(?:\s|$)'
+      })
+      if ($clockSummaryLines.Count -ne 1) {
+        $reason = if ($clockSummaryLines.Count -eq 0) {
+          "missing_duplex_clock_summary"
+        } else {
+          "duplicate_duplex_clock_summary"
+        }
+        return [pscustomobject]@{ Ok = $false; Error = $reason }
+      }
+      $clockSummaryFields = @{}
+      foreach ($match in [regex]::Matches(
+          $clockSummaryLines[0], '(?:^|\s)([^\s=]+)=([^\s]+)')) {
+        $name = $match.Groups[1].Value
+        if ($clockSummaryFields.ContainsKey($name)) {
+          return [pscustomobject]@{
+            Ok = $false
+            Error = "duplicate_duplex_clock_summary_metric:$name"
+          }
+        }
+        $clockSummaryFields[$name] = $match.Groups[2].Value
+      }
+      $clockObservationValues = @{}
+      foreach ($name in @(
+          "feed_forward_ready_observations",
+          "feed_forward_invalid_observations",
+          "feed_forward_warming_up_observations",
+          "feed_forward_disabled_observations")) {
+        $parsed = ConvertTo-WasapiSoakUnsignedInteger `
+            -Fields $clockSummaryFields -Name $name
+        if (!$parsed.Ok) {
+          return [pscustomobject]@{ Ok = $false; Error = $parsed.Error }
+        }
+        $clockObservationValues[$name] = [uint64]$parsed.Value
+      }
+      $feedForwardReadyObservations =
+          $clockObservationValues.feed_forward_ready_observations
+      $feedForwardInvalidObservations =
+          $clockObservationValues.feed_forward_invalid_observations
+      $feedForwardWarmingUpObservations =
+          $clockObservationValues.feed_forward_warming_up_observations
+      $feedForwardDisabledObservations =
+          $clockObservationValues.feed_forward_disabled_observations
+    }
+
+    if ($null -ne $MaximumConsecutiveCaptureRateClampedFrames) {
+      $workerLines = @($Lines | Where-Object {
+        $_ -match '^wasapi_worker_stats(?:\s|$)'
+      })
+      if ($workerLines.Count -ne 1) {
+        $reason = if ($workerLines.Count -eq 0) {
+          "missing_worker_stats"
+        } else {
+          "duplicate_worker_stats"
+        }
+        return [pscustomobject]@{ Ok = $false; Error = $reason }
+      }
+      $workerFields = @{}
+      foreach ($match in [regex]::Matches(
+          $workerLines[0], '(?:^|\s)([^\s=]+)=([^\s]+)')) {
+        $name = $match.Groups[1].Value
+        if ($workerFields.ContainsKey($name)) {
+          return [pscustomobject]@{
+            Ok = $false
+            Error = "duplicate_worker_metric:$name"
+          }
+        }
+        $workerFields[$name] = $match.Groups[2].Value
+      }
+      $parsed = ConvertTo-WasapiSoakUnsignedInteger `
+          -Fields $workerFields `
+          -Name "maximum_consecutive_capture_rate_clamped_frames"
+      if (!$parsed.Ok) {
+        return [pscustomobject]@{ Ok = $false; Error = $parsed.Error }
+      }
+      $maximumConsecutiveCaptureRateClampedFramesObserved =
+          [uint64]$parsed.Value
     }
   }
 
@@ -270,6 +358,27 @@ function ConvertFrom-WasapiMeasurementOutput {
             $MaximumRenderRecoverySilenceFrames) {
       $failures.Add("maximum_render_recovery_silence_frames_exceeded")
     }
+    if ($null -ne $MinimumFeedForwardReadyBasisPoints) {
+      $ratedObservations =
+          [System.Numerics.BigInteger]$feedForwardReadyObservations +
+          [System.Numerics.BigInteger]$feedForwardInvalidObservations +
+          [System.Numerics.BigInteger]$feedForwardDisabledObservations
+      if ($ratedObservations -eq 0) {
+        $failures.Add("feed_forward_rated_observations_zero")
+      } else {
+        $readyBasisPoints =
+            ([System.Numerics.BigInteger]$feedForwardReadyObservations * 10000) /
+            $ratedObservations
+        if ($readyBasisPoints -lt $MinimumFeedForwardReadyBasisPoints) {
+          $failures.Add("feed_forward_ready_coverage_below_minimum")
+        }
+      }
+    }
+    if ($null -ne $MaximumConsecutiveCaptureRateClampedFrames -and
+        $maximumConsecutiveCaptureRateClampedFramesObserved -gt
+            $MaximumConsecutiveCaptureRateClampedFrames) {
+      $failures.Add("maximum_consecutive_capture_rate_clamped_frames_exceeded")
+    }
   }
 
   return [pscustomobject]@{
@@ -352,6 +461,8 @@ function Invoke-WasapiSoak {
     [uint64]$MaximumRenderRecoverySilenceFrames = 0,
     [ValidateRange(0, 10000)]
     [uint32]$MinimumRenderedFrameCoverageBasisPoints = 9900,
+    [Nullable[uint32]]$MinimumFeedForwardReadyBasisPoints = $null,
+    [Nullable[uint64]]$MaximumConsecutiveCaptureRateClampedFrames = $null,
     [Parameter(Mandatory = $true)]
     [scriptblock]$RunMeasurement
   )
@@ -400,7 +511,9 @@ function Invoke-WasapiSoak {
       $measurement = ConvertFrom-WasapiMeasurementOutput `
           -Lines $measurementLines.ToArray() -Mode $modeName `
           -MaximumRenderRecoverySilenceFrames $MaximumRenderRecoverySilenceFrames `
-          -MinimumRenderedFrameCoverageBasisPoints $MinimumRenderedFrameCoverageBasisPoints
+          -MinimumRenderedFrameCoverageBasisPoints $MinimumRenderedFrameCoverageBasisPoints `
+          -MinimumFeedForwardReadyBasisPoints $MinimumFeedForwardReadyBasisPoints `
+          -MaximumConsecutiveCaptureRateClampedFrames $MaximumConsecutiveCaptureRateClampedFrames
       if ($measurement.Ok) {
         if (!$measurement.Passed) {
           $attemptFailed = $true

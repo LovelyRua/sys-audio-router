@@ -16,6 +16,8 @@ param(
   [uint64]$MaximumRenderRecoverySilenceFrames = 0,
   [ValidateRange(0, 10000)]
   [uint32]$MinimumRenderedFrameCoverageBasisPoints = 9900,
+  [string]$MinimumFeedForwardReadyBasisPoints = "",
+  [string]$MaximumConsecutiveCaptureRateClampedFrames = "",
   [string]$RequireHealthyText = "false",
   [string]$AllowUnavailableText = "false",
   [switch]$CleanupCompletedSlots,
@@ -69,6 +71,35 @@ if ($AllowUnavailableText -match '^(1|true|yes|y|on)$') {
 }
 if ($Iterations -eq 0) {
   throw "Iterations must be at least one."
+}
+
+$minimumFeedForwardReadyBasisPointsValue = $null
+if (![string]::IsNullOrWhiteSpace($MinimumFeedForwardReadyBasisPoints)) {
+  [uint32]$parsedMinimumFeedForwardReadyBasisPoints = 0
+  if (![uint32]::TryParse(
+      $MinimumFeedForwardReadyBasisPoints,
+      [Globalization.NumberStyles]::None,
+      [Globalization.CultureInfo]::InvariantCulture,
+      [ref]$parsedMinimumFeedForwardReadyBasisPoints) -or
+      $parsedMinimumFeedForwardReadyBasisPoints -gt 10000) {
+    throw "MinimumFeedForwardReadyBasisPoints must be between 0 and 10000."
+  }
+  $minimumFeedForwardReadyBasisPointsValue =
+      [Nullable[uint32]]$parsedMinimumFeedForwardReadyBasisPoints
+}
+
+$maximumConsecutiveCaptureRateClampedFramesValue = $null
+if (![string]::IsNullOrWhiteSpace($MaximumConsecutiveCaptureRateClampedFrames)) {
+  [uint64]$parsedMaximumConsecutiveCaptureRateClampedFrames = 0
+  if (![uint64]::TryParse(
+      $MaximumConsecutiveCaptureRateClampedFrames,
+      [Globalization.NumberStyles]::None,
+      [Globalization.CultureInfo]::InvariantCulture,
+      [ref]$parsedMaximumConsecutiveCaptureRateClampedFrames)) {
+    throw "MaximumConsecutiveCaptureRateClampedFrames must be a non-negative integer."
+  }
+  $maximumConsecutiveCaptureRateClampedFramesValue =
+      [Nullable[uint64]]$parsedMaximumConsecutiveCaptureRateClampedFrames
 }
 if ([string]::IsNullOrWhiteSpace($CaptureId) -ne
     [string]::IsNullOrWhiteSpace($RenderId)) {
@@ -144,6 +175,8 @@ try {
       $CaptureId, $RenderId, $remoteEvidenceDirectory, $gitHead `
       , $MaximumRenderRecoverySilenceFrames `
       , $MinimumRenderedFrameCoverageBasisPoints `
+      , $minimumFeedForwardReadyBasisPointsValue `
+      , $maximumConsecutiveCaptureRateClampedFramesValue `
       -ScriptBlock {
     param(
       [string]$SafeSlot,
@@ -167,6 +200,8 @@ try {
       [string]$GitHead
       ,[uint64]$MaximumRenderRecoverySilenceFrames
       ,[uint32]$MinimumRenderedFrameCoverageBasisPoints
+      ,[Nullable[uint32]]$MinimumFeedForwardReadyBasisPoints
+      ,[Nullable[uint64]]$MaximumConsecutiveCaptureRateClampedFrames
     )
 
     $ErrorActionPreference = "Stop"
@@ -396,6 +431,8 @@ try {
         render_id = $RenderId
         maximum_render_recovery_silence_frames = $MaximumRenderRecoverySilenceFrames
         minimum_rendered_frame_coverage_basis_points = $MinimumRenderedFrameCoverageBasisPoints
+        minimum_feed_forward_ready_basis_points = $MinimumFeedForwardReadyBasisPoints
+        maximum_consecutive_capture_rate_clamped_frames = $MaximumConsecutiveCaptureRateClampedFrames
         outcome = "running"
       }
       $evidenceManifest | ConvertTo-Json -Depth 4 |
@@ -469,6 +506,8 @@ try {
       $soakOutput = @(Invoke-WasapiSoak -Mode $Mode -Iterations $Iterations `
           -MaximumRenderRecoverySilenceFrames $MaximumRenderRecoverySilenceFrames `
           -MinimumRenderedFrameCoverageBasisPoints $MinimumRenderedFrameCoverageBasisPoints `
+          -MinimumFeedForwardReadyBasisPoints $MinimumFeedForwardReadyBasisPoints `
+          -MaximumConsecutiveCaptureRateClampedFrames $MaximumConsecutiveCaptureRateClampedFrames `
           -RunMeasurement {
         param($modeName, $iteration)
         $previousErrorActionPreference = $ErrorActionPreference

@@ -511,9 +511,21 @@ recovery or capture starvation. The maximum per-discontinuity recovery was
 1,824 frames against the 2,594-frame limit. The second distinct eight-hour
 pairing, 24-hour soak, and physical unplug/replug evidence remain outstanding.
 
+On 2026-08-09, a 30-second CABLE-B 44.1 kHz capture to 48 kHz render run
+validated the clock-health counters on real endpoints. It rendered 1,442,496
+frames with zero wait timeout, FIFO overflow, processing error, or stream
+start/stop error. Feed-forward reported 15 ready, zero invalid, zero disabled,
+and 43 initial warming-up observations, for 100% ready coverage after warm-up.
+Final capture correction never reached the +/-2500 ppm clamp. One capture
+discontinuity produced 480 recovery-silence frames; together with 960 startup
+frames, every one of the 1,440 render-underflow frames was attributed. The
+strict `--require-healthy` measurement therefore rejected the run as degraded,
+while the bounded duplex acceptance gate passed. This is a path check, not a
+replacement for the remaining release-qualification evidence.
+
 ## Current Testing Model
 
-The Windows CTest suite currently has 117 smoke targets. The named-pipe coverage
+The Windows CTest suite currently has 124 smoke targets. The named-pipe coverage
 includes a full control-wire integration path through `EngineControlService`
 for device enumeration, session state, runtime configuration, lifecycle, and
 diagnostics. Several tests are
