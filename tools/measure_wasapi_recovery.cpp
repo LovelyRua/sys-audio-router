@@ -8,6 +8,7 @@
 #include "core/platform/windows_wasapi_device_provider.h"
 #include "core/platform/windows_wasapi_duplex_supervisor.h"
 #include "core/platform/windows_wasapi_endpoint_notification.h"
+#include "core/platform/windows_wasapi_render_loop.h"
 #include "core/platform/windows_wasapi_stream_probe.h"
 #include "tools/wasapi_measure_report.h"
 
@@ -21,6 +22,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 #include <windows.h>
 
@@ -32,6 +34,7 @@ struct RecoveryMeasureOptions {
   std::uint32_t timeout_ms = 10;
   std::string capture_device_id;
   std::string render_device_id;
+  bool render_only = false;
   bool show_help = false;
 };
 
@@ -114,10 +117,16 @@ bool parse_options(int argc, char** argv, RecoveryMeasureOptions& options) {
       if (!parse_device_id(options.render_device_id)) {
         return false;
       }
+    } else if (arg == "--render-only") {
+      options.render_only = true;
     } else {
       std::cerr << "Unknown argument: " << arg << '\n';
       return false;
     }
+  }
+  if (options.render_only && !options.capture_device_id.empty()) {
+    std::cerr << "--render-only cannot be combined with --capture-id\n";
+    return false;
   }
   return true;
 }
@@ -216,6 +225,114 @@ std::uint64_t elapsed_milliseconds(
           .count());
 }
 
+std::vector<sar::platform::WasapiRealtimeWorkerError>
+convert_selection_errors(
+    const std::vector<sar::platform::WasapiEndpointSelectionError>& errors) {
+  std::vector<sar::platform::WasapiRealtimeWorkerError> converted;
+  converted.reserve(errors.size());
+  for (const auto& error : errors) {
+    converted.push_back({error.code, error.message});
+  }
+  return converted;
+}
+
+int measure_render_recovery(
+    const RecoveryMeasureOptions& options,
+    sar::platform::WindowsWasapiEndpointNotification& notifications) {
+  constexpr char kUnusedCaptureEndpointId[] = "__sar_render_only__";
+  const auto render_selection = options.render_device_id.empty()
+                                    ? sar::platform::WasapiEndpointSelection::follow_default()
+                                    : sar::platform::WasapiEndpointSelection::pinned_device_id(
+                                          options.render_device_id);
+  const sar::platform::WasapiEndpointSelectionPolicy endpoint_policy(
+      sar::platform::WasapiEndpointSelection::pinned_device_id(
+          kUnusedCaptureEndpointId),
+      render_selection);
+  sar::platform::WindowsWasapiDeviceProvider provider;
+  const auto selected = provider.resolve_endpoint(
+      endpoint_policy, sar::platform::WasapiEndpointDirection::Render);
+  if (!selected.ok()) {
+    for (const auto& error : selected.errors()) {
+      std::cerr << error.code << ": " << error.message << '\n';
+    }
+    return 1;
+  }
+  const auto probe_result = sar::platform::probe_wasapi_stream(
+      selected.device_id(), sar::platform::WasapiStreamDirection::Render);
+  if (!probe_result.ok()) {
+    print_probe_errors("Selected render stream", probe_result);
+    return 1;
+  }
+
+  const auto& probe = probe_result.probe();
+  sar::tools::print_wasapi_probe(std::cout, "Selected render stream", probe);
+  std::cout << "Recovery measurement\n"
+            << "  Mode: render-only\n"
+            << "  Duration ms: " << options.duration_ms << '\n'
+            << "  Poll interval ms: " << options.poll_ms << '\n'
+            << "  Timeout ms: " << options.timeout_ms << '\n';
+  sar::graph::Graph graph(1, probe.mix_format.channels, probe.buffer_frames,
+                          probe.mix_format.sample_rate);
+  graph.add_node(std::make_unique<sar::graph::GainNode>(0.0F));
+  sar::diagnostics::EngineDiagnostics diagnostics;
+  sar::platform::WasapiDuplexRuntimeFactory factory =
+      [&graph, &diagnostics, endpoint_policy] {
+        sar::platform::WindowsWasapiDeviceProvider reopen_provider;
+        const auto reopened_endpoint = reopen_provider.resolve_endpoint(
+            endpoint_policy, sar::platform::WasapiEndpointDirection::Render);
+        if (!reopened_endpoint.ok()) {
+          return sar::platform::WasapiDuplexRuntimeOpenResult::failure(
+              convert_selection_errors(reopened_endpoint.errors()));
+        }
+        auto reopened = sar::platform::open_wasapi_render_loop(
+            reopened_endpoint.device_id(), graph, diagnostics);
+        if (!reopened.ok()) {
+          return sar::platform::WasapiDuplexRuntimeOpenResult::failure(
+              reopened.errors());
+        }
+        sar::platform::WasapiDuplexRuntimeEndpoints endpoints{
+            .render_device_id = reopened.loop().probe().device_id};
+        return sar::platform::WasapiDuplexRuntimeOpenResult::success(
+            reopened.take_loop(), std::move(endpoints));
+      };
+  sar::platform::WindowsWasapiDuplexSupervisor supervisor(
+      std::move(factory), options.timeout_ms, endpoint_policy);
+
+  const auto start = std::chrono::steady_clock::now();
+  auto next_poll = start;
+  sar::platform::WasapiDuplexSupervisorSummary measurement_summary;
+  static_cast<void>(supervisor.poll_endpoint_notifications(notifications, 0));
+  supervisor.start(0);
+  while (true) {
+    const auto elapsed_ms = elapsed_milliseconds(start);
+    static_cast<void>(supervisor.poll_endpoint_notifications(notifications,
+                                                             elapsed_ms));
+    supervisor.tick(elapsed_ms);
+    measurement_summary = supervisor.summary();
+    print_supervisor_summary(elapsed_ms, measurement_summary);
+    if (elapsed_ms >= options.duration_ms) {
+      break;
+    }
+    next_poll += std::chrono::milliseconds(options.poll_ms);
+    const auto finish =
+        start + std::chrono::milliseconds(options.duration_ms);
+    std::this_thread::sleep_until(std::min(next_poll, finish));
+  }
+
+  const auto stop_ms = elapsed_milliseconds(start);
+  supervisor.stop(stop_ms);
+  const auto final_summary = supervisor.summary();
+  print_supervisor_summary(stop_ms, final_summary);
+  print_last_errors(supervisor.last_errors());
+  return !measurement_summary.running ||
+                 measurement_summary.active_render_device_id.empty() ||
+                 final_summary.failed_recovery_count != 0 ||
+                 final_summary.endpoint_notification_reset_failure_count != 0 ||
+                 !supervisor.last_errors().empty()
+             ? 1
+             : 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -226,7 +343,7 @@ int main(int argc, char** argv) {
   if (options.show_help) {
     std::cout << "Usage: sar_measure_wasapi_recovery "
                  "[--duration-ms N] [--poll-ms N] [--timeout-ms N] "
-                 "[--capture-id ID] [--render-id ID]\n";
+                 "[--capture-id ID] [--render-id ID] [--render-only]\n";
     return 0;
   }
 
@@ -245,6 +362,8 @@ int main(int argc, char** argv) {
       std::cerr << "Endpoint notification registration failed: "
                 << register_result << '\n';
       exit_code = 1;
+    } else if (options.render_only) {
+      exit_code = measure_render_recovery(options, notifications);
     } else {
       const auto capture_selection = options.capture_device_id.empty()
                                          ? sar::platform::WasapiEndpointSelection::follow_default()
@@ -338,6 +457,8 @@ int main(int argc, char** argv) {
         }
       }
 
+    }
+    if (SUCCEEDED(register_result)) {
       const auto unregister_result = notifications.unregister_notifications();
       if (FAILED(unregister_result)) {
         std::cerr << "Endpoint notification unregistration failed: "
