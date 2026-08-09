@@ -260,6 +260,7 @@ int main() {
   assert(diagnostic_response.wasapi_recovery
              .endpoint_notification_reopen_pending);
 
+  runtime_observer->recovery.reset();
   service->set_wasapi_recovery_diagnostics_provider(
       []() -> std::optional<sar::control::WasapiRecoveryDiagnostics> {
         throw std::runtime_error("Injected recovery diagnostics failure.");
