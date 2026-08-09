@@ -427,6 +427,14 @@ notification reopen, and no retained error. This validates the runtime-failure
 path and retry window, but neither experiment proves physical unplug/replug or a
 disappearing pinned endpoint.
 
+A 2026-08-09 render-only follow-default measurement restarted Windows Audio
+three seconds into a 25-second run. The first reopen observed no default render
+endpoint and entered bounded backoff; the next reopen restored the same endpoint
+in 604 ms. The run finished with one successful recovery, zero failed recovery,
+zero retained error, and the supervisor still running immediately before the
+measurement stopped it. Physical unplug/replug remains the outstanding device-
+absence gate.
+
 Coordinating capture and render event waits reduced two subsequent 10-second
 runs to two/one capture discontinuities, three/one render FIFO underflow cycles,
 and six/eight wait timeouts respectively. Both runs transferred about 482,400

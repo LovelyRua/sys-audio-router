@@ -149,7 +149,11 @@ or GUI feedback work after the corresponding short hardware path has passed.
   exercised the runtime-failure path with pinned High Definition Audio IDs. The
   0/500/3000 ms retry schedule restored those unchanged IDs in 3548 ms with no
   notification reopen or retained error. Physical unplug/replug and
-  pinned-endpoint removal evidence still remains.
+  pinned-endpoint removal evidence still remains. A later render-only
+  follow-default run restarted Windows Audio three seconds into a 25-second
+  measurement. One reopen saw the default endpoint unavailable, the following
+  reopen restored it in 604 ms, and the run ended with one successful recovery,
+  zero failed recovery, zero retained error, and a running render endpoint.
 - **Render deadline ordering:** when capture and render are both ready, service
   render before draining additional capture packets or producing optional graph
   backlog. A deterministic call-order smoke test must prove the ordering. A
