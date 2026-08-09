@@ -63,7 +63,7 @@ function Assert-DuplexAcceptanceCase {
       "wasapi_duplex_acceptance passed=$([int]($ExpectedExitCode -eq 0))") `
       "Unexpected pass value for '$Name'."
   Assert-Equal $true $result.Text.Contains($ExpectedText) `
-      "Unexpected summary for '$Name'."
+      "Unexpected summary for '$Name'. Output: $($result.Text)"
 }
 
 $tokens = $null
@@ -80,9 +80,10 @@ $temporaryDirectory = Join-Path ([System.IO.Path]::GetTempPath()) `
 [void](New-Item -ItemType Directory -Path $temporaryDirectory)
 
 $runtime = 'wasapi_runtime_summary health=healthy loop_cycles=100 graph_processed_cycles=90 captured_frames=48000 has_capture_stream=1 has_render_stream=1 render_sample_rate=48000 error_count=0'
-$worker = 'wasapi_worker_stats render_wait_timeout_cycles=0 process_error_cycles=0 stream_start_error_cycles=0 stream_stop_error_cycles=0 rendered_frames=47520 render_recovery_silence_frames=48 render_startup_silence_frames=64 render_capture_starvation_silence_frames=32 maximum_render_recovery_silence_frames=48'
+$worker = 'wasapi_worker_stats render_wait_timeout_cycles=0 process_error_cycles=0 stream_start_error_cycles=0 stream_stop_error_cycles=0 rendered_frames=47520 render_recovery_silence_frames=48 render_startup_silence_frames=64 render_capture_starvation_silence_frames=32 maximum_render_recovery_silence_frames=48 maximum_consecutive_capture_rate_clamped_frames=1200'
 $engine = 'engine_diagnostics capture_fifo_overflow_cycles=0 capture_fifo_overflow_frames=0 render_fifo_overflow_cycles=0 render_fifo_overflow_frames=0 render_fifo_underflow_frames=144'
-$goodLines = @($runtime, $worker, $engine)
+$clock = 'wasapi_duplex_clock_summary feed_forward_ready_observations=999 feed_forward_invalid_observations=1 feed_forward_warming_up_observations=10 feed_forward_disabled_observations=0'
+$goodLines = @($runtime, $worker, $engine, $clock)
 
 try {
   Assert-DuplexAcceptanceCase -Name "pass" -Lines $goodLines -ExpectedExitCode 0 `
@@ -101,13 +102,21 @@ try {
       -ExpectedExitCode 0 `
       -ExpectedText 'maximum_render_recovery_silence_frames_threshold=48' `
       -ExtraArgument @("-MaximumRenderRecoverySilenceFrames", "48")
+  Assert-DuplexAcceptanceCase -Name "clock-qualification" -Lines $goodLines `
+      -ExpectedExitCode 0 `
+      -ExpectedText 'feed_forward_ready_basis_points=9990 minimum_feed_forward_ready_basis_points=9900' `
+      -ExtraArgument @("-MinimumFeedForwardReadyBasisPoints", "9900")
+  Assert-DuplexAcceptanceCase -Name "clamp-qualification" -Lines $goodLines `
+      -ExpectedExitCode 0 `
+      -ExpectedText 'maximum_consecutive_capture_rate_clamped_frames=1200 maximum_consecutive_capture_rate_clamped_frames_threshold=240000' `
+      -ExtraArgument @("-MaximumConsecutiveCaptureRateClampedFrames", "240000")
 
   $legacyWorker = $worker -replace ' maximum_render_recovery_silence_frames=48', ''
   Assert-DuplexAcceptanceCase -Name "legacy-maximum-omitted" `
-      -Lines @($runtime, $legacyWorker, $engine) -ExpectedExitCode 0 `
+      -Lines @($runtime, $legacyWorker, $engine, $clock) -ExpectedExitCode 0 `
       -ExpectedText 'maximum_render_recovery_silence_frames=missing maximum_render_recovery_silence_frames_threshold=missing'
   Assert-DuplexAcceptanceCase -Name "legacy-maximum-required" `
-      -Lines @($runtime, $legacyWorker, $engine) -ExpectedExitCode 1 `
+      -Lines @($runtime, $legacyWorker, $engine, $clock) -ExpectedExitCode 1 `
       -ExpectedText 'reason="missing_maximum_render_recovery_silence_frames"' `
       -ExtraArgument @("-MaximumRenderRecoverySilenceFrames", "48")
 
@@ -115,7 +124,7 @@ try {
   $oldBadWorker = $worker -replace 'process_error_cycles=0', 'process_error_cycles=9'
   $oldBadEngine = $engine -replace 'capture_fifo_overflow_frames=0', 'capture_fifo_overflow_frames=9'
   Assert-DuplexAcceptanceCase -Name "last-summary-wins" `
-      -Lines (@($oldBadRuntime, $oldBadWorker, $oldBadEngine) + $goodLines) `
+      -Lines (@($oldBadRuntime, $oldBadWorker, $oldBadEngine, $clock) + $goodLines) `
       -ExpectedExitCode 0 -ExpectedText 'unlabeled_render_underflow_frames=0'
 
   $negativeCases = @(
@@ -138,7 +147,10 @@ try {
     @("starvation-unlabeled-underflow", @($runtime, ($worker -replace 'render_capture_starvation_silence_frames=32', 'render_capture_starvation_silence_frames=31'), $engine), 0, @(), "unlabeled_render_underflow_frames_nonzero"),
     @("starvation-label-over-total", @($runtime, ($worker -replace 'render_capture_starvation_silence_frames=32', 'render_capture_starvation_silence_frames=33'), $engine), 0, @(), "render_underflow_label_frames_exceed_total"),
     @("coverage", @($runtime, ($worker -replace 'rendered_frames=47520', 'rendered_frames=47519'), $engine), 0, @(), "rendered_frame_coverage_below_minimum"),
-    @("recovery-maximum", $goodLines, 0, @("-MaximumRenderRecoverySilenceFrames", "47"), "maximum_render_recovery_silence_frames_exceeded")
+    @("recovery-maximum", $goodLines, 0, @("-MaximumRenderRecoverySilenceFrames", "47"), "maximum_render_recovery_silence_frames_exceeded"),
+    @("feed-forward-coverage", @($runtime, $worker, $engine, ($clock -replace 'feed_forward_ready_observations=999', 'feed_forward_ready_observations=98') -replace 'feed_forward_invalid_observations=1', 'feed_forward_invalid_observations=2'), 0, @("-MinimumFeedForwardReadyBasisPoints", "9900"), "feed_forward_ready_coverage_below_minimum"),
+    @("feed-forward-disabled-coverage", @($runtime, $worker, $engine, ($clock -replace 'feed_forward_invalid_observations=1', 'feed_forward_invalid_observations=0') -replace 'feed_forward_disabled_observations=0', 'feed_forward_disabled_observations=2'), 0, @("-MinimumFeedForwardReadyBasisPoints", "9990"), "feed_forward_ready_coverage_below_minimum"),
+    @("clamp-maximum", $goodLines, 0, @("-MaximumConsecutiveCaptureRateClampedFrames", "1199"), "maximum_consecutive_capture_rate_clamped_frames_exceeded")
   )
   foreach ($case in $negativeCases) {
     Assert-DuplexAcceptanceCase -Name $case[0] -Lines $case[1] `
@@ -148,6 +160,17 @@ try {
 
   Assert-DuplexAcceptanceCase -Name "missing-summaries" -Lines @("unrelated") `
       -ExpectedExitCode 1 -ExpectedText 'missing_wasapi_runtime_summary,missing_wasapi_worker_stats,missing_engine_diagnostics'
+  Assert-DuplexAcceptanceCase -Name "missing-clock-summary-required" `
+      -Lines @($runtime, $worker, $engine) -ExpectedExitCode 1 `
+      -ExpectedText 'missing_wasapi_duplex_clock_summary' `
+      -ExtraArgument @("-MinimumFeedForwardReadyBasisPoints", "9900")
+  $legacyClampWorker = $worker -replace `
+      ' maximum_consecutive_capture_rate_clamped_frames=1200', ''
+  Assert-DuplexAcceptanceCase -Name "missing-clamp-maximum-required" `
+      -Lines @($runtime, $legacyClampWorker, $engine, $clock) `
+      -ExpectedExitCode 1 `
+      -ExpectedText 'missing_maximum_consecutive_capture_rate_clamped_frames' `
+      -ExtraArgument @("-MaximumConsecutiveCaptureRateClampedFrames", "240000")
   Assert-DuplexAcceptanceCase -Name "missing-startup-field" `
       -Lines @($runtime, ($worker -replace ' render_startup_silence_frames=64', ''), $engine) `
       -ExpectedExitCode 1 -ExpectedText 'missing_render_startup_silence_frames'
@@ -174,6 +197,7 @@ try {
     "echo $runtime",
     "echo $worker",
     "echo $engine",
+    "echo $clock",
     "exit /b 0"
   )
   $runArguments = @(

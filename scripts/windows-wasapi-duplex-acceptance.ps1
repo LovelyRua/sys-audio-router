@@ -19,13 +19,26 @@ param(
   [ValidateRange(0, 10000)]
   [int]$MinimumRenderedFrameCoverageBasisPoints = 9900,
 
-  [Nullable[long]]$MaximumRenderRecoverySilenceFrames = $null
+  [Nullable[long]]$MaximumRenderRecoverySilenceFrames = $null,
+
+  [Nullable[int]]$MinimumFeedForwardReadyBasisPoints = $null,
+
+  [Nullable[long]]$MaximumConsecutiveCaptureRateClampedFrames = $null
 )
 
 $ErrorActionPreference = "Stop"
 if ($null -ne $MaximumRenderRecoverySilenceFrames -and
     $MaximumRenderRecoverySilenceFrames -lt 0) {
   throw "MaximumRenderRecoverySilenceFrames must be non-negative."
+}
+if ($null -ne $MinimumFeedForwardReadyBasisPoints -and
+    ($MinimumFeedForwardReadyBasisPoints -lt 0 -or
+     $MinimumFeedForwardReadyBasisPoints -gt 10000)) {
+  throw "MinimumFeedForwardReadyBasisPoints must be between 0 and 10000."
+}
+if ($null -ne $MaximumConsecutiveCaptureRateClampedFrames -and
+    $MaximumConsecutiveCaptureRateClampedFrames -lt 0) {
+  throw "MaximumConsecutiveCaptureRateClampedFrames must be non-negative."
 }
 
 function ConvertFrom-DuplexKeyValueLine {
@@ -117,6 +130,7 @@ if ($PSCmdlet.ParameterSetName -eq "Run") {
 $runtime = Get-DuplexLastSummary -Lines $lines -Label "wasapi_runtime_summary"
 $worker = Get-DuplexLastSummary -Lines $lines -Label "wasapi_worker_stats"
 $engine = Get-DuplexLastSummary -Lines $lines -Label "engine_diagnostics"
+$clock = Get-DuplexLastSummary -Lines $lines -Label "wasapi_duplex_clock_summary"
 $failures = [System.Collections.Generic.List[string]]::new()
 if ($toolExitCode -ne 0) {
   $failures.Add("process_exit_code")
@@ -146,6 +160,12 @@ $captureFifoOverflowFrames = $null
 $renderFifoOverflowCycles = $null
 $renderFifoOverflowFrames = $null
 $renderFifoUnderflowFrames = $null
+$observedMaximumConsecutiveCaptureRateClampedFrames = $null
+$feedForwardReadyObservations = $null
+$feedForwardInvalidObservations = $null
+$feedForwardWarmingUpObservations = $null
+$feedForwardDisabledObservations = $null
+$feedForwardReadyBasisPoints = $null
 
 if ($null -ne $runtime) {
   $runtimeErrorCount = ConvertTo-DuplexUnsignedInteger $runtime "error_count" $failures
@@ -172,6 +192,13 @@ if ($null -ne $worker) {
   } elseif ($null -ne $MaximumRenderRecoverySilenceFrames) {
     $failures.Add("missing_maximum_render_recovery_silence_frames")
   }
+  if ($worker.ContainsKey("maximum_consecutive_capture_rate_clamped_frames")) {
+    $observedMaximumConsecutiveCaptureRateClampedFrames =
+        ConvertTo-DuplexUnsignedInteger $worker `
+            "maximum_consecutive_capture_rate_clamped_frames" $failures
+  } elseif ($null -ne $MaximumConsecutiveCaptureRateClampedFrames) {
+    $failures.Add("missing_maximum_consecutive_capture_rate_clamped_frames")
+  }
 }
 if ($null -ne $engine) {
   $captureFifoOverflowCycles = ConvertTo-DuplexUnsignedInteger $engine "capture_fifo_overflow_cycles" $failures
@@ -179,6 +206,18 @@ if ($null -ne $engine) {
   $renderFifoOverflowCycles = ConvertTo-DuplexUnsignedInteger $engine "render_fifo_overflow_cycles" $failures
   $renderFifoOverflowFrames = ConvertTo-DuplexUnsignedInteger $engine "render_fifo_overflow_frames" $failures
   $renderFifoUnderflowFrames = ConvertTo-DuplexUnsignedInteger $engine "render_fifo_underflow_frames" $failures
+}
+if ($null -ne $clock) {
+  $feedForwardReadyObservations = ConvertTo-DuplexUnsignedInteger `
+      $clock "feed_forward_ready_observations" $failures
+  $feedForwardInvalidObservations = ConvertTo-DuplexUnsignedInteger `
+      $clock "feed_forward_invalid_observations" $failures
+  $feedForwardWarmingUpObservations = ConvertTo-DuplexUnsignedInteger `
+      $clock "feed_forward_warming_up_observations" $failures
+  $feedForwardDisabledObservations = ConvertTo-DuplexUnsignedInteger `
+      $clock "feed_forward_disabled_observations" $failures
+} elseif ($null -ne $MinimumFeedForwardReadyBasisPoints) {
+  $failures.Add("missing_wasapi_duplex_clock_summary")
 }
 
 foreach ($check in @(
@@ -263,6 +302,34 @@ if ($null -ne $MaximumRenderRecoverySilenceFrames -and
   $failures.Add("maximum_render_recovery_silence_frames_exceeded")
 }
 
+if ($null -ne $MaximumConsecutiveCaptureRateClampedFrames -and
+    $null -ne $observedMaximumConsecutiveCaptureRateClampedFrames -and
+    $observedMaximumConsecutiveCaptureRateClampedFrames -gt
+        $MaximumConsecutiveCaptureRateClampedFrames) {
+  $failures.Add("maximum_consecutive_capture_rate_clamped_frames_exceeded")
+}
+
+if ($null -ne $MinimumFeedForwardReadyBasisPoints -and
+    $null -ne $feedForwardReadyObservations -and
+    $null -ne $feedForwardInvalidObservations -and
+    $null -ne $feedForwardDisabledObservations) {
+  $feedForwardRatedObservations =
+      [System.Numerics.BigInteger]$feedForwardReadyObservations +
+      [System.Numerics.BigInteger]$feedForwardInvalidObservations +
+      [System.Numerics.BigInteger]$feedForwardDisabledObservations
+  if ($feedForwardRatedObservations -eq 0) {
+    $failures.Add("feed_forward_rated_observations_zero")
+  } else {
+    $feedForwardReadyBasisPoints = [long](
+        ([System.Numerics.BigInteger]$feedForwardReadyObservations * 10000) /
+        $feedForwardRatedObservations)
+    if ($feedForwardReadyBasisPoints -lt
+        $MinimumFeedForwardReadyBasisPoints) {
+      $failures.Add("feed_forward_ready_coverage_below_minimum")
+    }
+  }
+}
+
 $passed = $failures.Count -eq 0
 $reason = if ($passed) { "none" } else { [string]::Join(",", $failures) }
 Write-Output (
@@ -285,6 +352,14 @@ Write-Output (
     " unlabeled_render_underflow_frames=$(ConvertTo-DuplexSummaryNumber $unlabeledRenderUnderflowFrames)" +
     " maximum_render_recovery_silence_frames=$(ConvertTo-DuplexSummaryNumber $observedMaximumRenderRecoverySilenceFrames)" +
     " maximum_render_recovery_silence_frames_threshold=$(ConvertTo-DuplexSummaryNumber $MaximumRenderRecoverySilenceFrames)" +
+    " feed_forward_ready_observations=$(ConvertTo-DuplexSummaryNumber $feedForwardReadyObservations)" +
+    " feed_forward_invalid_observations=$(ConvertTo-DuplexSummaryNumber $feedForwardInvalidObservations)" +
+    " feed_forward_warming_up_observations=$(ConvertTo-DuplexSummaryNumber $feedForwardWarmingUpObservations)" +
+    " feed_forward_disabled_observations=$(ConvertTo-DuplexSummaryNumber $feedForwardDisabledObservations)" +
+    " feed_forward_ready_basis_points=$(ConvertTo-DuplexSummaryNumber $feedForwardReadyBasisPoints)" +
+    " minimum_feed_forward_ready_basis_points=$(ConvertTo-DuplexSummaryNumber $MinimumFeedForwardReadyBasisPoints)" +
+    " maximum_consecutive_capture_rate_clamped_frames=$(ConvertTo-DuplexSummaryNumber $observedMaximumConsecutiveCaptureRateClampedFrames)" +
+    " maximum_consecutive_capture_rate_clamped_frames_threshold=$(ConvertTo-DuplexSummaryNumber $MaximumConsecutiveCaptureRateClampedFrames)" +
     " reason=`"$reason`"")
 
 if ($passed) { exit 0 }
