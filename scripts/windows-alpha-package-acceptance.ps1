@@ -165,6 +165,7 @@ try {
   $installedFiles = @(
     "bin\SystemAudioRouteLauncher.exe",
     "bin\sar_engine_service.exe",
+    "bin\sar_control_cli.exe",
     "bin\SystemAudioRoute.exe",
     "bin\Qt6Core.dll",
     "bin\Qt6Quick.dll",
@@ -232,6 +233,18 @@ try {
   if ($guiProcess.HasExited -or $engineProcess.HasExited) {
     throw "A bootstrapped process exited before the health window completed."
   }
+
+  $controlResult = Invoke-CommandScript `
+      -Path (Join-Path $installPath "bin\sar_control_cli.exe") `
+      -Argument @("devices")
+  Write-CommandOutput -Result $controlResult
+  if ($controlResult.ExitCode -ne 0 -or
+      $controlResult.Output.Count -eq 0 -or
+      $controlResult.Output[0] -notmatch
+          '^control_response status=accepted command_id=cli-1(?:\s|$)') {
+    throw "Installed control-plane handshake failed with exit code $($controlResult.ExitCode): $([string]::Join('; ', $controlResult.Output))"
+  }
+
   Stop-Process -Id $guiProcess.Id -Force
   Wait-Process -Id $guiProcess.Id -Timeout 5 -ErrorAction SilentlyContinue
   $guiProcess = $null
@@ -364,7 +377,7 @@ try {
       " sha256=$packageHash" +
       " gui_health_seconds=$GuiHealthSeconds" +
       " missing_runtime_guard=passed" +
-      " install=passed update=passed gui_launch=passed asio=passed" +
+      " install=passed update=passed gui_launch=passed control=passed asio=passed" +
       " path_boundary=passed ownership=passed uninstall=passed")
 } finally {
   if ($null -ne $guiProcess -and !$guiProcess.HasExited) {
