@@ -35,6 +35,10 @@ int main() {
     if (expect(classify_wasapi_failure_code("wasapi_device_lookup_failed") ==
                    WasapiFailureClass::DeviceInvalidated,
                "Device lookup failure must trigger endpoint recovery") ||
+        expect(classify_wasapi_failure_code(
+                   "wasapi_default_endpoint_unavailable") ==
+                   WasapiFailureClass::DeviceInvalidated,
+               "Unavailable default endpoint must trigger endpoint recovery") ||
         expect(classify_wasapi_failure_code("wasapi_probe_format_changed") ==
                    WasapiFailureClass::DeviceInvalidated,
                "Probe drift must trigger endpoint recovery") ||

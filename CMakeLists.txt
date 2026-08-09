@@ -927,6 +927,8 @@ if(WIN32)
     COMMAND sar_measure_wasapi_recovery --capture-id)
   add_test(NAME windows_wasapi_recovery_measure_missing_render_id
     COMMAND sar_measure_wasapi_recovery --render-id)
+  add_test(NAME windows_wasapi_recovery_measure_render_only_capture_conflict
+    COMMAND sar_measure_wasapi_recovery --render-only --capture-id capture-id)
   add_test(NAME wasapi_measure_options_smoke
     COMMAND sar_wasapi_measure_options_smoke)
   add_test(NAME wasapi_measure_report_smoke
@@ -960,6 +962,7 @@ if(WIN32)
     windows_wasapi_recovery_measure_unknown_arg
     windows_wasapi_recovery_measure_missing_capture_id
     windows_wasapi_recovery_measure_missing_render_id
+    windows_wasapi_recovery_measure_render_only_capture_conflict
     PROPERTIES WILL_FAIL TRUE)
   set_tests_properties(
     windows_wasapi_render_loop_measure_help
@@ -976,7 +979,7 @@ if(WIN32)
   set_tests_properties(
     windows_wasapi_recovery_measure_help
     windows_wasapi_recovery_measure_short_help
-    PROPERTIES PASS_REGULAR_EXPRESSION "--poll-ms")
+    PROPERTIES PASS_REGULAR_EXPRESSION "--poll-ms.*--render-only")
   set_tests_properties(
     windows_wasapi_capture_level_measure_help
     PROPERTIES PASS_REGULAR_EXPRESSION "--capture-id ID")
