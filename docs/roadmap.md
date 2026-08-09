@@ -110,12 +110,14 @@ loss block downstream integration. Long soaks remain Alpha release
 qualification and run in parallel; they do not block Virtual ASIO, WDM research,
 or GUI feedback work after the corresponding short hardware path has passed.
 
-- **Clock feed-forward:** report valid, invalid, and disabled observer samples,
-  plus time at the final +/-2500 ppm clamp. After the first valid estimate, each
-  duplex soak must keep feed-forward valid for at least 99% of observations and
-  must not remain clamped for more than five consecutive seconds. The FIFO term
-  remains enabled as residual correction; feed-forward is not treated as a
-  replacement for bounded buffering.
+- **Clock feed-forward:** ready, invalid, warming-up, and disabled observer
+  samples are reported, together with total and consecutive time at the final
+  +/-2500 ppm clamp. The duplex acceptance script can enforce both thresholds.
+  After warm-up, each duplex soak must keep feed-forward ready for at least 99%
+  of ready, invalid, and disabled observations and must not remain clamped for
+  more than five consecutive seconds of rendered frames. The FIFO term remains
+  enabled as residual correction; feed-forward is not treated as a replacement
+  for bounded buffering.
 - **Bounded discontinuity recovery:** preserve the existing reset/re-prime rule
   and prove, with scripted discontinuities and real-device observations, that no
   pre-discontinuity samples reach the graph. For each discontinuity, graph output

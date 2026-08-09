@@ -250,10 +250,13 @@ observer thread. Three consecutive invalid samples disable feed-forward and
 restore the previous FIFO-only behavior.
 
 This is the current clock feed-forward implementation, not yet an alpha exit
-result. The summary exposes the current feed-forward value and whether it is
-valid at the instant of the query, but does not yet count valid, invalid, or
-disabled observer samples or time spent at the correction clamp. Those counters
-are required to apply the roadmap's long-soak thresholds.
+result. The summary now reports ready, invalid, warming-up, and disabled
+observer samples. It also reports total correction-clamped cycles plus current
+and maximum consecutive clamped cycles and rendered frames. The duplex
+acceptance script can require a minimum feed-forward ready ratio and a maximum
+consecutive clamped-frame duration. Its ready-ratio denominator includes ready,
+invalid, and disabled observations but excludes startup warming-up samples, so
+the gate measures usable runtime rather than observer initialization.
 
 ## Platform Layer
 
