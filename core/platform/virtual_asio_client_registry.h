@@ -79,7 +79,9 @@ class VirtualAsioClientDisconnectResult {
 // resulting fixed format and generation through a separate preallocated transport.
 class VirtualAsioClientRegistry {
  public:
-  explicit VirtualAsioClientRegistry(std::size_t maximum_clients);
+  explicit VirtualAsioClientRegistry(
+      std::size_t maximum_clients,
+      std::uint64_t initial_connection_generation = 1);
 
   [[nodiscard]] VirtualAsioClientConnectResult connect(
       VirtualAsioClientRequest request);

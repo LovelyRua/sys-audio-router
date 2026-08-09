@@ -426,6 +426,12 @@ if(WIN32)
   target_link_libraries(sar_windows_virtual_asio_broker_client_smoke
     PRIVATE sar_core)
 
+  add_executable(sar_windows_virtual_asio_restart_recovery_smoke
+    tests/realtime/windows_virtual_asio_restart_recovery_smoke.cpp
+  )
+  target_link_libraries(sar_windows_virtual_asio_restart_recovery_smoke
+    PRIVATE sar_core)
+
   add_executable(sar_windows_engine_control_pipe_integration_smoke
     tests/realtime/windows_engine_control_pipe_integration_smoke.cpp
   )
@@ -755,6 +761,10 @@ if(WIN32)
            COMMAND sar_windows_virtual_asio_broker_client_smoke)
   set_tests_properties(windows_virtual_asio_broker_client_smoke
                        PROPERTIES TIMEOUT 10)
+  add_test(NAME windows_virtual_asio_restart_recovery_smoke
+           COMMAND sar_windows_virtual_asio_restart_recovery_smoke)
+  set_tests_properties(windows_virtual_asio_restart_recovery_smoke
+                       PROPERTIES TIMEOUT 15)
   add_test(NAME windows_named_pipe_control_smoke
            COMMAND sar_windows_named_pipe_control_smoke)
   set_tests_properties(windows_named_pipe_control_smoke PROPERTIES TIMEOUT 10)

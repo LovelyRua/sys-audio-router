@@ -46,7 +46,8 @@ std::uint64_t qpc_100ns(std::uint64_t frequency) noexcept {
 bool qpc_period(std::uint32_t sample_rate,
                 std::uint32_t frames_per_block,
                 std::uint64_t frequency,
-                std::uint64_t& period) noexcept {
+                std::uint64_t& whole_period,
+                std::uint64_t& remainder) noexcept {
   if (sample_rate == 0 || frames_per_block == 0 || frequency == 0 ||
       frequency > std::numeric_limits<std::uint64_t>::max() /
                       kHundredNanosecondsPerSecond ||
@@ -56,12 +57,9 @@ bool qpc_period(std::uint32_t sample_rate,
   }
   const auto numerator =
       static_cast<std::uint64_t>(frames_per_block) * frequency;
-  if (numerator > std::numeric_limits<std::uint64_t>::max() -
-                      sample_rate / 2U) {
-    return false;
-  }
-  period = (numerator + sample_rate / 2U) / sample_rate;
-  return period != 0;
+  whole_period = numerator / sample_rate;
+  remainder = numerator % sample_rate;
+  return whole_period != 0 || remainder != 0;
 }
 
 bool secure_random(std::array<std::uint64_t, 3>& values) noexcept {
@@ -115,7 +113,8 @@ WindowsVirtualAsioRuntime::WindowsVirtualAsioRuntime(
     std::unique_ptr<service::WindowsVirtualAsioBrokerClient> broker,
     void* broker_process_handle,
     std::uint64_t qpc_frequency,
-    std::uint64_t period_qpc)
+    std::uint64_t whole_period_qpc,
+    std::uint64_t period_remainder_qpc)
     : config_(std::move(config)),
       broker_(std::move(broker)),
       broker_process_handle_(broker_process_handle),
@@ -123,7 +122,8 @@ WindowsVirtualAsioRuntime::WindowsVirtualAsioRuntime(
       host_input_(config_.output_channels, config_.frames_per_block),
       output_scratch_(config_.output_channels, config_.frames_per_block),
       qpc_frequency_(qpc_frequency),
-      period_qpc_(period_qpc) {}
+      callback_clock_(whole_period_qpc, period_remainder_qpc,
+                      config_.sample_rate) {}
 
 WindowsVirtualAsioRuntime::~WindowsVirtualAsioRuntime() {
   disconnect();
@@ -157,12 +157,13 @@ WindowsVirtualAsioRuntimeOpenResult WindowsVirtualAsioRuntime::open(
   }
 
   LARGE_INTEGER qpc_frequency_value{};
-  std::uint64_t period_qpc = 0;
+  std::uint64_t whole_period_qpc = 0;
+  std::uint64_t period_remainder_qpc = 0;
   if (!QueryPerformanceFrequency(&qpc_frequency_value) ||
       qpc_frequency_value.QuadPart <= 0 ||
       !qpc_period(config.sample_rate, config.frames_per_block,
                   static_cast<std::uint64_t>(qpc_frequency_value.QuadPart),
-                  period_qpc)) {
+                  whole_period_qpc, period_remainder_qpc)) {
     return {nullptr, "Could not establish the ASIO callback clock."};
   }
 
@@ -210,7 +211,7 @@ WindowsVirtualAsioRuntimeOpenResult WindowsVirtualAsioRuntime::open(
             new WindowsVirtualAsioRuntime(
                 std::move(config), std::move(broker), broker_process,
                 static_cast<std::uint64_t>(qpc_frequency_value.QuadPart),
-                period_qpc)),
+                whole_period_qpc, period_remainder_qpc)),
         {},
     };
   } catch (const std::bad_alloc&) {
@@ -244,21 +245,19 @@ bool WindowsVirtualAsioRuntime::start(std::string& error) {
     return false;
   }
   const auto now_qpc = static_cast<std::uint64_t>(now.QuadPart);
-  if (now_qpc > std::numeric_limits<std::uint64_t>::max() - period_qpc_ ||
-      !arm_timer(now_qpc + period_qpc_, now_qpc)) {
+  const auto first_deadline = callback_clock_.reset(now_qpc);
+  if (first_deadline.deadline_qpc <= now_qpc ||
+      !arm_timer(first_deadline.deadline_qpc, now_qpc)) {
     close_handle(timer_);
     close_handle(stop_event_);
     error = "Could not arm the ASIO callback scheduler.";
     return false;
   }
-  const auto first_deadline_qpc = now_qpc + period_qpc_;
-
   sample_position_.store(0, std::memory_order_release);
   sequence_ = 0;
   running_.store(true, std::memory_order_release);
   try {
-    worker_ = std::thread(
-        [this, first_deadline_qpc] { run(first_deadline_qpc); });
+    worker_ = std::thread([this] { run(); });
   } catch (...) {
     running_.store(false, std::memory_order_release);
     close_handle(timer_);
@@ -325,7 +324,7 @@ bool WindowsVirtualAsioRuntime::arm_timer(std::uint64_t deadline_qpc,
                           nullptr, FALSE) != FALSE;
 }
 
-void WindowsVirtualAsioRuntime::run(std::uint64_t first_deadline_qpc) noexcept {
+void WindowsVirtualAsioRuntime::run() noexcept {
   platform::WindowsRealtimeThreadScope realtime_scope;
   static_cast<void>(
       platform::WindowsRealtimeThreadScope::enter_current_thread(realtime_scope));
@@ -336,7 +335,6 @@ void WindowsVirtualAsioRuntime::run(std::uint64_t first_deadline_qpc) noexcept {
   };
   const auto wait_count = broker_process_handle_ == nullptr ? 2UL : 3UL;
   std::uint32_t buffer_index = 0;
-  auto deadline_qpc = first_deadline_qpc;
   while (running_.load(std::memory_order_acquire)) {
     if (broker_process_exited()) {
       break;
@@ -359,10 +357,9 @@ void WindowsVirtualAsioRuntime::run(std::uint64_t first_deadline_qpc) noexcept {
     if (!QueryPerformanceCounter(&now)) {
       break;
     }
-    const auto schedule = detail::advance_windows_virtual_asio_deadline(
-        deadline_qpc, period_qpc_, static_cast<std::uint64_t>(now.QuadPart));
-    deadline_qpc = schedule.deadline_qpc;
-    if (!arm_timer(deadline_qpc,
+    const auto schedule = callback_clock_.advance(
+        static_cast<std::uint64_t>(now.QuadPart));
+    if (!arm_timer(schedule.deadline_qpc,
                    static_cast<std::uint64_t>(now.QuadPart))) {
       break;
     }

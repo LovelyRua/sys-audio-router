@@ -29,6 +29,18 @@ bool random_u64(std::uint64_t& value) noexcept {
                          BCRYPT_USE_SYSTEM_PREFERRED_RNG) == 0;
 }
 
+std::uint64_t random_generation_seed() noexcept {
+  std::uint64_t value = 0;
+  if (random_u64(value) && value != 0) {
+    return value;
+  }
+  LARGE_INTEGER counter{};
+  QueryPerformanceCounter(&counter);
+  value = static_cast<std::uint64_t>(counter.QuadPart) ^ GetTickCount64() ^
+          (static_cast<std::uint64_t>(GetCurrentProcessId()) << 32U);
+  return value == 0 ? 1 : value;
+}
+
 std::string random_token(std::uint64_t low, std::uint64_t high) {
   std::array<char, 33> text{};
   std::snprintf(text.data(), text.size(), "%016llx%016llx",
@@ -109,7 +121,7 @@ WindowsVirtualAsioTransportHost::WindowsVirtualAsioTransportHost(
     WindowsVirtualAsioHostConfig config,
     platform::VirtualAsioRenderBus* render_bus)
     : config_(std::move(config)),
-      registry_(config_.maximum_clients),
+      registry_(config_.maximum_clients, random_generation_seed()),
       render_bus_(render_bus) {
   sessions_.reserve(config_.maximum_clients);
 }

@@ -104,8 +104,12 @@ VirtualAsioClientDisconnectResult::VirtualAsioClientDisconnectResult(
     : errors_(std::move(errors)) {}
 
 VirtualAsioClientRegistry::VirtualAsioClientRegistry(
-    std::size_t maximum_clients)
-    : maximum_clients_(maximum_clients) {
+    std::size_t maximum_clients,
+    std::uint64_t initial_connection_generation)
+    : maximum_clients_(maximum_clients),
+      next_generation_(initial_connection_generation == 0
+                           ? 1
+                           : initial_connection_generation) {
   if (maximum_clients == 0) {
     throw std::invalid_argument(
         "VirtualAsioClientRegistry maximum client count must be non-zero");

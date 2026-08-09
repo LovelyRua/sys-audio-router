@@ -114,6 +114,35 @@ int wmain(int argc, wchar_t** argv) {
       schedule.deadline_qpc, 10, 155);
   assert(schedule.deadline_qpc == 160);
   assert(schedule.skipped_periods == 3);
+
+  using sar::driver::detail::WindowsVirtualAsioRationalClock;
+  constexpr std::uint64_t qpc_frequency = 10'000'000;
+  constexpr std::uint64_t sample_rate = 48'000;
+  WindowsVirtualAsioRationalClock clock_128(
+      (128 * qpc_frequency) / sample_rate,
+      (128 * qpc_frequency) % sample_rate, sample_rate);
+  WindowsVirtualAsioRationalClock clock_256(
+      (256 * qpc_frequency) / sample_rate,
+      (256 * qpc_frequency) % sample_rate, sample_rate);
+  auto deadline_128 = clock_128.reset(1'000);
+  auto deadline_256 = clock_256.reset(1'000);
+  deadline_128 = clock_128.advance(deadline_128.deadline_qpc);
+  assert(deadline_128.deadline_qpc == deadline_256.deadline_qpc);
+  for (std::uint32_t pair = 1; pair < 100'000; ++pair) {
+    deadline_128 = clock_128.advance(deadline_128.deadline_qpc);
+    deadline_128 = clock_128.advance(deadline_128.deadline_qpc);
+    deadline_256 = clock_256.advance(deadline_256.deadline_qpc);
+    assert(deadline_128.deadline_qpc == deadline_256.deadline_qpc);
+  }
+  const auto expected_elapsed =
+      (static_cast<std::uint64_t>(200'000) * 128 * qpc_frequency) /
+      sample_rate;
+  assert(deadline_128.deadline_qpc == 1'000 + expected_elapsed);
+
+  const auto late_now = deadline_128.deadline_qpc + 1'000'000;
+  const auto recovered = clock_128.advance(late_now);
+  assert(recovered.skipped_periods == 1);
+  assert(recovered.deadline_qpc > late_now);
   const std::wstring pipe_name =
       L"sys-audio-route-asio-com-smoke-" +
       std::to_wstring(GetCurrentProcessId());

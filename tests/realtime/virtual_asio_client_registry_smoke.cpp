@@ -39,6 +39,12 @@ int main() {
   }
   assert(rejected_zero_capacity);
 
+  sar::platform::VirtualAsioClientRegistry seeded_registry(
+      1, 0x123456789abcdef0ULL);
+  const auto seeded = seeded_registry.connect(request("seeded", 99));
+  assert(seeded.ok());
+  assert(seeded.client().connection_generation == 0x123456789abcdef0ULL);
+
   sar::platform::VirtualAsioClientRegistry registry(2);
   assert(registry.maximum_clients() == 2);
   assert(registry.clients().empty());

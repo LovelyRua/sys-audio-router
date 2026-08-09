@@ -46,6 +46,64 @@ advance_windows_virtual_asio_deadline(std::uint64_t deadline_qpc,
   return {next + skipped * period_qpc, skipped};
 }
 
+class WindowsVirtualAsioRationalClock {
+ public:
+  constexpr WindowsVirtualAsioRationalClock(std::uint64_t whole_period_qpc,
+                                            std::uint64_t remainder_qpc,
+                                            std::uint64_t denominator) noexcept
+      : whole_period_qpc_(whole_period_qpc),
+        remainder_qpc_(remainder_qpc),
+        denominator_(denominator) {}
+
+  [[nodiscard]] constexpr WindowsVirtualAsioPeriodicDeadline reset(
+      std::uint64_t anchor_qpc) noexcept {
+    deadline_qpc_ = anchor_qpc;
+    remainder_accumulator_ = 0;
+    return advance_one();
+  }
+
+  [[nodiscard]] constexpr WindowsVirtualAsioPeriodicDeadline advance(
+      std::uint64_t now_qpc) noexcept {
+    auto next = advance_one();
+    if (next.deadline_qpc >= now_qpc) {
+      return next;
+    }
+
+    // A late host callback is an xrun boundary. Re-anchor instead of issuing a
+    // catch-up burst, while retaining exact average cadence after recovery.
+    next = reset(now_qpc);
+    next.skipped_periods = 1;
+    return next;
+  }
+
+ private:
+  [[nodiscard]] constexpr WindowsVirtualAsioPeriodicDeadline advance_one()
+      noexcept {
+    if (denominator_ == 0 ||
+        (whole_period_qpc_ == 0 && remainder_qpc_ == 0)) {
+      return {deadline_qpc_, 0};
+    }
+
+    remainder_accumulator_ += remainder_qpc_;
+    auto increment = whole_period_qpc_;
+    if (remainder_accumulator_ >= denominator_) {
+      increment += remainder_accumulator_ / denominator_;
+      remainder_accumulator_ %= denominator_;
+    }
+    constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+    deadline_qpc_ = deadline_qpc_ > maximum - increment
+                        ? maximum
+                        : deadline_qpc_ + increment;
+    return {deadline_qpc_, 0};
+  }
+
+  std::uint64_t whole_period_qpc_ = 0;
+  std::uint64_t remainder_qpc_ = 0;
+  std::uint64_t denominator_ = 0;
+  std::uint64_t deadline_qpc_ = 0;
+  std::uint64_t remainder_accumulator_ = 0;
+};
+
 }  // namespace detail
 
 struct WindowsVirtualAsioBufferBinding {
@@ -95,9 +153,10 @@ class WindowsVirtualAsioRuntime {
       std::unique_ptr<service::WindowsVirtualAsioBrokerClient> broker,
       void* broker_process_handle,
       std::uint64_t qpc_frequency,
-      std::uint64_t period_qpc);
+      std::uint64_t whole_period_qpc,
+      std::uint64_t period_remainder_qpc);
 
-  void run(std::uint64_t first_deadline_qpc) noexcept;
+  void run() noexcept;
   [[nodiscard]] bool process_cycle(std::uint32_t buffer_index) noexcept;
   [[nodiscard]] bool broker_process_exited() const noexcept;
   [[nodiscard]] bool arm_timer(std::uint64_t deadline_qpc,
@@ -116,7 +175,7 @@ class WindowsVirtualAsioRuntime {
   std::atomic_uint64_t sample_position_ = 0;
   std::uint64_t sequence_ = 0;
   std::uint64_t qpc_frequency_ = 0;
-  std::uint64_t period_qpc_ = 0;
+  detail::WindowsVirtualAsioRationalClock callback_clock_;
 };
 
 }  // namespace sar::driver
