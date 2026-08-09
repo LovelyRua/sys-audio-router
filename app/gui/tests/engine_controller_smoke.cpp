@@ -330,5 +330,26 @@ int main(int argc, char **argv) {
     assert(muted_requests[1].type == ControlCommandType::SetMute);
     assert(muted_requests[2].type == ControlCommandType::QuerySessionState);
   }
+
+  std::string first_controller_command_id;
+  std::string second_controller_command_id;
+  const auto capture_first_id = [&](ControlCommand command) {
+    first_controller_command_id = command.command_id;
+    return confirmed_state(command);
+  };
+  const auto capture_second_id = [&](ControlCommand command) {
+    second_controller_command_id = command.command_id;
+    return confirmed_state(command);
+  };
+  sar::gui::EngineController first_controller(capture_first_id, false);
+  sar::gui::EngineController second_controller(capture_second_id, false);
+  first_controller.refresh();
+  second_controller.refresh();
+  assert(wait_until([&] {
+    return !first_controller.busy() && !second_controller.busy() &&
+           !first_controller_command_id.empty() &&
+           !second_controller_command_id.empty();
+  }));
+  assert(first_controller_command_id != second_controller_command_id);
   return 0;
 }

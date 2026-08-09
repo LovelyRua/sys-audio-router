@@ -7,6 +7,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QUuid>
 #include <QtConcurrentRun>
 
 #include <algorithm>
@@ -113,7 +114,11 @@ EngineController::EngineController(EngineTransport transport,
       transport_(std::move(transport)),
       preset_store_(QStandardPaths::writableLocation(
                         QStandardPaths::AppDataLocation) +
-                    QStringLiteral("/presets")),
+                     QStringLiteral("/presets")),
+      command_prefix_(
+          "gui-" +
+          QUuid::createUuid().toString(QUuid::WithoutBraces).toStdString() +
+          "-"),
       service_management_enabled_(automatic_activity) {
   connect(&watcher_, &QFutureWatcher<EngineReply>::finished, this, [this] {
     const auto reply = watcher_.result();
@@ -559,7 +564,7 @@ void EngineController::startNextCommand() {
   active_command_ = std::move(queued_commands_.front());
   queued_commands_.pop_front();
   auto command = active_command_->command;
-  command.command_id = "gui-" + std::to_string(++command_sequence_);
+  command.command_id = command_prefix_ + std::to_string(++command_sequence_);
   auto transport = transport_;
   watcher_.setFuture(QtConcurrent::run(
       [transport = std::move(transport), command = std::move(command)]() mutable {

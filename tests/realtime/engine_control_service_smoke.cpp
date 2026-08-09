@@ -110,6 +110,11 @@ int main() {
       replay_service->handle_wire_request(replay_request.bytes);
   assert(replay_first.ok());
   assert(replay_observer_calls == 1);
+  const auto replay_exact =
+      replay_service->handle_wire_request(replay_request.bytes);
+  assert(replay_exact.ok());
+  assert(replay_exact.bytes == replay_first.bytes);
+  assert(replay_observer_calls == 1);
 
   replay_gain.gain = 0.75F;
   const auto replay_changed_request =
@@ -118,7 +123,13 @@ int main() {
   const auto replay_second =
       replay_service->handle_wire_request(replay_changed_request.bytes);
   assert(replay_second.ok());
-  assert(replay_second.bytes == replay_first.bytes);
+  const auto replay_conflict =
+      sar::control::decode_control_response(replay_second.bytes);
+  assert(replay_conflict.ok());
+  assert(replay_conflict.response.status ==
+         sar::control::ControlResponseStatus::Rejected);
+  assert(replay_conflict.response.errors.size() == 1);
+  assert(replay_conflict.response.errors[0].code == "command_id_conflict");
   assert(replay_observer_calls == 1);
   assert(replay_service->session().current_preset().matrix.routes[0].gain ==
          0.25F);
@@ -134,6 +145,11 @@ int main() {
       replay_service->handle_wire_request(rejected_replay_request.bytes);
   assert(rejected_replay_first.ok());
   assert(replay_observer_calls == 2);
+  const auto rejected_replay_exact =
+      replay_service->handle_wire_request(rejected_replay_request.bytes);
+  assert(rejected_replay_exact.ok());
+  assert(rejected_replay_exact.bytes == rejected_replay_first.bytes);
+  assert(replay_observer_calls == 2);
 
   reject_replay_command = false;
   replay_gain.gain = 0.75F;
@@ -143,7 +159,14 @@ int main() {
   const auto rejected_replay_second =
       replay_service->handle_wire_request(rejected_replay_changed_request.bytes);
   assert(rejected_replay_second.ok());
-  assert(rejected_replay_second.bytes == rejected_replay_first.bytes);
+  const auto rejected_replay_conflict =
+      sar::control::decode_control_response(rejected_replay_second.bytes);
+  assert(rejected_replay_conflict.ok());
+  assert(rejected_replay_conflict.response.status ==
+         sar::control::ControlResponseStatus::Rejected);
+  assert(rejected_replay_conflict.response.errors.size() == 1);
+  assert(rejected_replay_conflict.response.errors[0].code ==
+         "command_id_conflict");
   assert(replay_observer_calls == 2);
   assert(replay_service->session().current_preset().matrix.routes[0].gain ==
          0.25F);

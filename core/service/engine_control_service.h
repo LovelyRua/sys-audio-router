@@ -86,14 +86,17 @@ class EngineControlService {
       std::string command_id) const;
   [[nodiscard]] control::ControlResponse append_platform_devices_locked(
       control::ControlResponse response) const;
-  [[nodiscard]] const control::ControlWireEncodeResult*
+  struct ReplayedResponse;
+  [[nodiscard]] const ReplayedResponse*
   find_replayed_response_locked(std::string_view command_id) const noexcept;
   void remember_response_locked(
       std::string command_id,
+      std::span<const std::uint8_t> request,
       const control::ControlWireEncodeResult& response);
 
   struct ReplayedResponse {
     std::string command_id;
+    std::vector<std::uint8_t> request;
     control::ControlWireEncodeResult response;
   };
 

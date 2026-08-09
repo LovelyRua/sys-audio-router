@@ -1,5 +1,6 @@
 #include "core/service/engine_control_service.h"
 
+#include <algorithm>
 #include <exception>
 #include <string>
 #include <utility>
@@ -364,7 +365,13 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
   if (!decoded.command.command_id.empty()) {
     if (const auto* replayed =
             find_replayed_response_locked(decoded.command.command_id)) {
-      return *replayed;
+      if (std::ranges::equal(replayed->request, request)) {
+        return replayed->response;
+      }
+      return control::encode_control_response(control::command_rejected(
+          decoded.command.command_id,
+          {{"command_id_conflict",
+            "Control command ID was already used for a different request."}}));
     }
   }
 
@@ -612,17 +619,17 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
 
   auto response = execute();
   if (!decoded.command.command_id.empty()) {
-    remember_response_locked(decoded.command.command_id, response);
+    remember_response_locked(decoded.command.command_id, request, response);
   }
   return response;
 }
 
-const control::ControlWireEncodeResult*
+const EngineControlService::ReplayedResponse*
 EngineControlService::find_replayed_response_locked(
     std::string_view command_id) const noexcept {
   for (const auto& replayed : replayed_responses_) {
     if (replayed.command_id == command_id) {
-      return &replayed.response;
+      return &replayed;
     }
   }
   return nullptr;
@@ -630,21 +637,27 @@ EngineControlService::find_replayed_response_locked(
 
 void EngineControlService::remember_response_locked(
     std::string command_id,
+    std::span<const std::uint8_t> request,
     const control::ControlWireEncodeResult& response) {
-  if (response.bytes.size() > kMaxReplayedResponseBytes) {
+  const auto entry_bytes = request.size() + response.bytes.size();
+  if (entry_bytes > kMaxReplayedResponseBytes) {
     return;
   }
 
   while (!replayed_responses_.empty() &&
          (replayed_responses_.size() >= kMaxReplayedResponses ||
-          replayed_response_bytes_ + response.bytes.size() >
+          replayed_response_bytes_ + entry_bytes >
               kMaxReplayedResponseBytes)) {
-    replayed_response_bytes_ -= replayed_responses_.front().response.bytes.size();
+    const auto& oldest = replayed_responses_.front();
+    replayed_response_bytes_ -=
+        oldest.request.size() + oldest.response.bytes.size();
     replayed_responses_.pop_front();
   }
 
-  replayed_response_bytes_ += response.bytes.size();
-  replayed_responses_.push_back({std::move(command_id), response});
+  replayed_response_bytes_ += entry_bytes;
+  replayed_responses_.push_back(
+      {std::move(command_id),
+       std::vector<std::uint8_t>(request.begin(), request.end()), response});
 }
 
 control::ControlResponse EngineControlService::audio_runtime_state_response_locked(

@@ -16,6 +16,7 @@
 #include <deque>
 #include <functional>
 #include <optional>
+#include <string>
 
 namespace sar::gui {
 
@@ -223,6 +224,7 @@ class EngineController final : public QObject {
   PresetStore preset_store_;
   std::deque<QueuedCommand> queued_commands_;
   std::optional<QueuedCommand> active_command_;
+  std::string command_prefix_;
   std::uint64_t command_sequence_ = 0;
   std::uint32_t poll_sequence_ = 0;
   bool connected_ = false;
