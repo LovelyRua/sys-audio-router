@@ -206,6 +206,26 @@ try {
     throw "Installed control-plane handshake failed with exit code $controlExitCode`: $([string]::Join('; ', $controlOutput))"
   }
 
+  $secondLauncher = Start-Process `
+      -FilePath (Join-Path $installPath "bin\SystemAudioRouteLauncher.exe") `
+      -WorkingDirectory (Join-Path $installPath "bin") `
+      -PassThru
+  if (!$secondLauncher.WaitForExit(10000)) {
+    Stop-Process -Id $secondLauncher.Id -Force -ErrorAction SilentlyContinue
+    throw "Second bootstrap launcher did not exit within ten seconds."
+  }
+  if ($secondLauncher.ExitCode -ne 0) {
+    throw "Second bootstrap launcher failed with exit code $($secondLauncher.ExitCode)."
+  }
+  Start-Sleep -Milliseconds 500
+  $guiProcesses = Get-InstalledProcess -Name "SystemAudioRoute" `
+      -Directory $installPath
+  $engineProcesses = Get-InstalledProcess -Name "sar_engine_service" `
+      -Directory $installPath
+  if ($guiProcesses.Count -ne 1 -or $engineProcesses.Count -ne 1) {
+    throw "Repeated bootstrap did not preserve one GUI and one engine process."
+  }
+
   $uninstallerPath = Join-Path $installPath "Uninstall.exe"
   Invoke-NsisExecutable -Path $uninstallerPath -Argument @("/S")
 
@@ -235,6 +255,7 @@ try {
       " package=`"$resolvedPackagePath`"" +
       " sha256=$packageHash" +
       " install=passed update=passed launcher=passed control=passed" +
+      " single_instance=passed" +
       " gui=passed engine=passed asio=passed uninstall=passed")
 } finally {
   foreach ($processName in @("SystemAudioRoute", "sar_engine_service")) {
