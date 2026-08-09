@@ -12,6 +12,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <iostream>
 #include <mutex>
 
 namespace {
@@ -115,11 +116,19 @@ int main(int argc, char** argv) {
 
   controller.setRouteGain(QStringLiteral("daw"), QStringLiteral("monitor"),
                           0.5);
-  assert(wait_until([&] {
+  if (!wait_until([&] {
     return !controller.busy() && controller.canUndo() &&
            near(controller.routeGain(QStringLiteral("daw"),
                                      QStringLiteral("monitor")), 0.5);
-  }));
+  })) {
+    std::cerr << "First history edit did not settle: busy="
+              << controller.busy() << " can_undo=" << controller.canUndo()
+              << " can_redo=" << controller.canRedo() << " gain="
+              << controller.routeGain(QStringLiteral("daw"),
+                                      QStringLiteral("monitor"))
+              << " error=" << controller.lastError().toStdString() << '\n';
+    return 1;
+  }
   assert(!controller.canRedo());
 
   {
