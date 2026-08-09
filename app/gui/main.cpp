@@ -16,32 +16,25 @@ namespace {
 class GuiInstanceGuard final {
  public:
   GuiInstanceGuard() noexcept {
-    mutex_ = CreateMutexW(
-        nullptr, FALSE,
+    event_ = CreateEventW(
+        nullptr, TRUE, FALSE,
         L"Local\\SystemAudioRoute.Gui.{7F16C8A9-4A0C-4D31-9A5B-2C6E7F8D1042}");
-    if (mutex_ == nullptr) {
-      return;
-    }
-
-    const auto wait_result = WaitForSingleObject(mutex_, 0);
-    primary_ = wait_result == WAIT_OBJECT_0 || wait_result == WAIT_ABANDONED;
+    const auto creation_error = GetLastError();
+    primary_ = event_ != nullptr && creation_error != ERROR_ALREADY_EXISTS;
   }
   GuiInstanceGuard(const GuiInstanceGuard&) = delete;
   GuiInstanceGuard& operator=(const GuiInstanceGuard&) = delete;
   ~GuiInstanceGuard() {
-    if (mutex_ != nullptr) {
-      if (primary_) {
-        ReleaseMutex(mutex_);
-      }
-      CloseHandle(mutex_);
+    if (event_ != nullptr) {
+      CloseHandle(event_);
     }
   }
 
   [[nodiscard]] bool primary() const noexcept { return primary_; }
-  [[nodiscard]] bool valid() const noexcept { return mutex_ != nullptr; }
+  [[nodiscard]] bool valid() const noexcept { return event_ != nullptr; }
 
  private:
-  HANDLE mutex_ = nullptr;
+  HANDLE event_ = nullptr;
   bool primary_ = false;
 };
 
