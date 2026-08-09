@@ -523,6 +523,12 @@ strict `--require-healthy` measurement therefore rejected the run as degraded,
 while the bounded duplex acceptance gate passed. This is a path check, not a
 replacement for the remaining release-qualification evidence.
 
+The same pairing then passed the one-command WinRM soak entry with the 99%
+feed-forward-ready and five-second clamp gates enabled. That repeat rendered
+1,442,496 frames, reported the same 15 ready and zero invalid/disabled clock
+observations, spent zero frames clamped, and kept its 1,920-frame maximum
+discontinuity recovery below the 2,594-frame bound.
+
 ## Current Testing Model
 
 The Windows CTest suite currently has 124 smoke targets. The named-pipe coverage
