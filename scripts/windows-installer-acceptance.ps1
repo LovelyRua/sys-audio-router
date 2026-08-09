@@ -217,13 +217,19 @@ try {
   if ($secondLauncher.ExitCode -ne 0) {
     throw "Second bootstrap launcher failed with exit code $($secondLauncher.ExitCode)."
   }
-  Start-Sleep -Milliseconds 500
-  $guiProcesses = Get-InstalledProcess -Name "SystemAudioRoute" `
-      -Directory $installPath
-  $engineProcesses = Get-InstalledProcess -Name "sar_engine_service" `
-      -Directory $installPath
+  $singleInstanceDeadline = [DateTime]::UtcNow.AddSeconds(10)
+  do {
+    $guiProcesses = Get-InstalledProcess -Name "SystemAudioRoute" `
+        -Directory $installPath
+    $engineProcesses = Get-InstalledProcess -Name "sar_engine_service" `
+        -Directory $installPath
+    if ($guiProcesses.Count -eq 1 -and $engineProcesses.Count -eq 1) {
+      break
+    }
+    Start-Sleep -Milliseconds 100
+  } while ([DateTime]::UtcNow -lt $singleInstanceDeadline)
   if ($guiProcesses.Count -ne 1 -or $engineProcesses.Count -ne 1) {
-    throw "Repeated bootstrap did not preserve one GUI and one engine process."
+    throw "Repeated bootstrap did not preserve one GUI and one engine process (gui=$($guiProcesses.Count), engine=$($engineProcesses.Count))."
   }
 
   $uninstallerPath = Join-Path $installPath "Uninstall.exe"
