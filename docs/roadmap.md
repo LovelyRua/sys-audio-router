@@ -380,9 +380,11 @@ Exit criteria:
 Purpose: make the engine usable without hiding the system model.
 
 Status: the first Qt Quick control application is merged. It connects to control
-wire v7 without entering the realtime process and provides an operational route
+wire v8 without entering the realtime process and provides an operational route
 matrix, route enable/gain controls, device listing, runtime start/stop, and live
-diagnostics, including WASAPI recovery state and counters. The first per-user
+diagnostics, including WASAPI runtime health, fault reason, recovery state,
+timeouts, discontinuities, underflow, recovery-silence, and clamp counters. The
+first per-user
 Windows x64 ZIP package now stages a validated
 engine, CLI, Virtual ASIO driver, registration utility, Qt Quick GUI, Qt/QML
 runtime, platform plugins, and compiler runtime. Its installer verifies

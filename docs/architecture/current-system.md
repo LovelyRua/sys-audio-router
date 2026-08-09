@@ -79,9 +79,10 @@ binary protocol. On Windows, `sar_engine_service` hosts that control surface on
 a named pipe and `sar_control_cli` can query state, the merged virtual and
 physical WASAPI device directory, graph, diagnostics, and audio-runtime state;
 start or stop an installed runtime; or apply gain and mute
-commands. Control wire version 5 carries installed/running/runtime graph-version
-state plus the active runtime mode and endpoint selection in lifecycle
-responses. A stopped service can configure default or pinned WASAPI render and
+commands. Control wire version 8 carries installed/running/runtime graph-version
+state plus the active runtime mode, endpoint selection, and WASAPI runtime
+health telemetry in lifecycle and diagnostics responses. A stopped service can
+configure default or pinned WASAPI render and
 default or pinned-pair duplex runtimes through the same protocol. A running
 runtime can be reconfigured transactionally: the candidate must start before it
 replaces the old configuration, and a failure restores the previous runtime.
@@ -98,7 +99,7 @@ two output channels. The service-owned render bus also keeps a fixed physical
 render quantum for its lifetime, so preset block-size changes are rejected with
 a restart-required error instead of committing an unusable format. A stopped
 runtime can rebuild against a newer graph through its retained endpoint
-configuration. The Qt Quick GUI now binds to control wire v7 from a separate process.
+configuration. The Qt Quick GUI now binds to control wire v8 from a separate process.
 Service installation and concurrent control-client authorization remain future
 work.
 
@@ -678,8 +679,10 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   select explicit endpoint IDs. Both modes now drive bounded supervisor
   recovery; follow-default render and duplex selections consume endpoint
   notifications while pinned selections retain their configured IDs. Recovery
-  state, episode counts, success/failure counts, duration, and notification
-  reopen counters are exposed through control wire v7 for GUI diagnostics. It
+  state, episode counts, success/failure counts, duration, notification reopen
+  counters, runtime health/reason, wait timeouts, discontinuities, render
+  underflow, bounded recovery silence, and sustained correction clamp are
+  exposed through control wire v8 for GUI diagnostics. It
   accepts
   runtime state/start/stop commands over the named pipe and lazily rebuilds a
   stopped stale runtime on start. Device-list and session-state requests merge
