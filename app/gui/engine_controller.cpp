@@ -268,6 +268,8 @@ QStringList EngineController::presetNames() const { return preset_names_; }
 QString EngineController::activePresetName() const {
   return active_preset_name_;
 }
+bool EngineController::canUndo() const noexcept { return !undo_history_.empty(); }
+bool EngineController::canRedo() const noexcept { return !redo_history_.empty(); }
 
 void EngineController::refresh() {
   control::ControlCommand command;
@@ -321,7 +323,8 @@ void EngineController::loadPreset(const QString& name) {
   control::ControlCommand command;
   command.type = control::ControlCommandType::LoadPreset;
   command.preset = std::move(preset);
-  dispatchPreset(std::move(command), PendingPresetAction::Load, normalized);
+  enqueue({std::move(command), PendingPresetAction::Load, normalized, false,
+           HistoryAction::Reset});
 }
 
 void EngineController::clearFeedback() {
@@ -401,24 +404,64 @@ double EngineController::routeGain(const QString& input_id,
 void EngineController::setRoute(const QString& input_id,
                                 const QString& output_id,
                                 bool enabled) {
+  if (busy_) {
+    setError(QStringLiteral("Wait for the current engine command to finish"));
+    return;
+  }
   control::ControlCommand command;
   command.type = enabled ? control::ControlCommandType::ConnectRoute
                          : control::ControlCommandType::DisconnectRoute;
   command.input_id = input_id.toStdString();
   command.output_id = output_id.toStdString();
   command.gain = 1.0F;
-  dispatch(std::move(command));
+  QueuedCommand queued{command};
+  if (current_preset_.has_value()) {
+    auto applied = control::apply_command(*current_preset_, command);
+    if (applied.ok()) {
+      queued.history_action = HistoryAction::Record;
+      queued.history_entry = HistoryEntry{*current_preset_,
+                                          applied.take_document()};
+    }
+  }
+  enqueue(std::move(queued));
 }
 
 void EngineController::setRouteGain(const QString& input_id,
                                     const QString& output_id,
                                     double gain) {
+  if (busy_) {
+    setError(QStringLiteral("Wait for the current engine command to finish"));
+    return;
+  }
   control::ControlCommand command;
   command.type = control::ControlCommandType::SetGain;
   command.input_id = input_id.toStdString();
   command.output_id = output_id.toStdString();
   command.gain = static_cast<float>(std::clamp(gain, 0.0, 2.0));
-  dispatch(std::move(command));
+  QueuedCommand queued{command};
+  if (current_preset_.has_value()) {
+    auto applied = control::apply_command(*current_preset_, command);
+    if (applied.ok()) {
+      queued.history_action = HistoryAction::Record;
+      queued.history_entry = HistoryEntry{*current_preset_,
+                                          applied.take_document()};
+    }
+  }
+  enqueue(std::move(queued));
+}
+
+void EngineController::undo() {
+  if (busy_ || undo_history_.empty()) {
+    return;
+  }
+  dispatchHistoryLoad(undo_history_.back(), HistoryAction::Undo);
+}
+
+void EngineController::redo() {
+  if (busy_ || redo_history_.empty()) {
+    return;
+  }
+  dispatchHistoryLoad(redo_history_.back(), HistoryAction::Redo);
 }
 
 void EngineController::dispatch(control::ControlCommand command) {
@@ -447,7 +490,7 @@ void EngineController::startNextCommand() {
   }
   active_command_ = std::move(queued_commands_.front());
   queued_commands_.pop_front();
-  auto command = std::move(active_command_->command);
+  auto command = active_command_->command;
   command.command_id = "gui-" + std::to_string(++command_sequence_);
   auto transport = transport_;
   watcher_.setFuture(QtConcurrent::run(
@@ -476,6 +519,63 @@ void EngineController::dispatchPreset(control::ControlCommand command,
   enqueue({std::move(command), action, std::move(name)});
 }
 
+void EngineController::dispatchHistoryLoad(const HistoryEntry& entry,
+                                           HistoryAction action) {
+  control::ControlCommand command;
+  command.type = control::ControlCommandType::LoadPreset;
+  command.preset = action == HistoryAction::Undo ? entry.before : entry.after;
+  enqueue({std::move(command), PendingPresetAction::None, {}, false, action,
+           entry});
+}
+
+void EngineController::pushBounded(std::deque<HistoryEntry>& history,
+                                   HistoryEntry entry) {
+  if (history.size() == kHistoryLimit) {
+    history.pop_front();
+  }
+  history.push_back(std::move(entry));
+}
+
+void EngineController::commitHistory(const QueuedCommand& command) {
+  const bool had_undo = canUndo();
+  const bool had_redo = canRedo();
+  switch (command.history_action) {
+    case HistoryAction::None:
+      return;
+    case HistoryAction::Record:
+      if (command.history_entry.has_value()) {
+        pushBounded(undo_history_, *command.history_entry);
+        redo_history_.clear();
+        current_preset_ = command.history_entry->after;
+      }
+      break;
+    case HistoryAction::Undo:
+      if (command.history_entry.has_value() && !undo_history_.empty()) {
+        auto entry = std::move(undo_history_.back());
+        undo_history_.pop_back();
+        pushBounded(redo_history_, std::move(entry));
+        current_preset_ = command.history_entry->before;
+      }
+      break;
+    case HistoryAction::Redo:
+      if (command.history_entry.has_value() && !redo_history_.empty()) {
+        auto entry = std::move(redo_history_.back());
+        redo_history_.pop_back();
+        pushBounded(undo_history_, std::move(entry));
+        current_preset_ = command.history_entry->after;
+      }
+      break;
+    case HistoryAction::Reset:
+      undo_history_.clear();
+      redo_history_.clear();
+      current_preset_ = command.command.preset;
+      break;
+  }
+  if (had_undo != canUndo() || had_redo != canRedo()) {
+    emit historyChanged();
+  }
+}
+
 void EngineController::applyReply(const EngineReply& reply,
                                   const QueuedCommand& command) {
   const bool command_succeeded =
@@ -500,6 +600,8 @@ void EngineController::applyReply(const EngineReply& reply,
     }
     return;
   }
+
+  commitHistory(command);
 
   if (reply.response.has_session_state || reply.response.has_preset ||
       reply.response.has_devices || reply.response.has_active_graph) {
@@ -574,6 +676,7 @@ void EngineController::applyReply(const EngineReply& reply,
 void EngineController::updateSession(const control::ControlResponse& response) {
   if (response.has_preset || response.has_session_state) {
     const auto& preset = response.preset;
+    current_preset_ = preset;
     sample_rate_ = static_cast<int>(preset.sample_rate);
     block_size_ = static_cast<int>(preset.frames_per_block);
     inputs_.clear();

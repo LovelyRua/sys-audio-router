@@ -11,6 +11,7 @@
 #include <QTimer>
 #include <QVariantList>
 
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <functional>
@@ -67,6 +68,8 @@ class EngineController final : public QObject {
   Q_PROPERTY(int routeRevision READ routeRevision NOTIFY sessionChanged)
   Q_PROPERTY(QStringList presetNames READ presetNames NOTIFY presetsChanged)
   Q_PROPERTY(QString activePresetName READ activePresetName NOTIFY presetsChanged)
+  Q_PROPERTY(bool canUndo READ canUndo NOTIFY historyChanged)
+  Q_PROPERTY(bool canRedo READ canRedo NOTIFY historyChanged)
 
  public:
   explicit EngineController(QObject* parent = nullptr);
@@ -110,6 +113,8 @@ class EngineController final : public QObject {
   [[nodiscard]] int routeRevision() const noexcept;
   [[nodiscard]] QStringList presetNames() const;
   [[nodiscard]] QString activePresetName() const;
+  [[nodiscard]] bool canUndo() const noexcept;
+  [[nodiscard]] bool canRedo() const noexcept;
 
   Q_INVOKABLE void refresh();
   Q_INVOKABLE void refreshPresets();
@@ -131,6 +136,8 @@ class EngineController final : public QObject {
   Q_INVOKABLE void setRouteGain(const QString& input_id,
                                 const QString& output_id,
                                 double gain);
+  Q_INVOKABLE void undo();
+  Q_INVOKABLE void redo();
 
  signals:
   void connectionChanged();
@@ -140,6 +147,7 @@ class EngineController final : public QObject {
   void diagnosticsChanged();
   void feedbackChanged();
   void presetsChanged();
+  void historyChanged();
 
  private:
   enum class PendingPresetAction {
@@ -148,11 +156,26 @@ class EngineController final : public QObject {
     Load,
   };
 
+  enum class HistoryAction {
+    None,
+    Record,
+    Undo,
+    Redo,
+    Reset,
+  };
+
+  struct HistoryEntry {
+    control::PresetDocument before;
+    control::PresetDocument after;
+  };
+
   struct QueuedCommand {
     control::ControlCommand command;
     PendingPresetAction preset_action = PendingPresetAction::None;
     QString preset_name;
     bool poll = false;
+    HistoryAction history_action = HistoryAction::None;
+    std::optional<HistoryEntry> history_entry;
   };
 
   void dispatch(control::ControlCommand command);
@@ -169,6 +192,9 @@ class EngineController final : public QObject {
   void stopEngineService();
   void setError(QString error);
   void setStatus(QString status);
+  void dispatchHistoryLoad(const HistoryEntry& entry, HistoryAction action);
+  void commitHistory(const QueuedCommand& command);
+  void pushBounded(std::deque<HistoryEntry>& history, HistoryEntry entry);
 
   QFutureWatcher<EngineReply> watcher_;
   EngineTransport transport_;
@@ -208,6 +234,10 @@ class EngineController final : public QObject {
   int route_revision_ = 0;
   QStringList preset_names_;
   QString active_preset_name_;
+  std::optional<control::PresetDocument> current_preset_;
+  std::deque<HistoryEntry> undo_history_;
+  std::deque<HistoryEntry> redo_history_;
+  static constexpr std::size_t kHistoryLimit = 64;
 };
 
 }  // namespace sar::gui

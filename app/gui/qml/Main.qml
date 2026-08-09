@@ -113,6 +113,18 @@ ApplicationWindow {
 
     Component.onCompleted: syncRuntimeDraft()
 
+    Shortcut {
+        sequences: ["Ctrl+Z"]
+        enabled: window.currentView === "matrix" && engine.canUndo && !engine.busy
+        onActivated: engine.undo()
+    }
+
+    Shortcut {
+        sequences: ["Ctrl+Y", "Ctrl+Shift+Z"]
+        enabled: window.currentView === "matrix" && engine.canRedo && !engine.busy
+        onActivated: engine.redo()
+    }
+
     component FlatButton: Button {
         id: control
         implicitHeight: 34
@@ -134,6 +146,32 @@ ApplicationWindow {
                                 : control.hovered ? colors.raised : "transparent"
             border.color: control.highlighted ? colors.cyan : colors.line
         }
+    }
+
+    component IconButton: Button {
+        id: control
+        required property string tooltipText
+        implicitWidth: 34
+        implicitHeight: 34
+        padding: 0
+        font.family: "Segoe UI Symbol"
+        font.pixelSize: 17
+        contentItem: Text {
+            text: control.text
+            color: control.enabled ? colors.text : colors.muted
+            font: control.font
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+        background: Rectangle {
+            radius: 4
+            color: control.down ? colors.hover
+                                : control.hovered ? colors.raised : "transparent"
+            border.color: colors.line
+        }
+        ToolTip.visible: hovered
+        ToolTip.delay: 450
+        ToolTip.text: tooltipText
     }
 
     component ConsoleField: TextField {
@@ -504,6 +542,18 @@ ApplicationWindow {
                                     font.pixelSize: 11
                                 }
                                 Item { Layout.fillWidth: true }
+                                IconButton {
+                                    text: "↶"
+                                    tooltipText: "Undo route edit (Ctrl+Z)"
+                                    enabled: engine.canUndo && !engine.busy
+                                    onClicked: engine.undo()
+                                }
+                                IconButton {
+                                    text: "↷"
+                                    tooltipText: "Redo route edit (Ctrl+Y or Ctrl+Shift+Z)"
+                                    enabled: engine.canRedo && !engine.busy
+                                    onClicked: engine.redo()
+                                }
                                 FlatButton {
                                     text: "Refresh"
                                     enabled: !engine.busy
