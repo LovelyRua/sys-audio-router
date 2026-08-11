@@ -520,8 +520,8 @@ int main() {
 
     const auto stats = worker.stats();
     if (stats.capture_rate_adapter_reset_cycles != 2 ||
-        stats.render_startup_silence_cycles != 1 ||
-        stats.render_startup_silence_frames != 64 ||
+        stats.render_startup_silence_cycles != 0 ||
+        stats.render_startup_silence_frames != 0 ||
         stats.render_recovery_silence_cycles != 3 ||
         stats.render_recovery_silence_frames != 192 ||
         stats.render_recovery_silence_episodes != 2 ||
@@ -538,8 +538,8 @@ int main() {
     }
     if (const auto failure = expect(
             stats.capture_rate_adapter_reset_cycles == 2 &&
-                stats.render_startup_silence_cycles == 1 &&
-                stats.render_startup_silence_frames == 64 &&
+                stats.render_startup_silence_cycles == 0 &&
+                stats.render_startup_silence_frames == 0 &&
                 stats.render_recovery_silence_cycles == 3 &&
                 stats.render_recovery_silence_frames == 192 &&
                 stats.render_recovery_silence_episodes == 2 &&

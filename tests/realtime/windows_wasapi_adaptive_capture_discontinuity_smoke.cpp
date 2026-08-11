@@ -191,14 +191,14 @@ RunResult run_with_pre_gap_partial() {
   assert(gap.stats().capture_data_discontinuity);
   assert(gap.stats().capture_rate_adapter_reset);
   assert(gap.stats().capture_rate_adapter_recovering);
-  assert(gap.stats().render_recovery_silence);
-  assert(gap.stats().render_recovery_silence_frames == kGraphFrames);
+  assert(!gap.stats().render_recovery_silence);
+  assert(gap.stats().render_recovery_silence_frames == 0);
   assert(!gap.stats().graph_processed);
   assert(gap.stats().capture_resampler_output_frames == 0);
   assert(diagnostics.capture_fifo_fill_frames == kCaptureFrames);
   assert(diagnostics.xrun_count == 1);
-  assert(diagnostics.render_fifo_underflow_cycles == 1);
-  assert(diagnostics.render_fifo_underflow_frames == kGraphFrames);
+  assert(diagnostics.render_fifo_underflow_cycles == 0);
+  assert(diagnostics.render_fifo_underflow_frames == 0);
   assert(recorder_ptr->process_calls() == learned_process_calls);
   assert_no_capture_overflow(diagnostics);
 
@@ -210,8 +210,8 @@ RunResult run_with_pre_gap_partial() {
   assert(post_gap_idle.stats().render_recovery_silence);
   assert(std::fabs(post_gap_idle.stats().capture_fifo_correction_ppm -
                    learned_correction_ppm) < 1.0e-9);
-  assert(diagnostics.render_fifo_underflow_cycles == 2);
-  assert(diagnostics.render_fifo_underflow_frames == 2 * kGraphFrames);
+  assert(diagnostics.render_fifo_underflow_cycles == 1);
+  assert(diagnostics.render_fifo_underflow_frames == kGraphFrames);
   assert(recorder_ptr->process_calls() == learned_process_calls);
   assert_no_capture_overflow(diagnostics);
 
@@ -224,8 +224,8 @@ RunResult run_with_pre_gap_partial() {
   assert(!recovered.stats().capture_rate_adapter_recovering);
   assert(!recovered.stats().render_recovery_silence);
   assert(recovered.stats().render_recovery_silence_frames == 0);
-  assert(diagnostics.render_fifo_underflow_cycles == 2);
-  assert(diagnostics.render_fifo_underflow_frames == 2 * kGraphFrames);
+  assert(diagnostics.render_fifo_underflow_cycles == 1);
+  assert(diagnostics.render_fifo_underflow_frames == kGraphFrames);
   assert_no_capture_overflow(diagnostics);
 
   assert(recorder_ptr->process_calls() == learned_process_calls + 1);

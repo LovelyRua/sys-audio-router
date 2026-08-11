@@ -86,9 +86,9 @@ int main() {
   assert(result.stats().graph_processed);
   assert(result.stats().capture_resampler_input_frames > 0);
   assert(result.stats().capture_resampler_input_frames <= 256);
-  // The queued render deadline is submitted first, then the bounded refill may
-  // produce two graph blocks to restore the configured FIFO target.
-  assert(result.stats().capture_resampler_output_frames == 128);
+  // One graph block remains from the startup reserve, so the bounded refill
+  // produces one block to restore the configured FIFO target.
+  assert(result.stats().capture_resampler_output_frames == 64);
   assert(result.stats().capture_rate_correction_ppm > 0.0);
   assert(result.stats().capture_clock_feed_forward_ppm == 500.0);
   assert(result.stats().capture_fifo_correction_ppm > 0.0);

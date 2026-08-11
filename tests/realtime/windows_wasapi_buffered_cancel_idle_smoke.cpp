@@ -197,8 +197,9 @@ void duplex_refills_multiple_graph_blocks_to_target() {
   assert(refilled.ok() && refilled.stats().captured_frames == 12);
   assert(refilled.stats().graph_processed && diagnostics.processed_blocks == 2);
   assert(diagnostics.capture_fifo_fill_frames == 4);
-  assert(diagnostics.render_fifo_fill_frames == 4);
-  assert((rendered(render) == std::vector<float>{0, 0, 0, 0, 1, 2, 3, 4}));
+  assert(diagnostics.render_fifo_fill_frames == 8);
+  assert((rendered(render) ==
+          std::vector<float>{0, 0, 0, 0, 0, 0, 0, 0}));
 }
 
 void duplex_leaves_native_capture_queued_when_fifo_is_full() {
@@ -222,7 +223,8 @@ void duplex_leaves_native_capture_queued_when_fifo_is_full() {
   const auto second = runner.process_once(route, diagnostics, 25);
   assert(second.ok() && second.stats().captured_frames == 4);
   assert(diagnostics.capture_fifo_overflow_cycles == 0);
-  assert((rendered(render) == std::vector<float>{0, 0, 0, 0, 1, 2, 3, 4}));
+  assert((rendered(render) ==
+          std::vector<float>{0, 0, 0, 0, 0, 0, 0, 0}));
 }
 }  // namespace
 
