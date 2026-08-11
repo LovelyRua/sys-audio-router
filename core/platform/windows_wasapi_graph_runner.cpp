@@ -441,8 +441,9 @@ void WindowsWasapiGraphRunner::prime_render_fifo_with_silence() noexcept {
   }
 
   output_.clear();
-  const auto target_frames = std::min(render_path_->packet.frames(),
-                                      render_path_->fifo.capacity_frames());
+  const auto target_frames = std::min(
+      render_path_->packet.frames() + graph_block_frames_,
+      render_path_->fifo.capacity_frames());
   while (render_path_->fifo.available_frames() < target_frames) {
     const auto remaining = target_frames - render_path_->fifo.available_frames();
     const auto queued = render_path_->fifo.push(

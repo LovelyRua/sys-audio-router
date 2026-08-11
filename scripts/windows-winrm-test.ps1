@@ -313,7 +313,7 @@ try {
         }
       }
 
-      $url = "https://raw.githubusercontent.com/LovelyRua/sys-audio-router/main/scripts/windows-test-bootstrap.cmd"
+      $url = "https://raw.githubusercontent.com/LovelyRua/sys-audio-router/$ExpectedCommit/scripts/windows-test-bootstrap.cmd"
       curl.exe --silent --show-error -L $url -o $bootstrap
       if ($LASTEXITCODE -ne 0) {
         throw "Failed to download bootstrap with exit code $LASTEXITCODE."
@@ -326,6 +326,12 @@ try {
       }
       if ($LASTEXITCODE -ne 0) {
         throw "Bootstrap failed with exit code $LASTEXITCODE."
+      }
+      $actualCommit = (& git -C $repoDir rev-parse HEAD 2>$null).Trim()
+      if ($LASTEXITCODE -ne 0 -or
+          ![string]::Equals($actualCommit, $ExpectedCommit,
+                            [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Remote validation built '$actualCommit' instead of expected commit '$ExpectedCommit'."
       }
       $slotOutcome = "success"
     } catch {
