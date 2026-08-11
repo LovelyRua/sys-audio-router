@@ -202,6 +202,30 @@ void duplex_refills_multiple_graph_blocks_to_target() {
           std::vector<float>{0, 0, 0, 0, 0, 0, 0, 0}));
 }
 
+void duplex_refill_covers_native_packet_with_small_graph_blocks() {
+  sar::tests::ScriptedWasapiStream capture(
+      probe(sar::platform::WasapiStreamDirection::Capture, 10));
+  sar::tests::ScriptedWasapiStream render(
+      probe(sar::platform::WasapiStreamDirection::Render, 10));
+  capture.enqueue_capture(
+      {.frames = 10, .samples = {{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}});
+  capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::TimedOut});
+  render.enqueue_render({.writable_frames = 10});
+  sar::platform::WindowsWasapiGraphRunner runner(
+      &capture, &render, 1, 1, 1, 10, 10, 24, true);
+  sar::graph::Graph route(1, 1, 1, 48000);
+  route.add_node(std::make_unique<sar::graph::PassthroughNode>());
+  sar::diagnostics::EngineDiagnostics diagnostics;
+
+  const auto refilled = runner.process_once(route, diagnostics, 25);
+
+  assert(refilled.ok() && refilled.stats().captured_frames == 10);
+  assert(refilled.stats().graph_processed);
+  assert(diagnostics.processed_blocks == 10);
+  assert(diagnostics.render_fifo_fill_frames == 11);
+  assert(diagnostics.render_fifo_underflow_cycles == 0);
+}
+
 void duplex_leaves_native_capture_queued_when_fifo_is_full() {
   sar::tests::ScriptedWasapiStream capture(
       probe(sar::platform::WasapiStreamDirection::Capture, 4));
@@ -235,6 +259,7 @@ int main() {
   duplex_prime_fills_native_render_packet();
   duplex_starvation_waits_and_submits_silence();
   duplex_refills_multiple_graph_blocks_to_target();
+  duplex_refill_covers_native_packet_with_small_graph_blocks();
   duplex_leaves_native_capture_queued_when_fifo_is_full();
   return 0;
 }
