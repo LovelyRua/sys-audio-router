@@ -1051,7 +1051,7 @@ int main() {
   }
 
   {
-    const auto stats = make_active_stats();
+    auto stats = make_active_stats();
     sar::diagnostics::EngineDiagnostics diagnostics;
     diagnostics.capture_fifo_overflow_cycles = 1;
     auto summary = sar::platform::summarize_wasapi_runtime(
@@ -1085,6 +1085,47 @@ int main() {
                            sar::platform::WasapiRuntimeHealth::Degraded,
                            "render_fifo_underflow",
                            "Expected render FIFO underflow summary")) {
+      return failure;
+    }
+
+    diagnostics.render_fifo_underflow_frames = 128;
+    stats.render_capture_starvation_silence_cycles = 0;
+    stats.render_capture_starvation_silence_frames = 0;
+    stats.render_recovery_silence_cycles = 0;
+    stats.render_recovery_silence_frames = 0;
+    stats.render_recovery_silence_episodes = 0;
+    stats.maximum_render_recovery_silence_frames = 0;
+    stats.render_startup_silence_cycles = 1;
+    stats.render_startup_silence_frames = 128;
+    summary = sar::platform::summarize_wasapi_runtime(
+        stats, {}, nullptr, nullptr, &diagnostics);
+    if (const auto failure =
+            expect_summary(summary,
+                           sar::platform::WasapiRuntimeHealth::Healthy,
+                           "running",
+                           "Expected fully attributed startup underflow to remain healthy")) {
+      return failure;
+    }
+
+    stats.render_startup_silence_frames = 129;
+    summary = sar::platform::summarize_wasapi_runtime(
+        stats, {}, nullptr, nullptr, &diagnostics);
+    if (const auto failure =
+            expect_summary(summary,
+                           sar::platform::WasapiRuntimeHealth::Degraded,
+                           "render_fifo_underflow",
+                           "Expected excess render attribution to degrade health")) {
+      return failure;
+    }
+
+    stats.render_startup_silence_frames = 127;
+    summary = sar::platform::summarize_wasapi_runtime(
+        stats, {}, nullptr, nullptr, &diagnostics);
+    if (const auto failure =
+            expect_summary(summary,
+                           sar::platform::WasapiRuntimeHealth::Degraded,
+                           "render_fifo_underflow",
+                           "Expected one unattributed render frame to degrade health")) {
       return failure;
     }
   }

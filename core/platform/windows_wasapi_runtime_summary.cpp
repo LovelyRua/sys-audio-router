@@ -377,7 +377,23 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
     return summary;
   }
 
-  if (summary.render_fifo_underflow_cycles > 0) {
+  auto unattributed_render_underflow_frames = summary.render_fifo_underflow_frames;
+  bool render_attribution_fits = unattributed_render_underflow_frames > 0;
+  const auto consume_render_attribution =
+      [&](std::uint64_t attributed_frames) noexcept {
+        if (attributed_frames > unattributed_render_underflow_frames) {
+          render_attribution_fits = false;
+          return;
+        }
+        unattributed_render_underflow_frames -= attributed_frames;
+      };
+  consume_render_attribution(summary.render_startup_silence_frames);
+  consume_render_attribution(summary.render_capture_starvation_silence_frames);
+  consume_render_attribution(summary.render_recovery_silence_frames);
+  const bool render_underflow_fully_attributed =
+      render_attribution_fits && unattributed_render_underflow_frames == 0;
+  if (summary.render_fifo_underflow_cycles > 0 &&
+      !render_underflow_fully_attributed) {
     summary.health = WasapiRuntimeHealth::Degraded;
     summary.reason_code = "render_fifo_underflow";
     summary.reason = "The render FIFO did not contain audio when the device requested it.";
