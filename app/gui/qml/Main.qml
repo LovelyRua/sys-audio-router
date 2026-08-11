@@ -923,7 +923,8 @@ ApplicationWindow {
                                                                selectedOutputId === outputId
                                                 var hovered = matrixMouse.hoverInput === column &&
                                                               matrixMouse.hoverOutput === row
-                                                context.fillStyle = state === "on" ? "#245a49"
+                                                var routeOn = state === "on" || state === "pending-on"
+                                                context.fillStyle = routeOn ? "#245a49"
                                                                   : state === "muted" ? "#4a3b20"
                                                                   : hovered && engine.connected && !engine.busy
                                                                     ? colors.hover : colors.surface
@@ -931,14 +932,14 @@ ApplicationWindow {
                                                                  cellSize - 3, cellSize - 3)
                                                 context.lineWidth = selected ? 2 : 1
                                                 context.strokeStyle = selected ? colors.cyan
-                                                                    : state === "on" ? colors.healthy
+                                                                    : routeOn ? colors.healthy
                                                                     : state === "muted" ? colors.warning
                                                                     : colors.line
                                                 context.strokeRect(x + (selected ? 1 : 1.5),
                                                                    y + (selected ? 1 : 1.5),
                                                                    cellSize - (selected ? 3 : 4),
                                                                    cellSize - (selected ? 3 : 4))
-                                                context.fillStyle = state === "on" ? colors.healthy
+                                                context.fillStyle = routeOn ? colors.healthy
                                                                   : state === "muted" ? colors.warning
                                                                   : colors.line
                                                 context.beginPath()

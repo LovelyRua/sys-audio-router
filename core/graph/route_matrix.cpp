@@ -109,7 +109,7 @@ std::string_view RouteMatrix::output_label(std::size_t output_channel) const noe
 
 void RouteMatrix::clear_routes() noexcept {
   for (auto& gain : gains_) {
-    std::atomic_ref<float>(gain).store(0.0F, std::memory_order_release);
+    std::atomic_ref<float>(gain).store(0.0F, std::memory_order_relaxed);
   }
 }
 
@@ -122,7 +122,7 @@ bool RouteMatrix::set_gain(std::size_t input_channel,
   }
 
   std::atomic_ref<float>(gains_[index(input_channel, output_channel)])
-      .store(gain, std::memory_order_release);
+      .store(gain, std::memory_order_relaxed);
   return true;
 }
 
@@ -134,7 +134,7 @@ float RouteMatrix::gain(std::size_t input_channel,
 
   return std::atomic_ref<const float>(
              gains_[index(input_channel, output_channel)])
-      .load(std::memory_order_acquire);
+      .load(std::memory_order_relaxed);
 }
 
 bool RouteMatrix::copy_gains_from(const RouteMatrix& source) noexcept {
