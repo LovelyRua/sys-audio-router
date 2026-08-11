@@ -16,8 +16,7 @@ string(REGEX MATCHALL "\\{" devices_open_braces "${devices_page}")
 string(REGEX MATCHALL "\\}" devices_close_braces "${devices_page}")
 list(LENGTH devices_open_braces devices_open_count)
 list(LENGTH devices_close_braces devices_close_count)
-math(EXPR expected_close_count "${devices_open_count} + 1")
-if(NOT devices_close_count EQUAL expected_close_count)
+if(NOT devices_close_count EQUAL devices_open_count)
   message(FATAL_ERROR
     "Audio devices page must close before diagnostics begins "
     "(opens=${devices_open_count}, closes=${devices_close_count})")
