@@ -1,5 +1,7 @@
 #include "core/graph/graph.h"
 
+#include "core/graph/route_matrix.h"
+
 #include <algorithm>
 #include <chrono>
 
@@ -282,6 +284,26 @@ std::string_view Graph::node_label(std::size_t index) const noexcept {
     return {};
   }
   return node_labels_[index];
+}
+
+bool Graph::apply_realtime_parameters_from(const Graph& source) noexcept {
+  if (nodes_.size() != source.nodes_.size() ||
+      node_ids_ != source.node_ids_) {
+    return false;
+  }
+  for (std::size_t index = 0; index < nodes_.size(); ++index) {
+    auto* target_matrix = dynamic_cast<RouteMatrixNode*>(nodes_[index].get());
+    const auto* source_matrix =
+        dynamic_cast<const RouteMatrixNode*>(source.nodes_[index].get());
+    if ((target_matrix == nullptr) != (source_matrix == nullptr)) {
+      return false;
+    }
+    if (target_matrix != nullptr &&
+        !target_matrix->apply_realtime_parameters_from(*source_matrix)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 }  // namespace sar::graph

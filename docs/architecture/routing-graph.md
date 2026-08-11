@@ -16,6 +16,26 @@ The first non-realtime graph validation path is documented in [Graph Builder](gr
 - Validate graph changes before they reach the audio engine.
 - Keep platform-specific device details outside the shared graph schema where possible.
 
+## Product Reference And Interaction Contract
+
+VB-Audio Matrix is the baseline reference for routing semantics: enabled device
+slots contribute channel-level sources and destinations to one routing grid,
+and every source can feed every destination. System Audio Route may improve the
+presentation and workflow, but it must not weaken that patchbay model.
+
+The matrix control path has two classes of change:
+
+- Route point parameters (`connected`, gain, mute, and phase) update the running
+  graph without stopping or reopening an audio device. The audible change must
+  reach the next practical processing block after the control command arrives.
+- Topology and clock changes (device binding, channel count, sample rate, and
+  buffer configuration) may rebuild or restart a runtime after validation.
+
+The UI keeps selection separate from mutation. A primary click toggles a route
+point; a secondary click selects it for inspection without changing audio.
+Gain is expressed in dB, remains adjustable without another toggle gesture, and
+is streamed while the control is dragged.
+
 ## Node Categories
 
 ### Platform Device Nodes

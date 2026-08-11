@@ -95,6 +95,24 @@ int main() {
     return failure;
   }
 
+  sar::graph::RouteMatrix replacement(2, 2);
+  static_cast<void>(replacement.set_gain(0, 0, 0.25F));
+  static_cast<void>(replacement.set_gain(0, 1, 0.75F));
+  if (const auto failure = expect(
+          matrix.copy_gains_from(replacement) &&
+              sar::tests::nearly_equal(matrix.gain(0, 0), 0.25F) &&
+              sar::tests::nearly_equal(matrix.gain(0, 1), 0.75F) &&
+              sar::tests::nearly_equal(matrix.gain(1, 0), 0.0F),
+          "Expected realtime gain replacement to copy every crosspoint")) {
+    return failure;
+  }
+  sar::graph::RouteMatrix incompatible(1, 2);
+  if (const auto failure = expect(
+          !matrix.copy_gains_from(incompatible),
+          "Expected incompatible realtime gain replacement to be rejected")) {
+    return failure;
+  }
+
   {
     sar::graph::RouteMatrix named_matrix(
         {

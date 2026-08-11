@@ -311,7 +311,16 @@ bool WindowsWasapiEngineRuntime::running() const noexcept {
 }
 
 std::uint64_t WindowsWasapiEngineRuntime::graph_version() const noexcept {
-  return graph_ ? graph_->version() : 0;
+  return graph_version_.load(std::memory_order_acquire);
+}
+
+bool WindowsWasapiEngineRuntime::apply_realtime_graph_parameters(
+    const graph::Graph& graph) noexcept {
+  if (!graph_ || !graph_->apply_realtime_parameters_from(graph)) {
+    return false;
+  }
+  graph_version_.store(graph.version(), std::memory_order_release);
+  return true;
 }
 
 diagnostics::EngineDiagnostics WindowsWasapiEngineRuntime::diagnostics() const {
@@ -321,7 +330,7 @@ diagnostics::EngineDiagnostics WindowsWasapiEngineRuntime::diagnostics() const {
   }
 
   const auto snapshot = runtime_summary();
-  result.graph_version = graph_->version();
+  result.graph_version = graph_version();
   result.processed_blocks = snapshot.graph_processed_cycles;
   result.xrun_count = snapshot.xrun_count;
   result.capture_fifo_fill_frames = snapshot.capture_fifo_fill_frames;
@@ -452,7 +461,9 @@ void WindowsWasapiEngineRuntime::run_duplex_supervisor() noexcept {
 WindowsWasapiEngineRuntime::WindowsWasapiEngineRuntime(
     std::shared_ptr<graph::Graph> graph,
     platform::RealtimeAudioSource* external_input) noexcept
-    : graph_(std::move(graph)), external_input_(external_input) {}
+    : graph_(std::move(graph)),
+      graph_version_(graph_ ? graph_->version() : 0),
+      external_input_(external_input) {}
 
 WindowsWasapiEngineRuntimeOpenResult
 WindowsWasapiEngineRuntimeOpenResult::success(

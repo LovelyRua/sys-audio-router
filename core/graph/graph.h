@@ -34,6 +34,8 @@ class Graph {
   [[nodiscard]] std::size_t node_count() const noexcept;
   [[nodiscard]] std::string_view node_id(std::size_t index) const noexcept;
   [[nodiscard]] std::string_view node_label(std::size_t index) const noexcept;
+  [[nodiscard]] bool apply_realtime_parameters_from(
+      const Graph& source) noexcept;
 
  private:
   std::uint64_t version_;

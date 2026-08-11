@@ -34,6 +34,7 @@ class RouteMatrix {
                               float gain) noexcept;
   [[nodiscard]] float gain(std::size_t input_channel,
                            std::size_t output_channel) const noexcept;
+  [[nodiscard]] bool copy_gains_from(const RouteMatrix& source) noexcept;
 
   void process(const realtime::AudioBuffer& input,
                realtime::AudioBuffer& output) const noexcept;
@@ -54,6 +55,8 @@ class RouteMatrixNode final : public Node {
   explicit RouteMatrixNode(RouteMatrix matrix) noexcept;
 
   [[nodiscard]] const RouteMatrix& matrix() const noexcept;
+  [[nodiscard]] bool apply_realtime_parameters_from(
+      const RouteMatrixNode& source) noexcept;
 
   void process(const realtime::ProcessContext& context,
                const realtime::AudioBuffer& input,

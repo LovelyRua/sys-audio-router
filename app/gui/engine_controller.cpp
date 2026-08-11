@@ -500,15 +500,11 @@ void EngineController::setRoute(const QString& input_id,
 void EngineController::setRouteGain(const QString& input_id,
                                     const QString& output_id,
                                     double gain) {
-  if (busy_) {
-    setError(QStringLiteral("Wait for the current engine command to finish"));
-    return;
-  }
   control::ControlCommand command;
   command.type = control::ControlCommandType::SetGain;
   command.input_id = input_id.toStdString();
   command.output_id = output_id.toStdString();
-  command.gain = static_cast<float>(std::clamp(gain, 0.0, 2.0));
+  command.gain = static_cast<float>(std::clamp(gain, 0.0, 4.0));
   QueuedCommand queued{command};
   if (current_preset_.has_value()) {
     auto preview = command;
@@ -548,6 +544,9 @@ void EngineController::enqueue(QueuedCommand queued) {
           it->command.input_id == queued.command.input_id &&
           it->command.output_id == queued.command.output_id) {
         it->command.gain = queued.command.gain;
+        if (it->history_entry.has_value() && queued.history_entry.has_value()) {
+          it->history_entry->after = queued.history_entry->after;
+        }
         return;
       }
     }

@@ -43,6 +43,14 @@ control::WasapiRuntimeHealth convert_runtime_health(
   return control::WasapiRuntimeHealth::Faulted;
 }
 
+bool updates_realtime_route_parameters(
+    control::ControlCommandType type) noexcept {
+  return type == control::ControlCommandType::ConnectRoute ||
+         type == control::ControlCommandType::DisconnectRoute ||
+         type == control::ControlCommandType::SetGain ||
+         type == control::ControlCommandType::SetMute;
+}
+
 }  // namespace
 
 EngineControlServiceCreateResult EngineControlService::create(
@@ -422,8 +430,13 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
   }
   const auto mutates_preset =
       control::control_command_mutates_preset(decoded.command.type);
+  const bool realtime_route_update =
+      updates_realtime_route_parameters(decoded.command.type);
+  const bool apply_route_update_live =
+      realtime_route_update && audio_runtime_ && audio_runtime_->running();
   const bool restart_runtime_after_preset_commit =
-      mutates_preset && audio_runtime_ && audio_runtime_->running();
+      mutates_preset && !realtime_route_update && audio_runtime_ &&
+      audio_runtime_->running();
   if (restart_runtime_after_preset_commit && !audio_runtime_builder_) {
     return control::encode_control_response(control::command_rejected(
         decoded.command.command_id,
@@ -547,6 +560,25 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
     }
     if (!observer_errors.empty()) {
       return reject_and_restore_runtime(std::move(observer_errors));
+    }
+    if (apply_route_update_live &&
+        !audio_runtime_->apply_realtime_graph_parameters(*update.graph)) {
+      if (preset_commit_observer_) {
+        try {
+          const auto current_graph = session_->current_graph();
+          static_cast<void>(preset_commit_observer_(
+              session_->current_preset(),
+              current_graph ? current_graph->version() : 0));
+        } catch (...) {
+          // The original graph remains authoritative when rollback reporting
+          // itself fails.
+        }
+      }
+      return control::encode_control_response(control::command_rejected(
+          decoded.command.command_id,
+          {{"audio_runtime_realtime_parameter_update_unsupported",
+            "The running audio runtime cannot apply route parameters "
+            "without restarting."}}));
     }
     session_->commit_preset_update(std::move(update));
 

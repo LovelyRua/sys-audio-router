@@ -81,6 +81,11 @@ class EngineAudioRuntime {
   virtual void stop() noexcept = 0;
   [[nodiscard]] virtual bool running() const noexcept = 0;
   [[nodiscard]] virtual std::uint64_t graph_version() const noexcept = 0;
+  [[nodiscard]] virtual bool apply_realtime_graph_parameters(
+      const graph::Graph& graph) noexcept {
+    (void)graph;
+    return false;
+  }
   [[nodiscard]] virtual diagnostics::EngineDiagnostics diagnostics() const = 0;
   [[nodiscard]] virtual std::optional<EngineAudioRecoveryDiagnostics>
   recovery_diagnostics() const {

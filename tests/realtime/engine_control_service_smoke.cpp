@@ -21,8 +21,11 @@ sar::control::PresetDocument make_preset() {
 class FakeAudioRuntime final : public sar::service::EngineAudioRuntime {
  public:
   explicit FakeAudioRuntime(std::uint64_t graph_version = 10,
-                            bool fail_start = false)
-      : graph_version_(graph_version), fail_start_(fail_start) {}
+                            bool fail_start = false,
+                            bool support_realtime_parameters = false)
+      : graph_version_(graph_version),
+        fail_start_(fail_start),
+        support_realtime_parameters_(support_realtime_parameters) {}
 
   sar::service::EngineAudioRuntimeResult start(std::uint32_t) override {
     ++start_calls;
@@ -44,6 +47,16 @@ class FakeAudioRuntime final : public sar::service::EngineAudioRuntime {
 
   std::uint64_t graph_version() const noexcept override { return graph_version_; }
 
+  bool apply_realtime_graph_parameters(
+      const sar::graph::Graph& graph) noexcept override {
+    ++realtime_parameter_calls;
+    if (!support_realtime_parameters_) {
+      return false;
+    }
+    graph_version_ = graph.version();
+    return true;
+  }
+
   sar::diagnostics::EngineDiagnostics diagnostics() const override {
     sar::diagnostics::EngineDiagnostics result;
     result.graph_version = 10;
@@ -60,8 +73,10 @@ class FakeAudioRuntime final : public sar::service::EngineAudioRuntime {
   bool running_ = false;
   std::uint64_t graph_version_ = 10;
   bool fail_start_ = false;
+  bool support_realtime_parameters_ = false;
   std::uint32_t start_calls = 0;
   std::uint32_t stop_calls = 0;
+  std::uint32_t realtime_parameter_calls = 0;
   std::optional<sar::service::EngineAudioRecoveryDiagnostics> recovery;
 };
 
@@ -320,7 +335,7 @@ int main() {
   const auto blocked = send(*service, gain);
   assert(blocked.status == sar::control::ControlResponseStatus::Rejected);
   assert(blocked.errors[0].code ==
-         "audio_runtime_graph_change_requires_restart");
+         "audio_runtime_realtime_parameter_update_unsupported");
 
   auto replacement = std::make_unique<FakeAudioRuntime>();
   const auto replace_while_running =
@@ -363,7 +378,8 @@ int main() {
   auto live_service = live_create.take_service();
   std::uint32_t live_rebuild_calls = 0;
   bool fail_live_rebuild = false;
-  auto live_runtime = std::make_unique<FakeAudioRuntime>(12);
+  auto live_runtime = std::make_unique<FakeAudioRuntime>(12, false, true);
+  auto* live_runtime_observer = live_runtime.get();
   const auto live_installed = live_service->install_audio_runtime(
       std::move(live_runtime),
       [&](std::shared_ptr<sar::graph::Graph> graph) {
@@ -389,24 +405,27 @@ int main() {
   assert(live_applied.has_audio_runtime_state);
   assert(live_applied.audio_runtime.running);
   assert(live_applied.audio_runtime.graph_version == 13);
-  assert(live_rebuild_calls == 1);
+  assert(live_rebuild_calls == 0);
+  assert(live_runtime_observer->realtime_parameter_calls == 1);
+  assert(live_runtime_observer->stop_calls == 0);
+  assert(live_runtime_observer->start_calls == 1);
 
   fail_live_rebuild = true;
   gain.command_id = "gain-while-running-rebuild-fails";
   gain.gain = 0.75F;
   const auto live_rejected = send(*live_service, gain);
   assert(live_rejected.status ==
-         sar::control::ControlResponseStatus::Rejected);
-  assert(live_rejected.errors[0].code ==
-         "audio_runtime_rebuild_failed_injected_live_rebuild_failure");
+         sar::control::ControlResponseStatus::Accepted);
   assert(live_service->audio_runtime_running());
   assert(live_service->session().current_preset().matrix.routes[0].gain ==
-         0.5F);
+         0.75F);
   runtime_state.command_id = "runtime-after-live-rebuild-failure";
   const auto live_restored = send(*live_service, runtime_state);
   assert(live_restored.audio_runtime.running);
-  assert(live_restored.audio_runtime.graph_version == 13);
-  assert(live_rebuild_calls == 2);
+  assert(live_restored.audio_runtime.graph_version == 14);
+  assert(live_rebuild_calls == 0);
+  assert(live_runtime_observer->realtime_parameter_calls == 2);
+  assert(live_runtime_observer->stop_calls == 0);
 
   auto observer_create =
       sar::service::EngineControlService::create(make_preset(), 15);

@@ -46,6 +46,14 @@ ApplicationWindow {
         return inputId.length + ":" + inputId + outputId
     }
 
+    function linearToDb(gain) {
+        return gain > 0.001 ? 20 * Math.log(gain) / Math.LN10 : -60
+    }
+
+    function dbToLinear(db) {
+        return db <= -60 ? 0 : Math.pow(10, db / 20)
+    }
+
     function rebuildRouteStateCache() {
         var nextCache = {}
         for (var index = 0; index < engine.routes.length; ++index) {
@@ -856,7 +864,8 @@ ApplicationWindow {
                                         MouseArea {
                                             id: matrixMouse
                                             anchors.fill: parent
-                                            enabled: engine.connected && !engine.busy
+                                            enabled: engine.connected
+                                            acceptedButtons: Qt.LeftButton | Qt.RightButton
                                             hoverEnabled: true
                                             preventStealing: false
                                             property int hoverInput: -1
@@ -879,7 +888,8 @@ ApplicationWindow {
                                                 if (!window.selectRoute(inputIndex, outputIndex))
                                                     return
                                                 matrixGridFlick.forceActiveFocus()
-                                                window.toggleSelectedRoute()
+                                                if (mouse.button === Qt.LeftButton)
+                                                    window.toggleSelectedRoute()
                                             }
                                         }
                                     }
@@ -1054,31 +1064,40 @@ ApplicationWindow {
                             Slider {
                                 id: gainSlider
                                 Layout.fillWidth: true
-                                from: 0
-                                to: 2
-                                stepSize: 0.01
+                                from: -60
+                                to: 12
+                                stepSize: 0.1
                                 enabled: selectedInputId.length > 0 &&
                                          routeSwitch.checked &&
-                                         engine.connected && !engine.busy
+                                         engine.connected
                                 value: {
                                     engine.routeRevision;
                                     return selectedInputId.length > 0
-                                           ? engine.routeGain(selectedInputId, selectedOutputId) : 0
+                                           ? window.linearToDb(
+                                                 engine.routeGain(selectedInputId,
+                                                                  selectedOutputId)) : -60
                                 }
+                                onMoved: engine.setRouteGain(
+                                             selectedInputId,
+                                             selectedOutputId,
+                                             window.dbToLinear(value))
                                 onPressedChanged: {
                                     if (!pressed) {
                                         engine.setRouteGain(selectedInputId,
                                                             selectedOutputId,
-                                                            value)
+                                                            window.dbToLinear(value))
                                     }
                                 }
                             }
                             Text {
-                                text: gainSlider.value.toFixed(2)
+                                text: gainSlider.value <= -60
+                                      ? "-inf"
+                                      : (gainSlider.value > 0 ? "+" : "") +
+                                        gainSlider.value.toFixed(1) + " dB"
                                 color: colors.text
                                 font.family: "Consolas"
                                 font.pixelSize: 11
-                                Layout.preferredWidth: 36
+                                Layout.preferredWidth: 66
                             }
                         }
 

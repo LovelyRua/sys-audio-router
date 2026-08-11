@@ -1,6 +1,7 @@
 #include "core/graph/route_matrix.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <stdexcept>
 #include <string>
@@ -107,7 +108,9 @@ std::string_view RouteMatrix::output_label(std::size_t output_channel) const noe
 }
 
 void RouteMatrix::clear_routes() noexcept {
-  std::ranges::fill(gains_, 0.0F);
+  for (auto& gain : gains_) {
+    std::atomic_ref<float>(gain).store(0.0F, std::memory_order_release);
+  }
 }
 
 bool RouteMatrix::set_gain(std::size_t input_channel,
@@ -118,7 +121,8 @@ bool RouteMatrix::set_gain(std::size_t input_channel,
     return false;
   }
 
-  gains_[index(input_channel, output_channel)] = gain;
+  std::atomic_ref<float>(gains_[index(input_channel, output_channel)])
+      .store(gain, std::memory_order_release);
   return true;
 }
 
@@ -128,7 +132,32 @@ float RouteMatrix::gain(std::size_t input_channel,
     return 0.0F;
   }
 
-  return gains_[index(input_channel, output_channel)];
+  return std::atomic_ref<const float>(
+             gains_[index(input_channel, output_channel)])
+      .load(std::memory_order_acquire);
+}
+
+bool RouteMatrix::copy_gains_from(const RouteMatrix& source) noexcept {
+  if (input_channels_ != source.input_channels_ ||
+      output_channels_ != source.output_channels_) {
+    return false;
+  }
+  for (std::size_t input = 0; input < input_channels_; ++input) {
+    if (input_id(input) != source.input_id(input)) {
+      return false;
+    }
+  }
+  for (std::size_t output = 0; output < output_channels_; ++output) {
+    if (output_id(output) != source.output_id(output)) {
+      return false;
+    }
+  }
+  for (std::size_t output = 0; output < output_channels_; ++output) {
+    for (std::size_t input = 0; input < input_channels_; ++input) {
+      static_cast<void>(set_gain(input, output, source.gain(input, output)));
+    }
+  }
+  return true;
 }
 
 void RouteMatrix::process(const realtime::AudioBuffer& input,
@@ -166,6 +195,11 @@ RouteMatrixNode::RouteMatrixNode(RouteMatrix matrix) noexcept
 
 const RouteMatrix& RouteMatrixNode::matrix() const noexcept {
   return matrix_;
+}
+
+bool RouteMatrixNode::apply_realtime_parameters_from(
+    const RouteMatrixNode& source) noexcept {
+  return matrix_.copy_gains_from(source.matrix_);
 }
 
 void RouteMatrixNode::process(const realtime::ProcessContext& context,
