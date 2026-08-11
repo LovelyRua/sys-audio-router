@@ -5,15 +5,18 @@ set "REPO_URL=https://github.com/LovelyRua/sys-audio-router.git"
 set "REPO_ZIP_URL=https://github.com/LovelyRua/sys-audio-router/archive/refs/heads/main.zip"
 set "REPO_DIR=%USERPROFILE%\src\sys-audio-router"
 set "BUILD_DIR=build"
+set "EXPECTED_COMMIT="
 
 if not "%~1"=="" set "REPO_DIR=%~1"
 if not "%~2"=="" set "BUILD_DIR=%~2"
+if not "%~3"=="" set "EXPECTED_COMMIT=%~3"
 if not "%SAR_BUILD_DIR%"=="" set "BUILD_DIR=%SAR_BUILD_DIR%"
 
 echo System Audio Route Windows test bootstrap
 echo Repository: %REPO_URL%
 echo Worktree:   %REPO_DIR%
 echo Build dir:  %BUILD_DIR%
+if not "%EXPECTED_COMMIT%"=="" echo Commit:     %EXPECTED_COMMIT%
 echo.
 
 call :maybe_enable_winrm
@@ -112,14 +115,33 @@ if not exist "%REPO_DIR%\.git" (
   pushd "%REPO_DIR%"
   git fetch origin
   if errorlevel 1 exit /b 1
-  git reset --hard origin/main
+  if "%EXPECTED_COMMIT%"=="" (
+    git reset --hard origin/main
+  ) else (
+    git reset --hard "%EXPECTED_COMMIT%"
+  )
   if errorlevel 1 exit /b 1
+  popd
+)
+if not "%EXPECTED_COMMIT%"=="" (
+  pushd "%REPO_DIR%"
+  git checkout --detach "%EXPECTED_COMMIT%"
+  if errorlevel 1 exit /b 1
+  for /f "tokens=*" %%I in ('git rev-parse HEAD') do set "ACTUAL_COMMIT=%%I"
+  if /I not "!ACTUAL_COMMIT!"=="%EXPECTED_COMMIT%" (
+    echo Expected commit %EXPECTED_COMMIT% but checked out !ACTUAL_COMMIT!.
+    exit /b 1
+  )
   popd
 )
 exit /b 0
 
 :fetch_source_zip
 echo [fetch] git not found; downloading source zip
+if not "%EXPECTED_COMMIT%"=="" (
+  echo git is required when an exact commit is requested.
+  exit /b 1
+)
 where curl >nul 2>nul
 if errorlevel 1 (
   echo curl is required to download the source zip when git is unavailable.

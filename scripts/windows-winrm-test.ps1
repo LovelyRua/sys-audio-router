@@ -18,6 +18,19 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+$expectedCommit = (& git -C $repositoryRoot rev-parse HEAD 2>$null).Trim()
+if ($LASTEXITCODE -ne 0 -or $expectedCommit -notmatch '^[0-9a-fA-F]{40}$') {
+  throw "Could not resolve the local repository HEAD for remote validation."
+}
+$localChanges = @(& git -C $repositoryRoot status --porcelain --untracked-files=all)
+if ($LASTEXITCODE -ne 0) {
+  throw "Could not inspect the local repository worktree before remote validation."
+}
+if ($localChanges.Count -ne 0) {
+  throw "Remote validation clones GitHub and cannot test local changes. Commit and push the worktree first."
+}
+
 function ConvertTo-OptionalBoolean {
   param([string]$Value, [string]$Name)
   if ([string]::IsNullOrWhiteSpace($Value)) {
@@ -58,7 +71,7 @@ try {
 
   Invoke-Command -Session $session -ArgumentList `
       $safeSlot, $cleanupEnabled, $cleanupDryRun, $RetentionDays, $RetentionCount, `
-      $CleanupLimit, $StaleActiveHours -ScriptBlock {
+      $CleanupLimit, $StaleActiveHours, $expectedCommit -ScriptBlock {
     param(
       [string]$SafeSlot,
       [bool]$CleanupEnabled,
@@ -66,7 +79,8 @@ try {
       [uint32]$RetentionDays,
       [uint32]$RetentionCount,
       [uint32]$CleanupLimit,
-      [uint32]$StaleActiveHours
+      [uint32]$StaleActiveHours,
+      [string]$ExpectedCommit
     )
 
     $ErrorActionPreference = "Stop"
@@ -306,9 +320,9 @@ try {
       }
 
       if ([string]::IsNullOrWhiteSpace($SafeSlot)) {
-        cmd.exe /c "$bootstrap 2>&1"
+        cmd.exe /c "`"$bootstrap`" `"`" `"`" `"$ExpectedCommit`" 2>&1"
       } else {
-        cmd.exe /c "`"$bootstrap`" `"$repoDir`" `"$buildDir`" 2>&1"
+        cmd.exe /c "`"$bootstrap`" `"$repoDir`" `"$buildDir`" `"$ExpectedCommit`" 2>&1"
       }
       if ($LASTEXITCODE -ne 0) {
         throw "Bootstrap failed with exit code $LASTEXITCODE."

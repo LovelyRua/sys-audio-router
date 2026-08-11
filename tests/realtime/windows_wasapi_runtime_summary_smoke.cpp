@@ -50,11 +50,8 @@ sar::platform::WasapiRealtimeWorkerStats make_active_stats() {
   stats.maximum_render_recovery_silence_frames = 64;
   stats.render_startup_silence_cycles = 1;
   stats.render_startup_silence_frames = 64;
-  stats.render_capture_starvation_silence_cycles = 3;
-  stats.render_capture_starvation_silence_frames = 96;
   stats.capture_rate_adapter_recovering = true;
   stats.last_render_startup_silence = true;
-  stats.last_render_capture_starvation_silence = true;
   stats.last_render_recovery_silence = true;
   return stats;
 }
@@ -200,6 +197,9 @@ int main() {
 
   {
     auto stats = make_active_stats();
+    stats.render_capture_starvation_silence_cycles = 3;
+    stats.render_capture_starvation_silence_frames = 96;
+    stats.last_render_capture_starvation_silence = true;
     stats.capture_fifo_fill_frames = 11;
     stats.render_fifo_fill_frames = 22;
     stats.capture_fifo_overflow_cycles = 1;
