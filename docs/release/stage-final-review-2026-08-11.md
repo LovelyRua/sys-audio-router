@@ -13,14 +13,14 @@ must not be silently weakened.
 
 ## Reviewed Candidate
 
-- Executable source candidate: `4353e4c`.
-- Review-record candidate `4fabaa3`: 124 of 124 CTest targets passed on the
-  Windows test machine after a clean slot clone and full MSVC build.
+- Executable source candidate: `8eb7c36`.
+- Candidate `8eb7c36`: 124 of 124 CTest targets passed on the Windows test
+  machine after a clean slot upload and full MSVC build.
 - GitHub CI run: `31311094007`, passed.
 - Windows GUI Package run: `31311094017`, passed.
-- Final ZIP: SHA-256
+- Previous candidate ZIP: SHA-256
   `FD9ED882552F5529E1BCF5225C66DE01B069641731779B3700B84B81239C98CB`.
-- Final NSIS installer: SHA-256
+- Previous candidate NSIS installer: SHA-256
   `2A8C078940F3DF79A635005CBB1BDAEB5C7D0EA3A8AA51EC7E861FF1B903E40D`.
 - Package acceptance covers ZIP and NSIS install/update/uninstall, bootstrap,
   Qt/QML deployment, control and diagnostics handshakes, WASAPI enumeration,
@@ -44,6 +44,16 @@ must not be silently weakened.
 5. An older render-deadline branch appeared unmerged. Review confirmed its
    render-before-capture scheduling and I/O-order test were already integrated
    by `35b07fb` and subsequently adapted to the bounded realtime error model.
+6. The first non-empty WASAPI capture packet could carry the documented data
+   discontinuity flag during stream transition. With no prior packet baseline,
+   the graph runner incorrectly counted it as a midstream gap and entered
+   recovery. The first packet now establishes the baseline; discontinuities on
+   all later packets retain strict xrun and recovery handling.
+7. Intentional startup, capture-starvation, and recovery silence was included in
+   the render FIFO underflow counter and therefore marked an otherwise clean
+   run degraded. Runtime health now remains healthy only when every underflow
+   frame is exactly attributed to those explicit silence categories. Missing or
+   excess attribution remains degraded.
 
 ## Review Coverage
 
@@ -58,6 +68,17 @@ must not be silently weakened.
   process restart identity.
 - Repository health: clean `main`, no open pull requests, no Git object
   corruption, no generated build trees committed, and no credential artifacts.
+
+## Strict Real WASAPI Gate
+
+Candidate `8eb7c36` passed three consecutive five-second duplex runs against
+VB-Audio Cable B with strict healthy mode enabled. Across 15 seconds the gate
+reported zero failures, zero capture discontinuities, zero xruns, zero FIFO
+overflows, zero wait timeouts, and zero recovery-silence frames. All 5,568
+render underflow frames were exactly attributed to 4,896 startup-silence frames
+and 672 capture-starvation-silence frames. Aggregate rendered throughput was
+48,601.6 frames per second. Evidence is stored in the local ignored directory
+`.sar-evidence/20260811T012506Z-stage-final-duplex-health`.
 
 ## Final Interactive Gate
 
