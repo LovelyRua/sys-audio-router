@@ -771,7 +771,9 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
       render_path_ ? render_path_->fifo.available_frames() : 0;
 
   constexpr std::size_t kMaximumGraphBlocksPerCycle = 64;
-  const bool fill_render_packet = render_master_ || external_input_ != nullptr;
+  const bool fill_render_packet =
+      render_path_.has_value() &&
+      (render_master_ || external_input_ != nullptr);
   const auto desired_render_fill = render_master_
       ? desired_render_fill_frames_
       : (render_path_ ? std::min(render_path_->fifo.capacity_frames(),
