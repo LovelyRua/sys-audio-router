@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -16,6 +17,8 @@
 #include <thread>
 
 namespace {
+
+constexpr std::size_t kProductGraphBlockFrames = 128;
 
 std::string hex_encode(std::string_view text) {
   constexpr char digits[] = "0123456789abcdef";
@@ -101,11 +104,14 @@ int main(int argc, char** argv) {
   std::cout << "Measurement\n";
   std::cout << "  Duration ms: " << options.duration_ms << '\n';
   std::cout << "  Timeout ms: " << options.timeout_ms << '\n';
+  std::cout << "  Graph block frames: " << kProductGraphBlockFrames << '\n';
 
   const auto channels =
       std::max(capture_probe.mix_format.channels, render_probe.mix_format.channels);
-  const auto frames = std::max(capture_probe.buffer_frames, render_probe.buffer_frames);
-  sar::graph::Graph graph(1, channels, frames, render_probe.mix_format.sample_rate);
+  sar::graph::Graph graph(1,
+                          channels,
+                          kProductGraphBlockFrames,
+                          render_probe.mix_format.sample_rate);
   graph.add_node(std::make_unique<sar::graph::GainNode>(0.0F));
   sar::diagnostics::EngineDiagnostics diagnostics;
 
