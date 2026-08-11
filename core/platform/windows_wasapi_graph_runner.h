@@ -55,6 +55,18 @@ struct WasapiGraphRunnerStats {
   bool capture_data_discontinuity = false;
   bool capture_timestamp_error = false;
   bool external_input_mixed = false;
+  bool external_output_published = false;
+};
+
+struct WasapiGraphChannelLayout {
+  std::size_t graph_input_channels = 0;
+  std::size_t graph_output_channels = 0;
+  std::size_t capture_input_offset = 0;
+  std::size_t external_input_offset = 0;
+  std::size_t external_input_channels = 0;
+  std::size_t render_output_offset = 0;
+  std::size_t external_output_offset = 0;
+  std::size_t external_output_channels = 0;
 };
 
 class WasapiGraphRunnerResult {
@@ -101,6 +113,19 @@ class WindowsWasapiGraphRunner {
                            bool prime_render_silence = false,
                            bool adapt_capture_rate = false,
                            RealtimeAudioSource* external_input = nullptr);
+  WindowsWasapiGraphRunner(WasapiStreamIo* capture_stream,
+                           WasapiStreamIo* render_stream,
+                           std::size_t capture_channels,
+                           std::size_t render_channels,
+                           std::size_t graph_block_frames,
+                           std::size_t capture_packet_capacity_frames,
+                           std::size_t render_packet_capacity_frames,
+                           std::size_t fifo_capacity_frames,
+                           bool prime_render_silence,
+                           bool adapt_capture_rate,
+                           RealtimeAudioSource* external_input,
+                           RealtimeAudioSink* external_output,
+                           WasapiGraphChannelLayout channel_layout);
 
   [[nodiscard]] realtime::AudioBuffer& input_buffer() noexcept;
   [[nodiscard]] const realtime::AudioBuffer& input_buffer() const noexcept;
@@ -157,6 +182,8 @@ class WindowsWasapiGraphRunner {
       std::uint32_t timeout_ms) noexcept;
   void prime_render_fifo_with_silence() noexcept;
   void mix_external_input(WasapiGraphRunnerStats& stats) noexcept;
+  void assemble_mapped_graph_input(WasapiGraphRunnerStats& stats) noexcept;
+  void publish_mapped_graph_output(WasapiGraphRunnerStats& stats) noexcept;
 
   WasapiStreamIo* capture_stream_ = nullptr;
   WasapiStreamIo* render_stream_ = nullptr;
@@ -172,7 +199,13 @@ class WindowsWasapiGraphRunner {
   std::optional<CaptureRateAdapter> capture_rate_adapter_;
   bool capture_packet_baseline_established_ = false;
   RealtimeAudioSource* external_input_ = nullptr;
+  RealtimeAudioSink* external_output_ = nullptr;
   std::optional<realtime::AudioBuffer> external_input_buffer_;
+  std::optional<realtime::AudioBuffer> external_output_buffer_;
+  std::optional<realtime::AudioBuffer> capture_graph_buffer_;
+  std::optional<realtime::AudioBuffer> render_graph_buffer_;
+  WasapiGraphChannelLayout channel_layout_;
+  bool mapped_channels_ = false;
   std::atomic<double> capture_clock_feed_forward_ppm_ = 0.0;
 };
 

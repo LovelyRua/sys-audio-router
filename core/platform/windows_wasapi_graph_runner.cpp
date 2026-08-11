@@ -165,6 +165,31 @@ void deinterleave_planar(std::span<const float> source,
   }
 }
 
+void copy_channels(const realtime::AudioBuffer& source,
+                   realtime::AudioBuffer& destination,
+                   std::size_t destination_offset) noexcept {
+  const auto channels = std::min(source.channels(),
+                                 destination.channels() - destination_offset);
+  const auto frames = std::min(source.frames(), destination.frames());
+  for (std::size_t channel = 0; channel < channels; ++channel) {
+    std::copy_n(source.channel(channel).begin(), frames,
+                destination.channel(destination_offset + channel).begin());
+  }
+}
+
+void extract_channels(const realtime::AudioBuffer& source,
+                      std::size_t source_offset,
+                      realtime::AudioBuffer& destination) noexcept {
+  const auto channels = std::min(destination.channels(),
+                                 source.channels() - source_offset);
+  const auto frames = std::min(source.frames(), destination.frames());
+  destination.clear();
+  for (std::size_t channel = 0; channel < channels; ++channel) {
+    std::copy_n(source.channel(source_offset + channel).begin(), frames,
+                destination.channel(channel).begin());
+  }
+}
+
 void record_sample_conversion_failure(
     WasapiRealtimeErrorRecord error,
     std::uint64_t& counter) noexcept {
@@ -343,6 +368,119 @@ WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(
   }
 }
 
+WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(
+    WasapiStreamIo* capture_stream,
+    WasapiStreamIo* render_stream,
+    std::size_t capture_channels,
+    std::size_t render_channels,
+    std::size_t graph_block_frames,
+    std::size_t capture_packet_capacity_frames,
+    std::size_t render_packet_capacity_frames,
+    std::size_t fifo_capacity_frames,
+    bool prime_render_silence,
+    bool adapt_capture_rate,
+    RealtimeAudioSource* external_input,
+    RealtimeAudioSink* external_output,
+    WasapiGraphChannelLayout channel_layout)
+    : capture_stream_(capture_stream),
+      render_stream_(render_stream),
+      native_capture_stream_(dynamic_cast<WindowsWasapiStream*>(capture_stream)),
+      native_render_stream_(dynamic_cast<WindowsWasapiStream*>(render_stream)),
+      input_(channel_layout.graph_input_channels, graph_block_frames),
+      output_(channel_layout.graph_output_channels, graph_block_frames),
+      graph_block_frames_(graph_block_frames),
+      render_master_(prime_render_silence ||
+                     (capture_stream == nullptr && render_stream != nullptr &&
+                      external_input != nullptr)),
+      external_input_(external_input),
+      external_output_(external_output),
+      external_input_buffer_(external_input != nullptr
+                                 ? std::optional<realtime::AudioBuffer>(
+                                       std::in_place,
+                                       channel_layout.external_input_channels,
+                                       graph_block_frames)
+                                 : std::nullopt),
+      external_output_buffer_(external_output != nullptr
+                                  ? std::optional<realtime::AudioBuffer>(
+                                        std::in_place,
+                                        channel_layout.external_output_channels,
+                                        graph_block_frames)
+                                  : std::nullopt),
+      capture_graph_buffer_(capture_stream != nullptr
+                                ? std::optional<realtime::AudioBuffer>(
+                                      std::in_place, capture_channels,
+                                      graph_block_frames)
+                                : std::nullopt),
+      render_graph_buffer_(render_stream != nullptr
+                               ? std::optional<realtime::AudioBuffer>(
+                                     std::in_place, render_channels,
+                                     graph_block_frames)
+                               : std::nullopt),
+      channel_layout_(channel_layout),
+      mapped_channels_(true) {
+  const auto invalid_layout =
+      channel_layout.graph_input_channels == 0 ||
+      channel_layout.graph_output_channels == 0 ||
+      channel_layout.capture_input_offset + capture_channels >
+          channel_layout.graph_input_channels ||
+      channel_layout.external_input_offset +
+              channel_layout.external_input_channels >
+          channel_layout.graph_input_channels ||
+      channel_layout.render_output_offset + render_channels >
+          channel_layout.graph_output_channels ||
+      channel_layout.external_output_offset +
+              channel_layout.external_output_channels >
+          channel_layout.graph_output_channels ||
+      (external_input != nullptr &&
+       channel_layout.external_input_channels == 0) ||
+      (external_output != nullptr &&
+       channel_layout.external_output_channels == 0);
+  if (invalid_layout || fifo_capacity_frames < graph_block_frames ||
+      (capture_stream != nullptr && capture_packet_capacity_frames == 0) ||
+      (render_stream != nullptr && render_packet_capacity_frames == 0)) {
+    throw std::invalid_argument("Invalid mapped WASAPI graph runner configuration");
+  }
+  if (adapt_capture_rate) {
+    if (capture_stream == nullptr || render_stream == nullptr ||
+        !prime_render_silence ||
+        capture_stream->probe().mix_format.sample_rate == 0 ||
+        render_stream->probe().mix_format.sample_rate == 0) {
+      throw std::invalid_argument("Invalid adaptive capture stream configuration");
+    }
+    const auto nominal_ratio =
+        static_cast<double>(render_stream->probe().mix_format.sample_rate) /
+        capture_stream->probe().mix_format.sample_rate;
+    const auto nominal_capture_block =
+        source_frames_for_output(graph_block_frames, nominal_ratio);
+    if (nominal_capture_block > fifo_capacity_frames ||
+        capture_packet_capacity_frames >
+            fifo_capacity_frames - nominal_capture_block) {
+      throw std::invalid_argument(
+          "Adaptive capture FIFO must hold one graph block and capture packet");
+    }
+  }
+  if (capture_stream != nullptr) {
+    capture_path_.emplace(capture_channels, capture_packet_capacity_frames,
+                          fifo_capacity_frames);
+    if (adapt_capture_rate) {
+      capture_rate_adapter_.emplace(
+          capture_channels, graph_block_frames, fifo_capacity_frames,
+          capture_stream->probe().mix_format.sample_rate,
+          render_stream->probe().mix_format.sample_rate);
+    }
+  }
+  if (render_stream != nullptr) {
+    render_path_.emplace(render_channels, render_packet_capacity_frames,
+                         fifo_capacity_frames);
+    desired_render_fill_frames_ = render_target_fill_frames(
+        render_stream->probe(), render_packet_capacity_frames,
+        graph_block_frames, fifo_capacity_frames);
+    if (prime_render_silence) {
+      prime_render_fifo_with_silence();
+    }
+  }
+}
+
 realtime::AudioBuffer& WindowsWasapiGraphRunner::input_buffer() noexcept {
   return input_;
 }
@@ -503,6 +641,39 @@ void WindowsWasapiGraphRunner::mix_external_input(
       destination[frame] = clipped;
     }
   }
+}
+
+void WindowsWasapiGraphRunner::assemble_mapped_graph_input(
+    WasapiGraphRunnerStats& stats) noexcept {
+  input_.clear();
+  if (capture_graph_buffer_) {
+    copy_channels(*capture_graph_buffer_, input_,
+                  channel_layout_.capture_input_offset);
+  }
+  if (external_input_ == nullptr || !external_input_buffer_) {
+    return;
+  }
+
+  external_input_buffer_->clear();
+  stats.external_input_mixed = external_input_->read(*external_input_buffer_);
+  copy_channels(*external_input_buffer_, input_,
+                channel_layout_.external_input_offset);
+}
+
+void WindowsWasapiGraphRunner::publish_mapped_graph_output(
+    WasapiGraphRunnerStats& stats) noexcept {
+  if (render_graph_buffer_) {
+    extract_channels(output_, channel_layout_.render_output_offset,
+                     *render_graph_buffer_);
+  }
+  if (external_output_ == nullptr || !external_output_buffer_) {
+    return;
+  }
+
+  extract_channels(output_, channel_layout_.external_output_offset,
+                   *external_output_buffer_);
+  stats.external_output_published =
+      external_output_->write(*external_output_buffer_);
 }
 
 WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
@@ -815,7 +986,8 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
           const auto preroll_frames =
               nominal_preroll_frames + extra_preroll_frames;
           static_cast<void>(capture_path_->fifo.peek(adapter.source_planar, 1));
-          for (std::size_t channel = 0; channel < input_.channels(); ++channel) {
+          const auto capture_channels = capture_path_->packet.channels();
+          for (std::size_t channel = 0; channel < capture_channels; ++channel) {
             const auto edge_sample = adapter.source_planar.channel(channel)[0];
             std::fill_n(adapter.source_planar.channel(channel).begin(),
                         preroll_frames, edge_sample);
@@ -830,10 +1002,10 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
                preroll_frames_used < preroll_frames;
                ++pass) {
             const auto remaining_frames = preroll_frames - preroll_frames_used;
-            const auto input_offset = preroll_frames_used * input_.channels();
+            const auto input_offset = preroll_frames_used * capture_channels;
             auto preroll_result = adapter.resampler.process(
                 std::span<const float>(adapter.source_interleaved).subspan(
-                    input_offset, remaining_frames * input_.channels()),
+                    input_offset, remaining_frames * capture_channels),
                 static_cast<std::uint32_t>(remaining_frames),
                 adapter.output_interleaved,
                 static_cast<std::uint32_t>(graph_block_frames_),
@@ -909,11 +1081,12 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
           }
           attempted_internal_drain = true;
 
+          const auto capture_channels = capture_path_->packet.channels();
           const auto output_offset =
-              adapter.output_frames_ready * input_.channels();
+              adapter.output_frames_ready * capture_channels;
           auto result = adapter.resampler.process(
               std::span<const float>(adapter.source_interleaved.data(),
-                                     source_frames * input_.channels()),
+                                     source_frames * capture_channels),
               static_cast<std::uint32_t>(source_frames),
               std::span<float>(adapter.output_interleaved).subspan(output_offset),
               static_cast<std::uint32_t>(graph_block_frames_ -
@@ -942,16 +1115,37 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
         if (adapter.output_frames_ready < graph_block_frames_) {
           break;
         }
-        deinterleave_planar(adapter.output_interleaved, graph_block_frames_, input_);
+        auto& capture_destination =
+            mapped_channels_ ? *capture_graph_buffer_ : input_;
+        deinterleave_planar(adapter.output_interleaved, graph_block_frames_,
+                            capture_destination);
       } else {
         if (capture_path_->fifo.available_frames() < graph_block_frames_) {
           break;
         }
-        static_cast<void>(capture_path_->fifo.pop(input_, graph_block_frames_));
+        auto& capture_destination =
+            mapped_channels_ ? *capture_graph_buffer_ : input_;
+        static_cast<void>(capture_path_->fifo.pop(capture_destination,
+                                                  graph_block_frames_));
       }
-      mix_external_input(stats);
-    } else if (external_input_ != nullptr && !external_input_->read(input_)) {
-      break;
+      if (mapped_channels_) {
+        assemble_mapped_graph_input(stats);
+      } else {
+        mix_external_input(stats);
+      }
+    } else if (external_input_ != nullptr) {
+      if (mapped_channels_) {
+        external_input_buffer_->clear();
+        if (!external_input_->read(*external_input_buffer_)) {
+          break;
+        }
+        input_.clear();
+        copy_channels(*external_input_buffer_, input_,
+                      channel_layout_.external_input_offset);
+        stats.external_input_mixed = true;
+      } else if (!external_input_->read(input_)) {
+        break;
+      }
     }
     if (const auto shape_error = validate_graph_shape_realtime(graph, input_, output_)) {
       return WasapiGraphRunnerResult::failure(*shape_error);
@@ -959,6 +1153,9 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     output_.clear();
     graph.process(input_, output_, diagnostics);
     stats.graph_processed = true;
+    if (mapped_channels_) {
+      publish_mapped_graph_output(stats);
+    }
     if (capture_rate_adapter_) {
       capture_rate_adapter_->ever_produced_graph_block = true;
       capture_rate_adapter_->output_frames_ready = 0;
@@ -967,7 +1164,10 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
       stats.capture_rate_adapter_recovering = false;
     }
     if (render_path_) {
-      const auto queued = render_path_->fifo.push(output_, graph_block_frames_);
+      const auto& render_source =
+          mapped_channels_ ? *render_graph_buffer_ : output_;
+      const auto queued =
+          render_path_->fifo.push(render_source, graph_block_frames_);
       if (queued != graph_block_frames_) {
         ++diagnostics.render_fifo_overflow_cycles;
         diagnostics.render_fifo_overflow_frames += graph_block_frames_ - queued;

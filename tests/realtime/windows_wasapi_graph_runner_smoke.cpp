@@ -1,9 +1,11 @@
 #include "core/platform/windows_wasapi_graph_runner.h"
 
 #include "core/graph/node.h"
+#include "core/graph/route_matrix.h"
 #include "tests/realtime/scripted_wasapi_stream.h"
 #include "tests/realtime/test_helpers.h"
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <memory>
@@ -93,6 +95,41 @@ class EmptyRealtimeAudioSource final
   }
 
   std::size_t read_calls = 0;
+};
+
+class SingleBlockRealtimeAudioSource final
+    : public sar::platform::RealtimeAudioSource {
+ public:
+  [[nodiscard]] bool read(
+      sar::realtime::AudioBuffer& destination) noexcept override {
+    destination.clear();
+    if (consumed || destination.channels() < 2) {
+      return false;
+    }
+    std::fill(destination.channel(0).begin(), destination.channel(0).end(),
+              0.8F);
+    std::fill(destination.channel(1).begin(), destination.channel(1).end(),
+              -0.4F);
+    consumed = true;
+    return true;
+  }
+
+  bool consumed = false;
+};
+
+class RecordingRealtimeAudioSink final : public sar::platform::RealtimeAudioSink {
+ public:
+  [[nodiscard]] bool write(
+      const sar::realtime::AudioBuffer& source) noexcept override {
+    first_left = source.channel(0)[0];
+    first_right = source.channel(1)[0];
+    ++write_calls;
+    return true;
+  }
+
+  float first_left = 0.0F;
+  float first_right = 0.0F;
+  std::size_t write_calls = 0;
 };
 
 }  // namespace
@@ -190,6 +227,61 @@ int main() {
             diagnostics.sample_conversion_import_failures == 0 &&
                 diagnostics.sample_conversion_export_failures == 1,
             "Expected render conversion diagnostics increment")) {
+      return failure;
+    }
+  }
+
+  {
+    sar::tests::ScriptedWasapiStream render_stream(make_render_probe());
+    render_stream.enqueue_render({.writable_frames = 4});
+    SingleBlockRealtimeAudioSource asio_output;
+    RecordingRealtimeAudioSink asio_input;
+    sar::platform::WasapiGraphChannelLayout layout{
+        .graph_input_channels = 4,
+        .graph_output_channels = 4,
+        .capture_input_offset = 0,
+        .external_input_offset = 2,
+        .external_input_channels = 2,
+        .render_output_offset = 0,
+        .external_output_offset = 2,
+        .external_output_channels = 2,
+    };
+    sar::platform::WindowsWasapiGraphRunner runner(
+        nullptr, &render_stream, 2, 2, 4, 0, 4, 8, false, false,
+        &asio_output, &asio_input, layout);
+
+    sar::graph::RouteMatrix matrix(4, 4);
+    static_cast<void>(matrix.set_gain(2, 0, 0.5F));
+    static_cast<void>(matrix.set_gain(3, 1, 0.25F));
+    static_cast<void>(matrix.set_gain(2, 2, 1.0F));
+    static_cast<void>(matrix.set_gain(3, 3, 1.0F));
+    sar::graph::Graph graph(19, 4, 4, 48000);
+    graph.add_node(std::make_unique<sar::graph::RouteMatrixNode>(
+        std::move(matrix)));
+    sar::diagnostics::EngineDiagnostics diagnostics;
+
+    const auto result = runner.process_once(graph, diagnostics, 10);
+    if (const auto failure = expect(
+            result.ok() && result.stats().graph_processed &&
+                result.stats().external_input_mixed &&
+                result.stats().external_output_published,
+            "Expected mapped 4x4 graph processing success")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            render_stream.render_submissions().size() == 1 &&
+                sar::tests::nearly_equal(
+                    render_stream.render_submissions()[0].samples[0][0], 0.4F) &&
+                sar::tests::nearly_equal(
+                    render_stream.render_submissions()[0].samples[1][0], -0.1F),
+            "Expected ASIO output routed to physical render channels")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            asio_input.write_calls == 1 &&
+                sar::tests::nearly_equal(asio_input.first_left, 0.8F) &&
+                sar::tests::nearly_equal(asio_input.first_right, -0.4F),
+            "Expected graph output routed independently to ASIO input")) {
       return failure;
     }
   }
