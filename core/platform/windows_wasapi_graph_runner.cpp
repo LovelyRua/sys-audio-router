@@ -24,10 +24,11 @@ std::size_t render_target_fill_frames(const WasapiStreamProbe& probe,
                                       std::size_t graph_block_frames,
                                       std::size_t fifo_capacity_frames) noexcept {
   constexpr long double kHundredNanosecondsPerSecond = 10'000'000.0L;
+  constexpr long double kRenderPeriodGuardCount = 2.0L;
   const auto period_frames = static_cast<std::size_t>(std::ceil(
       static_cast<long double>(probe.mix_format.sample_rate) *
       static_cast<long double>(probe.default_period_100ns) /
-      kHundredNanosecondsPerSecond));
+      kHundredNanosecondsPerSecond * kRenderPeriodGuardCount));
   const auto guard_frames = std::max(graph_block_frames, period_frames);
   if (packet_frames >= fifo_capacity_frames) {
     return fifo_capacity_frames;

@@ -223,7 +223,7 @@ void duplex_refill_covers_native_packet_with_small_graph_blocks() {
   assert(refilled.ok() && refilled.stats().captured_frames == 10);
   assert(refilled.stats().graph_processed);
   assert(diagnostics.processed_blocks == 10);
-  assert(diagnostics.render_fifo_fill_frames == 15);
+  assert(diagnostics.render_fifo_fill_frames == 20);
   assert(diagnostics.render_fifo_underflow_cycles == 0);
 }
 
