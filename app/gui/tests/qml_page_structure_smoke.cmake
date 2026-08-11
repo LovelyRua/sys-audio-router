@@ -22,4 +22,28 @@ if(NOT devices_close_count EQUAL devices_open_count)
     "(opens=${devices_open_count}, closes=${devices_close_count})")
 endif()
 
+foreach(required_marker
+    "objectName: \"routingMatrixMouseArea\""
+    "acceptedButtons: Qt.LeftButton | Qt.RightButton"
+    "if (mouse.button === Qt.LeftButton)"
+    "window.toggleRoute(input.id, output.id)"
+    "objectName: \"selectedRouteGainSlider\""
+    "window.adjustSelectedRouteGain("
+    "property var pendingRouteStates: ({})"
+    "property var pendingRouteGains: ({})"
+    "WASAPI CAPTURE"
+    "ASIO / DAW OUT"
+    "WASAPI RENDER"
+    "ASIO / DAW IN")
+  string(FIND "${qml}" "${required_marker}" marker_position)
+  if(marker_position LESS 0)
+    message(FATAL_ERROR "Routing matrix QML marker is missing: ${required_marker}")
+  endif()
+endforeach()
+
+string(FIND "${qml}" "routeSwitch.checked &&" gain_requires_route_toggle)
+if(NOT gain_requires_route_toggle LESS 0)
+  message(FATAL_ERROR "Selected-route gain must not require toggling the route")
+endif()
+
 message(STATUS "QML page structure smoke passed")

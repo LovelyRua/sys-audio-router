@@ -37,13 +37,42 @@ ApplicationWindow {
     property string runtimeDraftMode: "render"
     property string runtimeDraftRenderDeviceId: ""
     property string runtimeDraftCaptureDeviceId: ""
-    property string pendingRouteInputId: ""
-    property string pendingRouteOutputId: ""
-    property bool pendingRouteEnabled: false
+    property var pendingRouteStates: ({})
+    property var pendingRouteGains: ({})
     property var routeStateCache: ({})
 
     function routeKey(inputId, outputId) {
         return inputId.length + ":" + inputId + outputId
+    }
+
+    function endpointFamily(endpoint, index, count) {
+        var identity = (String(endpoint.id) + " " + String(endpoint.label)).toLowerCase()
+        if (identity.indexOf("asio") >= 0 || identity.indexOf("daw") >= 0 ||
+                identity.indexOf("virtual") >= 0)
+            return "asio"
+        if (identity.indexOf("wasapi") >= 0 || identity.indexOf("capture") >= 0 ||
+                identity.indexOf("render") >= 0 || identity.indexOf("monitor") >= 0 ||
+                identity.indexOf("hardware") >= 0)
+            return "wasapi"
+        // The unified duplex layout is conventionally WASAPI L/R followed by ASIO L/R.
+        if (count === 4)
+            return index < 2 ? "wasapi" : "asio"
+        return "other"
+    }
+
+    function endpointGroupTitle(endpoint, index, count, source) {
+        var family = endpointFamily(endpoint, index, count)
+        if (family === "wasapi")
+            return source ? "WASAPI CAPTURE" : "WASAPI RENDER"
+        if (family === "asio")
+            return source ? "ASIO / DAW OUT" : "ASIO / DAW IN"
+        return source ? "OTHER SOURCES" : "OTHER DESTINATIONS"
+    }
+
+    function endpointGroupColor(endpoint, index, count) {
+        var family = endpointFamily(endpoint, index, count)
+        return family === "wasapi" ? colors.cyan
+             : family === "asio" ? colors.healthy : colors.muted
     }
 
     function linearToDb(gain) {
@@ -93,19 +122,47 @@ ApplicationWindow {
     }
 
     function routeDisplayEnabled(inputId, outputId) {
-        if (pendingRouteInputId === inputId && pendingRouteOutputId === outputId)
-            return pendingRouteEnabled
+        var pending = pendingRouteStates[routeKey(inputId, outputId)]
+        if (pending !== undefined)
+            return pending
         var route = routeStateCache[routeKey(inputId, outputId)]
         return route !== undefined && !route.muted
     }
 
     function routeDisplayState(inputId, outputId) {
-        if (pendingRouteInputId === inputId && pendingRouteOutputId === outputId)
-            return pendingRouteEnabled ? "pending-on" : "pending-off"
+        var pending = pendingRouteStates[routeKey(inputId, outputId)]
+        if (pending !== undefined)
+            return pending ? "pending-on" : "pending-off"
         var route = routeStateCache[routeKey(inputId, outputId)]
         if (route === undefined)
             return "off"
         return route.muted ? "muted" : "on"
+    }
+
+    function routeDisplayGain(inputId, outputId) {
+        var key = routeKey(inputId, outputId)
+        var pending = pendingRouteGains[key]
+        if (pending !== undefined)
+            return pending
+        var route = routeStateCache[key]
+        return route !== undefined ? route.gain : 1.0
+    }
+
+    function setPendingRouteState(inputId, outputId, enabled) {
+        var next = Object.assign({}, pendingRouteStates)
+        next[routeKey(inputId, outputId)] = enabled
+        pendingRouteStates = next
+    }
+
+    function setPendingRouteGain(inputId, outputId, gain) {
+        var next = Object.assign({}, pendingRouteGains)
+        next[routeKey(inputId, outputId)] = gain
+        pendingRouteGains = next
+    }
+
+    function clearPendingRouteUpdates() {
+        pendingRouteStates = ({})
+        pendingRouteGains = ({})
     }
 
     function selectRoute(inputIndex, outputIndex) {
@@ -148,14 +205,23 @@ ApplicationWindow {
         matrixGridCanvas.requestPaint()
     }
 
-    function toggleSelectedRoute() {
-        if (!engine.connected || engine.busy || selectedInputId.length === 0)
+    function toggleRoute(inputId, outputId) {
+        if (!engine.connected || engine.busy || inputId.length === 0 || outputId.length === 0)
             return
-        var enabled = !routeDisplayEnabled(selectedInputId, selectedOutputId)
-        pendingRouteInputId = selectedInputId
-        pendingRouteOutputId = selectedOutputId
-        pendingRouteEnabled = enabled
-        engine.setRoute(selectedInputId, selectedOutputId, pendingRouteEnabled)
+        var enabled = !routeDisplayEnabled(inputId, outputId)
+        setPendingRouteState(inputId, outputId, enabled)
+        engine.setRoute(inputId, outputId, enabled)
+    }
+
+    function toggleSelectedRoute() {
+        toggleRoute(selectedInputId, selectedOutputId)
+    }
+
+    function adjustSelectedRouteGain(linearGain) {
+        if (!engine.connected || selectedInputId.length === 0 || selectedOutputId.length === 0)
+            return
+        setPendingRouteGain(selectedInputId, selectedOutputId, linearGain)
+        engine.setRouteGain(selectedInputId, selectedOutputId, linearGain)
     }
 
     function syncRuntimeDraft() {
@@ -190,8 +256,7 @@ ApplicationWindow {
         target: engine
         function onRuntimeChanged() { window.syncRuntimeDraft() }
         function onSessionChanged() {
-            window.pendingRouteInputId = ""
-            window.pendingRouteOutputId = ""
+            window.clearPendingRouteUpdates()
             window.rebuildRouteStateCache()
             window.validateRouteSelection()
             matrixInputHeader.requestPaint()
@@ -199,10 +264,8 @@ ApplicationWindow {
             matrixGridCanvas.requestPaint()
         }
         function onBusyChanged() {
-            if (!engine.busy) {
-                window.pendingRouteInputId = ""
-                window.pendingRouteOutputId = ""
-            }
+            if (!engine.busy)
+                window.clearPendingRouteUpdates()
             matrixGridCanvas.requestPaint()
         }
         function onConnectionChanged() { matrixGridCanvas.requestPaint() }
@@ -210,9 +273,7 @@ ApplicationWindow {
 
     onSelectedInputIdChanged: matrixGridCanvas.requestPaint()
     onSelectedOutputIdChanged: matrixGridCanvas.requestPaint()
-    onPendingRouteInputIdChanged: matrixGridCanvas.requestPaint()
-    onPendingRouteOutputIdChanged: matrixGridCanvas.requestPaint()
-    onPendingRouteEnabledChanged: matrixGridCanvas.requestPaint()
+    onPendingRouteStatesChanged: matrixGridCanvas.requestPaint()
 
     Component.onCompleted: {
         syncRuntimeDraft()
@@ -713,9 +774,10 @@ ApplicationWindow {
                                 anchors.margins: 18
                                 visible: engine.inputs.length > 0 && engine.outputs.length > 0
                                 clip: true
-                                property int labelWidth: window.width < 1100 ? 126 : 164
-                                property int headerHeight: 76
+                                property int labelWidth: window.width < 1100 ? 154 : 190
+                                property int headerHeight: 96
                                 property int cellSize: 44
+                                property int groupLabelWidth: window.width < 1100 ? 44 : 56
 
                                 function elideCanvasText(context, value, maximumWidth) {
                                     var label = String(value)
@@ -735,7 +797,7 @@ ApplicationWindow {
                                     border.color: colors.line
                                     Text {
                                         anchors.centerIn: parent
-                                        text: "OUTPUT / INPUT"
+                                        text: "DESTINATION  /  SOURCE"
                                         color: colors.muted
                                         font.pixelSize: 9
                                         font.weight: Font.DemiBold
@@ -752,18 +814,45 @@ ApplicationWindow {
                                         var context = getContext("2d")
                                         context.clearRect(0, 0, width, height)
                                         context.font = "10px Segoe UI"
-                                        context.fillStyle = colors.muted
                                         var cellSize = matrixViewport.cellSize
                                         var firstColumn = Math.floor(matrixGridFlick.contentX / cellSize)
                                         var x = firstColumn * cellSize - matrixGridFlick.contentX
                                         for (var column = firstColumn;
                                              column < engine.inputs.length && x < width;
                                              ++column, x += cellSize) {
+                                            var endpoint = engine.inputs[column]
+                                            var group = window.endpointGroupTitle(
+                                                        endpoint, column,
+                                                        engine.inputs.length, true)
+                                            var groupStart = column === 0 || group !== window.endpointGroupTitle(
+                                                        engine.inputs[column - 1], column - 1,
+                                                        engine.inputs.length, true)
+                                            if (groupStart) {
+                                                var groupEnd = column + 1
+                                                while (groupEnd < engine.inputs.length &&
+                                                       window.endpointGroupTitle(
+                                                           engine.inputs[groupEnd], groupEnd,
+                                                           engine.inputs.length, true) === group)
+                                                    ++groupEnd
+                                                var groupWidth = (groupEnd - column) * cellSize
+                                                context.fillStyle = "#20262a"
+                                                context.fillRect(x + 1, 1, groupWidth - 3, 20)
+                                                context.fillStyle = window.endpointGroupColor(
+                                                                    endpoint, column,
+                                                                    engine.inputs.length)
+                                                context.fillRect(x + 1, 20, groupWidth - 3, 2)
+                                                context.font = "bold 9px Segoe UI"
+                                                context.textAlign = "center"
+                                                context.fillText(group, x + groupWidth / 2, 14)
+                                            }
                                             context.save()
-                                            context.translate(x + cellSize / 2, height - 8)
+                                            context.font = "10px Segoe UI"
+                                            context.fillStyle = colors.muted
+                                            context.textAlign = "left"
+                                            context.translate(x + cellSize / 2, height - 7)
                                             context.rotate(-Math.PI / 3)
                                             var label = matrixViewport.elideCanvasText(
-                                                        context, engine.inputs[column].label, 96)
+                                                        context, endpoint.label, 86)
                                             context.fillText(label, 0, 0)
                                             context.restore()
                                         }
@@ -786,16 +875,65 @@ ApplicationWindow {
                                         for (var row = firstRow;
                                              row < engine.outputs.length && y < height;
                                              ++row, y += cellSize) {
+                                            var endpoint = engine.outputs[row]
+                                            var groupTitle = window.endpointGroupTitle(
+                                                                 endpoint, row,
+                                                                 engine.outputs.length, false)
+                                            var groupStart = row === 0 ||
+                                                    groupTitle !== window.endpointGroupTitle(
+                                                        engine.outputs[row - 1], row - 1,
+                                                        engine.outputs.length, false)
                                             context.fillStyle = colors.surface
                                             context.fillRect(0, y + 1, width - 3, cellSize - 3)
                                             context.strokeStyle = colors.line
                                             context.strokeRect(0.5, y + 1.5, width - 4, cellSize - 4)
+                                            if (groupStart) {
+                                                var groupEnd = row + 1
+                                                while (groupEnd < engine.outputs.length &&
+                                                       window.endpointGroupTitle(
+                                                           engine.outputs[groupEnd], groupEnd,
+                                                           engine.outputs.length, false) === groupTitle)
+                                                    ++groupEnd
+                                                var groupHeight = (groupEnd - row) * cellSize
+                                                context.fillStyle = "#20262a"
+                                                context.fillRect(1, y + 1,
+                                                                 matrixViewport.groupLabelWidth - 3,
+                                                                 groupHeight - 3)
+                                                context.fillStyle = window.endpointGroupColor(
+                                                                    endpoint, row,
+                                                                    engine.outputs.length)
+                                                context.fillRect(matrixViewport.groupLabelWidth - 3,
+                                                                 y + 1, 2,
+                                                                 groupHeight - 3)
+                                                context.fillStyle = window.endpointGroupColor(
+                                                                    endpoint, row,
+                                                                    engine.outputs.length)
+                                                context.font = "bold 8px Segoe UI"
+                                                context.textAlign = "center"
+                                                context.textBaseline = "middle"
+                                                var family = window.endpointFamily(
+                                                                 endpoint, row,
+                                                                 engine.outputs.length)
+                                                var centerY = y + groupHeight / 2
+                                                context.fillText(family === "wasapi" ? "WASAPI"
+                                                                 : family === "asio" ? "ASIO" : "OTHER",
+                                                                 matrixViewport.groupLabelWidth / 2,
+                                                                 centerY - 6)
+                                                context.fillText(family === "wasapi" ? "RENDER"
+                                                                 : family === "asio" ? "DAW IN" : "DEST",
+                                                                 matrixViewport.groupLabelWidth / 2,
+                                                                 centerY + 7)
+                                            }
                                             context.fillStyle = colors.text
                                             context.textBaseline = "middle"
+                                            context.font = "11px Segoe UI"
+                                            context.textAlign = "left"
                                             var label = matrixViewport.elideCanvasText(
-                                                        context, engine.outputs[row].label,
-                                                        width - 18)
-                                            context.fillText(label, 9, y + cellSize / 2)
+                                                        context, endpoint.label,
+                                                        width - matrixViewport.groupLabelWidth - 14)
+                                            context.fillText(label,
+                                                             matrixViewport.groupLabelWidth + 7,
+                                                             y + cellSize / 2)
                                         }
                                     }
                                 }
@@ -863,6 +1001,7 @@ ApplicationWindow {
                                         height: matrixGridFlick.contentHeight
                                         MouseArea {
                                             id: matrixMouse
+                                            objectName: "routingMatrixMouseArea"
                                             anchors.fill: parent
                                             enabled: engine.connected
                                             acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -888,8 +1027,11 @@ ApplicationWindow {
                                                 if (!window.selectRoute(inputIndex, outputIndex))
                                                     return
                                                 matrixGridFlick.forceActiveFocus()
-                                                if (mouse.button === Qt.LeftButton)
-                                                    window.toggleSelectedRoute()
+                                                if (mouse.button === Qt.LeftButton) {
+                                                    var input = engine.inputs[inputIndex]
+                                                    var output = engine.outputs[outputIndex]
+                                                    window.toggleRoute(input.id, output.id)
+                                                }
                                             }
                                         }
                                     }
@@ -924,6 +1066,16 @@ ApplicationWindow {
                                                 var hovered = matrixMouse.hoverInput === column &&
                                                               matrixMouse.hoverOutput === row
                                                 var routeOn = state === "on" || state === "pending-on"
+                                                var inputGroupStart = column > 0 &&
+                                                        window.endpointFamily(engine.inputs[column], column,
+                                                                              engine.inputs.length) !==
+                                                        window.endpointFamily(engine.inputs[column - 1], column - 1,
+                                                                              engine.inputs.length)
+                                                var outputGroupStart = row > 0 &&
+                                                        window.endpointFamily(engine.outputs[row], row,
+                                                                              engine.outputs.length) !==
+                                                        window.endpointFamily(engine.outputs[row - 1], row - 1,
+                                                                              engine.outputs.length)
                                                 context.fillStyle = routeOn ? "#245a49"
                                                                   : state === "muted" ? "#4a3b20"
                                                                   : hovered && engine.connected && !engine.busy
@@ -963,6 +1115,16 @@ ApplicationWindow {
                                                     context.lineWidth = 2
                                                     context.strokeRect(x + 4, y + 4,
                                                                        cellSize - 9, cellSize - 9)
+                                                }
+                                                if (inputGroupStart) {
+                                                    context.fillStyle = colors.cyan
+                                                    context.fillRect(x - 1, y + 1, 2,
+                                                                     cellSize - 3)
+                                                }
+                                                if (outputGroupStart) {
+                                                    context.fillStyle = colors.healthy
+                                                    context.fillRect(x + 1, y - 1,
+                                                                     cellSize - 3, 2)
                                                 }
                                                 if (!engine.connected) {
                                                     context.fillStyle = "#99101315"
@@ -1035,6 +1197,7 @@ ApplicationWindow {
 
                         Switch {
                             id: routeSwitch
+                            objectName: "routeEnabledSwitch"
                             text: "Route enabled"
                             enabled: selectedInputId.length > 0 &&
                                      engine.connected && !engine.busy
@@ -1045,9 +1208,9 @@ ApplicationWindow {
                                                                   selectedOutputId)
                             }
                             onClicked: {
-                                window.pendingRouteInputId = selectedInputId
-                                window.pendingRouteOutputId = selectedOutputId
-                                window.pendingRouteEnabled = checked
+                                window.setPendingRouteState(selectedInputId,
+                                                            selectedOutputId,
+                                                            checked)
                                 engine.setRoute(selectedInputId, selectedOutputId, checked)
                             }
                             contentItem: Text {
@@ -1064,29 +1227,26 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             Slider {
                                 id: gainSlider
+                                objectName: "selectedRouteGainSlider"
                                 Layout.fillWidth: true
                                 from: -60
                                 to: 12
                                 stepSize: 0.1
                                 enabled: selectedInputId.length > 0 &&
-                                         routeSwitch.checked &&
                                          engine.connected
                                 value: {
                                     engine.routeRevision;
                                     return selectedInputId.length > 0
                                            ? window.linearToDb(
-                                                 engine.routeGain(selectedInputId,
-                                                                  selectedOutputId)) : -60
+                                                 window.routeDisplayGain(selectedInputId,
+                                                                         selectedOutputId)) : 0
                                 }
-                                onMoved: engine.setRouteGain(
-                                             selectedInputId,
-                                             selectedOutputId,
+                                onMoved: window.adjustSelectedRouteGain(
                                              window.dbToLinear(value))
                                 onPressedChanged: {
                                     if (!pressed) {
-                                        engine.setRouteGain(selectedInputId,
-                                                            selectedOutputId,
-                                                            window.dbToLinear(value))
+                                        window.adjustSelectedRouteGain(
+                                                    window.dbToLinear(value))
                                     }
                                 }
                             }
