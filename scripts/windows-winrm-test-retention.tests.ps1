@@ -77,7 +77,7 @@ foreach ($setting in @(
 Assert-Equal $true $wrapperText.Contains('if "%CLEANUP%"=="" set "CLEANUP=true"') `
     "Completed-slot cleanup is not enabled by default."
 
-$nowUtc = [datetime]::SpecifyKind([datetime]"2026-08-09T00:00:00", "Utc")
+$nowUtc = [datetime]::UtcNow
 $testRoot = Join-Path $env:TEMP "sar-winrm-retention-$([guid]::NewGuid().ToString('N'))"
 try {
   New-Item -ItemType Directory -Path $testRoot | Out-Null

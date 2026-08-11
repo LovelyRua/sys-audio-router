@@ -54,6 +54,11 @@ must not be silently weakened.
    run degraded. Runtime health now remains healthy only when every underflow
    frame is exactly attributed to those explicit silence categories. Missing or
    excess attribution remains degraded.
+8. The downloaded-source slot-retention self-test anchored its active-token
+   fixture to a fixed date while production selection used the current UTC
+   time. The test became time-dependent and failed after the fixture aged past
+   the stale-token threshold. It now anchors all relative fixture timestamps to
+   the current UTC time; the complete 11-script automation suite passes.
 
 ## Review Coverage
 
