@@ -205,8 +205,9 @@ void duplex_refills_multiple_graph_blocks_to_target() {
 void duplex_refill_covers_native_packet_with_small_graph_blocks() {
   sar::tests::ScriptedWasapiStream capture(
       probe(sar::platform::WasapiStreamDirection::Capture, 10));
-  sar::tests::ScriptedWasapiStream render(
-      probe(sar::platform::WasapiStreamDirection::Render, 10));
+  auto render_probe = probe(sar::platform::WasapiStreamDirection::Render, 10);
+  render_probe.default_period_100ns = 1000;
+  sar::tests::ScriptedWasapiStream render(render_probe);
   capture.enqueue_capture(
       {.frames = 10, .samples = {{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}}});
   capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::TimedOut});
@@ -222,7 +223,7 @@ void duplex_refill_covers_native_packet_with_small_graph_blocks() {
   assert(refilled.ok() && refilled.stats().captured_frames == 10);
   assert(refilled.stats().graph_processed);
   assert(diagnostics.processed_blocks == 10);
-  assert(diagnostics.render_fifo_fill_frames == 11);
+  assert(diagnostics.render_fifo_fill_frames == 15);
   assert(diagnostics.render_fifo_underflow_cycles == 0);
 }
 

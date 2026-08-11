@@ -19,6 +19,23 @@ bool capture_rate_correction_clamped(double unbounded_correction_ppm) noexcept {
          unbounded_correction_ppm >= kMaximumCaptureRateCorrectionPpm;
 }
 
+std::size_t render_target_fill_frames(const WasapiStreamProbe& probe,
+                                      std::size_t packet_frames,
+                                      std::size_t graph_block_frames,
+                                      std::size_t fifo_capacity_frames) noexcept {
+  constexpr long double kHundredNanosecondsPerSecond = 10'000'000.0L;
+  const auto period_frames = static_cast<std::size_t>(std::ceil(
+      static_cast<long double>(probe.mix_format.sample_rate) *
+      static_cast<long double>(probe.default_period_100ns) /
+      kHundredNanosecondsPerSecond));
+  const auto guard_frames = std::max(graph_block_frames, period_frames);
+  if (packet_frames >= fifo_capacity_frames) {
+    return fifo_capacity_frames;
+  }
+  return packet_frames +
+         std::min(guard_frames, fifo_capacity_frames - packet_frames);
+}
+
 std::vector<WasapiStreamError> validate_graph_shape(
     const graph::Graph& graph,
     const realtime::AudioBuffer& input,
@@ -316,6 +333,9 @@ WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(
   if (render_stream != nullptr) {
     render_path_.emplace(output_channels, render_packet_capacity_frames,
                          fifo_capacity_frames);
+    desired_render_fill_frames_ = render_target_fill_frames(
+        render_stream->probe(), render_packet_capacity_frames,
+        graph_block_frames, fifo_capacity_frames);
     if (prime_render_silence) {
       prime_render_fifo_with_silence();
     }
@@ -441,9 +461,7 @@ void WindowsWasapiGraphRunner::prime_render_fifo_with_silence() noexcept {
   }
 
   output_.clear();
-  const auto target_frames = std::min(
-      render_path_->packet.frames() + graph_block_frames_,
-      render_path_->fifo.capacity_frames());
+  const auto target_frames = desired_render_fill_frames_;
   while (render_path_->fifo.available_frames() < target_frames) {
     const auto remaining = target_frames - render_path_->fifo.available_frames();
     const auto queued = render_path_->fifo.push(
@@ -753,11 +771,11 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
 
   constexpr std::size_t kMaximumGraphBlocksPerCycle = 64;
   const bool fill_render_packet = render_master_ || external_input_ != nullptr;
-  const auto desired_render_fill = render_path_
-      ? std::min(render_path_->fifo.capacity_frames(),
-                 render_path_->packet.frames() +
-                     (render_master_ ? graph_block_frames_ : std::size_t{0}))
-      : std::size_t{0};
+  const auto desired_render_fill = render_master_
+      ? desired_render_fill_frames_
+      : (render_path_ ? std::min(render_path_->fifo.capacity_frames(),
+                                 render_path_->packet.frames())
+                      : std::size_t{0});
   const auto graph_blocks_to_target =
       (desired_render_fill + graph_block_frames_ - 1) / graph_block_frames_;
   const auto graph_limit = fill_render_packet
