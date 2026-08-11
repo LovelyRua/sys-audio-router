@@ -34,4 +34,12 @@ class RealtimeAudioSource {
   }
 };
 
+class RealtimeAudioSink {
+ public:
+  virtual ~RealtimeAudioSink() = default;
+
+  [[nodiscard]] virtual bool write(
+      const realtime::AudioBuffer& source) noexcept = 0;
+};
+
 }  // namespace sar::platform
