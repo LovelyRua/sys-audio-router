@@ -461,13 +461,21 @@ ApplicationWindow {
             }
 
             FlatButton {
-                text: window.width < 1100
-                      ? (engine.runtimeRunning ? "Stop" : "Start")
-                      : (engine.runtimeRunning ? "Stop engine" : "Start engine")
+                objectName: "runtimeActionButton"
+                text: !engine.runtimeConfigured ? "Configure audio"
+                      : window.width < 1100
+                        ? (engine.runtimeRunning ? "Stop" : "Start")
+                        : (engine.runtimeRunning ? "Stop engine" : "Start engine")
                 highlighted: !engine.runtimeRunning
                 enabled: engine.connected && !engine.busy
-                onClicked: engine.runtimeRunning ? engine.stopRuntime()
-                                                 : engine.startRuntime()
+                onClicked: {
+                    if (!engine.runtimeConfigured) {
+                        window.currentView = "devices"
+                        return
+                    }
+                    engine.runtimeRunning ? engine.stopRuntime()
+                                          : engine.startRuntime()
+                }
             }
         }
     }
@@ -1103,15 +1111,18 @@ ApplicationWindow {
             }
 
             Rectangle {
+                objectName: "audioDevicesPage"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
                 color: colors.canvas
                 ScrollView {
-                    id: diagnosticsScroll
+                    id: devicesScroll
                     anchors.fill: parent
                     clip: true
                 ColumnLayout {
                     x: 24
                     y: 24
-                    width: Math.max(0, diagnosticsScroll.availableWidth - 48)
+                    width: Math.max(0, devicesScroll.availableWidth - 48)
                     spacing: 14
                     Text { text: "Audio devices"; color: colors.text; font.pixelSize: 18; font.weight: Font.DemiBold }
                     Text { text: engine.devices.length + " endpoints reported by the engine"; color: colors.muted; font.pixelSize: 12 }
@@ -1154,6 +1165,7 @@ ApplicationWindow {
                                 Text { text: "Mode"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
                                 ConsoleCombo {
                                     id: runtimeModeCombo
+                                    objectName: "runtimeModeCombo"
                                     Layout.fillWidth: true
                                     model: ["WASAPI render", "WASAPI duplex"]
                                     currentIndex: window.runtimeDraftMode === "duplex" ? 1 : 0
@@ -1170,6 +1182,7 @@ ApplicationWindow {
                                 Text { text: "Render"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
                                 ConsoleCombo {
                                     id: renderDeviceCombo
+                                    objectName: "renderDeviceCombo"
                                     Layout.fillWidth: true
                                     textRole: "label"
                                     emptyText: "No render devices"
@@ -1196,6 +1209,7 @@ ApplicationWindow {
                                 Text { text: "Capture"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
                                 ConsoleCombo {
                                     id: captureDeviceCombo
+                                    objectName: "captureDeviceCombo"
                                     Layout.fillWidth: true
                                     textRole: "label"
                                     emptyText: "No capture devices"
@@ -1228,6 +1242,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                 }
                                 FlatButton {
+                                    objectName: "applyRuntimeButton"
                                     text: "Apply"
                                     highlighted: true
                                     enabled: engine.connected && !engine.busy &&
@@ -1246,49 +1261,58 @@ ApplicationWindow {
                             }
                         }
                     }
-                    ListView {
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
                         spacing: 1
-                        clip: true
-                        model: engine.devices
-                        delegate: Rectangle {
-                            required property var modelData
-                            width: ListView.view.width
-                            height: 56
-                            color: colors.surface
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.leftMargin: 14
-                                anchors.rightMargin: 14
-                                Rectangle {
-                                    width: 8; height: 8; radius: 4
-                                    color: modelData.isDefault ? colors.healthy : colors.line
+                        Repeater {
+                            model: engine.devices
+                            delegate: Rectangle {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 56
+                                color: colors.surface
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 14
+                                    anchors.rightMargin: 14
+                                    Rectangle {
+                                        width: 8; height: 8; radius: 4
+                                        color: modelData.isDefault ? colors.healthy : colors.line
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        Text { text: modelData.label; color: colors.text; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
+                                        Text { text: modelData.id; color: colors.muted; font.pixelSize: 10; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                                    }
+                                    Text { text: modelData.isVirtual ? "VIRTUAL" : "HARDWARE"; color: modelData.isVirtual ? colors.cyan : colors.muted; font.pixelSize: 9; font.weight: Font.DemiBold }
                                 }
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 2
-                                    Text { text: modelData.label; color: colors.text; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
-                                    Text { text: modelData.id; color: colors.muted; font.pixelSize: 10; elide: Text.ElideMiddle; Layout.fillWidth: true }
-                                }
-                                Text { text: modelData.isVirtual ? "VIRTUAL" : "HARDWARE"; color: modelData.isVirtual ? colors.cyan : colors.muted; font.pixelSize: 9; font.weight: Font.DemiBold }
                             }
                         }
                     }
                 }
             }
+            }
 
             Rectangle {
+                objectName: "diagnosticsPage"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
                 color: colors.canvas
-                ColumnLayout {
+                ScrollView {
+                    id: diagnosticsScroll
                     anchors.fill: parent
-                    anchors.margins: 24
+                    clip: true
+                ColumnLayout {
+                    x: 24
+                    y: 24
+                    width: Math.max(0, diagnosticsScroll.availableWidth - 48)
                     spacing: 14
                     Text { text: "Diagnostics"; color: colors.text; font.pixelSize: 18; font.weight: Font.DemiBold }
                     Text { text: "Live engine counters"; color: colors.muted; font.pixelSize: 12 }
                     Rectangle { Layout.fillWidth: true; height: 1; color: colors.line }
                     GridLayout {
-                        columns: width > 900 ? 4 : 2
+                        columns: diagnosticsScroll.availableWidth > 900 ? 4 : 2
                         columnSpacing: 1
                         rowSpacing: 1
                         Layout.fillWidth: true
@@ -1325,7 +1349,7 @@ ApplicationWindow {
                         Layout.topMargin: 8
                     }
                     GridLayout {
-                        columns: width > 900 ? 4 : 2
+                        columns: diagnosticsScroll.availableWidth > 900 ? 4 : 2
                         columnSpacing: 1
                         rowSpacing: 1
                         Layout.fillWidth: true

@@ -1077,6 +1077,15 @@ if(WIN32 AND SAR_BUILD_GUI)
       "bin\\\\SystemAudioRouteLauncher.exe")
   set(CPACK_NSIS_MUI_FINISHPAGE_RUN
       "bin\\\\SystemAudioRouteLauncher.exe")
+  # CPack's NSIS template runs elevated. Hand the finish-page launch to the
+  # existing Explorer process so the control panel starts in the signed-in
+  # desktop session instead of inheriting the installer's elevated token.
+  set(CPACK_NSIS_DEFINES [[
+    !define MUI_FINISHPAGE_RUN_FUNCTION SarLaunchControlPanel
+    Function SarLaunchControlPanel
+      Exec '"$WINDIR\explorer.exe" "$INSTDIR\bin\SystemAudioRouteLauncher.exe"'
+    FunctionEnd
+  ]])
   set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
   set(CPACK_NSIS_MANIFEST_DPI_AWARE ON)
   set(CPACK_NSIS_EXTRA_PREINSTALL_COMMANDS [[

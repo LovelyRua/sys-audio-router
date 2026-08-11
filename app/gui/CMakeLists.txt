@@ -90,3 +90,8 @@ set_tests_properties(gui_engine_controller_history_smoke PROPERTIES
     "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
   TIMEOUT 30
 )
+
+add_test(NAME gui_qml_page_structure_smoke
+  COMMAND ${CMAKE_COMMAND}
+    -DMAIN_QML=${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/qml_page_structure_smoke.cmake)
