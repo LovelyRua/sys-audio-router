@@ -14,20 +14,22 @@ must not be silently weakened.
 ## Reviewed Candidate
 
 - Executable source candidate: `8eb7c36`.
+- Automation and package candidate: `3c87066`.
 - Candidate `8eb7c36`: 124 of 124 CTest targets passed on the Windows test
   machine after a clean slot upload and full MSVC build.
-- GitHub CI run: `31311094007`, passed.
-- Windows GUI Package run: `31311094017`, passed.
-- Previous candidate ZIP: SHA-256
-  `FD9ED882552F5529E1BCF5225C66DE01B069641731779B3700B84B81239C98CB`.
-- Previous candidate NSIS installer: SHA-256
-  `2A8C078940F3DF79A635005CBB1BDAEB5C7D0EA3A8AA51EC7E861FF1B903E40D`.
+- GitHub CI run: `31449581633`, passed, including the complete CTest and
+  Windows automation-script suites.
+- Windows GUI Package run: `31449581645`, passed.
+- Final ZIP: SHA-256
+  `FFA22433CE81363E5C8C661F024F930B4B3A4E93617DE732EF8793860A5389F7`.
+- Final NSIS installer: SHA-256
+  `248CD8E205ED0A751F997EE0D58E313E9365203186E79B90D55430E41E986550`.
 - Package acceptance covers ZIP and NSIS install/update/uninstall, bootstrap,
   Qt/QML deployment, control and diagnostics handshakes, WASAPI enumeration,
   Virtual ASIO registration ownership, and install-path boundary rejection.
-  The final ZIP repeated this gate on the test machine with 15 enumerated
-  endpoints, both concurrent launchers successful, and the existing Virtual
-  ASIO registration preserved.
+  The final ZIP repeated this gate in slot `stage-final-3c87066` on the test
+  machine with 15 enumerated endpoints, both concurrent launchers successful,
+  and the existing Virtual ASIO registration preserved.
 
 ## Defects Closed During Final Review
 
