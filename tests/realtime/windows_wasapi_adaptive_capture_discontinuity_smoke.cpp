@@ -116,6 +116,15 @@ RunResult run_post_gap_baseline() {
   graph.add_node(std::move(recorder));
   sar::diagnostics::EngineDiagnostics diagnostics;
 
+  enqueue_capture_packet(capture, kPostGapSample, false, 1);
+  end_capture_cycle(capture, render);
+  const auto baseline = process_cycle(runner, graph, diagnostics);
+  assert(baseline.ok());
+  assert(!baseline.stats().graph_processed);
+  assert(!baseline.stats().capture_data_discontinuity);
+  assert(!baseline.stats().capture_rate_adapter_reset);
+  assert(diagnostics.xrun_count == 0);
+
   for (std::size_t cycle = 0; cycle < 2; ++cycle) {
     enqueue_capture_packet(capture, kPostGapSample, cycle == 0);
     end_capture_cycle(capture, render);
@@ -123,11 +132,14 @@ RunResult run_post_gap_baseline() {
     assert(result.ok());
     assert(result.stats().capture_rate_adapter_active);
     assert(result.stats().graph_processed == (cycle == 1));
+    assert(result.stats().capture_data_discontinuity == (cycle == 0));
+    assert(result.stats().capture_rate_adapter_reset == (cycle == 0));
+    assert(diagnostics.xrun_count == 1);
     assert_no_capture_overflow(diagnostics);
   }
 
   assert(recorder_ptr->process_calls() == 1);
-  assert(render.render_submissions().size() == 2);
+  assert(render.render_submissions().size() == 3);
   return {recorder_ptr->observed(),
           render.render_submissions().back().samples.front()};
 }

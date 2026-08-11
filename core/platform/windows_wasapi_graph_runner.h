@@ -168,6 +168,7 @@ class WindowsWasapiGraphRunner {
   std::optional<BufferedPath> capture_path_;
   std::optional<BufferedPath> render_path_;
   std::optional<CaptureRateAdapter> capture_rate_adapter_;
+  bool capture_packet_baseline_established_ = false;
   RealtimeAudioSource* external_input_ = nullptr;
   std::optional<realtime::AudioBuffer> external_input_buffer_;
   std::atomic<double> capture_clock_feed_forward_ppm_ = 0.0;

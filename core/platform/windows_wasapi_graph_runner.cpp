@@ -339,6 +339,7 @@ const realtime::AudioBuffer& WindowsWasapiGraphRunner::output_buffer() const noe
 }
 
 WasapiGraphRunnerResult WindowsWasapiGraphRunner::start_streams() noexcept {
+  capture_packet_baseline_established_ = false;
   if (capture_path_) {
     capture_path_->fifo.clear();
   }
@@ -497,7 +498,12 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_once(
     }
     stats.captured_frames = capture_result.frames();
     stats.capture_silent = capture_result.silent();
-    stats.capture_data_discontinuity = capture_result.data_discontinuity();
+    stats.capture_data_discontinuity =
+        stats.captured_frames > 0 && capture_packet_baseline_established_ &&
+        capture_result.data_discontinuity();
+    if (stats.captured_frames > 0) {
+      capture_packet_baseline_established_ = true;
+    }
     stats.capture_timestamp_error = capture_result.timestamp_error();
     if (stats.capture_data_discontinuity) {
       diagnostics.xrun_count += 1;
@@ -679,16 +685,20 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
         break;
       }
 
+      const bool capture_data_discontinuity =
+          capture_packet_baseline_established_ &&
+          capture_result.data_discontinuity();
+      capture_packet_baseline_established_ = true;
       stats.captured_frames += capture_result.frames();
       stats.capture_silent = stats.capture_silent || capture_result.silent();
       stats.capture_data_discontinuity =
-          stats.capture_data_discontinuity || capture_result.data_discontinuity();
+          stats.capture_data_discontinuity || capture_data_discontinuity;
       stats.capture_timestamp_error =
           stats.capture_timestamp_error || capture_result.timestamp_error();
       if (capture_result.silent()) {
         stats.capture_silent_frames += capture_result.frames();
       }
-      if (capture_result.data_discontinuity()) {
+      if (capture_data_discontinuity) {
         ++diagnostics.xrun_count;
         if (capture_rate_adapter_) {
           capture_path_->fifo.clear();
