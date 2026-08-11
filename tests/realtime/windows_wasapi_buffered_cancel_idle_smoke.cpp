@@ -129,6 +129,26 @@ void duplex_prime_supplies_render_before_capture() {
   assert((rendered(render) == std::vector<float>{0, 0, 0, 0}));
 }
 
+void duplex_prime_fills_native_render_packet() {
+  sar::tests::ScriptedWasapiStream capture(
+      probe(sar::platform::WasapiStreamDirection::Capture, 4));
+  sar::tests::ScriptedWasapiStream render(
+      probe(sar::platform::WasapiStreamDirection::Render, 10));
+  capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::TimedOut});
+  render.enqueue_render({.writable_frames = 10});
+  sar::platform::WindowsWasapiGraphRunner runner(
+      &capture, &render, 1, 1, 4, 4, 10, 16, true);
+  auto route = graph();
+  sar::diagnostics::EngineDiagnostics diagnostics;
+
+  const auto primed = runner.process_once(route, diagnostics, 1);
+
+  assert(primed.ok() && primed.stats().capture_stream_idle);
+  assert(!primed.stats().graph_processed && primed.stats().rendered_frames == 10);
+  assert(diagnostics.render_fifo_underflow_cycles == 0);
+  assert(rendered(render) == std::vector<float>(10, 0.0F));
+}
+
 void duplex_starvation_waits_and_submits_silence() {
   sar::tests::ScriptedWasapiStream capture(
       probe(sar::platform::WasapiStreamDirection::Capture, 4));
@@ -205,6 +225,7 @@ int main() {
   idle_drains_backlog();
   cancellation_preserves_queues();
   duplex_prime_supplies_render_before_capture();
+  duplex_prime_fills_native_render_packet();
   duplex_starvation_waits_and_submits_silence();
   duplex_refills_multiple_graph_blocks_to_target();
   duplex_leaves_native_capture_queued_when_fifo_is_full();

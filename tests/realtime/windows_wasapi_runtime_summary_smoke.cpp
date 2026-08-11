@@ -1107,6 +1107,24 @@ int main() {
       return failure;
     }
 
+    stats.render_startup_silence_cycles = 0;
+    stats.render_startup_silence_frames = 0;
+    stats.render_capture_starvation_silence_cycles = 1;
+    stats.render_capture_starvation_silence_frames = 128;
+    summary = sar::platform::summarize_wasapi_runtime(
+        stats, {}, nullptr, nullptr, &diagnostics);
+    if (const auto failure =
+            expect_summary(summary,
+                           sar::platform::WasapiRuntimeHealth::Degraded,
+                           "render_capture_starvation",
+                           "Expected capture starvation silence to degrade health")) {
+      return failure;
+    }
+
+    stats.render_capture_starvation_silence_cycles = 0;
+    stats.render_capture_starvation_silence_frames = 0;
+    stats.render_startup_silence_cycles = 1;
+
     stats.render_startup_silence_frames = 129;
     summary = sar::platform::summarize_wasapi_runtime(
         stats, {}, nullptr, nullptr, &diagnostics);

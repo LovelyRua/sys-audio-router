@@ -317,7 +317,7 @@ WindowsWasapiGraphRunner::WindowsWasapiGraphRunner(
     render_path_.emplace(output_channels, render_packet_capacity_frames,
                          fifo_capacity_frames);
     if (prime_render_silence) {
-      static_cast<void>(render_path_->fifo.push(output_, graph_block_frames_));
+      prime_render_fifo_with_silence();
     }
   }
 }
@@ -346,8 +346,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::start_streams() noexcept {
   if (render_path_) {
     render_path_->fifo.clear();
     if (render_master_) {
-      output_.clear();
-      static_cast<void>(render_path_->fifo.push(output_, graph_block_frames_));
+      prime_render_fifo_with_silence();
     }
   }
   if (capture_rate_adapter_) {
@@ -434,6 +433,24 @@ void WindowsWasapiGraphRunner::set_capture_clock_feed_forward_ppm(
 
 double WindowsWasapiGraphRunner::capture_clock_feed_forward_ppm() const noexcept {
   return capture_clock_feed_forward_ppm_.load(std::memory_order_relaxed);
+}
+
+void WindowsWasapiGraphRunner::prime_render_fifo_with_silence() noexcept {
+  if (!render_path_) {
+    return;
+  }
+
+  output_.clear();
+  const auto target_frames = std::min(render_path_->packet.frames(),
+                                      render_path_->fifo.capacity_frames());
+  while (render_path_->fifo.available_frames() < target_frames) {
+    const auto remaining = target_frames - render_path_->fifo.available_frames();
+    const auto queued = render_path_->fifo.push(
+        output_, std::min(remaining, output_.frames()));
+    if (queued == 0) {
+      break;
+    }
+  }
 }
 
 void WindowsWasapiGraphRunner::mix_external_input(

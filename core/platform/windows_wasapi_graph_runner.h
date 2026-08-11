@@ -155,6 +155,7 @@ class WindowsWasapiGraphRunner {
       graph::Graph& graph,
       diagnostics::EngineDiagnostics& diagnostics,
       std::uint32_t timeout_ms) noexcept;
+  void prime_render_fifo_with_silence() noexcept;
   void mix_external_input(WasapiGraphRunnerStats& stats) noexcept;
 
   WasapiStreamIo* capture_stream_ = nullptr;
