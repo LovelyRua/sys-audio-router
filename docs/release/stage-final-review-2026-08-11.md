@@ -13,13 +13,21 @@ must not be silently weakened.
 
 ## Reviewed Candidate
 
-- Source candidate before this review record: `4353e4c`.
-- Windows test-machine suite: 124 of 124 CTest targets passed.
+- Executable source candidate: `4353e4c`.
+- Review-record candidate `4fabaa3`: 124 of 124 CTest targets passed on the
+  Windows test machine after a clean slot clone and full MSVC build.
 - GitHub CI run: `31311094007`, passed.
 - Windows GUI Package run: `31311094017`, passed.
+- Final ZIP: SHA-256
+  `FD9ED882552F5529E1BCF5225C66DE01B069641731779B3700B84B81239C98CB`.
+- Final NSIS installer: SHA-256
+  `2A8C078940F3DF79A635005CBB1BDAEB5C7D0EA3A8AA51EC7E861FF1B903E40D`.
 - Package acceptance covers ZIP and NSIS install/update/uninstall, bootstrap,
   Qt/QML deployment, control and diagnostics handshakes, WASAPI enumeration,
   Virtual ASIO registration ownership, and install-path boundary rejection.
+  The final ZIP repeated this gate on the test machine with 15 enumerated
+  endpoints, both concurrent launchers successful, and the existing Virtual
+  ASIO registration preserved.
 
 ## Defects Closed During Final Review
 
