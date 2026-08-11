@@ -201,11 +201,12 @@ render-only blocks with zero xruns and 987 supervised duplex blocks across a
 xrun, 1,088 render underflow frames, zero capture/render overflow, and a
 279.6-microsecond peak callback. FIFO diagnostics are mirrored into atomic
 worker snapshots so service queries do not race the realtime diagnostics writer.
-Control wire version 5 and `sar_control_cli` now expose runtime state, start,
-stop, and WASAPI runtime configuration without restarting the service process.
-Version 4 also exposes Virtual ASIO producer, queue, silence, peak, clipping,
-and non-finite-sample evidence so a real DAW bridge can be accepted without
-inferring audio flow from callback cadence alone.
+Control wire version 8 and `sar_control_cli` now expose runtime state, start,
+stop, WASAPI runtime configuration, runtime health, recovery state, endpoint
+selection, and Virtual ASIO producer, queue, silence, peak, clipping, and
+non-finite-sample evidence without restarting the service process. This lets a
+real DAW bridge be accepted from measured audio-flow evidence instead of
+inferring flow from callback cadence alone.
 Render mode accepts default or pinned output selection; duplex accepts default
 or paired pinned capture/render selection. A physical named-pipe
 stop/start check then processed 304 duplex blocks in three seconds with zero
@@ -397,11 +398,12 @@ ZIP alpha, then passed install, in-place update, launcher, GUI, engine, control,
 ASIO registration, and uninstall acceptance before leaving the same verified
 installer deployed under the user's local Programs directory. The installer
 gate now launches the bootstrap executable twice and requires exactly one GUI
-and one engine process; the 2026-08-09 test-machine acceptance passed the same
-single-instance check before deploying package `f4708e1`. Package `2b32723`
-then repeated the isolated ZIP install, update, launcher, control handshake,
-15-device enumeration, ASIO ownership, path-boundary, and uninstall acceptance
-while preserving the user's existing registration. The route matrix now draws
+and one engine process. Package acceptance at `4353e4c` also starts two
+bootstrap launchers concurrently and requires both launch requests to succeed
+while retaining exactly one GUI and one engine. The isolated ZIP and NSIS gates
+cover install, update, launcher, control and diagnostics handshakes, 15-device
+enumeration, ASIO ownership, path-boundary rejection, and uninstall while
+preserving an existing registration. The route matrix now draws
 only visible cells with fixed headers, two-axis scrolling, keyboard navigation,
 and explicit pending, muted, busy, and offline states. Seed-user workflow testing
 remains. Route gain and connection

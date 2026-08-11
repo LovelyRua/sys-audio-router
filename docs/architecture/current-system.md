@@ -100,6 +100,17 @@ render quantum for its lifetime, so preset block-size changes are rejected with
 a restart-required error instead of committing an unusable format. A stopped
 runtime can rebuild against a newer graph through its retained endpoint
 configuration. The Qt Quick GUI now binds to control wire v8 from a separate process.
+Control command identity is scoped to each GUI process with a UUID prefix. The
+service replay cache stores the original request bytes: an exact retry receives
+the cached response, while reuse of an ID for a different request is rejected
+as `command_id_conflict`. This prevents stale responses after a GUI restart from
+rolling device, runtime-mode, or matrix controls back to older state.
+
+`sar_bootstrap_launcher` serializes each per-user launch sequence with a named
+mutex, starts or reuses the engine, waits for the control pipe, and then starts
+or reuses the GUI. ZIP and installer acceptance launch two bootstrap processes
+concurrently and require both callers to succeed with exactly one engine and one
+GUI process.
 Service installation and concurrent control-client authorization remain future
 work.
 

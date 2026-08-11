@@ -195,7 +195,7 @@ processes and Scheduled Tasks are removed on success and failure.
 
 ## Expected Test Targets
 
-The Windows suite currently has 118 CTest targets, including the portable core
+The Windows suite currently has 124 CTest targets, including the portable core
 smoke tests plus WASAPI stream, graph runner, realtime thread, realtime
 worker/render/duplex loop, runtime summary, preflight, and measure tool smoke
 tests.
