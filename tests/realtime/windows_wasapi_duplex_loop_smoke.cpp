@@ -39,7 +39,9 @@ struct WindowsWasapiDuplexLoopTestAccess {
                                          probe_stream,
                                          open_stream,
                                          context,
-                                         nullptr);
+                                         nullptr,
+                                         nullptr,
+                                         {});
   }
 };
 

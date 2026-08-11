@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/platform/realtime_audio_source.h"
+#include "core/platform/windows_wasapi_graph_runner.h"
 #include "core/platform/wasapi_endpoint_selection_policy.h"
 #include "core/platform/wasapi_recovery_policy.h"
 #include "core/platform/windows_wasapi_realtime_worker.h"
@@ -98,13 +99,17 @@ class WindowsWasapiDuplexSupervisor {
   WindowsWasapiDuplexSupervisor(graph::Graph& graph,
                                 diagnostics::EngineDiagnostics& diagnostics,
                                 std::uint32_t timeout_ms,
-                                RealtimeAudioSource* external_input = nullptr);
+                                RealtimeAudioSource* external_input = nullptr,
+                                RealtimeAudioSink* external_output = nullptr,
+                                WasapiGraphChannelLayout channel_layout = {});
   WindowsWasapiDuplexSupervisor(
       graph::Graph& graph,
       diagnostics::EngineDiagnostics& diagnostics,
       std::uint32_t timeout_ms,
       WasapiEndpointSelectionPolicy endpoint_selection_policy,
-      RealtimeAudioSource* external_input = nullptr);
+      RealtimeAudioSource* external_input = nullptr,
+      RealtimeAudioSink* external_output = nullptr,
+      WasapiGraphChannelLayout channel_layout = {});
   WindowsWasapiDuplexSupervisor(const WindowsWasapiDuplexSupervisor&) = delete;
   WindowsWasapiDuplexSupervisor& operator=(const WindowsWasapiDuplexSupervisor&) = delete;
   ~WindowsWasapiDuplexSupervisor();

@@ -201,7 +201,9 @@ WindowsWasapiEngineRuntimeOpenResult WindowsWasapiEngineRuntime::open_render(
 WindowsWasapiEngineRuntimeOpenResult
 WindowsWasapiEngineRuntime::open_default_duplex(
     std::shared_ptr<graph::Graph> graph,
-    platform::RealtimeAudioSource* external_input) {
+    platform::RealtimeAudioSource* external_input,
+    platform::RealtimeAudioSink* external_output,
+    platform::WasapiGraphChannelLayout channel_layout) {
   if (!graph) {
     return WindowsWasapiEngineRuntimeOpenResult::failure({
         {"null_runtime_graph", "WASAPI engine runtime requires a graph."},
@@ -209,7 +211,8 @@ WindowsWasapiEngineRuntime::open_default_duplex(
   }
 
   auto runtime = std::unique_ptr<WindowsWasapiEngineRuntime>(
-      new WindowsWasapiEngineRuntime(std::move(graph), external_input));
+      new WindowsWasapiEngineRuntime(std::move(graph), external_input,
+                                     external_output, channel_layout));
   runtime->duplex_configured_ = true;
   return WindowsWasapiEngineRuntimeOpenResult::success(std::move(runtime));
 }
@@ -218,7 +221,9 @@ WindowsWasapiEngineRuntimeOpenResult WindowsWasapiEngineRuntime::open_duplex(
     std::string capture_device_id,
     std::string render_device_id,
     std::shared_ptr<graph::Graph> graph,
-    platform::RealtimeAudioSource* external_input) {
+    platform::RealtimeAudioSource* external_input,
+    platform::RealtimeAudioSink* external_output,
+    platform::WasapiGraphChannelLayout channel_layout) {
   if (!graph) {
     return WindowsWasapiEngineRuntimeOpenResult::failure({
         {"null_runtime_graph", "WASAPI engine runtime requires a graph."},
@@ -232,7 +237,8 @@ WindowsWasapiEngineRuntimeOpenResult WindowsWasapiEngineRuntime::open_duplex(
   }
 
   auto runtime = std::unique_ptr<WindowsWasapiEngineRuntime>(
-      new WindowsWasapiEngineRuntime(std::move(graph), external_input));
+      new WindowsWasapiEngineRuntime(std::move(graph), external_input,
+                                     external_output, channel_layout));
   runtime->duplex_endpoint_policy_ = platform::WasapiEndpointSelectionPolicy(
       platform::WasapiEndpointSelection::pinned_device_id(
           std::move(capture_device_id)),
@@ -264,7 +270,8 @@ EngineAudioRuntimeResult WindowsWasapiEngineRuntime::start(
             runtime_factory_, timeout_ms, duplex_endpoint_policy_)
       : std::make_unique<platform::WindowsWasapiDuplexSupervisor>(
             *graph_, realtime_diagnostics_, timeout_ms,
-            duplex_endpoint_policy_, external_input_);
+            duplex_endpoint_policy_, external_input_, external_output_,
+            channel_layout_);
   duplex_supervisor_->start(monotonic_milliseconds());
   if (duplex_supervisor_->state() == platform::WasapiRecoveryState::Faulted) {
     auto errors = convert_errors(duplex_supervisor_->last_errors());
@@ -460,10 +467,14 @@ void WindowsWasapiEngineRuntime::run_duplex_supervisor() noexcept {
 
 WindowsWasapiEngineRuntime::WindowsWasapiEngineRuntime(
     std::shared_ptr<graph::Graph> graph,
-    platform::RealtimeAudioSource* external_input) noexcept
+    platform::RealtimeAudioSource* external_input,
+    platform::RealtimeAudioSink* external_output,
+    platform::WasapiGraphChannelLayout channel_layout) noexcept
     : graph_(std::move(graph)),
       graph_version_(graph_ ? graph_->version() : 0),
-      external_input_(external_input) {}
+      external_input_(external_input),
+      external_output_(external_output),
+      channel_layout_(channel_layout) {}
 
 WindowsWasapiEngineRuntimeOpenResult
 WindowsWasapiEngineRuntimeOpenResult::success(

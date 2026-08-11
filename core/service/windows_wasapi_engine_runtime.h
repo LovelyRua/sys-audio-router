@@ -38,12 +38,16 @@ class WindowsWasapiEngineRuntime final : public EngineAudioRuntime {
       platform::RealtimeAudioSource* external_input = nullptr);
   [[nodiscard]] static WindowsWasapiEngineRuntimeOpenResult open_default_duplex(
       std::shared_ptr<graph::Graph> graph,
-      platform::RealtimeAudioSource* external_input = nullptr);
+      platform::RealtimeAudioSource* external_input = nullptr,
+      platform::RealtimeAudioSink* external_output = nullptr,
+      platform::WasapiGraphChannelLayout channel_layout = {});
   [[nodiscard]] static WindowsWasapiEngineRuntimeOpenResult open_duplex(
       std::string capture_device_id,
       std::string render_device_id,
       std::shared_ptr<graph::Graph> graph,
-      platform::RealtimeAudioSource* external_input = nullptr);
+      platform::RealtimeAudioSource* external_input = nullptr,
+      platform::RealtimeAudioSink* external_output = nullptr,
+      platform::WasapiGraphChannelLayout channel_layout = {});
 
   [[nodiscard]] EngineAudioRuntimeResult start(
       std::uint32_t timeout_ms) override;
@@ -61,12 +65,16 @@ class WindowsWasapiEngineRuntime final : public EngineAudioRuntime {
  private:
   explicit WindowsWasapiEngineRuntime(
       std::shared_ptr<graph::Graph> graph,
-      platform::RealtimeAudioSource* external_input = nullptr) noexcept;
+      platform::RealtimeAudioSource* external_input = nullptr,
+      platform::RealtimeAudioSink* external_output = nullptr,
+      platform::WasapiGraphChannelLayout channel_layout = {}) noexcept;
   void run_duplex_supervisor() noexcept;
 
   std::shared_ptr<graph::Graph> graph_;
   std::atomic<std::uint64_t> graph_version_ = 0;
   platform::RealtimeAudioSource* external_input_ = nullptr;
+  platform::RealtimeAudioSink* external_output_ = nullptr;
+  platform::WasapiGraphChannelLayout channel_layout_;
   diagnostics::EngineDiagnostics realtime_diagnostics_;
   platform::WasapiDuplexRuntimeFactory runtime_factory_;
   bool render_configured_ = false;

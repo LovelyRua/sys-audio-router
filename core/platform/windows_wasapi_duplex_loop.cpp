@@ -587,7 +587,36 @@ WindowsWasapiDuplexLoop::WindowsWasapiDuplexLoop(
                                    render_stream_.probe().buffer_frames)),
               true,
               true,
-              external_input),
+      external_input),
+      worker_(runner_, graph, diagnostics) {}
+
+WindowsWasapiDuplexLoop::WindowsWasapiDuplexLoop(
+    WindowsWasapiStream capture_stream,
+    WindowsWasapiStream render_stream,
+    graph::Graph& graph,
+    diagnostics::EngineDiagnostics& diagnostics,
+    RealtimeAudioSource* external_input,
+    RealtimeAudioSink* external_output,
+    WasapiGraphChannelLayout channel_layout)
+    : capture_stream_(std::move(capture_stream)),
+      render_stream_(std::move(render_stream)),
+      diagnostics_(diagnostics),
+      runner_(&capture_stream_,
+              &render_stream_,
+              capture_stream_.probe().mix_format.channels,
+              render_stream_.probe().mix_format.channels,
+              graph.frames(),
+              capture_stream_.probe().buffer_frames,
+              render_stream_.probe().buffer_frames,
+              graph.frames() +
+                  2 * static_cast<std::size_t>(
+                          std::max(capture_stream_.probe().buffer_frames,
+                                   render_stream_.probe().buffer_frames)),
+              true,
+              true,
+              external_input,
+              external_output,
+              channel_layout),
       worker_(runner_, graph, diagnostics) {}
 
 WasapiDuplexLoopOpenResult WindowsWasapiDuplexLoop::open(
@@ -598,7 +627,9 @@ WasapiDuplexLoopOpenResult WindowsWasapiDuplexLoop::open(
     ProbeStreamFunction probe_stream,
     OpenStreamFunction open_stream,
     void* context,
-    RealtimeAudioSource* external_input) {
+    RealtimeAudioSource* external_input,
+    RealtimeAudioSink* external_output,
+    WasapiGraphChannelLayout channel_layout) {
   auto render_probe_result =
       probe_stream(render_device_id, WasapiStreamDirection::Render, context);
   if (!render_probe_result.ok()) {
@@ -632,12 +663,16 @@ WasapiDuplexLoopOpenResult WindowsWasapiDuplexLoop::open(
     return WasapiDuplexLoopOpenResult::failure(std::move(graph_errors));
   }
 
-  auto loop = std::unique_ptr<WindowsWasapiDuplexLoop>(
-      new WindowsWasapiDuplexLoop(capture_result.take_stream(),
-                                  render_result.take_stream(),
-                                  graph,
-                                  diagnostics,
-                                  external_input));
+  std::unique_ptr<WindowsWasapiDuplexLoop> loop;
+  if (external_output != nullptr) {
+    loop.reset(new WindowsWasapiDuplexLoop(
+        capture_result.take_stream(), render_result.take_stream(), graph,
+        diagnostics, external_input, external_output, channel_layout));
+  } else {
+    loop.reset(new WindowsWasapiDuplexLoop(
+        capture_result.take_stream(), render_result.take_stream(), graph,
+        diagnostics, external_input));
+  }
   return WasapiDuplexLoopOpenResult::success(std::move(loop));
 }
 
@@ -680,10 +715,12 @@ WasapiDuplexLoopOpenResult::WasapiDuplexLoopOpenResult(
 WasapiDuplexLoopOpenResult open_default_wasapi_duplex_loop(
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics,
-    RealtimeAudioSource* external_input) {
+    RealtimeAudioSource* external_input,
+    RealtimeAudioSink* external_output,
+    WasapiGraphChannelLayout channel_layout) {
   return WindowsWasapiDuplexLoop::open(
       nullptr, nullptr, graph, diagnostics, probe_endpoint, open_endpoint, nullptr,
-      external_input);
+      external_input, external_output, channel_layout);
 }
 
 WasapiDuplexLoopOpenResult open_wasapi_duplex_loop(
@@ -691,7 +728,9 @@ WasapiDuplexLoopOpenResult open_wasapi_duplex_loop(
     const std::string& render_device_id,
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics,
-    RealtimeAudioSource* external_input) {
+    RealtimeAudioSource* external_input,
+    RealtimeAudioSink* external_output,
+    WasapiGraphChannelLayout channel_layout) {
   return WindowsWasapiDuplexLoop::open(&capture_device_id,
                                        &render_device_id,
                                        graph,
@@ -699,7 +738,9 @@ WasapiDuplexLoopOpenResult open_wasapi_duplex_loop(
                                        probe_endpoint,
                                        open_endpoint,
                                        nullptr,
-                                       external_input);
+                                       external_input,
+                                       external_output,
+                                       channel_layout);
 }
 
 }  // namespace sar::platform
