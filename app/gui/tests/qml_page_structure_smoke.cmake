@@ -28,7 +28,7 @@ foreach(required_marker
     "if (mouse.button === Qt.LeftButton)"
     "window.toggleRoute(input.id, output.id)"
     "objectName: \"selectedRouteGainSlider\""
-    "window.adjustSelectedRouteGain("
+    "window.scheduleSelectedRouteGain("
     "property var pendingRouteStates: ({})"
     "property var pendingRouteGains: ({})"
     "objectName: \"showInactiveIoCheckBox\""
