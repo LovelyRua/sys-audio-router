@@ -118,7 +118,8 @@ int main() {
   expect(mixed, 0.75F, -0.25F);
 
   first_block.channel(0)[0] = std::numeric_limits<float>::infinity();
-  assert(first.push(first_block));
+  assert(replacement.push(first_block));
+  assert(second.push(second_block));
   assert(bus.read(mixed));
   assert(mixed.channel(0)[0] == 0.0F);
   first_block.channel(0)[0] = 0.25F;

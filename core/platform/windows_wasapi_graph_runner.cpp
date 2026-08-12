@@ -1136,15 +1136,15 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     } else if (external_input_ != nullptr) {
       if (mapped_channels_) {
         external_input_buffer_->clear();
-        const auto external_input_available =
-            external_input_->read(*external_input_buffer_);
+        if (!external_input_->read(*external_input_buffer_)) {
+          break;
+        }
         input_.clear();
         copy_channels(*external_input_buffer_, input_,
                       channel_layout_.external_input_offset);
-        stats.external_input_mixed = external_input_available;
-      } else {
-        input_.clear();
-        stats.external_input_mixed = external_input_->read(input_);
+        stats.external_input_mixed = true;
+      } else if (!external_input_->read(input_)) {
+        break;
       }
     }
     if (const auto shape_error = validate_graph_shape_realtime(graph, input_, output_)) {
@@ -1211,8 +1211,12 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     stats.render_wait_timed_out =
         !coordinated_duplex_wait && render_result.timed_out();
     if (stats.rendered_frames > 0) {
-      ++diagnostics.render_fifo_underflow_cycles;
-      diagnostics.render_fifo_underflow_frames += stats.rendered_frames;
+      const bool intentional_external_silence =
+          capture_stream_ == nullptr && external_input_ != nullptr;
+      if (!intentional_external_silence) {
+        ++diagnostics.render_fifo_underflow_cycles;
+        diagnostics.render_fifo_underflow_frames += stats.rendered_frames;
+      }
       if (capture_rate_adapter_ && capture_rate_adapter_->recovery_active) {
         stats.render_recovery_silence = true;
         stats.render_recovery_silence_frames = stats.rendered_frames;
