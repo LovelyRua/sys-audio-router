@@ -655,7 +655,8 @@ void WindowsWasapiGraphRunner::assemble_mapped_graph_input(
   }
 
   external_input_buffer_->clear();
-  stats.external_input_mixed = external_input_->read(*external_input_buffer_);
+  const bool external_input_read = external_input_->read(*external_input_buffer_);
+  stats.external_input_mixed = stats.external_input_mixed || external_input_read;
   copy_channels(*external_input_buffer_, input_,
                 channel_layout_.external_input_offset);
 }
