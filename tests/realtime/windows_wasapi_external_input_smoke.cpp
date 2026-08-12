@@ -125,8 +125,8 @@ int main() {
         {.status = sar::platform::WasapiStreamIoStatus::TimedOut});
     capture.enqueue_capture(
         {.status = sar::platform::WasapiStreamIoStatus::TimedOut});
-    render.enqueue_render({.writable_frames = 4});
-    render.enqueue_render({.writable_frames = 4});
+    render.enqueue_render({.writable_frames = 10});
+    render.enqueue_render({.writable_frames = 10});
 
     sar::platform::VirtualAsioRenderBus external(2, 4, 1, 4);
     auto producer = external.attach();
