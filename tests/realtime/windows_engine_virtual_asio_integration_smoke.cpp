@@ -108,9 +108,11 @@ int wmain(int argc, wchar_t** argv) {
   assert(client->pop_output(output, received) ==
          sar::platform::VirtualAsioSharedQueueStatus::Completed);
   assert(received.sequence == sent.sequence);
-  for (std::size_t channel = 0; channel < input.channels(); ++channel) {
-    for (std::size_t frame = 0; frame < input.frames(); ++frame) {
-      assert(output.channel(channel)[frame] == input.channel(channel)[frame]);
+  for (std::size_t channel = 0; channel < output.channels(); ++channel) {
+    for (std::size_t frame = 0; frame < output.frames(); ++frame) {
+      // With no WASAPI runtime there is no central graph clock. The ASIO
+      // transport must return silence instead of bypassing the routing matrix.
+      assert(output.channel(channel)[frame] == 0.0F);
     }
   }
   assert(client->disconnect().ok());
