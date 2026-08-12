@@ -36,6 +36,29 @@ point; a secondary click selects it for inspection without changing audio.
 Gain is expressed in dB, remains adjustable without another toggle gesture, and
 is streamed while the control is dragged.
 
+## Alpha Unified Duplex Topology
+
+The Alpha service runs one 4-source by 4-destination graph:
+
+| Graph channels | 0 | 1 | 2 | 3 |
+| --- | --- | --- | --- | --- |
+| Sources | WASAPI Capture L | WASAPI Capture R | ASIO DAW Out L | ASIO DAW Out R |
+| Destinations | WASAPI Render L | WASAPI Render R | ASIO DAW In L | ASIO DAW In R |
+
+The virtual ASIO driver still exposes two inputs and two outputs to each DAW.
+Those transport channel counts do not define the size of the global matrix.
+DAW output blocks enter the central graph through `VirtualAsioRenderBus`; graph
+destinations 2 and 3 return through `VirtualAsioCaptureBus`.
+
+The default preset routes DAW output to physical render and physical capture to
+DAW input. Direct hardware monitoring is opt-in so startup cannot unexpectedly
+create an acoustic or system feedback path.
+
+The current multi-client Alpha model mixes all active DAW output pairs into one
+stereo ASIO source and fans one stereo ASIO destination out to every client.
+Per-client matrix lanes are a later topology extension, not an implicit behavior
+of the current 4x4 graph.
+
 ## Node Categories
 
 ### Platform Device Nodes
