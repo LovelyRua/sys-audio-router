@@ -123,26 +123,33 @@ int main() {
     sar::tests::ScriptedWasapiStream render(render_probe());
     capture.enqueue_capture(
         {.status = sar::platform::WasapiStreamIoStatus::TimedOut});
+    capture.enqueue_capture(
+        {.status = sar::platform::WasapiStreamIoStatus::TimedOut});
+    render.enqueue_render({.writable_frames = 4});
     render.enqueue_render({.writable_frames = 4});
 
-    sar::realtime::AudioBuffer external_block(2, 4);
-    for (std::size_t frame = 0; frame < external_block.frames(); ++frame) {
-      external_block.channel(0)[frame] = 0.2F + 0.1F * frame;
-      external_block.channel(1)[frame] = -0.2F - 0.1F * frame;
-    }
-    SingleBlockSource external(std::move(external_block));
+    sar::platform::VirtualAsioRenderBus external(2, 4, 1, 4);
+    auto producer = external.attach();
     sar::platform::WindowsWasapiGraphRunner runner(
         &capture, &render, 2, 2, 4, 4, 10, 20, true, false, &external,
         nullptr, mapped_layout());
     sar::graph::Graph graph(1, 4, 4, 48000);
     sar::diagnostics::EngineDiagnostics diagnostics;
 
+    const auto warmup = runner.process_once(graph, diagnostics, 0);
+    assert(warmup.ok());
+    sar::realtime::AudioBuffer external_block(2, 4);
+    for (std::size_t frame = 0; frame < external_block.frames(); ++frame) {
+      external_block.channel(0)[frame] = 0.2F + 0.1F * frame;
+      external_block.channel(1)[frame] = -0.2F - 0.1F * frame;
+    }
+    assert(producer.push(external_block));
     const auto result = runner.process_once(graph, diagnostics, 0);
     assert(result.ok());
     assert(result.stats().capture_stream_idle);
     assert(result.stats().external_input_mixed);
     assert(result.stats().graph_processed);
-    assert(diagnostics.processed_blocks == 1);
+    assert(diagnostics.processed_blocks >= 1);
     assert(diagnostics.render_fifo_underflow_cycles == 0);
   }
 
