@@ -39,6 +39,11 @@ void expect_gain(const sar::realtime::AudioBuffer& input,
   }
 }
 
+void expect_equal(const sar::realtime::AudioBuffer& expected,
+                  const sar::realtime::AudioBuffer& actual) {
+  expect_gain(expected, actual, 1.0F);
+}
+
 }  // namespace
 
 int main() {
@@ -156,6 +161,64 @@ int main() {
   assert(stats.last_sequence == kBlocks - 1);
   assert(stats.graph_updates == 1);
   assert(stats.current_graph_version == 3);
+
+  const auto central_name_result = make_windows_virtual_asio_object_names(
+      "transport-smoke", "central-client", kGeneration + 10);
+  assert(central_name_result.ok());
+  auto central_identity = identity;
+  central_identity.connection_generation = kGeneration + 10;
+  VirtualAsioRenderBus render_bus(kChannels, kFrames, 1, 4);
+  VirtualAsioCaptureBus capture_bus(kChannels, kFrames, 1, 4);
+  auto central_graph =
+      std::make_unique<sar::graph::Graph>(4, kChannels, kFrames, 48000);
+  central_graph->add_node(std::make_unique<sar::graph::GainNode>(0.0F));
+  auto central_created = WindowsVirtualAsioTransportSession::create(
+      central_name_result.names(), config, central_identity,
+      std::move(central_graph), 20, render_bus.attach(), capture_bus.attach());
+  assert(central_created.ok());
+  auto central_session = central_created.take_session();
+  auto central_mapping_result = WindowsVirtualAsioSharedMemory::open(
+      central_name_result.names().mapping);
+  assert(central_mapping_result.ok());
+  auto central_mapping = central_mapping_result.take_mapping();
+  auto central_events_result =
+      WindowsVirtualAsioEvents::open(central_name_result.names());
+  assert(central_events_result.ok());
+  auto central_events = central_events_result.take_events();
+  auto central_input_result = WindowsVirtualAsioSharedQueue::bind(
+      *central_mapping, VirtualAsioSharedQueueDirection::Input);
+  auto central_output_result = WindowsVirtualAsioSharedQueue::bind(
+      *central_mapping, VirtualAsioSharedQueueDirection::Output);
+  assert(central_input_result.ok() && central_output_result.ok());
+  auto central_input = central_input_result.take_queue();
+  auto central_output = central_output_result.take_queue();
+  assert(central_session->start());
+
+  sar::realtime::AudioBuffer daw_output(kChannels, kFrames);
+  sar::realtime::AudioBuffer daw_input(kChannels, kFrames);
+  sar::realtime::AudioBuffer matrix_output(kChannels, kFrames);
+  sar::realtime::AudioBuffer rendered_from_daw(kChannels, kFrames);
+  fill(daw_output, 7);
+  fill(matrix_output, 9);
+  assert(capture_bus.write(matrix_output));
+  const VirtualAsioSharedBlockMetadata central_metadata{.sequence = 77};
+  assert(central_input.push(daw_output, central_metadata) ==
+         VirtualAsioSharedQueueStatus::Completed);
+  assert(central_events->signal_input());
+  assert(central_events->wait_output_or_shutdown(1000).status ==
+         WindowsVirtualAsioEventWaitStatus::Ready);
+  VirtualAsioSharedBlockMetadata central_received;
+  assert(central_output.pop(daw_input, central_received) ==
+         VirtualAsioSharedQueueStatus::Completed);
+  assert(central_received.sequence == central_metadata.sequence);
+  expect_equal(matrix_output, daw_input);
+  assert(render_bus.read(rendered_from_daw));
+  expect_equal(daw_output, rendered_from_daw);
+  assert(central_session->stats().capture_bus_underflows == 0);
+  central_session->stop();
+  central_session.reset();
+  assert(capture_bus.stats().active_consumers == 0);
+  assert(render_bus.diagnostics().active_producers == 0);
 
   STARTUPINFOW startup{};
   startup.cb = sizeof(startup);

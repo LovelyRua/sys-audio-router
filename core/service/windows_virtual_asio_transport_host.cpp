@@ -119,10 +119,12 @@ WindowsVirtualAsioHostConnectResult::WindowsVirtualAsioHostConnectResult(
 
 WindowsVirtualAsioTransportHost::WindowsVirtualAsioTransportHost(
     WindowsVirtualAsioHostConfig config,
-    platform::VirtualAsioRenderBus* render_bus)
+    platform::VirtualAsioRenderBus* render_bus,
+    platform::VirtualAsioCaptureBus* capture_bus)
     : config_(std::move(config)),
       registry_(config_.maximum_clients, random_generation_seed()),
-      render_bus_(render_bus) {
+      render_bus_(render_bus),
+      capture_bus_(capture_bus) {
   sessions_.reserve(config_.maximum_clients);
 }
 
@@ -168,6 +170,20 @@ WindowsVirtualAsioHostConnectResult WindowsVirtualAsioTransportHost::connect(
     }
   }
 
+  platform::VirtualAsioCaptureConsumer capture_consumer;
+  if (capture_bus_ != nullptr) {
+    if (client.format.input_channels != capture_bus_->channels()) {
+      return failure("virtual_asio_capture_bus_format_mismatch",
+                     "Virtual ASIO client input channels do not match the "
+                     "capture bus.");
+    }
+    capture_consumer = capture_bus_->attach();
+    if (!capture_consumer.valid()) {
+      return failure("virtual_asio_capture_bus_full",
+                     "Virtual ASIO capture bus has no free client slots.");
+    }
+  }
+
   std::uint64_t token_low = 0;
   std::uint64_t token_high = 0;
   std::uint64_t server_nonce_low = 0;
@@ -204,7 +220,8 @@ WindowsVirtualAsioHostConnectResult WindowsVirtualAsioTransportHost::connect(
   };
   auto session_result = WindowsVirtualAsioTransportSession::create(
       names_result.names(), memory_config, identity, std::move(graph),
-      config_.wait_timeout_ms, std::move(render_producer));
+      config_.wait_timeout_ms, std::move(render_producer),
+      std::move(capture_consumer));
   if (!session_result.ok()) {
     return WindowsVirtualAsioHostConnectResult::failure(
         session_result.errors());

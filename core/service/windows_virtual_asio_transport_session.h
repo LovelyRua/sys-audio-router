@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/graph/graph_snapshot.h"
+#include "core/platform/virtual_asio_capture_bus.h"
 #include "core/platform/virtual_asio_shared_memory_layout.h"
 #include "core/platform/virtual_asio_render_bus.h"
 #include "core/platform/windows_virtual_asio_events.h"
@@ -35,6 +36,7 @@ struct WindowsVirtualAsioTransportStats {
   std::uint64_t client_disconnects = 0;
   std::uint64_t last_sequence = 0;
   std::uint64_t dropped_render_bus_blocks = 0;
+  std::uint64_t capture_bus_underflows = 0;
   std::uint64_t graph_updates = 0;
   std::uint64_t current_graph_version = 0;
 };
@@ -78,7 +80,8 @@ class WindowsVirtualAsioTransportSession {
       const platform::VirtualAsioSharedMemoryIdentity& identity,
       std::unique_ptr<graph::Graph> graph,
       std::uint32_t wait_timeout_ms = 100,
-      platform::VirtualAsioRenderProducer render_producer = {});
+      platform::VirtualAsioRenderProducer render_producer = {},
+      platform::VirtualAsioCaptureConsumer capture_consumer = {});
 
   [[nodiscard]] bool start() noexcept;
   void stop() noexcept;
@@ -100,6 +103,7 @@ class WindowsVirtualAsioTransportSession {
       platform::WindowsVirtualAsioSharedQueue output_queue,
       std::shared_ptr<graph::Graph> graph,
       platform::VirtualAsioRenderProducer render_producer,
+      platform::VirtualAsioCaptureConsumer capture_consumer,
       void* client_process_handle,
       std::uint32_t wait_timeout_ms);
 
@@ -113,6 +117,7 @@ class WindowsVirtualAsioTransportSession {
   platform::WindowsVirtualAsioSharedQueue output_queue_;
   graph::GraphSnapshotPublisher graph_publisher_;
   platform::VirtualAsioRenderProducer render_producer_;
+  platform::VirtualAsioCaptureConsumer capture_consumer_;
   realtime::AudioBuffer input_buffer_;
   realtime::AudioBuffer output_buffer_;
   std::uint32_t sample_rate_ = 0;
@@ -134,6 +139,7 @@ class WindowsVirtualAsioTransportSession {
   std::atomic<std::uint64_t> client_disconnects_ = 0;
   std::atomic<std::uint64_t> last_sequence_ = 0;
   std::atomic<std::uint64_t> dropped_render_bus_blocks_ = 0;
+  std::atomic<std::uint64_t> capture_bus_underflows_ = 0;
   std::atomic<std::uint64_t> graph_updates_ = 0;
   std::atomic<std::uint64_t> current_graph_version_ = 0;
 };

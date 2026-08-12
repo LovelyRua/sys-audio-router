@@ -98,7 +98,8 @@ WindowsVirtualAsioTransportSession::create(
     const platform::VirtualAsioSharedMemoryIdentity& identity,
     std::unique_ptr<graph::Graph> graph,
     std::uint32_t wait_timeout_ms,
-    platform::VirtualAsioRenderProducer render_producer) {
+    platform::VirtualAsioRenderProducer render_producer,
+    platform::VirtualAsioCaptureConsumer capture_consumer) {
   if (graph == nullptr) {
     return failure("virtual_asio_session_graph_missing",
                    "Virtual ASIO transport requires an owned graph.");
@@ -170,6 +171,7 @@ WindowsVirtualAsioTransportSession::create(
                 std::move(mapping), std::move(events),
                 input_result.take_queue(), output_result.take_queue(),
                 std::move(shared_graph), std::move(render_producer),
+                std::move(capture_consumer),
                 client_process.release(), wait_timeout_ms)));
   } catch (const std::bad_alloc&) {
     return failure("virtual_asio_session_allocation_failed",
@@ -240,6 +242,7 @@ WindowsVirtualAsioTransportSession::stats() const noexcept {
       client_disconnects_.load(std::memory_order_relaxed),
       last_sequence_.load(std::memory_order_relaxed),
       dropped_render_bus_blocks_.load(std::memory_order_relaxed),
+      capture_bus_underflows_.load(std::memory_order_relaxed),
       graph_updates_.load(std::memory_order_relaxed),
       current_graph_version_.load(std::memory_order_relaxed),
   };
@@ -273,6 +276,7 @@ WindowsVirtualAsioTransportSession::WindowsVirtualAsioTransportSession(
     platform::WindowsVirtualAsioSharedQueue output_queue,
     std::shared_ptr<graph::Graph> graph,
     platform::VirtualAsioRenderProducer render_producer,
+    platform::VirtualAsioCaptureConsumer capture_consumer,
     void* client_process_handle,
     std::uint32_t wait_timeout_ms)
     : mapping_(std::move(mapping)),
@@ -281,6 +285,7 @@ WindowsVirtualAsioTransportSession::WindowsVirtualAsioTransportSession(
       output_queue_(std::move(output_queue)),
       graph_publisher_(graph),
       render_producer_(std::move(render_producer)),
+      capture_consumer_(std::move(capture_consumer)),
       input_buffer_(graph->channels(), graph->frames()),
       output_buffer_(graph->channels(), graph->frames()),
       sample_rate_(graph->sample_rate()),
@@ -355,7 +360,14 @@ void WindowsVirtualAsioTransportSession::process_available_input() noexcept {
     if (render_producer_.valid() && !render_producer_.push(input_buffer_)) {
       dropped_render_bus_blocks_.fetch_add(1, std::memory_order_relaxed);
     }
-    graph_publisher_.process(input_buffer_, output_buffer_, graph_diagnostics_);
+    if (capture_consumer_.valid()) {
+      output_buffer_.clear();
+      if (!capture_consumer_.read(output_buffer_)) {
+        capture_bus_underflows_.fetch_add(1, std::memory_order_relaxed);
+      }
+    } else {
+      graph_publisher_.process(input_buffer_, output_buffer_, graph_diagnostics_);
+    }
     processed_blocks_.fetch_add(1, std::memory_order_relaxed);
     last_sequence_.store(metadata.sequence, std::memory_order_relaxed);
 
