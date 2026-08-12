@@ -192,6 +192,7 @@ bool VirtualAsioRenderBus::read(
     clipped_samples_.fetch_add(clipped, std::memory_order_relaxed);
     non_finite_samples_.fetch_add(non_finite, std::memory_order_relaxed);
     update_peak(peak_bits_, block_peak);
+    update_peak(interval_peak_bits_, block_peak);
     mixed_blocks_.fetch_add(1, std::memory_order_relaxed);
   } else {
     silent_reads_.fetch_add(1, std::memory_order_relaxed);
@@ -219,6 +220,8 @@ VirtualAsioRenderBusStats VirtualAsioRenderBus::stats() const noexcept {
 RealtimeAudioSourceDiagnostics VirtualAsioRenderBus::diagnostics()
     const noexcept {
   const auto snapshot = stats();
+  const auto interval_peak = std::bit_cast<float>(
+      interval_peak_bits_.exchange(0, std::memory_order_acq_rel));
   return {
       snapshot.pushed_blocks,
       snapshot.dropped_blocks,
@@ -231,7 +234,7 @@ RealtimeAudioSourceDiagnostics VirtualAsioRenderBus::diagnostics()
       snapshot.non_finite_samples,
       snapshot.maximum_queue_depth,
       snapshot.active_producers,
-      snapshot.peak,
+      interval_peak,
   };
 }
 

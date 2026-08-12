@@ -173,12 +173,13 @@ int main() {
   render.enqueue_render({.writable_frames = 10});
   const auto empty_result = runner.process_once(graph, diagnostics, 10);
   assert(empty_result.ok());
-  assert(!empty_result.stats().graph_processed);
+  assert(empty_result.stats().graph_processed);
+  assert(!empty_result.stats().external_input_mixed);
   assert(empty_result.stats().rendered_frames == 10);
   assert(!empty_result.stats().render_stream_idle);
-  assert(diagnostics.processed_blocks == 4);
-  assert(diagnostics.render_fifo_underflow_cycles == 1);
-  assert(diagnostics.render_fifo_underflow_frames == 10);
+  assert(diagnostics.processed_blocks > 4);
+  assert(diagnostics.render_fifo_underflow_cycles == 0);
+  assert(diagnostics.render_fifo_underflow_frames == 0);
   assert(render.render_submissions().size() == 4);
   const auto& silence = render.render_submissions().back();
   for (const auto& channel : silence.samples) {

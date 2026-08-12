@@ -40,6 +40,39 @@ ApplicationWindow {
     property var pendingRouteStates: ({})
     property var pendingRouteGains: ({})
     property var routeStateCache: ({})
+    property real meterTarget: 0
+    property real meterLevel: 0
+    property real meterHold: 0
+    property int meterHoldTicks: 0
+
+    function levelToMeterPosition(level) {
+        if (level <= 0.001)
+            return 0
+        var db = 20 * Math.log(level) / Math.LN10
+        return Math.max(0, Math.min(1, (db + 60) / 60))
+    }
+
+    Timer {
+        interval: 16
+        repeat: true
+        running: true
+        onTriggered: {
+            var target = Math.max(0, Math.min(1, window.meterTarget))
+            if (target >= window.meterLevel)
+                window.meterLevel = target
+            else
+                window.meterLevel = Math.max(target, window.meterLevel * 0.91)
+            if (target >= window.meterHold) {
+                window.meterHold = target
+                window.meterHoldTicks = 75
+            } else if (window.meterHoldTicks > 0) {
+                --window.meterHoldTicks
+            } else {
+                window.meterHold = Math.max(window.meterLevel,
+                                            window.meterHold * 0.985)
+            }
+        }
+    }
 
     function routeKey(inputId, outputId) {
         return inputId.length + ":" + inputId + outputId
@@ -254,6 +287,9 @@ ApplicationWindow {
 
     Connections {
         target: engine
+        function onDiagnosticsChanged() {
+            window.meterTarget = engine.peak
+        }
         function onRuntimeChanged() { window.syncRuntimeDraft() }
         function onSessionChanged() {
             window.clearPendingRouteUpdates()
@@ -1266,20 +1302,36 @@ ApplicationWindow {
                         Text { text: "ASIO BUS LEVEL"; color: colors.muted; font.pixelSize: 10 }
                         Rectangle {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 12
+                            Layout.preferredHeight: 16
                             radius: 2
                             color: colors.canvas
                             border.color: colors.line
                             Rectangle {
-                                width: parent.width * Math.max(0, Math.min(1, engine.peak))
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                anchors.margins: 2
+                                width: Math.max(0, (parent.width - 4) *
+                                                window.levelToMeterPosition(window.meterLevel))
                                 height: parent.height
                                 radius: 2
-                                color: engine.peak > 0.95 ? colors.danger
-                                      : engine.peak > 0.75 ? colors.warning : colors.healthy
+                                color: window.meterLevel > 0.95 ? colors.danger
+                                      : window.meterLevel > 0.50 ? colors.warning : colors.healthy
+                            }
+                            Rectangle {
+                                visible: window.meterHold > 0.001
+                                width: 2
+                                height: parent.height - 2
+                                y: 1
+                                x: Math.max(1, Math.min(parent.width - width - 1,
+                                    (parent.width - 4) *
+                                    window.levelToMeterPosition(window.meterHold) + 2))
+                                color: window.meterHold > 0.95 ? colors.danger : colors.text
                             }
                         }
                         Text {
-                            text: engine.peak > 0 ? (20 * Math.log(engine.peak) / Math.LN10).toFixed(1) + " dBFS"
+                            text: window.meterLevel > 0.001
+                                  ? (20 * Math.log(window.meterLevel) / Math.LN10).toFixed(1) + " dBFS"
                                                   : "-inf dBFS"
                             color: colors.text
                             font.family: "Consolas"
@@ -1299,7 +1351,10 @@ ApplicationWindow {
                     id: devicesScroll
                     anchors.fill: parent
                     clip: true
+                    contentWidth: availableWidth
+                    contentHeight: devicesContent.implicitHeight + 48
                 ColumnLayout {
+                    id: devicesContent
                     x: 24
                     y: 24
                     width: Math.max(0, devicesScroll.availableWidth - 48)
@@ -1470,6 +1525,7 @@ ApplicationWindow {
                             }
                         }
                     }
+                    Item { Layout.preferredHeight: 20 }
                 }
             }
             }

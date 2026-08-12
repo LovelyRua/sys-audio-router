@@ -166,7 +166,9 @@ EngineController::EngineController(EngineTransport transport,
                            .arg(exit_code));
             }
           });
-  poll_timer_.setInterval(250);
+  // Diagnostics feed the meter at control rate; slower queries stay throttled
+  // independently in schedulePoll().
+  poll_timer_.setInterval(50);
   connect(&poll_timer_, &QTimer::timeout, this,
           &EngineController::schedulePoll);
   if (automatic_activity) {
@@ -840,9 +842,9 @@ void EngineController::schedulePoll() {
   }
   control::ControlCommand command;
   ++poll_sequence_;
-  if (poll_sequence_ % 20 == 0) {
+  if (poll_sequence_ % 100 == 0) {
     command.type = control::ControlCommandType::QuerySessionState;
-  } else if (poll_sequence_ % 4 == 0) {
+  } else if (poll_sequence_ % 20 == 0) {
     command.type = control::ControlCommandType::QueryAudioRuntime;
   } else {
     command.type = control::ControlCommandType::QueryDiagnostics;

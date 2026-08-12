@@ -187,6 +187,13 @@ int main() {
   assert(diagnostics.consumed_blocks == stats.consumed_blocks);
   assert(diagnostics.maximum_queue_depth == stats.maximum_queue_depth);
   assert(sar::tests::nearly_equal(diagnostics.peak, stats.peak));
+  const auto consumed_interval = bus.diagnostics();
+  assert(consumed_interval.peak == 0.0F);
+
+  assert(first.push(first_block));
+  assert(bus.read(mixed));
+  const auto next_interval = bus.diagnostics();
+  assert(sar::tests::nearly_equal(next_interval.peak, 0.75F));
 
   // A healthy producer must not hide starvation from a slower clock domain.
   sar::platform::VirtualAsioRenderBus drift_bus(2, 16, 2, 2);

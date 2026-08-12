@@ -41,6 +41,17 @@ foreach(required_marker
   endif()
 endforeach()
 
+foreach(realtime_ui_marker
+    "property real meterLevel"
+    "interval: 16"
+    "window.levelToMeterPosition(window.meterLevel)"
+    "contentHeight: devicesContent.implicitHeight + 48")
+  string(FIND "${qml}" "${realtime_ui_marker}" marker_position)
+  if(marker_position LESS 0)
+    message(FATAL_ERROR "Realtime UI QML marker is missing: ${realtime_ui_marker}")
+  endif()
+endforeach()
+
 string(FIND "${qml}" "routeSwitch.checked &&" gain_requires_route_toggle)
 if(NOT gain_requires_route_toggle LESS 0)
   message(FATAL_ERROR "Selected-route gain must not require toggling the route")

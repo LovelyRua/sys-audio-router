@@ -1136,15 +1136,15 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     } else if (external_input_ != nullptr) {
       if (mapped_channels_) {
         external_input_buffer_->clear();
-        if (!external_input_->read(*external_input_buffer_)) {
-          break;
-        }
+        const auto external_input_available =
+            external_input_->read(*external_input_buffer_);
         input_.clear();
         copy_channels(*external_input_buffer_, input_,
                       channel_layout_.external_input_offset);
-        stats.external_input_mixed = true;
-      } else if (!external_input_->read(input_)) {
-        break;
+        stats.external_input_mixed = external_input_available;
+      } else {
+        input_.clear();
+        stats.external_input_mixed = external_input_->read(input_);
       }
     }
     if (const auto shape_error = validate_graph_shape_realtime(graph, input_, output_)) {

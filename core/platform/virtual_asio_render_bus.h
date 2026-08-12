@@ -128,6 +128,7 @@ class VirtualAsioRenderBus final : public RealtimeAudioSource {
   std::atomic<std::size_t> maximum_queue_depth_ = 0;
   std::atomic<std::size_t> active_producers_ = 0;
   std::atomic<std::uint32_t> peak_bits_ = 0;
+  mutable std::atomic<std::uint32_t> interval_peak_bits_ = 0;
 };
 
 }  // namespace sar::platform
