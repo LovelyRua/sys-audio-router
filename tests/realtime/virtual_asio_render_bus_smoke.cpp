@@ -118,8 +118,7 @@ int main() {
   expect(mixed, 0.75F, -0.25F);
 
   first_block.channel(0)[0] = std::numeric_limits<float>::infinity();
-  assert(replacement.push(first_block));
-  assert(second.push(second_block));
+  assert(first.push(first_block));
   assert(bus.read(mixed));
   assert(mixed.channel(0)[0] == 0.0F);
   first_block.channel(0)[0] = 0.25F;
@@ -191,7 +190,8 @@ int main() {
   const auto consumed_interval = bus.diagnostics();
   assert(consumed_interval.peak == 0.0F);
 
-  assert(first.push(first_block));
+  assert(replacement.push(first_block));
+  assert(second.push(second_block));
   assert(bus.read(mixed));
   const auto next_interval = bus.diagnostics();
   assert(sar::tests::nearly_equal(next_interval.peak, 0.75F));
