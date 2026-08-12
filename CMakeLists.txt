@@ -316,7 +316,7 @@ if(WIN32)
     tools/sar_virtual_asio_register.cpp
   )
   target_link_libraries(sar_virtual_asio_register
-    PRIVATE sar_virtual_asio_registration)
+    PRIVATE sar_virtual_asio_registration rstrtmgr)
 
   add_executable(sar_virtual_asio_host_probe
     tools/sar_virtual_asio_host_probe.cpp
@@ -759,6 +759,9 @@ if(WIN32)
                    $<TARGET_FILE:sar_virtual_asio_driver>)
   add_test(NAME windows_virtual_asio_registration_help
            COMMAND sar_virtual_asio_register --help)
+  add_test(NAME windows_virtual_asio_driver_unlocked
+           COMMAND sar_virtual_asio_register --check-unlocked
+                   $<TARGET_FILE:sar_virtual_asio_driver>)
   add_test(NAME windows_virtual_asio_registration_missing_action
            COMMAND sar_virtual_asio_register)
   set_tests_properties(windows_virtual_asio_registration_missing_action
@@ -1098,6 +1101,14 @@ if(WIN32 AND SAR_BUILD_GUI)
   set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
   set(CPACK_NSIS_MANIFEST_DPI_AWARE ON)
   set(CPACK_NSIS_EXTRA_PREINSTALL_COMMANDS [[
+    nsExec::ExecToStack '"$SYSDIR\cmd.exe" /D /C ""$SYSDIR\tasklist.exe" /M SystemAudioRouteVirtualASIO.dll /FO CSV /NH 2^>nul | "$SYSDIR\findstr.exe" /I /C:"SystemAudioRouteVirtualASIO.dll" ^>nul"'
+    Pop $0
+    Pop $1
+    StrCmp $0 "0" 0 sar_asio_driver_unlocked
+    MessageBox MB_OK|MB_ICONSTOP "System Audio Route Virtual ASIO is still loaded by an audio application.$\r$\n$\r$\nClose REAPER, your DAW, and plug-in scanners, then run this installer again.$\r$\n$\r$\nThe update has not changed any installed files."
+    SetErrorLevel 1
+    Abort
+    sar_asio_driver_unlocked:
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM SystemAudioRoute.exe'
     Pop $0
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM sar_engine_service.exe'

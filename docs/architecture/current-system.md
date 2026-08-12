@@ -106,6 +106,14 @@ the cached response, while reuse of an ID for a different request is rejected
 as `command_id_conflict`. This prevents stale responses after a GUI restart from
 rolling device, runtime-mode, or matrix controls back to older state.
 
+The GUI treats mute/enable and gain as independent route properties. Disabling
+a crosspoint now retains the route and its gain, so enabling it restores the
+same level. In render mode, capture-side WASAPI sources and DAW-input ASIO
+destinations are unavailable: the matrix hides them by default and can show
+them as non-editable inactive ports. This is currently a compatibility
+projection over the fixed alpha endpoint IDs. The engine must become the source
+of port availability before arbitrary devices are exposed.
+
 `sar_bootstrap_launcher` serializes each per-user launch sequence with a named
 mutex, starts or reuses the engine, waits for the control pipe, and then starts
 or reuses the GUI. ZIP and installer acceptance launch two bootstrap processes

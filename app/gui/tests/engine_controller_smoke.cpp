@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
       requests.push_back(command);
     }
     if (command.type == ControlCommandType::ConfigureAudioRuntime ||
-        command.type == ControlCommandType::DisconnectRoute) {
+        command.type == ControlCommandType::SetMute) {
       return uncertain(command);
     }
     assert(command.type == ControlCommandType::QuerySessionState);
@@ -185,7 +185,8 @@ int main(int argc, char **argv) {
 
   {
     const std::scoped_lock lock(mutex);
-    assert(requests[2].type == ControlCommandType::DisconnectRoute);
+    assert(requests[2].type == ControlCommandType::SetMute);
+    assert(requests[2].mute);
     assert(requests[3].type == ControlCommandType::QuerySessionState);
   }
 

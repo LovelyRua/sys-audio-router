@@ -40,6 +40,13 @@ ApplicationWindow {
     property var pendingRouteStates: ({})
     property var pendingRouteGains: ({})
     property var routeStateCache: ({})
+    property bool showInactiveIo: false
+    readonly property var matrixInputs: projectEndpoints(engine.inputs, true,
+                                                          engine.runtimeMode,
+                                                          showInactiveIo)
+    readonly property var matrixOutputs: projectEndpoints(engine.outputs, false,
+                                                           engine.runtimeMode,
+                                                           showInactiveIo)
     property real meterTarget: 0
     property real meterLevel: 0
     property real meterHold: 0
@@ -76,6 +83,35 @@ ApplicationWindow {
 
     function routeKey(inputId, outputId) {
         return inputId.length + ":" + inputId + outputId
+    }
+
+    function projectEndpoints(endpoints, source, runtimeMode, includeInactive) {
+        var projected = []
+        for (var index = 0; index < endpoints.length; ++index) {
+            var endpoint = endpoints[index]
+            var family = endpointFamily(endpoint, index, endpoints.length)
+            var active = runtimeMode === "duplex" ||
+                    (source ? family !== "wasapi" : family !== "asio")
+            if (active || includeInactive) {
+                projected.push({
+                    id: endpoint.id,
+                    label: endpoint.label,
+                    active: active
+                })
+            }
+        }
+        return projected
+    }
+
+    function endpointActive(endpointId) {
+        var models = [matrixInputs, matrixOutputs]
+        for (var modelIndex = 0; modelIndex < models.length; ++modelIndex) {
+            for (var index = 0; index < models[modelIndex].length; ++index) {
+                if (models[modelIndex][index].id === endpointId)
+                    return models[modelIndex][index].active
+            }
+        }
+        return false
     }
 
     function endpointFamily(endpoint, index, count) {
@@ -138,13 +174,13 @@ ApplicationWindow {
     function validateRouteSelection() {
         var inputLabel = ""
         var outputLabel = ""
-        for (var inputIndex = 0; inputIndex < engine.inputs.length; ++inputIndex) {
-            if (engine.inputs[inputIndex].id === selectedInputId)
-                inputLabel = engine.inputs[inputIndex].label
+        for (var inputIndex = 0; inputIndex < matrixInputs.length; ++inputIndex) {
+            if (matrixInputs[inputIndex].id === selectedInputId)
+                inputLabel = matrixInputs[inputIndex].label
         }
-        for (var outputIndex = 0; outputIndex < engine.outputs.length; ++outputIndex) {
-            if (engine.outputs[outputIndex].id === selectedOutputId)
-                outputLabel = engine.outputs[outputIndex].label
+        for (var outputIndex = 0; outputIndex < matrixOutputs.length; ++outputIndex) {
+            if (matrixOutputs[outputIndex].id === selectedOutputId)
+                outputLabel = matrixOutputs[outputIndex].label
         }
         if (inputLabel.length === 0 || outputLabel.length === 0) {
             clearRouteSelection()
@@ -199,11 +235,11 @@ ApplicationWindow {
     }
 
     function selectRoute(inputIndex, outputIndex) {
-        if (inputIndex < 0 || inputIndex >= engine.inputs.length ||
-                outputIndex < 0 || outputIndex >= engine.outputs.length)
+        if (inputIndex < 0 || inputIndex >= matrixInputs.length ||
+                outputIndex < 0 || outputIndex >= matrixOutputs.length)
             return false
-        var input = engine.inputs[inputIndex]
-        var output = engine.outputs[outputIndex]
+        var input = matrixInputs[inputIndex]
+        var output = matrixOutputs[outputIndex]
         selectedInputId = input.id
         selectedInputLabel = input.label
         selectedOutputId = output.id
@@ -220,17 +256,17 @@ ApplicationWindow {
     }
 
     function moveRouteSelection(inputDelta, outputDelta) {
-        if (engine.inputs.length === 0 || engine.outputs.length === 0)
+        if (matrixInputs.length === 0 || matrixOutputs.length === 0)
             return
-        var inputIndex = endpointIndex(engine.inputs, selectedInputId)
-        var outputIndex = endpointIndex(engine.outputs, selectedOutputId)
+        var inputIndex = endpointIndex(matrixInputs, selectedInputId)
+        var outputIndex = endpointIndex(matrixOutputs, selectedOutputId)
         if (inputIndex < 0 || outputIndex < 0) {
             inputIndex = 0
             outputIndex = 0
         } else {
-            inputIndex = Math.max(0, Math.min(engine.inputs.length - 1,
+            inputIndex = Math.max(0, Math.min(matrixInputs.length - 1,
                                              inputIndex + inputDelta))
-            outputIndex = Math.max(0, Math.min(engine.outputs.length - 1,
+            outputIndex = Math.max(0, Math.min(matrixOutputs.length - 1,
                                               outputIndex + outputDelta))
         }
         selectRoute(inputIndex, outputIndex)
@@ -239,7 +275,8 @@ ApplicationWindow {
     }
 
     function toggleRoute(inputId, outputId) {
-        if (!engine.connected || engine.busy || inputId.length === 0 || outputId.length === 0)
+        if (!engine.connected || engine.busy || !endpointActive(inputId) ||
+                !endpointActive(outputId) || inputId.length === 0 || outputId.length === 0)
             return
         var enabled = !routeDisplayEnabled(inputId, outputId)
         setPendingRouteState(inputId, outputId, enabled)
@@ -251,7 +288,9 @@ ApplicationWindow {
     }
 
     function adjustSelectedRouteGain(linearGain) {
-        if (!engine.connected || selectedInputId.length === 0 || selectedOutputId.length === 0)
+        if (!engine.connected || !endpointActive(selectedInputId) ||
+                !endpointActive(selectedOutputId) || selectedInputId.length === 0 ||
+                selectedOutputId.length === 0)
             return
         setPendingRouteGain(selectedInputId, selectedOutputId, linearGain)
         engine.setRouteGain(selectedInputId, selectedOutputId, linearGain)
@@ -758,8 +797,8 @@ ApplicationWindow {
                                     font.weight: Font.DemiBold
                                 }
                                 Text {
-                                    text: engine.inputs.length + " inputs  /  " +
-                                          engine.outputs.length + " outputs"
+                                    text: matrixInputs.length + " inputs  /  " +
+                                          matrixOutputs.length + " outputs"
                                     color: colors.muted
                                     font.pixelSize: 11
                                 }
@@ -771,6 +810,18 @@ ApplicationWindow {
                                     font.weight: Font.DemiBold
                                 }
                                 Item { Layout.fillWidth: true }
+                                CheckBox {
+                                    objectName: "showInactiveIoCheckBox"
+                                    text: "Show inactive I/O"
+                                    checked: showInactiveIo
+                                    onToggled: {
+                                        showInactiveIo = checked
+                                        validateRouteSelection()
+                                        matrixInputHeader.requestPaint()
+                                        matrixOutputHeader.requestPaint()
+                                        matrixGridCanvas.requestPaint()
+                                    }
+                                }
                                 IconButton {
                                     text: "↶"
                                     tooltipText: "Undo route edit (Ctrl+Z)"
@@ -797,7 +848,7 @@ ApplicationWindow {
 
                             Text {
                                 anchors.centerIn: parent
-                                visible: engine.inputs.length === 0 || engine.outputs.length === 0
+                                visible: matrixInputs.length === 0 || matrixOutputs.length === 0
                                 text: engine.connected ? "No routable endpoints in this preset"
                                                        : "Waiting for the engine"
                                 color: colors.muted
@@ -808,7 +859,7 @@ ApplicationWindow {
                                 id: matrixViewport
                                 anchors.fill: parent
                                 anchors.margins: 18
-                                visible: engine.inputs.length > 0 && engine.outputs.length > 0
+                                visible: matrixInputs.length > 0 && matrixOutputs.length > 0
                                 clip: true
                                 property int labelWidth: window.width < 1100 ? 154 : 190
                                 property int headerHeight: 96
@@ -854,28 +905,28 @@ ApplicationWindow {
                                         var firstColumn = Math.floor(matrixGridFlick.contentX / cellSize)
                                         var x = firstColumn * cellSize - matrixGridFlick.contentX
                                         for (var column = firstColumn;
-                                             column < engine.inputs.length && x < width;
+                                             column < matrixInputs.length && x < width;
                                              ++column, x += cellSize) {
-                                            var endpoint = engine.inputs[column]
+                                            var endpoint = matrixInputs[column]
                                             var group = window.endpointGroupTitle(
                                                         endpoint, column,
-                                                        engine.inputs.length, true)
+                                                        matrixInputs.length, true)
                                             var groupStart = column === 0 || group !== window.endpointGroupTitle(
-                                                        engine.inputs[column - 1], column - 1,
-                                                        engine.inputs.length, true)
+                                                        matrixInputs[column - 1], column - 1,
+                                                        matrixInputs.length, true)
                                             if (groupStart) {
                                                 var groupEnd = column + 1
-                                                while (groupEnd < engine.inputs.length &&
+                                                while (groupEnd < matrixInputs.length &&
                                                        window.endpointGroupTitle(
-                                                           engine.inputs[groupEnd], groupEnd,
-                                                           engine.inputs.length, true) === group)
+                                                           matrixInputs[groupEnd], groupEnd,
+                                                           matrixInputs.length, true) === group)
                                                     ++groupEnd
                                                 var groupWidth = (groupEnd - column) * cellSize
                                                 context.fillStyle = "#20262a"
                                                 context.fillRect(x + 1, 1, groupWidth - 3, 20)
                                                 context.fillStyle = window.endpointGroupColor(
                                                                     endpoint, column,
-                                                                    engine.inputs.length)
+                                                                    matrixInputs.length)
                                                 context.fillRect(x + 1, 20, groupWidth - 3, 2)
                                                 context.font = "bold 9px Segoe UI"
                                                 context.textAlign = "center"
@@ -883,7 +934,7 @@ ApplicationWindow {
                                             }
                                             context.save()
                                             context.font = "10px Segoe UI"
-                                            context.fillStyle = colors.muted
+                                            context.fillStyle = endpoint.active ? colors.muted : "#596166"
                                             context.textAlign = "left"
                                             context.translate(x + cellSize / 2, height - 7)
                                             context.rotate(-Math.PI / 3)
@@ -909,26 +960,26 @@ ApplicationWindow {
                                         var firstRow = Math.floor(matrixGridFlick.contentY / cellSize)
                                         var y = firstRow * cellSize - matrixGridFlick.contentY
                                         for (var row = firstRow;
-                                             row < engine.outputs.length && y < height;
+                                             row < matrixOutputs.length && y < height;
                                              ++row, y += cellSize) {
-                                            var endpoint = engine.outputs[row]
+                                            var endpoint = matrixOutputs[row]
                                             var groupTitle = window.endpointGroupTitle(
                                                                  endpoint, row,
-                                                                 engine.outputs.length, false)
+                                                                 matrixOutputs.length, false)
                                             var groupStart = row === 0 ||
                                                     groupTitle !== window.endpointGroupTitle(
-                                                        engine.outputs[row - 1], row - 1,
-                                                        engine.outputs.length, false)
+                                                        matrixOutputs[row - 1], row - 1,
+                                                        matrixOutputs.length, false)
                                             context.fillStyle = colors.surface
                                             context.fillRect(0, y + 1, width - 3, cellSize - 3)
                                             context.strokeStyle = colors.line
                                             context.strokeRect(0.5, y + 1.5, width - 4, cellSize - 4)
                                             if (groupStart) {
                                                 var groupEnd = row + 1
-                                                while (groupEnd < engine.outputs.length &&
+                                                while (groupEnd < matrixOutputs.length &&
                                                        window.endpointGroupTitle(
-                                                           engine.outputs[groupEnd], groupEnd,
-                                                           engine.outputs.length, false) === groupTitle)
+                                                           matrixOutputs[groupEnd], groupEnd,
+                                                           matrixOutputs.length, false) === groupTitle)
                                                     ++groupEnd
                                                 var groupHeight = (groupEnd - row) * cellSize
                                                 context.fillStyle = "#20262a"
@@ -937,19 +988,19 @@ ApplicationWindow {
                                                                  groupHeight - 3)
                                                 context.fillStyle = window.endpointGroupColor(
                                                                     endpoint, row,
-                                                                    engine.outputs.length)
+                                                                    matrixOutputs.length)
                                                 context.fillRect(matrixViewport.groupLabelWidth - 3,
                                                                  y + 1, 2,
                                                                  groupHeight - 3)
                                                 context.fillStyle = window.endpointGroupColor(
                                                                     endpoint, row,
-                                                                    engine.outputs.length)
+                                                                    matrixOutputs.length)
                                                 context.font = "bold 8px Segoe UI"
                                                 context.textAlign = "center"
                                                 context.textBaseline = "middle"
                                                 var family = window.endpointFamily(
                                                                  endpoint, row,
-                                                                 engine.outputs.length)
+                                                                 matrixOutputs.length)
                                                 var centerY = y + groupHeight / 2
                                                 context.fillText(family === "wasapi" ? "WASAPI"
                                                                  : family === "asio" ? "ASIO" : "OTHER",
@@ -960,7 +1011,7 @@ ApplicationWindow {
                                                                  matrixViewport.groupLabelWidth / 2,
                                                                  centerY + 7)
                                             }
-                                            context.fillStyle = colors.text
+                                            context.fillStyle = endpoint.active ? colors.text : "#596166"
                                             context.textBaseline = "middle"
                                             context.font = "11px Segoe UI"
                                             context.textAlign = "left"
@@ -983,9 +1034,9 @@ ApplicationWindow {
                                     anchors.right: parent.right
                                     anchors.bottom: parent.bottom
                                     contentWidth: Math.max(width,
-                                                           engine.inputs.length * matrixViewport.cellSize)
+                                                           matrixInputs.length * matrixViewport.cellSize)
                                     contentHeight: Math.max(height,
-                                                            engine.outputs.length * matrixViewport.cellSize)
+                                                            matrixOutputs.length * matrixViewport.cellSize)
                                     boundsBehavior: Flickable.StopAtBounds
                                     clip: true
                                     focus: true
@@ -1064,8 +1115,8 @@ ApplicationWindow {
                                                     return
                                                 matrixGridFlick.forceActiveFocus()
                                                 if (mouse.button === Qt.LeftButton) {
-                                                    var input = engine.inputs[inputIndex]
-                                                    var output = engine.outputs[outputIndex]
+                                                    var input = matrixInputs[inputIndex]
+                                                    var output = matrixOutputs[outputIndex]
                                                     window.toggleRoute(input.id, output.id)
                                                 }
                                             }
@@ -1089,37 +1140,42 @@ ApplicationWindow {
                                         var startX = firstColumn * cellSize - matrixGridFlick.contentX
                                         var startY = firstRow * cellSize - matrixGridFlick.contentY
                                         for (var row = firstRow, y = startY;
-                                             row < engine.outputs.length && y < height;
+                                             row < matrixOutputs.length && y < height;
                                              ++row, y += cellSize) {
                                             for (var column = firstColumn, x = startX;
-                                                 column < engine.inputs.length && x < width;
+                                                 column < matrixInputs.length && x < width;
                                                  ++column, x += cellSize) {
-                                                var inputId = engine.inputs[column].id
-                                                var outputId = engine.outputs[row].id
-                                                var state = window.routeDisplayState(inputId, outputId)
+                                                    var input = matrixInputs[column]
+                                                    var output = matrixOutputs[row]
+                                                    var inputId = input.id
+                                                    var outputId = output.id
+                                                    var active = input.active && output.active
+                                                    var state = window.routeDisplayState(inputId, outputId)
                                                 var selected = selectedInputId === inputId &&
                                                                selectedOutputId === outputId
                                                 var hovered = matrixMouse.hoverInput === column &&
                                                               matrixMouse.hoverOutput === row
                                                 var routeOn = state === "on" || state === "pending-on"
                                                 var inputGroupStart = column > 0 &&
-                                                        window.endpointFamily(engine.inputs[column], column,
-                                                                              engine.inputs.length) !==
-                                                        window.endpointFamily(engine.inputs[column - 1], column - 1,
-                                                                              engine.inputs.length)
+                                                        window.endpointFamily(matrixInputs[column], column,
+                                                                              matrixInputs.length) !==
+                                                        window.endpointFamily(matrixInputs[column - 1], column - 1,
+                                                                              matrixInputs.length)
                                                 var outputGroupStart = row > 0 &&
-                                                        window.endpointFamily(engine.outputs[row], row,
-                                                                              engine.outputs.length) !==
-                                                        window.endpointFamily(engine.outputs[row - 1], row - 1,
-                                                                              engine.outputs.length)
-                                                context.fillStyle = routeOn ? "#245a49"
+                                                        window.endpointFamily(matrixOutputs[row], row,
+                                                                              matrixOutputs.length) !==
+                                                        window.endpointFamily(matrixOutputs[row - 1], row - 1,
+                                                                              matrixOutputs.length)
+                                                context.fillStyle = !active ? "#15191b"
+                                                                  : routeOn ? "#245a49"
                                                                   : state === "muted" ? "#4a3b20"
                                                                   : hovered && engine.connected && !engine.busy
                                                                     ? colors.hover : colors.surface
                                                 context.fillRect(x + 1, y + 1,
                                                                  cellSize - 3, cellSize - 3)
                                                 context.lineWidth = selected ? 2 : 1
-                                                context.strokeStyle = selected ? colors.cyan
+                                                context.strokeStyle = !active ? "#252b2e"
+                                                                    : selected ? colors.cyan
                                                                     : routeOn ? colors.healthy
                                                                     : state === "muted" ? colors.warning
                                                                     : colors.line
@@ -1127,7 +1183,8 @@ ApplicationWindow {
                                                                    y + (selected ? 1 : 1.5),
                                                                    cellSize - (selected ? 3 : 4),
                                                                    cellSize - (selected ? 3 : 4))
-                                                context.fillStyle = routeOn ? colors.healthy
+                                                context.fillStyle = !active ? "#30373a"
+                                                                  : routeOn ? colors.healthy
                                                                   : state === "muted" ? colors.warning
                                                                   : colors.line
                                                 context.beginPath()
@@ -1236,6 +1293,8 @@ ApplicationWindow {
                             objectName: "routeEnabledSwitch"
                             text: "Route enabled"
                             enabled: selectedInputId.length > 0 &&
+                                     window.endpointActive(selectedInputId) &&
+                                     window.endpointActive(selectedOutputId) &&
                                      engine.connected && !engine.busy
                             checked: {
                                 engine.routeRevision;
@@ -1269,6 +1328,8 @@ ApplicationWindow {
                                 to: 12
                                 stepSize: 0.1
                                 enabled: selectedInputId.length > 0 &&
+                                         window.endpointActive(selectedInputId) &&
+                                         window.endpointActive(selectedOutputId) &&
                                          engine.connected
                                 value: {
                                     engine.routeRevision;

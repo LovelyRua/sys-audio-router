@@ -163,6 +163,13 @@ int main(int argc, char** argv) {
            near(controller.routeGain(QStringLiteral("daw"),
                                      QStringLiteral("monitor")), 1.0);
   }));
+  controller.setRouteGain(QStringLiteral("daw"), QStringLiteral("monitor"),
+                          0.37);
+  assert(wait_until([&] {
+    return !controller.busy() &&
+           near(controller.routeGain(QStringLiteral("daw"),
+                                     QStringLiteral("monitor")), 0.37);
+  }));
   controller.setRoute(QStringLiteral("daw"), QStringLiteral("monitor"),
                       false);
   assert(wait_until([&] {
@@ -171,6 +178,17 @@ int main(int argc, char** argv) {
            !controller.routeEnabled(QStringLiteral("daw"),
                                     QStringLiteral("monitor"));
   }));
+  assert(near(controller.routeGain(QStringLiteral("daw"),
+                                  QStringLiteral("monitor")), 0.37));
+  controller.setRoute(QStringLiteral("daw"), QStringLiteral("monitor"),
+                      true);
+  assert(wait_until([&] {
+    return !controller.busy() &&
+           controller.routeEnabled(QStringLiteral("daw"),
+                                   QStringLiteral("monitor"));
+  }));
+  assert(near(controller.routeGain(QStringLiteral("daw"),
+                                  QStringLiteral("monitor")), 0.37));
 
   const auto preset_root = QStandardPaths::writableLocation(
                                QStandardPaths::AppDataLocation) +

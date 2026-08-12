@@ -470,17 +470,16 @@ void EngineController::setRoute(const QString& input_id,
     }
   }
 
-  if (enabled && existing_route != nullptr) {
-    if (!existing_route->muted) {
+  if (existing_route != nullptr) {
+    if (existing_route->muted == !enabled) {
       return;
     }
     command.type = control::ControlCommandType::SetMute;
-    command.mute = false;
+    command.mute = !enabled;
   } else if (!enabled && existing_route == nullptr) {
     return;
   } else {
-    command.type = enabled ? control::ControlCommandType::ConnectRoute
-                           : control::ControlCommandType::DisconnectRoute;
+    command.type = control::ControlCommandType::ConnectRoute;
   }
   command.input_id = std::move(input);
   command.output_id = std::move(output);

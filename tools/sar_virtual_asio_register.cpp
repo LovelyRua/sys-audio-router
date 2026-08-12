@@ -4,10 +4,12 @@
 #define NOMINMAX
 #endif
 #include <Windows.h>
+#include <RestartManager.h>
 
 #include <iostream>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -15,9 +17,64 @@ void print_usage() {
   std::cerr
       << "Usage: sar_virtual_asio_register "
          "(--register [DLL]|--verify [DLL]|--unregister|"
-         "--unregister-owned [DLL]) "
+         "--unregister-owned [DLL]|--check-unlocked [DLL]) "
          "[--user|--machine] [--x64|--x86]\n"
          "DLL defaults to SystemAudioRouteVirtualASIO.dll beside this tool.\n";
+}
+
+int check_driver_unlocked(const std::wstring& dll_path) {
+  DWORD session = 0;
+  wchar_t session_key[CCH_RM_SESSION_KEY + 1]{};
+  const auto start_error = RmStartSession(&session, 0, session_key);
+  if (start_error != ERROR_SUCCESS) {
+    std::wcerr << L"asio_lock_check_failed: RmStartSession native="
+               << start_error << L'\n';
+    return 1;
+  }
+  struct SessionGuard {
+    DWORD value;
+    ~SessionGuard() { RmEndSession(value); }
+  } guard{session};
+
+  const wchar_t* resources[] = {dll_path.c_str()};
+  const auto register_error =
+      RmRegisterResources(session, 1, resources, 0, nullptr, 0, nullptr);
+  if (register_error != ERROR_SUCCESS) {
+    std::wcerr << L"asio_lock_check_failed: RmRegisterResources native="
+               << register_error << L'\n';
+    return 1;
+  }
+
+  UINT required = 0;
+  UINT count = 0;
+  DWORD reboot_reasons = 0;
+  auto list_error = RmGetList(session, &required, &count, nullptr,
+                              &reboot_reasons);
+  if (list_error == ERROR_SUCCESS && required == 0) {
+    std::cout << "virtual_asio_driver=unlocked\n";
+    return 0;
+  }
+  if (list_error != ERROR_MORE_DATA) {
+    std::wcerr << L"asio_lock_check_failed: RmGetList native=" << list_error
+               << L'\n';
+    return 1;
+  }
+
+  std::vector<RM_PROCESS_INFO> processes(required);
+  count = required;
+  list_error = RmGetList(session, &required, &count, processes.data(),
+                         &reboot_reasons);
+  if (list_error != ERROR_SUCCESS) {
+    std::wcerr << L"asio_lock_check_failed: RmGetList native=" << list_error
+               << L'\n';
+    return 1;
+  }
+  for (UINT index = 0; index < count; ++index) {
+    std::wcerr << L"asio_driver_locked_by: "
+               << processes[index].strAppName << L" pid="
+               << processes[index].Process.dwProcessId << L'\n';
+  }
+  return count == 0 ? 0 : 3;
 }
 
 bool is_option(const wchar_t* value) noexcept {
@@ -50,6 +107,7 @@ int wmain(int argc, wchar_t** argv) {
   bool verify_driver = false;
   bool unregister_driver = false;
   bool unregister_owned_driver = false;
+  bool check_unlocked = false;
   WindowsVirtualAsioRegistryView view = WindowsVirtualAsioRegistryView::X64;
   WindowsVirtualAsioRegistrationScope scope =
       WindowsVirtualAsioRegistrationScope::LocalMachine;
@@ -74,6 +132,11 @@ int wmain(int argc, wchar_t** argv) {
       if (index + 1 < argc && !is_option(argv[index + 1])) {
         dll_path = argv[++index];
       }
+    } else if (argument == L"--check-unlocked") {
+      check_unlocked = true;
+      if (index + 1 < argc && !is_option(argv[index + 1])) {
+        dll_path = argv[++index];
+      }
     } else if (argument == L"--x86") {
       view = WindowsVirtualAsioRegistryView::X86;
     } else if (argument == L"--x64") {
@@ -93,14 +156,19 @@ int wmain(int argc, wchar_t** argv) {
   const int action_count = static_cast<int>(register_driver) +
                            static_cast<int>(verify_driver) +
                            static_cast<int>(unregister_driver) +
-                           static_cast<int>(unregister_owned_driver);
+                           static_cast<int>(unregister_owned_driver) +
+                           static_cast<int>(check_unlocked);
   if (action_count != 1) {
     std::cerr << "Choose exactly one registration action.\n";
     return 2;
   }
-  if ((register_driver || verify_driver || unregister_owned_driver) &&
+  if ((register_driver || verify_driver || unregister_owned_driver ||
+       check_unlocked) &&
       dll_path.empty()) {
     dll_path = adjacent_driver_path();
+  }
+  if (check_unlocked) {
+    return check_driver_unlocked(dll_path);
   }
 
   const auto result = register_driver
