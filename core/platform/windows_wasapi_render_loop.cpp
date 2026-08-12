@@ -102,11 +102,34 @@ WindowsWasapiRenderLoop::WindowsWasapiRenderLoop(
               external_input),
       worker_(runner_, graph, diagnostics) {}
 
+WindowsWasapiRenderLoop::WindowsWasapiRenderLoop(
+    WindowsWasapiStream render_stream,
+    graph::Graph& graph,
+    diagnostics::EngineDiagnostics& diagnostics,
+    RealtimeAudioSource* external_input,
+    WasapiGraphChannelLayout channel_layout)
+    : render_stream_(std::move(render_stream)),
+      runner_(nullptr,
+              &render_stream_,
+              0,
+              render_stream_.probe().mix_format.channels,
+              graph.frames(),
+              0,
+              render_stream_.probe().buffer_frames,
+              graph.frames() + render_stream_.probe().buffer_frames,
+              false,
+              false,
+              external_input,
+              nullptr,
+              channel_layout),
+      worker_(runner_, graph, diagnostics) {}
+
 WasapiRenderLoopOpenResult WindowsWasapiRenderLoop::open_from_stream(
     WasapiStreamOpenResult stream_result,
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics,
-    RealtimeAudioSource* external_input) {
+    RealtimeAudioSource* external_input,
+    WasapiGraphChannelLayout channel_layout) {
   if (!stream_result.ok()) {
     return WasapiRenderLoopOpenResult::failure(convert_errors(stream_result.errors()));
   }
@@ -117,9 +140,15 @@ WasapiRenderLoopOpenResult WindowsWasapiRenderLoop::open_from_stream(
     return WasapiRenderLoopOpenResult::failure(std::move(graph_errors));
   }
 
-  auto loop = std::unique_ptr<WindowsWasapiRenderLoop>(
-      new WindowsWasapiRenderLoop(stream_result.take_stream(), graph, diagnostics,
-                                 external_input));
+  std::unique_ptr<WindowsWasapiRenderLoop> loop;
+  if (channel_layout.graph_input_channels != 0) {
+    loop.reset(new WindowsWasapiRenderLoop(
+        stream_result.take_stream(), graph, diagnostics, external_input,
+        channel_layout));
+  } else {
+    loop.reset(new WindowsWasapiRenderLoop(
+        stream_result.take_stream(), graph, diagnostics, external_input));
+  }
   return WasapiRenderLoopOpenResult::success(std::move(loop));
 }
 
@@ -162,21 +191,24 @@ WasapiRenderLoopOpenResult::WasapiRenderLoopOpenResult(
 WasapiRenderLoopOpenResult open_default_wasapi_render_loop(
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics,
-    RealtimeAudioSource* external_input) {
+    RealtimeAudioSource* external_input,
+    WasapiGraphChannelLayout channel_layout) {
   return WindowsWasapiRenderLoop::open_from_stream(
       open_default_wasapi_stream_shell(
           WasapiStreamDirection::Render, WasapiStreamMode::Endpoint, 0,
           external_input != nullptr ? static_cast<std::uint32_t>(graph.frames()) : 0),
       graph,
       diagnostics,
-      external_input);
+      external_input,
+      channel_layout);
 }
 
 WasapiRenderLoopOpenResult open_wasapi_render_loop(
     const std::string& render_device_id,
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics,
-    RealtimeAudioSource* external_input) {
+    RealtimeAudioSource* external_input,
+    WasapiGraphChannelLayout channel_layout) {
   if (render_device_id.empty()) {
     return WasapiRenderLoopOpenResult::failure({
         {"missing_render_device_id",
@@ -191,8 +223,7 @@ WasapiRenderLoopOpenResult open_wasapi_render_loop(
       open_wasapi_stream_shell(
           probe.probe(), 0,
           external_input != nullptr ? static_cast<std::uint32_t>(graph.frames()) : 0),
-      graph, diagnostics,
-      external_input);
+      graph, diagnostics, external_input, channel_layout);
 }
 
 }  // namespace sar::platform
