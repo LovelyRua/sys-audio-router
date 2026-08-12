@@ -956,6 +956,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
       ? std::min(kMaximumGraphBlocksPerCycle, graph_blocks_to_target)
       : std::size_t{1};
   for (std::size_t block_index = 0; block_index < graph_limit; ++block_index) {
+    bool external_only_block = false;
     const bool render_has_space =
         !render_path_ ||
         (render_path_->fifo.free_frames() >= graph_block_frames_ &&
@@ -964,7 +965,18 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     if (!render_has_space) {
       break;
     }
-    if (capture_path_) {
+    if (capture_path_ && mapped_channels_ && external_input_ != nullptr &&
+        stats.capture_stream_idle &&
+        capture_path_->fifo.available_frames() < graph_block_frames_ &&
+        (!capture_rate_adapter_ ||
+         capture_rate_adapter_->output_frames_ready < graph_block_frames_)) {
+      capture_graph_buffer_->clear();
+      assemble_mapped_graph_input(stats);
+      if (!stats.external_input_mixed) {
+        break;
+      }
+      external_only_block = true;
+    } else if (capture_path_) {
       if (capture_rate_adapter_) {
         auto& adapter = *capture_rate_adapter_;
         if (!adapter.primed) {
@@ -1156,7 +1168,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     if (mapped_channels_) {
       publish_mapped_graph_output(stats);
     }
-    if (capture_rate_adapter_) {
+    if (capture_rate_adapter_ && !external_only_block) {
       capture_rate_adapter_->ever_produced_graph_block = true;
       capture_rate_adapter_->output_frames_ready = 0;
       capture_rate_adapter_->ratio_set_for_block = false;

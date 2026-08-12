@@ -111,7 +111,8 @@ int main(int argc, char **argv) {
       requests.push_back(command);
     }
     if (command.type == ControlCommandType::ConfigureAudioRuntime ||
-        command.type == ControlCommandType::SetMute) {
+        command.type == ControlCommandType::SetMute ||
+        command.type == ControlCommandType::DisconnectRoute) {
       return uncertain(command);
     }
     assert(command.type == ControlCommandType::QuerySessionState);
@@ -188,6 +189,17 @@ int main(int argc, char **argv) {
     assert(requests[2].type == ControlCommandType::SetMute);
     assert(requests[2].mute);
     assert(requests[3].type == ControlCommandType::QuerySessionState);
+  }
+
+  controller.removeRoute(QStringLiteral("daw"), QStringLiteral("monitor"));
+  assert(wait_until([&] {
+    std::scoped_lock lock(mutex);
+    return requests.size() == 6 && !controller.busy();
+  }));
+  {
+    const std::scoped_lock lock(mutex);
+    assert(requests[4].type == ControlCommandType::DisconnectRoute);
+    assert(requests[5].type == ControlCommandType::QuerySessionState);
   }
 
   const std::array recovery_states{

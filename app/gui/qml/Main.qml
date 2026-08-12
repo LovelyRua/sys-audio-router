@@ -39,6 +39,10 @@ ApplicationWindow {
     property string runtimeDraftCaptureDeviceId: ""
     property var pendingRouteStates: ({})
     property var pendingRouteGains: ({})
+    property string pendingGainInputId: ""
+    property string pendingGainOutputId: ""
+    property real pendingGainLinear: 1.0
+    property bool pendingGainDirty: false
     property var routeStateCache: ({})
     property bool showInactiveIo: false
     readonly property var matrixInputs: projectEndpoints(engine.inputs, true,
@@ -217,6 +221,10 @@ ApplicationWindow {
         return route !== undefined ? route.gain : 1.0
     }
 
+    function routeExists(inputId, outputId) {
+        return routeStateCache[routeKey(inputId, outputId)] !== undefined
+    }
+
     function setPendingRouteState(inputId, outputId, enabled) {
         var next = Object.assign({}, pendingRouteStates)
         next[routeKey(inputId, outputId)] = enabled
@@ -232,6 +240,16 @@ ApplicationWindow {
     function clearPendingRouteUpdates() {
         pendingRouteStates = ({})
         pendingRouteGains = ({})
+    }
+
+    function reconcilePendingRouteGains() {
+        var next = {}
+        for (var key in pendingRouteGains) {
+            var route = routeStateCache[key]
+            if (route === undefined || Math.abs(route.gain - pendingRouteGains[key]) > 0.00001)
+                next[key] = pendingRouteGains[key]
+        }
+        pendingRouteGains = next
     }
 
     function selectRoute(inputIndex, outputIndex) {
@@ -287,6 +305,13 @@ ApplicationWindow {
         toggleRoute(selectedInputId, selectedOutputId)
     }
 
+    function removeSelectedRoute() {
+        if (!engine.connected || engine.busy || !routeExists(selectedInputId,
+                                                               selectedOutputId))
+            return
+        engine.removeRoute(selectedInputId, selectedOutputId)
+    }
+
     function adjustSelectedRouteGain(linearGain) {
         if (!engine.connected || !endpointActive(selectedInputId) ||
                 !endpointActive(selectedOutputId) || selectedInputId.length === 0 ||
@@ -294,6 +319,46 @@ ApplicationWindow {
             return
         setPendingRouteGain(selectedInputId, selectedOutputId, linearGain)
         engine.setRouteGain(selectedInputId, selectedOutputId, linearGain)
+    }
+
+    Timer {
+        id: gainCommitTimer
+        interval: 33
+        repeat: true
+        running: pendingGainDirty
+        onTriggered: {
+            if (pendingGainInputId.length === 0 || pendingGainOutputId.length === 0)
+                return
+            pendingGainDirty = false
+            window.setPendingRouteGain(pendingGainInputId, pendingGainOutputId,
+                                       pendingGainLinear)
+            engine.setRouteGain(pendingGainInputId, pendingGainOutputId,
+                                pendingGainLinear)
+        }
+    }
+
+    function scheduleSelectedRouteGain(linearGain, immediate) {
+        if (!engine.connected || !routeExists(selectedInputId, selectedOutputId))
+            return
+        pendingGainInputId = selectedInputId
+        pendingGainOutputId = selectedOutputId
+        pendingGainLinear = linearGain
+        setPendingRouteGain(selectedInputId, selectedOutputId, linearGain)
+        if (immediate) {
+            pendingGainDirty = false
+            engine.setRouteGain(selectedInputId, selectedOutputId, linearGain)
+        } else {
+            pendingGainDirty = true
+        }
+    }
+
+    function flushPendingGain() {
+        if (!pendingGainDirty || pendingGainInputId.length === 0 ||
+                pendingGainOutputId.length === 0)
+            return
+        pendingGainDirty = false
+        engine.setRouteGain(pendingGainInputId, pendingGainOutputId,
+                            pendingGainLinear)
     }
 
     function syncRuntimeDraft() {
@@ -331,16 +396,15 @@ ApplicationWindow {
         }
         function onRuntimeChanged() { window.syncRuntimeDraft() }
         function onSessionChanged() {
-            window.clearPendingRouteUpdates()
             window.rebuildRouteStateCache()
+            window.pendingRouteStates = ({})
+            window.reconcilePendingRouteGains()
             window.validateRouteSelection()
             matrixInputHeader.requestPaint()
             matrixOutputHeader.requestPaint()
             matrixGridCanvas.requestPaint()
         }
         function onBusyChanged() {
-            if (!engine.busy)
-                window.clearPendingRouteUpdates()
             matrixGridCanvas.requestPaint()
         }
         function onConnectionChanged() { matrixGridCanvas.requestPaint() }
@@ -810,11 +874,46 @@ ApplicationWindow {
                                     font.weight: Font.DemiBold
                                 }
                                 Item { Layout.fillWidth: true }
-                                CheckBox {
+                                AbstractButton {
+                                    id: inactiveIoToggle
                                     objectName: "showInactiveIoCheckBox"
                                     text: "Show inactive I/O"
                                     checked: showInactiveIo
-                                    onToggled: {
+                                    checkable: true
+                                    implicitHeight: 26
+                                    implicitWidth: inactiveIoToggleContent.implicitWidth + 8
+                                    padding: 4
+                                    contentItem: Row {
+                                        id: inactiveIoToggleContent
+                                        spacing: 6
+                                        Rectangle {
+                                            width: 12
+                                            height: 12
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            radius: 2
+                                            color: inactiveIoToggle.checked ? colors.cyan : "transparent"
+                                            border.color: inactiveIoToggle.checked ? colors.cyan : colors.muted
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                visible: inactiveIoToggle.checked
+                                                color: colors.canvas
+                                                width: 5
+                                                height: 5
+                                                radius: 1
+                                            }
+                                        }
+                                        Text {
+                                            text: inactiveIoToggle.text
+                                            color: colors.muted
+                                            font.pixelSize: 10
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                    }
+                                    background: Rectangle {
+                                        radius: 3
+                                        color: inactiveIoToggle.hovered ? colors.raised : "transparent"
+                                    }
+                                    onClicked: {
                                         showInactiveIo = checked
                                         validateRouteSelection()
                                         matrixInputHeader.requestPaint()
@@ -1117,7 +1216,10 @@ ApplicationWindow {
                                                 if (mouse.button === Qt.LeftButton) {
                                                     var input = matrixInputs[inputIndex]
                                                     var output = matrixOutputs[outputIndex]
-                                                    window.toggleRoute(input.id, output.id)
+                                                    if ((mouse.modifiers & Qt.ShiftModifier) !== 0)
+                                                        engine.removeRoute(input.id, output.id)
+                                                    else
+                                                        window.toggleRoute(input.id, output.id)
                                                 }
                                             }
                                         }
@@ -1317,6 +1419,19 @@ ApplicationWindow {
                             }
                         }
 
+                        FlatButton {
+                            objectName: "removeSelectedRouteButton"
+                            Layout.fillWidth: true
+                            text: "Remove route"
+                            enabled: selectedInputId.length > 0 &&
+                                     window.routeExists(selectedInputId,
+                                                        selectedOutputId) &&
+                                     engine.connected && !engine.busy
+                            onClicked: window.removeSelectedRoute()
+                            ToolTip.visible: hovered
+                            ToolTip.text: "Delete this crosspoint (Shift+click in matrix)"
+                        }
+
                         Text { text: "Gain"; color: colors.muted; font.pixelSize: 11 }
                         RowLayout {
                             Layout.fillWidth: true
@@ -1330,7 +1445,9 @@ ApplicationWindow {
                                 enabled: selectedInputId.length > 0 &&
                                          window.endpointActive(selectedInputId) &&
                                          window.endpointActive(selectedOutputId) &&
-                                         engine.connected
+                                         engine.connected &&
+                                         window.routeExists(selectedInputId,
+                                                            selectedOutputId)
                                 value: {
                                     engine.routeRevision;
                                     return selectedInputId.length > 0
@@ -1338,13 +1455,16 @@ ApplicationWindow {
                                                  window.routeDisplayGain(selectedInputId,
                                                                          selectedOutputId)) : 0
                                 }
-                                onMoved: window.adjustSelectedRouteGain(
-                                             window.dbToLinear(value))
+                                onMoved: window.scheduleSelectedRouteGain(
+                                             window.dbToLinear(value), false)
                                 onPressedChanged: {
-                                    if (!pressed) {
-                                        window.adjustSelectedRouteGain(
-                                                    window.dbToLinear(value))
-                                    }
+                                    if (!pressed)
+                                        window.flushPendingGain()
+                                }
+                                TapHandler {
+                                    acceptedButtons: Qt.LeftButton
+                                    onDoubleTapped: window.scheduleSelectedRouteGain(1.0,
+                                                                                     true)
                                 }
                             }
                             Text {

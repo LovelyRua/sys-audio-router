@@ -498,6 +498,38 @@ void EngineController::setRoute(const QString& input_id,
   enqueue(std::move(queued));
 }
 
+void EngineController::removeRoute(const QString& input_id,
+                                   const QString& output_id) {
+  if (busy_) {
+    setError(QStringLiteral("Wait for the current engine command to finish"));
+    return;
+  }
+  control::ControlCommand command;
+  command.type = control::ControlCommandType::DisconnectRoute;
+  command.input_id = input_id.toStdString();
+  command.output_id = output_id.toStdString();
+
+  if (!current_preset_.has_value() ||
+      std::ranges::none_of(current_preset_->matrix.routes,
+                           [&](const auto& route) {
+                             return route.input_id == command.input_id &&
+                                    route.output_id == command.output_id;
+                           })) {
+    return;
+  }
+
+  QueuedCommand queued{command};
+  auto preview = command;
+  preview.command_id = "gui-history-preview";
+  auto applied = control::apply_command(*current_preset_, preview);
+  if (applied.ok()) {
+    queued.history_action = HistoryAction::Record;
+    queued.history_entry =
+        HistoryEntry{*current_preset_, applied.take_document()};
+  }
+  enqueue(std::move(queued));
+}
+
 void EngineController::setRouteGain(const QString& input_id,
                                     const QString& output_id,
                                     double gain) {

@@ -151,8 +151,10 @@ class EngineController final : public QObject {
   Q_INVOKABLE double routeGain(const QString& input_id,
                                const QString& output_id) const;
   Q_INVOKABLE void setRoute(const QString& input_id,
-                            const QString& output_id,
-                            bool enabled);
+                             const QString& output_id,
+                             bool enabled);
+  Q_INVOKABLE void removeRoute(const QString& input_id,
+                               const QString& output_id);
   Q_INVOKABLE void setRouteGain(const QString& input_id,
                                 const QString& output_id,
                                 double gain);

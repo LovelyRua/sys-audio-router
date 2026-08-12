@@ -58,6 +58,19 @@ class SingleBlockSource final : public sar::platform::RealtimeAudioSource {
   bool consumed_ = false;
 };
 
+sar::platform::WasapiGraphChannelLayout mapped_layout() {
+  return {
+      .graph_input_channels = 4,
+      .graph_output_channels = 4,
+      .capture_input_offset = 0,
+      .external_input_offset = 2,
+      .external_input_channels = 2,
+      .render_output_offset = 0,
+      .external_output_offset = 2,
+      .external_output_channels = 2,
+  };
+}
+
 }  // namespace
 
 int main() {
@@ -103,6 +116,34 @@ int main() {
     for (std::size_t frame = 0; frame < mixed.frames(); ++frame) {
       assert(sar::tests::nearly_equal(mixed.channel(1)[frame], 0.3F));
     }
+  }
+
+  {
+    sar::tests::ScriptedWasapiStream capture(capture_probe());
+    sar::tests::ScriptedWasapiStream render(render_probe());
+    capture.enqueue_capture(
+        {.status = sar::platform::WasapiStreamIoStatus::TimedOut});
+    render.enqueue_render({.writable_frames = 4});
+
+    sar::realtime::AudioBuffer external_block(2, 4);
+    for (std::size_t frame = 0; frame < external_block.frames(); ++frame) {
+      external_block.channel(0)[frame] = 0.2F + 0.1F * frame;
+      external_block.channel(1)[frame] = -0.2F - 0.1F * frame;
+    }
+    SingleBlockSource external(std::move(external_block));
+    sar::platform::WindowsWasapiGraphRunner runner(
+        &capture, &render, 2, 2, 4, 4, 10, 20, true, false, &external,
+        nullptr, mapped_layout());
+    sar::graph::Graph graph(1, 4, 4, 48000);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+
+    const auto result = runner.process_once(graph, diagnostics, 0);
+    assert(result.ok());
+    assert(result.stats().capture_stream_idle);
+    assert(result.stats().external_input_mixed);
+    assert(result.stats().graph_processed);
+    assert(diagnostics.processed_blocks == 1);
+    assert(diagnostics.render_fifo_underflow_cycles == 0);
   }
 
   sar::platform::VirtualAsioRenderBus bus(2, 4, 1, 4);
