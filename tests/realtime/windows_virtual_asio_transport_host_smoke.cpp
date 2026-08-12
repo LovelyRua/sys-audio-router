@@ -30,13 +30,18 @@ sar::service::WindowsVirtualAsioHostConnectRequest request(
 }  // namespace
 
 int main() {
+  sar::platform::VirtualAsioRenderBus render_bus(2, 32, 2, 4);
+  sar::platform::VirtualAsioCaptureBus capture_bus(2, 32, 2, 4);
   sar::service::WindowsVirtualAsioTransportHost host({
       .endpoint_token = "host-smoke", .maximum_clients = 2,
-      .queue_capacity_blocks = 4, .wait_timeout_ms = 10});
+      .queue_capacity_blocks = 4, .wait_timeout_ms = 10},
+      &render_bus, &capture_bus);
   const auto initial_graph_generation = host.graph_generation();
   auto first =
       host.connect(request("daw-a"), make_graph(1), initial_graph_generation);
   assert(first.ok());
+  assert(render_bus.stats().active_producers == 1);
+  assert(capture_bus.stats().active_consumers == 1);
   auto mapping = sar::platform::WindowsVirtualAsioSharedMemory::open(
       first.connection().names.mapping);
   assert(mapping.ok());
@@ -51,9 +56,13 @@ int main() {
                              host.graph_generation());
   assert(second.ok());
   assert(host.active_session_count() == 2);
+  assert(render_bus.stats().active_producers == 2);
+  assert(capture_bus.stats().active_consumers == 2);
   assert(second.connection().names.mapping != first.connection().names.mapping);
   assert(!host.connect(request("daw-c"), make_graph(5),
                        host.graph_generation()).ok());
+  assert(render_bus.stats().active_producers == 2);
+  assert(capture_bus.stats().active_consumers == 2);
 
   std::uint64_t next_version = 10;
   auto refreshed = host.refresh_graphs(
@@ -109,8 +118,12 @@ int main() {
   assert(host.disconnect(
       "daw-a", first.connection().client.connection_generation).ok());
   assert(host.active_session_count() == 1);
+  assert(render_bus.stats().active_producers == 1);
+  assert(capture_bus.stats().active_consumers == 1);
   assert(host.connections().front().client.client_id == "bad-graph");
   host.stop_all();
   assert(host.active_session_count() == 0);
+  assert(render_bus.stats().active_producers == 0);
+  assert(capture_bus.stats().active_consumers == 0);
   assert(host.reap_stopped_sessions() == 0);
 }
