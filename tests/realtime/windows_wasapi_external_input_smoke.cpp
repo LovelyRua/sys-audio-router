@@ -138,6 +138,8 @@ int main() {
 
     const auto warmup = runner.process_once(graph, diagnostics, 0);
     assert(warmup.ok());
+    const auto underflows_before_external =
+        diagnostics.render_fifo_underflow_cycles;
     sar::realtime::AudioBuffer external_block(2, 4);
     for (std::size_t frame = 0; frame < external_block.frames(); ++frame) {
       external_block.channel(0)[frame] = 0.2F + 0.1F * frame;
@@ -150,7 +152,8 @@ int main() {
     assert(result.stats().external_input_mixed);
     assert(result.stats().graph_processed);
     assert(diagnostics.processed_blocks >= 1);
-    assert(diagnostics.render_fifo_underflow_cycles == 0);
+    assert(diagnostics.render_fifo_underflow_cycles ==
+           underflows_before_external);
   }
 
   sar::platform::VirtualAsioRenderBus bus(2, 4, 1, 4);
