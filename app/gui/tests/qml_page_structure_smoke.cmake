@@ -51,8 +51,10 @@ foreach(required_marker
     "pixelAligned: true"
     "var visibleGroupLeft = Math.max(0, groupLeft)"
     "var visibleGroupTop = Math.max(0, groupTop)"
-    "context.fillRect(separatorX - 1, 0, 2, height)"
-    "context.fillRect(0, separatorY - 1, width, 2)")
+    "var visibleGridBottom = Math.max("
+    "var visibleGridRight = Math.max("
+    "visibleGridBottom)"
+    "visibleGridRight, 2)")
   string(FIND "${qml}" "${required_marker}" marker_position)
   if(marker_position LESS 0)
     message(FATAL_ERROR "Routing matrix QML marker is missing: ${required_marker}")

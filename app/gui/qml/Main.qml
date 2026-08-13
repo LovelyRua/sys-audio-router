@@ -1508,6 +1508,14 @@ ApplicationWindow {
                                         }
                                         // Group separators are continuous viewport rails, not
                                         // per-cell fragments that expose seams between rows.
+                                        var visibleGridBottom = Math.max(
+                                                    0, Math.min(height,
+                                                        matrixOutputs.length * cellSize -
+                                                        matrixGridFlick.contentY))
+                                        var visibleGridRight = Math.max(
+                                                   0, Math.min(width,
+                                                       matrixInputs.length * cellSize -
+                                                       matrixGridFlick.contentX))
                                         for (var separatorColumn = firstColumn + 1;
                                              separatorColumn < matrixInputs.length;
                                              ++separatorColumn) {
@@ -1523,7 +1531,8 @@ ApplicationWindow {
                                                     matrixInputs[separatorColumn - 1], separatorColumn - 1,
                                                     matrixInputs.length)) {
                                                 context.fillStyle = colors.cyan
-                                                context.fillRect(separatorX - 1, 0, 2, height)
+                                                context.fillRect(separatorX - 1, 0, 2,
+                                                                 visibleGridBottom)
                                             }
                                         }
                                         for (var separatorRow = firstRow + 1;
@@ -1541,7 +1550,8 @@ ApplicationWindow {
                                                     matrixOutputs[separatorRow - 1], separatorRow - 1,
                                                     matrixOutputs.length)) {
                                                 context.fillStyle = colors.healthy
-                                                context.fillRect(0, separatorY - 1, width, 2)
+                                                context.fillRect(0, separatorY - 1,
+                                                                 visibleGridRight, 2)
                                             }
                                         }
                                     }
