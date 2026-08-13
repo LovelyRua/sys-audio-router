@@ -156,7 +156,7 @@ int wmain(int argc, wchar_t** argv) {
   });
   sar::service::WindowsVirtualAsioBrokerServer broker_server(
       pipe_name, transport_host, make_graph,
-      [] { return sar::platform::VirtualAsioFormat{48000, 256, 2, 2}; });
+      [] { return sar::platform::VirtualAsioFormat{48000, 256, 8, 8}; });
   assert(broker_server.start().ok());
   assert(SetEnvironmentVariableW(L"SAR_VIRTUAL_ASIO_PIPE",
                                  pipe_name.c_str()));
@@ -207,8 +207,8 @@ int wmain(int argc, wchar_t** argv) {
   long input_channels = 0;
   long output_channels = 0;
   assert(asio->getChannels(&input_channels, &output_channels) == ASE_OK);
-  assert(input_channels == 2);
-  assert(output_channels == 2);
+  assert(input_channels == 8);
+  assert(output_channels == 8);
   long minimum = 0;
   long maximum = 0;
   long preferred = 0;
@@ -235,6 +235,11 @@ int wmain(int argc, wchar_t** argv) {
   assert(channel_info.isActive == ASIOFalse);
   assert(channel_info.type == ASIOSTFloat32LSB);
   assert(std::strcmp(channel_info.name, "Output 2") == 0);
+  channel_info = {};
+  channel_info.channel = 7;
+  channel_info.isInput = ASIOTrue;
+  assert(asio->getChannelInfo(&channel_info) == ASE_OK);
+  assert(std::strcmp(channel_info.name, "Input 8") == 0);
 
   std::array<ASIOBufferInfo, 4> buffer_infos{};
   for (long index = 0; index < 2; ++index) {

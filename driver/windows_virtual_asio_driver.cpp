@@ -26,8 +26,8 @@ using sar::driver::WindowsVirtualAsioRuntimeConfig;
 std::atomic_ulong module_objects = 0;
 std::atomic_ulong server_locks = 0;
 
-constexpr long kInputChannels = 2;
-constexpr long kOutputChannels = 2;
+constexpr long kDefaultInputChannels = 2;
+constexpr long kDefaultOutputChannels = 2;
 constexpr long kMinimumBufferFrames = 64;
 constexpr long kMaximumBufferFrames = 2048;
 constexpr long kPreferredBufferFrames = 256;
@@ -109,9 +109,12 @@ class VirtualAsioDriver final : public IASIO {
     system_handle_ = system_handle;
     initialized_ = true;
     const auto format = WindowsVirtualAsioRuntime::query_engine_format();
-    if (format.ok() &&
-        format.format.input_channels == kOutputChannels &&
-        format.format.output_channels == kInputChannels &&
+    if (format.ok() && format.format.input_channels != 0 &&
+        format.format.output_channels != 0 &&
+        format.format.input_channels <=
+            static_cast<std::uint32_t>(std::numeric_limits<long>::max()) &&
+        format.format.output_channels <=
+            static_cast<std::uint32_t>(std::numeric_limits<long>::max()) &&
         format.format.sample_rate != 0 &&
         format.format.frames_per_block <=
             static_cast<std::uint32_t>(std::numeric_limits<long>::max()) &&
@@ -120,6 +123,8 @@ class VirtualAsioDriver final : public IASIO {
       sample_rate_ = static_cast<ASIOSampleRate>(format.format.sample_rate);
       preferred_buffer_frames_ =
           static_cast<long>(format.format.frames_per_block);
+      input_channels_ = static_cast<long>(format.format.input_channels);
+      output_channels_ = static_cast<long>(format.format.output_channels);
       format_discovered_ = true;
       last_error_.clear();
     } else if (!format.errors.empty()) {
@@ -189,8 +194,9 @@ class VirtualAsioDriver final : public IASIO {
       return fail_thread_safe(ASE_InvalidParameter,
                               "Channel count output pointers must not be null.");
     }
-    *input_channels = kInputChannels;
-    *output_channels = kOutputChannels;
+    std::scoped_lock lock(control_mutex_);
+    *input_channels = input_channels_;
+    *output_channels = output_channels_;
     return ASE_OK;
   }
 
@@ -309,13 +315,13 @@ class VirtualAsioDriver final : public IASIO {
       return fail_thread_safe(ASE_InvalidParameter,
                               "Channel information pointer must not be null.");
     }
-    const auto channel_count = info->isInput == ASIOTrue ? kInputChannels
-                                                         : kOutputChannels;
+    std::scoped_lock lock(control_mutex_);
+    const auto channel_count = info->isInput == ASIOTrue ? input_channels_
+                                                         : output_channels_;
     if (info->channel < 0 || info->channel >= channel_count) {
       return fail_thread_safe(ASE_InvalidParameter,
                               "The requested channel does not exist.");
     }
-    std::scoped_lock lock(control_mutex_);
     info->isActive = channel_active(info->isInput, info->channel) ? ASIOTrue
                                                                   : ASIOFalse;
     info->channelGroup = 0;
@@ -335,10 +341,6 @@ class VirtualAsioDriver final : public IASIO {
       return fail_thread_safe(ASE_InvalidParameter,
                               "Buffer descriptors and callbacks are required.");
     }
-    if (channel_count > kInputChannels + kOutputChannels) {
-      return fail_thread_safe(ASE_InvalidParameter,
-                              "The requested active channel count is too large.");
-    }
     if (!supported_buffer_size(buffer_frames)) {
       return fail_thread_safe(ASE_InvalidMode,
                               "The requested buffer size is not supported.");
@@ -351,6 +353,10 @@ class VirtualAsioDriver final : public IASIO {
       return fail(ASE_InvalidMode,
                   "Buffers require an initialized, stopped, unprepared driver.");
     }
+    if (channel_count > input_channels_ + output_channels_) {
+      return fail(ASE_InvalidParameter,
+                  "The requested active channel count is too large.");
+    }
     try {
       buffers_.assign(static_cast<std::size_t>(channel_count) * 2U, {});
       active_channels_.clear();
@@ -358,8 +364,8 @@ class VirtualAsioDriver final : public IASIO {
       for (long index = 0; index < channel_count; ++index) {
         const auto& descriptor = buffer_infos[index];
         const auto available = descriptor.isInput == ASIOTrue
-                                   ? kInputChannels
-                                   : kOutputChannels;
+                                   ? input_channels_
+                                   : output_channels_;
         if (descriptor.channelNum < 0 || descriptor.channelNum >= available ||
             channel_active(descriptor.isInput, descriptor.channelNum)) {
           reset_buffers();
@@ -388,8 +394,8 @@ class VirtualAsioDriver final : public IASIO {
     WindowsVirtualAsioRuntimeConfig runtime_config{
         .sample_rate = static_cast<std::uint32_t>(sample_rate_),
         .frames_per_block = static_cast<std::uint32_t>(buffer_frames),
-        .input_channels = static_cast<std::uint32_t>(kOutputChannels),
-        .output_channels = static_cast<std::uint32_t>(kInputChannels),
+        .input_channels = static_cast<std::uint32_t>(input_channels_),
+        .output_channels = static_cast<std::uint32_t>(output_channels_),
         .callbacks = callbacks,
         .use_time_info = use_time_info,
     };
@@ -509,6 +515,8 @@ class VirtualAsioDriver final : public IASIO {
   ASIOSampleRate sample_rate_ = kDefaultSampleRate;
   long preferred_buffer_frames_ = kPreferredBufferFrames;
   long buffer_frames_ = 0;
+  long input_channels_ = kDefaultInputChannels;
+  long output_channels_ = kDefaultOutputChannels;
   bool initialized_ = false;
   bool buffers_created_ = false;
   bool format_discovered_ = false;
