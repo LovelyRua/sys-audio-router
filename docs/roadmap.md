@@ -418,6 +418,13 @@ instances, and multiple clock-domain-aware WASAPI bindings. Fixed channel
 offsets in the alpha preset are migration scaffolding, not the extensibility
 model.
 
+The first multi-device runtime slice is now present: one WASAPI render endpoint
+owns the master clock, additional render and capture endpoints run as soft-clock
+followers, and multiple captures are sample-rate matched and assembled into
+non-overlapping graph input ranges. The next gate is exposing this topology to
+the control protocol and GUI, followed by two-capture hardware acceptance and
+per-endpoint delay alignment.
+
 Deliverables:
 
 - Matrix routing view.

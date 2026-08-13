@@ -12,6 +12,15 @@ helpers, a first named-pipe engine control service, a bounded control wire
 protocol, a mock Virtual ASIO transport, the first Qt Quick control application,
 and the smoke-test harness are in place.
 
+The matrix runtime now uses one render endpoint as the master clock and treats
+each additional physical render or capture endpoint as an independently clocked
+follower. Capture followers publish native-clock blocks through preallocated
+SPSC queues; one adaptive rate matcher per endpoint converts them into the
+master domain, and an allocation-free input assembler places every source in
+its stable graph channel range. The former one-capture duplex special case is
+no longer the matrix topology limit. The Virtual ASIO input remains a strict
+master-domain source and is assembled alongside the soft-clock physical inputs.
+
 The first measured real-device loops now execute this path:
 
 ```text
@@ -601,6 +610,12 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   hardware gates pass.
 - Loopback capture is not yet connected to a selectable render destination or
   virtual endpoint.
+- Multi-capture WASAPI topology is implemented around capture-only follower
+  workers, per-endpoint queues, adaptive sample-rate matching, and stable input
+  channel assembly. It still needs real-machine qualification with at least two
+  simultaneous physical or virtual capture devices, including mismatched rates,
+  drift, endpoint removal/reopen, queue-waterline, and end-to-end latency tests.
+  Per-output delay alignment is not implemented yet.
 - The virtual ASIO DLL has a real control/buffer ABI and broker-backed callback
   loop. REAPER 7.78 x64 now enumerates and loads the machine-registered driver
   on the Windows test desktop. The validated session exposes two inputs and two

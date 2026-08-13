@@ -207,6 +207,44 @@ int main() {
   }
 
   {
+    sar::tests::ScriptedWasapiStream capture_stream(make_capture_probe());
+    capture_stream.enqueue_capture({
+        .frames = 4,
+        .samples = {{0.25F, 0.5F, 0.75F, 1.0F},
+                    {-0.25F, -0.5F, -0.75F, -1.0F}},
+    });
+    RecordingRealtimeAudioSink follower_queue;
+    sar::platform::WasapiGraphChannelLayout layout{
+        .graph_input_channels = 2,
+        .graph_output_channels = 2,
+        .capture_input_offset = 0,
+        .external_output_offset = 0,
+        .external_output_channels = 2,
+    };
+    sar::platform::WindowsWasapiGraphRunner runner(
+        &capture_stream, nullptr, 2, 0, 4, 4, 0, 8, false, false, nullptr,
+        &follower_queue, layout);
+    sar::graph::Graph graph(18, 2, 4, 48000);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+
+    const auto result = runner.process_once(graph, diagnostics, 0);
+    if (const auto failure = expect(
+            result.ok() && result.stats().captured_frames == 4 &&
+                result.stats().graph_processed &&
+                result.stats().external_output_published,
+            "Expected capture-only follower graph processing success")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            follower_queue.write_calls == 1 &&
+                sar::tests::nearly_equal(follower_queue.first_left, 0.25F) &&
+                sar::tests::nearly_equal(follower_queue.first_right, -0.25F),
+            "Expected capture-only graph output published to follower queue")) {
+      return failure;
+    }
+  }
+
+  {
     sar::tests::ScriptedWasapiStream render_stream(make_render_probe());
     render_stream.enqueue_render({
         .status = sar::platform::WasapiStreamIoStatus::Failed,
