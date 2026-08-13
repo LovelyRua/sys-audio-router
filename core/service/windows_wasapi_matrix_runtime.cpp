@@ -23,6 +23,7 @@ namespace {
 constexpr std::size_t kEndpointQueueCapacityBlocks = 32;
 
 struct EndpointFollowerResources {
+  std::string endpoint_id;
   std::unique_ptr<platform::RealtimeAudioEndpointQueue> queue;
   std::unique_ptr<platform::RealtimeAudioRateMatchingSource> rate_matcher;
   std::shared_ptr<graph::Graph> graph;
@@ -74,6 +75,34 @@ class WindowsWasapiMatrixRuntime final : public EngineAudioRuntime {
   std::optional<EngineAudioRecoveryDiagnostics> recovery_diagnostics()
       const override {
     return runtime_->recovery_diagnostics();
+  }
+  std::vector<EngineAudioEndpointDiagnostics> endpoint_diagnostics()
+      const override {
+    auto snapshots = runtime_->endpoint_diagnostics();
+    std::vector<WindowsWasapiMatrixEndpointResourceDiagnostics>
+        resource_snapshots;
+    resource_snapshots.reserve(resources_.size());
+    for (const auto& resource : resources_) {
+      const auto queue = resource->queue->stats().queue;
+      const auto rate_matcher = resource->rate_matcher->stats();
+      diagnostics::EngineDiagnostics diagnostics;
+      diagnostics.xrun_count = queue.dropped_blocks;
+      diagnostics.virtual_asio_pushed_blocks = queue.published_blocks;
+      diagnostics.virtual_asio_dropped_blocks = queue.dropped_blocks;
+      diagnostics.virtual_asio_producer_overflows =
+          queue.consumer_overflows;
+      diagnostics.virtual_asio_maximum_queue_depth =
+          queue.maximum_queue_depth;
+      resource_snapshots.push_back({
+          .endpoint_id = resource->endpoint_id,
+          .diagnostics = diagnostics,
+          .queue_fill_frames = rate_matcher.input_fill_frames,
+          .correction_ppm = rate_matcher.correction_ppm,
+      });
+    }
+    merge_windows_wasapi_matrix_endpoint_diagnostics(snapshots,
+                                                      resource_snapshots);
+    return snapshots;
   }
 
  private:
@@ -144,6 +173,33 @@ bool endpoint_uses_entire_device(
 }
 
 }  // namespace
+
+void merge_windows_wasapi_matrix_endpoint_diagnostics(
+    std::vector<EngineAudioEndpointDiagnostics>& endpoints,
+    const std::vector<WindowsWasapiMatrixEndpointResourceDiagnostics>&
+        resources) noexcept {
+  for (const auto& resource : resources) {
+    const auto endpoint = std::ranges::find_if(
+        endpoints, [&resource](const auto& candidate) {
+          return candidate.endpoint_id == resource.endpoint_id;
+        });
+    if (endpoint == endpoints.end()) {
+      continue;
+    }
+    endpoint->diagnostics.xrun_count += resource.diagnostics.xrun_count;
+    endpoint->diagnostics.virtual_asio_pushed_blocks +=
+        resource.diagnostics.virtual_asio_pushed_blocks;
+    endpoint->diagnostics.virtual_asio_dropped_blocks +=
+        resource.diagnostics.virtual_asio_dropped_blocks;
+    endpoint->diagnostics.virtual_asio_producer_overflows +=
+        resource.diagnostics.virtual_asio_producer_overflows;
+    endpoint->diagnostics.virtual_asio_maximum_queue_depth = std::max(
+        endpoint->diagnostics.virtual_asio_maximum_queue_depth,
+        resource.diagnostics.virtual_asio_maximum_queue_depth);
+    endpoint->queue_fill_frames = resource.queue_fill_frames;
+    endpoint->correction_ppm = resource.correction_ppm;
+  }
+}
 
 EngineAudioRuntimeBuildResult open_windows_wasapi_matrix_runtime(
     const control::AudioRuntimeConfiguration& configuration,
@@ -227,6 +283,7 @@ EngineAudioRuntimeBuildResult open_windows_wasapi_matrix_runtime(
     }
 
     auto owned = std::make_unique<EndpointFollowerResources>();
+    owned->endpoint_id = endpoint->endpoint_id;
     owned->queue = std::make_unique<platform::RealtimeAudioEndpointQueue>(
         binding->graph_first_channel, binding->channel_count, graph->frames(),
         kEndpointQueueCapacityBlocks);
@@ -278,6 +335,7 @@ EngineAudioRuntimeBuildResult open_windows_wasapi_matrix_runtime(
     }
 
     auto owned = std::make_unique<EndpointFollowerResources>();
+    owned->endpoint_id = endpoint->endpoint_id;
     owned->queue = std::make_unique<platform::RealtimeAudioEndpointQueue>(
         0, binding->channel_count, graph->frames(),
         kEndpointQueueCapacityBlocks);

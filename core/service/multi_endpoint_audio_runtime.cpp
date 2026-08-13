@@ -280,6 +280,26 @@ MultiEndpointAudioRuntime::recovery_diagnostics() const {
   return aggregate;
 }
 
+std::vector<EngineAudioEndpointDiagnostics>
+MultiEndpointAudioRuntime::endpoint_diagnostics() const {
+  std::vector<EngineAudioEndpointDiagnostics> snapshots;
+  snapshots.reserve(endpoint_count());
+  const auto append = [&snapshots](const AudioRuntimeMember& member,
+                                   EngineAudioEndpointRole role) {
+    snapshots.push_back({
+        .endpoint_id = member.endpoint_id,
+        .role = role,
+        .diagnostics = member.runtime->diagnostics(),
+        .recovery = member.runtime->recovery_diagnostics(),
+    });
+  };
+  append(master_, EngineAudioEndpointRole::Master);
+  for (const auto& follower : followers_) {
+    append(follower, EngineAudioEndpointRole::Follower);
+  }
+  return snapshots;
+}
+
 std::size_t MultiEndpointAudioRuntime::endpoint_count() const noexcept {
   return followers_.size() + 1;
 }

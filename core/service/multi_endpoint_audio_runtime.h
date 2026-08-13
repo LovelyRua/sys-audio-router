@@ -37,6 +37,8 @@ class MultiEndpointAudioRuntime final : public EngineAudioRuntime {
   [[nodiscard]] diagnostics::EngineDiagnostics diagnostics() const override;
   [[nodiscard]] std::optional<EngineAudioRecoveryDiagnostics>
   recovery_diagnostics() const override;
+  [[nodiscard]] std::vector<EngineAudioEndpointDiagnostics>
+  endpoint_diagnostics() const override;
 
   [[nodiscard]] std::size_t endpoint_count() const noexcept;
   [[nodiscard]] std::string_view master_endpoint_id() const noexcept;

@@ -7,8 +7,22 @@
 #include "core/service/engine_audio_runtime.h"
 
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace sar::service {
+
+struct WindowsWasapiMatrixEndpointResourceDiagnostics {
+  std::string endpoint_id;
+  diagnostics::EngineDiagnostics diagnostics;
+  std::uint64_t queue_fill_frames = 0;
+  double correction_ppm = 0.0;
+};
+
+void merge_windows_wasapi_matrix_endpoint_diagnostics(
+    std::vector<EngineAudioEndpointDiagnostics>& endpoints,
+    const std::vector<WindowsWasapiMatrixEndpointResourceDiagnostics>&
+        resources) noexcept;
 
 // Builds one render-clock master plus independently rate-matched render and
 // capture followers. Every physical endpoint owns its device clock; only the

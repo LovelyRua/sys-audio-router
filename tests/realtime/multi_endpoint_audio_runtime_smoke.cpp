@@ -1,4 +1,5 @@
 #include "core/service/multi_endpoint_audio_runtime.h"
+#include "core/service/windows_wasapi_matrix_runtime.h"
 
 #include <cassert>
 #include <memory>
@@ -116,6 +117,66 @@ int main() {
   assert(recovery->runtime_health ==
          sar::service::EngineAudioRuntimeHealth::Degraded);
   assert(recovery->runtime_reason_code == "render-b:render_underflow");
+
+  auto endpoint_diagnostics = runtime.endpoint_diagnostics();
+  assert(endpoint_diagnostics.size() == 3);
+  assert(endpoint_diagnostics[0].endpoint_id == "render-main");
+  assert(endpoint_diagnostics[0].role ==
+         sar::service::EngineAudioEndpointRole::Master);
+  assert(endpoint_diagnostics[0].diagnostics.processed_blocks == 100);
+  assert(endpoint_diagnostics[0].diagnostics.xrun_count == 1);
+  assert(!endpoint_diagnostics[0].recovery.has_value());
+  assert(!endpoint_diagnostics[0].queue_fill_frames.has_value());
+  assert(!endpoint_diagnostics[0].correction_ppm.has_value());
+
+  assert(endpoint_diagnostics[1].endpoint_id == "render-a");
+  assert(endpoint_diagnostics[1].role ==
+         sar::service::EngineAudioEndpointRole::Follower);
+  assert(endpoint_diagnostics[1].diagnostics.processed_blocks == 500);
+  assert(endpoint_diagnostics[1].diagnostics.xrun_count == 2);
+  assert(endpoint_diagnostics[1].diagnostics.render_fifo_underflow_frames ==
+         128);
+  assert(!endpoint_diagnostics[1].recovery.has_value());
+
+  assert(endpoint_diagnostics[2].endpoint_id == "render-b");
+  assert(endpoint_diagnostics[2].role ==
+         sar::service::EngineAudioEndpointRole::Follower);
+  assert(endpoint_diagnostics[2].diagnostics.xrun_count == 3);
+  assert(endpoint_diagnostics[2].recovery.has_value());
+  assert(endpoint_diagnostics[2].recovery->state ==
+         sar::service::EngineAudioRecoveryState::Backoff);
+  assert(endpoint_diagnostics[2].recovery->runtime_reason_code ==
+         "render_underflow");
+
+  sar::diagnostics::EngineDiagnostics resource_diagnostics;
+  resource_diagnostics.xrun_count = 4;
+  resource_diagnostics.virtual_asio_pushed_blocks = 12;
+  resource_diagnostics.virtual_asio_dropped_blocks = 4;
+  resource_diagnostics.virtual_asio_producer_overflows = 2;
+  resource_diagnostics.virtual_asio_maximum_queue_depth = 9;
+  sar::service::merge_windows_wasapi_matrix_endpoint_diagnostics(
+      endpoint_diagnostics,
+      {{.endpoint_id = "render-a",
+        .diagnostics = resource_diagnostics,
+        .queue_fill_frames = 384,
+        .correction_ppm = -17.25},
+       {.endpoint_id = "missing-endpoint",
+        .queue_fill_frames = 999,
+        .correction_ppm = 999.0}});
+  assert(endpoint_diagnostics[1].diagnostics.xrun_count == 6);
+  assert(endpoint_diagnostics[1].diagnostics.virtual_asio_pushed_blocks ==
+         12);
+  assert(endpoint_diagnostics[1].diagnostics.virtual_asio_dropped_blocks ==
+         4);
+  assert(
+      endpoint_diagnostics[1].diagnostics.virtual_asio_producer_overflows ==
+      2);
+  assert(endpoint_diagnostics[1]
+             .diagnostics.virtual_asio_maximum_queue_depth == 9);
+  assert(endpoint_diagnostics[1].queue_fill_frames == 384);
+  assert(endpoint_diagnostics[1].correction_ppm == -17.25);
+  assert(!endpoint_diagnostics[0].queue_fill_frames.has_value());
+  assert(!endpoint_diagnostics[2].queue_fill_frames.has_value());
 
   sar::graph::Graph next_graph(8, 2, 128, 48000);
   assert(runtime.apply_realtime_graph_parameters(next_graph));

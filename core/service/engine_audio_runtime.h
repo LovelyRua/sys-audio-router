@@ -54,6 +54,20 @@ struct EngineAudioRecoveryDiagnostics {
   std::uint64_t maximum_consecutive_capture_rate_clamped_frames = 0;
 };
 
+enum class EngineAudioEndpointRole {
+  Master,
+  Follower,
+};
+
+struct EngineAudioEndpointDiagnostics {
+  std::string endpoint_id;
+  EngineAudioEndpointRole role = EngineAudioEndpointRole::Follower;
+  diagnostics::EngineDiagnostics diagnostics;
+  std::optional<EngineAudioRecoveryDiagnostics> recovery;
+  std::optional<std::uint64_t> queue_fill_frames;
+  std::optional<double> correction_ppm;
+};
+
 class EngineAudioRuntimeResult {
  public:
   static EngineAudioRuntimeResult success();
@@ -90,6 +104,10 @@ class EngineAudioRuntime {
   [[nodiscard]] virtual std::optional<EngineAudioRecoveryDiagnostics>
   recovery_diagnostics() const {
     return std::nullopt;
+  }
+  [[nodiscard]] virtual std::vector<EngineAudioEndpointDiagnostics>
+  endpoint_diagnostics() const {
+    return {};
   }
 
  protected:
