@@ -955,6 +955,25 @@ int main() {
       return failure;
     }
 
+    const auto capture_diagnostics = make_stream_diagnostics(
+        sar::platform::WasapiStreamDirection::Capture, 48000, 2, 128);
+    summary = sar::platform::summarize_wasapi_runtime(
+        stats, {}, &capture_diagnostics, nullptr);
+    if (const auto failure =
+            expect_summary(summary,
+                           sar::platform::WasapiRuntimeHealth::Healthy,
+                           "capture_idle",
+                           "Expected capture-only timeout to report idle")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            summary.capture_wait_timeout_cycles == 1 &&
+                !sar::platform::wasapi_runtime_summary_should_fail(
+                    summary, true),
+            "Expected capture-only idle to retain timeout diagnostics")) {
+      return failure;
+    }
+
     stats.capture_wait_timeout_cycles = 0;
     stats.render_wait_timeout_cycles = 1;
     summary = sar::platform::summarize_wasapi_runtime(stats, {}, nullptr, nullptr);

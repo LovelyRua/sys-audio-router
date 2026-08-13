@@ -446,6 +446,17 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
     return summary;
   }
 
+  if (stats.wait_timeout_cycles > 0 &&
+      stats.capture_wait_timeout_cycles > 0 &&
+      stats.render_wait_timeout_cycles == 0 && summary.has_capture_stream &&
+      !summary.has_render_stream) {
+    summary.health = WasapiRuntimeHealth::Healthy;
+    summary.reason_code = "capture_idle";
+    summary.reason =
+        "The capture-only stream is running and currently has no packet ready.";
+    return summary;
+  }
+
   if (stats.wait_timeout_cycles > 0) {
     summary.health = WasapiRuntimeHealth::Degraded;
     if (stats.capture_wait_timeout_cycles > 0 &&
