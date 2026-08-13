@@ -4,6 +4,7 @@
 #include "core/service/windows_virtual_asio_broker_server.h"
 #include "core/service/windows_virtual_asio_transport_host.h"
 #include "core/service/windows_wasapi_engine_runtime.h"
+#include "core/service/windows_wasapi_matrix_runtime.h"
 #include "core/platform/virtual_asio_capture_bus.h"
 #include "core/platform/windows_wasapi_device_provider.h"
 
@@ -465,8 +466,10 @@ sar::service::EngineAudioRuntimeBuildResult convert_runtime_result(
 sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator(
     sar::platform::RealtimeAudioSource* external_render_input,
     sar::platform::RealtimeAudioSink* external_capture_output,
-    sar::platform::WasapiGraphChannelLayout channel_layout) {
-  return [external_render_input, external_capture_output, channel_layout](
+    sar::platform::WasapiGraphChannelLayout channel_layout,
+    const sar::control::PresetRouteMatrix* matrix) {
+  return [external_render_input, external_capture_output, channel_layout,
+          matrix](
              const sar::control::AudioRuntimeConfiguration& configuration,
              std::shared_ptr<sar::graph::Graph> graph) {
     if (configuration.mode ==
@@ -498,6 +501,18 @@ sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator(
           sar::service::WindowsWasapiEngineRuntime::open_default_duplex(
               std::move(graph), external_render_input,
               external_capture_output, channel_layout));
+    }
+    if (configuration.mode ==
+        sar::control::AudioRuntimeMode::WasapiMatrix) {
+      if (matrix == nullptr) {
+        return sar::service::EngineAudioRuntimeBuildResult::failure({
+            {"matrix_document_unavailable",
+             "WASAPI matrix runtime requires the current matrix document."},
+        });
+      }
+      return sar::service::open_windows_wasapi_matrix_runtime(
+          configuration, *matrix, std::move(graph), external_render_input,
+          external_capture_output, channel_layout);
     }
     return sar::service::EngineAudioRuntimeBuildResult::failure({
         {"unsupported_audio_runtime_mode",
@@ -652,7 +667,8 @@ int main(int argc, char** argv) {
           &asio_render_bus,
           &asio_capture_bus,
           unified_channel_layout(desired_session.preset.matrix.inputs.size(),
-                                 desired_session.preset.matrix.outputs.size())));
+                                 desired_session.preset.matrix.outputs.size()),
+          &desired_session.preset.matrix));
   if (has_session_path &&
       desired_session.audio_runtime.mode !=
           sar::control::AudioRuntimeMode::None) {

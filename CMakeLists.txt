@@ -73,6 +73,7 @@ add_library(sar_core
   core/service/audio_runtime_topology.cpp
   core/service/audio_runtime_matrix_binding.cpp
   core/service/multi_endpoint_audio_runtime.cpp
+  core/service/windows_wasapi_matrix_runtime.cpp
   core/service/engine_control_service.cpp
 )
 
