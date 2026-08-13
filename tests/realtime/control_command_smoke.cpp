@@ -339,6 +339,47 @@ int main() {
                                     "Expected pinned render configuration success")) {
       return failure;
     }
+
+    command.audio_runtime = {};
+    command.audio_runtime.mode =
+        sar::control::AudioRuntimeMode::WasapiMatrix;
+    command.audio_runtime.endpoints = {
+        {"capture-a", "native-capture-a",
+         sar::control::AudioRuntimeEndpointDirection::Capture, false, 0, 2},
+        {"render-main", "native-render-a",
+         sar::control::AudioRuntimeEndpointDirection::Render, true, 0, 2},
+        {"render-b", "native-render-b",
+         sar::control::AudioRuntimeEndpointDirection::Render, false, 0, 2},
+    };
+    result = sar::control::validate_command(command);
+    if (const auto failure = expect(
+            result.ok(), "Expected valid multi-endpoint matrix configuration")) {
+      return failure;
+    }
+
+    command.audio_runtime.endpoints[0].endpoint_id = "render-main";
+    command.audio_runtime.endpoints[1].clock_master = false;
+    result = sar::control::validate_command(command);
+    if (const auto failure = expect(
+            has_error_code(result, "duplicate_audio_runtime_endpoint_id"),
+            "Expected duplicate logical endpoint validation error")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            has_error_code(result,
+                           "invalid_audio_runtime_clock_master_count"),
+            "Expected missing matrix clock master validation error")) {
+      return failure;
+    }
+
+    command.audio_runtime.endpoints[0].endpoint_id = "capture-a";
+    command.audio_runtime.endpoints[0].clock_master = true;
+    result = sar::control::validate_command(command);
+    if (const auto failure = expect(
+            has_error_code(result, "capture_clock_master_not_supported"),
+            "Expected capture clock master validation error")) {
+      return failure;
+    }
   }
 
   std::cout << "Control command smoke test passed\n";

@@ -203,6 +203,8 @@ QString EngineController::runtimeMode() const {
       return QStringLiteral("render");
     case control::AudioRuntimeMode::WasapiDuplex:
       return QStringLiteral("duplex");
+    case control::AudioRuntimeMode::WasapiMatrix:
+      return QStringLiteral("matrix");
     case control::AudioRuntimeMode::None:
       return QStringLiteral("none");
   }

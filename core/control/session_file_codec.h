@@ -10,7 +10,7 @@
 
 namespace sar::control {
 
-inline constexpr std::uint16_t kSessionFileVersion = 1;
+inline constexpr std::uint16_t kSessionFileVersion = 2;
 inline constexpr std::size_t kSessionFileMaxBytes = 1024 * 1024;
 
 struct SessionFileError {

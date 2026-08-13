@@ -2,6 +2,7 @@
 
 #include "core/control/control_wire_protocol.h"
 
+#include <iterator>
 #include <utility>
 
 namespace sar::control {
@@ -52,44 +53,20 @@ SessionDocumentValidationResult validate_session_document(
         "Audio runtime device IDs exceed the supported length.",
     });
   }
-
-  switch (runtime.mode) {
-    case AudioRuntimeMode::None:
-      if (!runtime.capture_device_id.empty() ||
-          !runtime.render_device_id.empty()) {
-        errors.push_back({
-            "unexpected_audio_runtime_device_id",
-            "A disabled audio runtime cannot specify device IDs.",
-        });
-      }
-      break;
-
-    case AudioRuntimeMode::WasapiRender:
-      if (!runtime.capture_device_id.empty()) {
-        errors.push_back({
-            "unexpected_capture_device_id",
-            "WASAPI render configuration does not accept a capture device ID.",
-        });
-      }
-      break;
-
-    case AudioRuntimeMode::WasapiDuplex:
-      if (runtime.capture_device_id.empty() !=
-          runtime.render_device_id.empty()) {
-        errors.push_back({
-            "incomplete_duplex_device_ids",
-            "WASAPI duplex configuration requires both device IDs or neither.",
-        });
-      }
-      break;
-
-    default:
+  for (const auto& endpoint : runtime.endpoints) {
+    if (endpoint.endpoint_id.size() > kControlWireMaxStringBytes ||
+        endpoint.device_id.size() > kControlWireMaxStringBytes) {
       errors.push_back({
-          "invalid_audio_runtime_mode",
-          "Session document contains an invalid audio runtime mode.",
+          "audio_runtime_endpoint_field_too_long",
+          "Audio runtime endpoint fields exceed the supported length.",
       });
-      break;
+    }
   }
+
+  auto runtime_errors = validate_audio_runtime_configuration(runtime, true);
+  errors.insert(errors.end(),
+                std::make_move_iterator(runtime_errors.begin()),
+                std::make_move_iterator(runtime_errors.end()));
 
   if (session.auto_start && runtime.mode == AudioRuntimeMode::None) {
     errors.push_back({

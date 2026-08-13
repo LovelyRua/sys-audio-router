@@ -191,6 +191,17 @@ SessionFileEncodeResult encode_session_file(const SessionDocument& session) {
   append_integer(bytes, static_cast<std::uint8_t>(session.audio_runtime.mode));
   append_string(bytes, session.audio_runtime.capture_device_id);
   append_string(bytes, session.audio_runtime.render_device_id);
+  append_integer(bytes, static_cast<std::uint32_t>(
+                            session.audio_runtime.endpoints.size()));
+  for (const auto& endpoint : session.audio_runtime.endpoints) {
+    append_string(bytes, endpoint.endpoint_id);
+    append_string(bytes, endpoint.device_id);
+    append_integer(bytes, static_cast<std::uint8_t>(endpoint.direction));
+    append_integer(bytes,
+                   static_cast<std::uint8_t>(endpoint.clock_master ? 1 : 0));
+    append_integer(bytes, endpoint.first_channel);
+    append_integer(bytes, endpoint.channel_count);
+  }
   append_integer(bytes, static_cast<std::uint8_t>(session.auto_start ? 1 : 0));
 
   if (bytes.size() > kSessionFileMaxBytes) {
@@ -223,7 +234,8 @@ SessionFileDecodeResult decode_session_file(
   std::uint32_t payload_size = 0;
   if (!reader.span(kMagic.size(), magic) ||
       !std::equal(magic.begin(), magic.end(), kMagic.begin()) ||
-      !reader.integer(version) || version != kSessionFileVersion ||
+      !reader.integer(version) || version == 0 ||
+      version > kSessionFileVersion ||
       !reader.integer(reserved) || reserved != 0 ||
       !reader.integer(payload_size) || payload_size != reader.remaining()) {
     return SessionFileDecodeResult::failure(
@@ -252,11 +264,48 @@ SessionFileDecodeResult decode_session_file(
   }
   session.preset = decoded_preset.preset();
 
-  if (!reader.integer(runtime_mode) ||
-      runtime_mode > static_cast<std::uint8_t>(AudioRuntimeMode::WasapiDuplex) ||
+  const auto maximum_runtime_mode =
+      version == 1 ? static_cast<std::uint8_t>(AudioRuntimeMode::WasapiDuplex)
+                   : static_cast<std::uint8_t>(AudioRuntimeMode::WasapiMatrix);
+  if (!reader.integer(runtime_mode) || runtime_mode > maximum_runtime_mode ||
       !reader.string(session.audio_runtime.capture_device_id) ||
-      !reader.string(session.audio_runtime.render_device_id) ||
-      !reader.integer(auto_start) || auto_start > 1 || reader.remaining() != 0) {
+      !reader.string(session.audio_runtime.render_device_id)) {
+    return SessionFileDecodeResult::failure(
+        file_error("Session runtime payload is invalid."));
+  }
+  if (version >= 2) {
+    std::uint32_t endpoint_count = 0;
+    if (!reader.integer(endpoint_count) ||
+        endpoint_count > kMaximumAudioRuntimeEndpoints) {
+      return SessionFileDecodeResult::failure(
+          file_error("Session runtime endpoint list is invalid."));
+    }
+    session.audio_runtime.endpoints.reserve(endpoint_count);
+    for (std::uint32_t index = 0; index < endpoint_count; ++index) {
+      AudioRuntimeEndpointConfiguration endpoint;
+      std::uint8_t direction = 0;
+      std::uint8_t clock_master = 0;
+      if (!reader.string(endpoint.endpoint_id) ||
+          !reader.string(endpoint.device_id) || !reader.integer(direction) ||
+          direction > static_cast<std::uint8_t>(
+                          AudioRuntimeEndpointDirection::Render) ||
+          !reader.integer(clock_master) || clock_master > 1) {
+        return SessionFileDecodeResult::failure(
+            file_error("Session runtime endpoint is invalid."));
+      }
+      endpoint.direction =
+          static_cast<AudioRuntimeEndpointDirection>(direction);
+      endpoint.clock_master = clock_master == 1;
+      if (!reader.integer(endpoint.first_channel) ||
+          !reader.integer(endpoint.channel_count)) {
+        return SessionFileDecodeResult::failure(
+            file_error("Session runtime endpoint channel range is invalid."));
+      }
+      session.audio_runtime.endpoints.push_back(std::move(endpoint));
+    }
+  }
+  if (!reader.integer(auto_start) || auto_start > 1 ||
+      reader.remaining() != 0) {
     return SessionFileDecodeResult::failure(
         file_error("Session runtime payload is invalid."));
   }

@@ -212,6 +212,8 @@ const char* runtime_mode_name(sar::control::AudioRuntimeMode mode) {
       return "wasapi-render";
     case sar::control::AudioRuntimeMode::WasapiDuplex:
       return "wasapi-duplex";
+    case sar::control::AudioRuntimeMode::WasapiMatrix:
+      return "wasapi-matrix";
   }
   return "unknown";
 }

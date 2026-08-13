@@ -1,6 +1,7 @@
 #include "core/control/control_wire_protocol.h"
 
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -17,6 +18,22 @@ sar::control::PresetDocument make_preset() {
   return preset;
 }
 
+void write_u16(std::vector<std::uint8_t>& bytes,
+               std::size_t offset,
+               std::uint16_t value) {
+  bytes[offset] = static_cast<std::uint8_t>(value & 0xFFU);
+  bytes[offset + 1] = static_cast<std::uint8_t>((value >> 8U) & 0xFFU);
+}
+
+void write_u32(std::vector<std::uint8_t>& bytes,
+               std::size_t offset,
+               std::uint32_t value) {
+  for (std::size_t index = 0; index < sizeof(value); ++index) {
+    bytes[offset + index] =
+        static_cast<std::uint8_t>((value >> (index * 8U)) & 0xFFU);
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -27,10 +44,13 @@ int main() {
   command.output_id = "output-1";
   command.gain = 0.25F;
   command.preset = make_preset();
-  command.audio_runtime.mode =
-      sar::control::AudioRuntimeMode::WasapiDuplex;
-  command.audio_runtime.capture_device_id = "capture-1";
-  command.audio_runtime.render_device_id = "render-1";
+  command.audio_runtime.mode = sar::control::AudioRuntimeMode::WasapiMatrix;
+  command.audio_runtime.endpoints = {
+      {"capture-1", "native-capture-1",
+       sar::control::AudioRuntimeEndpointDirection::Capture, false, 0, 2},
+      {"render-1", "native-render-1",
+       sar::control::AudioRuntimeEndpointDirection::Render, true, 0, 2},
+  };
 
   const auto encoded_command = sar::control::encode_control_command(command);
   assert(encoded_command.ok());
@@ -44,9 +64,31 @@ int main() {
   assert(decoded_command.command.gain == command.gain);
   assert(decoded_command.command.preset.matrix.routes.size() == 1);
   assert(decoded_command.command.audio_runtime.mode ==
+         sar::control::AudioRuntimeMode::WasapiMatrix);
+  assert(decoded_command.command.audio_runtime.endpoints.size() == 2);
+  assert(decoded_command.command.audio_runtime.endpoints[0].endpoint_id ==
+         "capture-1");
+  assert(decoded_command.command.audio_runtime.endpoints[0].device_id ==
+         "native-capture-1");
+  assert(decoded_command.command.audio_runtime.endpoints[1].clock_master);
+
+  auto legacy_command = command;
+  legacy_command.audio_runtime = {};
+  legacy_command.audio_runtime.mode =
+      sar::control::AudioRuntimeMode::WasapiDuplex;
+  legacy_command.audio_runtime.capture_device_id = "legacy-capture";
+  legacy_command.audio_runtime.render_device_id = "legacy-render";
+  auto encoded_v8 = sar::control::encode_control_command(legacy_command).bytes;
+  encoded_v8.resize(encoded_v8.size() - sizeof(std::uint32_t));
+  write_u16(encoded_v8, 4, 8);
+  write_u32(encoded_v8, 8,
+            static_cast<std::uint32_t>(encoded_v8.size() -
+                                       sar::control::kControlWireHeaderSize));
+  const auto decoded_v8 = sar::control::decode_control_command(encoded_v8);
+  assert(decoded_v8.ok());
+  assert(decoded_v8.command.audio_runtime.mode ==
          sar::control::AudioRuntimeMode::WasapiDuplex);
-  assert(decoded_command.command.audio_runtime.capture_device_id == "capture-1");
-  assert(decoded_command.command.audio_runtime.render_device_id == "render-1");
+  assert(decoded_v8.command.audio_runtime.endpoints.empty());
 
   sar::control::ControlResponse response;
   response.command_id = command.command_id;
@@ -155,9 +197,12 @@ int main() {
   assert(decoded_response.response.audio_runtime.graph_version == 6);
   assert(decoded_response.response.audio_runtime.configured);
   assert(decoded_response.response.audio_runtime.configuration.mode ==
-         sar::control::AudioRuntimeMode::WasapiDuplex);
-  assert(decoded_response.response.audio_runtime.configuration.capture_device_id ==
-         "capture-1");
+         sar::control::AudioRuntimeMode::WasapiMatrix);
+  assert(decoded_response.response.audio_runtime.configuration.endpoints.size() ==
+         2);
+  assert(decoded_response.response.audio_runtime.configuration.endpoints[1]
+             .direction ==
+         sar::control::AudioRuntimeEndpointDirection::Render);
 
   auto truncated = encoded_command.bytes;
   truncated.pop_back();

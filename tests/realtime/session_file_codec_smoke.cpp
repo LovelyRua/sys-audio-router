@@ -75,6 +75,19 @@ int main() {
   assert(decoded.session().audio_runtime.render_device_id == "render-device");
   assert(decoded.session().auto_start);
 
+  auto legacy_v1 = encoded.bytes();
+  legacy_v1.erase(legacy_v1.end() - 5, legacy_v1.end() - 1);
+  legacy_v1[4] = 1;
+  // Session v1 files contain the original control-wire v8 preset payload.
+  legacy_v1[24] = 8;
+  legacy_v1[25] = 0;
+  write_u32(legacy_v1, 8, read_u32(legacy_v1, 8) - 4);
+  const auto decoded_v1 = sar::control::decode_session_file(legacy_v1);
+  assert(decoded_v1.ok());
+  assert(decoded_v1.session().audio_runtime.mode ==
+         sar::control::AudioRuntimeMode::WasapiDuplex);
+  assert(decoded_v1.session().audio_runtime.endpoints.empty());
+
   assert_decode_fails({});
 
   auto truncated = encoded.bytes();
@@ -87,7 +100,7 @@ int main() {
   assert_decode_fails(trailing);
 
   auto unknown_file_version = encoded.bytes();
-  unknown_file_version[4] = 2;
+  unknown_file_version[4] = 3;
   assert_decode_fails(unknown_file_version);
 
   auto unknown_schema_version = encoded.bytes();
@@ -148,6 +161,27 @@ int main() {
   default_duplex.audio_runtime.capture_device_id.clear();
   default_duplex.audio_runtime.render_device_id.clear();
   assert(sar::control::encode_session_file(default_duplex).ok());
+
+  auto matrix = session;
+  matrix.audio_runtime = {};
+  matrix.audio_runtime.mode = sar::control::AudioRuntimeMode::WasapiMatrix;
+  matrix.audio_runtime.endpoints = {
+      {"capture-a", "native-capture-a",
+       sar::control::AudioRuntimeEndpointDirection::Capture, false, 0, 2},
+      {"render-main", "native-render-main",
+       sar::control::AudioRuntimeEndpointDirection::Render, true, 0, 2},
+      {"render-b", "native-render-b",
+       sar::control::AudioRuntimeEndpointDirection::Render, false, 0, 2},
+  };
+  const auto encoded_matrix = sar::control::encode_session_file(matrix);
+  assert(encoded_matrix.ok());
+  const auto decoded_matrix =
+      sar::control::decode_session_file(encoded_matrix.bytes());
+  assert(decoded_matrix.ok());
+  assert(decoded_matrix.session().audio_runtime.endpoints.size() == 3);
+  assert(decoded_matrix.session().audio_runtime.endpoints[1].endpoint_id ==
+         "render-main");
+  assert(decoded_matrix.session().audio_runtime.endpoints[1].clock_master);
 
   auto stopped = session;
   stopped.audio_runtime.mode = sar::control::AudioRuntimeMode::None;

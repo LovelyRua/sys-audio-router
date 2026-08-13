@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
+#include <limits>
+#include <unordered_set>
 #include <utility>
 
 namespace sar::control {
@@ -60,6 +63,139 @@ ControlCommandValidationResult::ControlCommandValidationResult(
     std::vector<PresetError> errors)
     : errors_(std::move(errors)) {}
 
+std::vector<PresetError> validate_audio_runtime_configuration(
+    const AudioRuntimeConfiguration& configuration,
+    bool allow_none) {
+  std::vector<PresetError> errors;
+
+  if (configuration.mode == AudioRuntimeMode::None) {
+    if (!allow_none) {
+      errors.push_back({"missing_audio_runtime_mode",
+                        "ConfigureAudioRuntime requires a runtime mode."});
+    }
+    if (!configuration.capture_device_id.empty() ||
+        !configuration.render_device_id.empty() ||
+        !configuration.endpoints.empty()) {
+      errors.push_back({"unexpected_audio_runtime_endpoint",
+                        "A disabled audio runtime cannot specify endpoints."});
+    }
+    return errors;
+  }
+
+  if (configuration.mode == AudioRuntimeMode::WasapiRender) {
+    if (!configuration.capture_device_id.empty()) {
+      errors.push_back({
+          "unexpected_capture_device_id",
+          "WASAPI render configuration does not accept a capture device ID.",
+      });
+    }
+    if (!configuration.endpoints.empty()) {
+      errors.push_back({"unexpected_matrix_endpoints",
+                        "Legacy WASAPI modes do not accept matrix endpoints."});
+    }
+    return errors;
+  }
+
+  if (configuration.mode == AudioRuntimeMode::WasapiDuplex) {
+    if (configuration.capture_device_id.empty() !=
+        configuration.render_device_id.empty()) {
+      errors.push_back({
+          "incomplete_duplex_device_ids",
+          "WASAPI duplex configuration requires both device IDs or neither.",
+      });
+    }
+    if (!configuration.endpoints.empty()) {
+      errors.push_back({"unexpected_matrix_endpoints",
+                        "Legacy WASAPI modes do not accept matrix endpoints."});
+    }
+    return errors;
+  }
+
+  if (configuration.mode != AudioRuntimeMode::WasapiMatrix) {
+    errors.push_back(
+        {"invalid_audio_runtime_mode", "Audio runtime mode is not supported."});
+    return errors;
+  }
+
+  if (!configuration.capture_device_id.empty() ||
+      !configuration.render_device_id.empty()) {
+    errors.push_back({
+        "unexpected_legacy_device_id",
+        "WASAPI matrix mode uses endpoint descriptors, not legacy device IDs.",
+    });
+  }
+  if (configuration.endpoints.empty()) {
+    errors.push_back({"empty_audio_runtime_matrix",
+                      "WASAPI matrix mode requires at least one endpoint."});
+    return errors;
+  }
+  if (configuration.endpoints.size() > kMaximumAudioRuntimeEndpoints) {
+    errors.push_back({"too_many_audio_runtime_endpoints",
+                      "WASAPI matrix mode exceeds the endpoint capacity."});
+    return errors;
+  }
+
+  std::unordered_set<std::string> endpoint_ids;
+  std::unordered_set<std::string> native_endpoints;
+  std::size_t render_count = 0;
+  std::size_t clock_master_count = 0;
+  for (const auto& endpoint : configuration.endpoints) {
+    if (endpoint.endpoint_id.empty()) {
+      errors.push_back({"empty_audio_runtime_endpoint_id",
+                        "Matrix endpoints require a stable endpoint ID."});
+    } else if (!endpoint_ids.insert(endpoint.endpoint_id).second) {
+      errors.push_back({"duplicate_audio_runtime_endpoint_id",
+                        "Matrix endpoint IDs must be unique."});
+    }
+
+    const bool render =
+        endpoint.direction == AudioRuntimeEndpointDirection::Render;
+    if (render) {
+      ++render_count;
+    } else if (endpoint.direction != AudioRuntimeEndpointDirection::Capture) {
+      errors.push_back({"invalid_audio_runtime_endpoint_direction",
+                        "Matrix endpoint direction is invalid."});
+    }
+
+    std::string native_key(render ? "render\n" : "capture\n");
+    native_key += endpoint.device_id;
+    if (!native_endpoints.insert(std::move(native_key)).second) {
+      errors.push_back({
+          "duplicate_audio_runtime_device",
+          "A native device direction can appear only once in a matrix runtime.",
+      });
+    }
+
+    if (endpoint.clock_master) {
+      ++clock_master_count;
+      if (!render) {
+        errors.push_back({"capture_clock_master_not_supported",
+                          "The matrix clock master must be a render endpoint."});
+      }
+    }
+    if (endpoint.channel_count == 0) {
+      errors.push_back({"empty_audio_runtime_channel_range",
+                        "Matrix endpoints require an explicit channel count."});
+    } else if (endpoint.first_channel >
+               std::numeric_limits<std::uint32_t>::max() -
+                   endpoint.channel_count) {
+      errors.push_back({"invalid_audio_runtime_channel_range",
+                        "Matrix endpoint channel range overflows."});
+    }
+  }
+  if (render_count == 0) {
+    errors.push_back({
+        "missing_audio_runtime_render_endpoint",
+        "WASAPI matrix mode requires a render endpoint to drive the graph.",
+    });
+  }
+  if (clock_master_count != 1) {
+    errors.push_back({"invalid_audio_runtime_clock_master_count",
+                      "WASAPI matrix mode requires exactly one clock master."});
+  }
+  return errors;
+}
+
 ControlCommandValidationResult validate_command(const ControlCommand& command) {
   std::vector<PresetError> errors;
 
@@ -83,28 +219,14 @@ ControlCommandValidationResult validate_command(const ControlCommand& command) {
     case ControlCommandType::StopAudioRuntime:
       break;
 
-    case ControlCommandType::ConfigureAudioRuntime:
-      if (command.audio_runtime.mode == AudioRuntimeMode::None) {
-        errors.push_back({
-            "missing_audio_runtime_mode",
-            "ConfigureAudioRuntime requires a runtime mode.",
-        });
-      } else if (command.audio_runtime.mode == AudioRuntimeMode::WasapiRender) {
-        if (!command.audio_runtime.capture_device_id.empty()) {
-          errors.push_back({
-              "unexpected_capture_device_id",
-              "WASAPI render configuration does not accept a capture device ID.",
-          });
-        }
-      } else if (command.audio_runtime.mode == AudioRuntimeMode::WasapiDuplex &&
-                 command.audio_runtime.capture_device_id.empty() !=
-                     command.audio_runtime.render_device_id.empty()) {
-        errors.push_back({
-            "incomplete_duplex_device_ids",
-            "WASAPI duplex configuration requires both device IDs or neither.",
-        });
-      }
+    case ControlCommandType::ConfigureAudioRuntime: {
+      auto runtime_errors =
+          validate_audio_runtime_configuration(command.audio_runtime, false);
+      errors.insert(errors.end(),
+                    std::make_move_iterator(runtime_errors.begin()),
+                    std::make_move_iterator(runtime_errors.end()));
       break;
+    }
 
     case ControlCommandType::CreateVirtualEndpoint:
       require_non_empty(command.endpoint_id,

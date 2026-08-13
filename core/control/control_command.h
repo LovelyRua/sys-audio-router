@@ -2,6 +2,7 @@
 
 #include "core/control/preset_document.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -31,13 +32,34 @@ enum class AudioRuntimeMode {
   None,
   WasapiRender,
   WasapiDuplex,
+  WasapiMatrix,
+};
+
+enum class AudioRuntimeEndpointDirection {
+  Capture,
+  Render,
+};
+
+struct AudioRuntimeEndpointConfiguration {
+  // This stable ID belongs to graph routes. device_id is a native binding and
+  // may change when hardware is unplugged and reconnected.
+  std::string endpoint_id;
+  std::string device_id;
+  AudioRuntimeEndpointDirection direction =
+      AudioRuntimeEndpointDirection::Capture;
+  bool clock_master = false;
+  std::uint32_t first_channel = 0;
+  std::uint32_t channel_count = 0;
 };
 
 struct AudioRuntimeConfiguration {
   AudioRuntimeMode mode = AudioRuntimeMode::None;
   std::string capture_device_id;
   std::string render_device_id;
+  std::vector<AudioRuntimeEndpointConfiguration> endpoints;
 };
+
+inline constexpr std::size_t kMaximumAudioRuntimeEndpoints = 32;
 
 struct ControlCommand {
   std::uint32_t schema_version = 1;
@@ -86,6 +108,9 @@ class ControlApplyResult {
 };
 
 [[nodiscard]] ControlCommandValidationResult validate_command(const ControlCommand& command);
+[[nodiscard]] std::vector<PresetError> validate_audio_runtime_configuration(
+    const AudioRuntimeConfiguration& configuration,
+    bool allow_none);
 [[nodiscard]] bool control_command_mutates_preset(
     ControlCommandType type) noexcept;
 [[nodiscard]] ControlApplyResult apply_command(const PresetDocument& current,

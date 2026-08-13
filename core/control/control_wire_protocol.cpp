@@ -106,7 +106,7 @@ class Reader {
       return;
     }
     const auto magic = scalar<std::uint32_t>();
-    const auto version = scalar<std::uint16_t>();
+    version_ = scalar<std::uint16_t>();
     const auto kind = scalar<std::uint16_t>();
     const auto payload_size = scalar<std::uint32_t>();
     if (!ok()) {
@@ -114,7 +114,7 @@ class Reader {
     }
     if (magic != kMagic) {
       fail(ControlWireErrorCode::InvalidMagic);
-    } else if (version != kControlWireVersion) {
+    } else if (version_ < 8 || version_ > kControlWireVersion) {
       fail(ControlWireErrorCode::UnsupportedVersion);
     } else if (kind != expected_kind) {
       fail(ControlWireErrorCode::UnexpectedMessageKind);
@@ -205,6 +205,7 @@ class Reader {
   [[nodiscard]] bool ok() const noexcept {
     return error_.code == ControlWireErrorCode::None;
   }
+  [[nodiscard]] std::uint16_t version() const noexcept { return version_; }
   [[nodiscard]] ControlWireError error() const noexcept { return error_; }
 
  private:
@@ -227,6 +228,7 @@ class Reader {
 
   std::span<const std::uint8_t> bytes_;
   std::size_t offset_ = 0;
+  std::uint16_t version_ = 0;
   ControlWireError error_;
 };
 
@@ -482,6 +484,15 @@ ControlWireEncodeResult encode_control_command(const ControlCommand& command) {
   writer.scalar(static_cast<std::uint32_t>(command.audio_runtime.mode));
   writer.string(command.audio_runtime.capture_device_id);
   writer.string(command.audio_runtime.render_device_id);
+  writer.count(command.audio_runtime.endpoints.size());
+  for (const auto& endpoint : command.audio_runtime.endpoints) {
+    writer.string(endpoint.endpoint_id);
+    writer.string(endpoint.device_id);
+    writer.scalar(static_cast<std::uint32_t>(endpoint.direction));
+    writer.boolean(endpoint.clock_master);
+    writer.scalar(endpoint.first_channel);
+    writer.scalar(endpoint.channel_count);
+  }
   return writer.finish();
 }
 
@@ -503,9 +514,27 @@ ControlCommandDecodeResult decode_control_command(
   command.gain = reader.float32();
   command.mute = reader.boolean();
   command.preset = decode_preset(reader);
-  command.audio_runtime.mode = reader.enumeration<AudioRuntimeMode>(2);
+  command.audio_runtime.mode = reader.enumeration<AudioRuntimeMode>(
+      reader.version() >= 9 ? 3 : 2);
   command.audio_runtime.capture_device_id = reader.string();
   command.audio_runtime.render_device_id = reader.string();
+  const auto runtime_endpoint_count =
+      reader.version() >= 9 ? reader.count() : 0;
+  if (reader.ok() && reader.version() >= 9) {
+    command.audio_runtime.endpoints.reserve(runtime_endpoint_count);
+    for (std::uint32_t index = 0;
+         index < runtime_endpoint_count && reader.ok(); ++index) {
+      AudioRuntimeEndpointConfiguration endpoint;
+      endpoint.endpoint_id = reader.string();
+      endpoint.device_id = reader.string();
+      endpoint.direction =
+          reader.enumeration<AudioRuntimeEndpointDirection>(1);
+      endpoint.clock_master = reader.boolean();
+      endpoint.first_channel = reader.scalar<std::uint32_t>();
+      endpoint.channel_count = reader.scalar<std::uint32_t>();
+      command.audio_runtime.endpoints.push_back(std::move(endpoint));
+    }
+  }
   reader.finish();
   return {std::move(command), reader.error()};
 }
@@ -562,6 +591,16 @@ ControlWireEncodeResult encode_control_response(const ControlResponse& response)
         response.audio_runtime.configuration.mode));
     writer.string(response.audio_runtime.configuration.capture_device_id);
     writer.string(response.audio_runtime.configuration.render_device_id);
+    writer.count(response.audio_runtime.configuration.endpoints.size());
+    for (const auto& endpoint :
+         response.audio_runtime.configuration.endpoints) {
+      writer.string(endpoint.endpoint_id);
+      writer.string(endpoint.device_id);
+      writer.scalar(static_cast<std::uint32_t>(endpoint.direction));
+      writer.boolean(endpoint.clock_master);
+      writer.scalar(endpoint.first_channel);
+      writer.scalar(endpoint.channel_count);
+    }
   }
   return writer.finish();
 }
@@ -632,10 +671,29 @@ ControlResponseDecodeResult decode_control_response(
     response.audio_runtime.running = reader.boolean();
     response.audio_runtime.graph_version = reader.scalar<std::uint64_t>();
     response.audio_runtime.configured = reader.boolean();
-    response.audio_runtime.configuration.mode =
-        reader.enumeration<AudioRuntimeMode>(2);
+    response.audio_runtime.configuration.mode = reader.enumeration<AudioRuntimeMode>(
+        reader.version() >= 9 ? 3 : 2);
     response.audio_runtime.configuration.capture_device_id = reader.string();
     response.audio_runtime.configuration.render_device_id = reader.string();
+    const auto runtime_endpoint_count =
+        reader.version() >= 9 ? reader.count() : 0;
+    if (reader.ok() && reader.version() >= 9) {
+      response.audio_runtime.configuration.endpoints.reserve(
+          runtime_endpoint_count);
+      for (std::uint32_t index = 0;
+           index < runtime_endpoint_count && reader.ok(); ++index) {
+        AudioRuntimeEndpointConfiguration endpoint;
+        endpoint.endpoint_id = reader.string();
+        endpoint.device_id = reader.string();
+        endpoint.direction =
+            reader.enumeration<AudioRuntimeEndpointDirection>(1);
+        endpoint.clock_master = reader.boolean();
+        endpoint.first_channel = reader.scalar<std::uint32_t>();
+        endpoint.channel_count = reader.scalar<std::uint32_t>();
+        response.audio_runtime.configuration.endpoints.push_back(
+            std::move(endpoint));
+      }
+    }
   }
   reader.finish();
   return {std::move(response), reader.error()};
