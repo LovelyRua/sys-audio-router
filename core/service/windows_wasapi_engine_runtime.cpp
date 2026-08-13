@@ -13,6 +13,7 @@ namespace sar::service {
 namespace {
 
 constexpr char kUnusedCaptureEndpointId[] = "__sar_render_only__";
+constexpr char kUnusedRenderEndpointId[] = "__sar_capture_only__";
 
 std::vector<EngineAudioRuntimeError> convert_errors(
     const std::vector<platform::WasapiRealtimeWorkerError>& errors) {
@@ -89,6 +90,107 @@ EngineAudioRuntimeHealth convert_runtime_health(
 
 WindowsWasapiEngineRuntime::~WindowsWasapiEngineRuntime() {
   stop();
+}
+
+WindowsWasapiEngineRuntimeOpenResult
+WindowsWasapiEngineRuntime::open_default_capture(
+    std::shared_ptr<graph::Graph> graph,
+    platform::RealtimeAudioSink* external_output) {
+  if (!graph || external_output == nullptr) {
+    return WindowsWasapiEngineRuntimeOpenResult::failure({{
+        "invalid_capture_runtime_configuration",
+        "WASAPI capture runtime requires a graph and output sink.",
+    }});
+  }
+  auto runtime = std::unique_ptr<WindowsWasapiEngineRuntime>(
+      new WindowsWasapiEngineRuntime(std::move(graph), nullptr,
+                                     external_output));
+  auto loop = platform::open_default_wasapi_capture_loop(
+      *runtime->graph_, runtime->realtime_diagnostics_, external_output);
+  if (!loop.ok()) {
+    return WindowsWasapiEngineRuntimeOpenResult::failure(
+        convert_errors(loop.errors()));
+  }
+  auto first_loop = std::make_shared<
+      std::unique_ptr<platform::WindowsWasapiCaptureLoop>>(loop.take_loop());
+  auto* graph_ptr = runtime->graph_.get();
+  auto* diagnostics = &runtime->realtime_diagnostics_;
+  runtime->runtime_factory_ =
+      [first_loop, graph_ptr, diagnostics, external_output]() mutable {
+        auto next = std::move(*first_loop);
+        if (!next) {
+          auto reopened = platform::open_default_wasapi_capture_loop(
+              *graph_ptr, *diagnostics, external_output);
+          if (!reopened.ok()) {
+            return platform::WasapiDuplexRuntimeOpenResult::failure(
+                reopened.errors());
+          }
+          next = reopened.take_loop();
+        }
+        platform::WasapiDuplexRuntimeEndpoints endpoints{
+            .capture_device_id = next->probe().device_id};
+        return platform::WasapiDuplexRuntimeOpenResult::success(
+            std::move(next), std::move(endpoints));
+      };
+  runtime->duplex_endpoint_policy_ = platform::WasapiEndpointSelectionPolicy(
+      platform::WasapiEndpointSelection::follow_default(),
+      platform::WasapiEndpointSelection::pinned_device_id(
+          kUnusedRenderEndpointId));
+  runtime->capture_configured_ = true;
+  return WindowsWasapiEngineRuntimeOpenResult::success(std::move(runtime));
+}
+
+WindowsWasapiEngineRuntimeOpenResult WindowsWasapiEngineRuntime::open_capture(
+    std::string capture_device_id,
+    std::shared_ptr<graph::Graph> graph,
+    platform::RealtimeAudioSink* external_output) {
+  if (!graph || external_output == nullptr || capture_device_id.empty()) {
+    return WindowsWasapiEngineRuntimeOpenResult::failure({{
+        "invalid_capture_runtime_configuration",
+        "Explicit WASAPI capture runtime requires a graph, device ID, and "
+        "output sink.",
+    }});
+  }
+  auto runtime = std::unique_ptr<WindowsWasapiEngineRuntime>(
+      new WindowsWasapiEngineRuntime(std::move(graph), nullptr,
+                                     external_output));
+  auto loop = platform::open_wasapi_capture_loop(
+      capture_device_id, *runtime->graph_, runtime->realtime_diagnostics_,
+      external_output);
+  if (!loop.ok()) {
+    return WindowsWasapiEngineRuntimeOpenResult::failure(
+        convert_errors(loop.errors()));
+  }
+  auto first_loop = std::make_shared<
+      std::unique_ptr<platform::WindowsWasapiCaptureLoop>>(loop.take_loop());
+  auto* graph_ptr = runtime->graph_.get();
+  auto* diagnostics = &runtime->realtime_diagnostics_;
+  const auto pinned_id = capture_device_id;
+  runtime->runtime_factory_ =
+      [first_loop, graph_ptr, diagnostics, external_output,
+       capture_device_id = pinned_id]() mutable {
+        auto next = std::move(*first_loop);
+        if (!next) {
+          auto reopened = platform::open_wasapi_capture_loop(
+              capture_device_id, *graph_ptr, *diagnostics, external_output);
+          if (!reopened.ok()) {
+            return platform::WasapiDuplexRuntimeOpenResult::failure(
+                reopened.errors());
+          }
+          next = reopened.take_loop();
+        }
+        platform::WasapiDuplexRuntimeEndpoints endpoints{
+            .capture_device_id = next->probe().device_id};
+        return platform::WasapiDuplexRuntimeOpenResult::success(
+            std::move(next), std::move(endpoints));
+      };
+  runtime->duplex_endpoint_policy_ = platform::WasapiEndpointSelectionPolicy(
+      platform::WasapiEndpointSelection::pinned_device_id(
+          std::move(capture_device_id)),
+      platform::WasapiEndpointSelection::pinned_device_id(
+          kUnusedRenderEndpointId));
+  runtime->capture_configured_ = true;
+  return WindowsWasapiEngineRuntimeOpenResult::success(std::move(runtime));
 }
 
 WindowsWasapiEngineRuntimeOpenResult
@@ -262,7 +364,7 @@ WindowsWasapiEngineRuntimeOpenResult WindowsWasapiEngineRuntime::open_duplex(
 
 EngineAudioRuntimeResult WindowsWasapiEngineRuntime::start(
     std::uint32_t timeout_ms) {
-  if (!render_configured_ && !duplex_configured_) {
+  if (!capture_configured_ && !render_configured_ && !duplex_configured_) {
     return EngineAudioRuntimeResult::failure({
         {"wasapi_audio_loop_not_open", "WASAPI audio loop is not open."},
     });
@@ -344,7 +446,7 @@ bool WindowsWasapiEngineRuntime::apply_realtime_graph_parameters(
 
 diagnostics::EngineDiagnostics WindowsWasapiEngineRuntime::diagnostics() const {
   diagnostics::EngineDiagnostics result;
-  if (!render_configured_ && !duplex_configured_) {
+  if (!capture_configured_ && !render_configured_ && !duplex_configured_) {
     return result;
   }
 
@@ -421,8 +523,11 @@ WindowsWasapiEngineRuntime::recovery_diagnostics() const {
 }
 
 WindowsWasapiEngineRuntimeMode WindowsWasapiEngineRuntime::mode() const noexcept {
-  return duplex_configured_ ? WindowsWasapiEngineRuntimeMode::Duplex
-                            : WindowsWasapiEngineRuntimeMode::Render;
+  if (duplex_configured_) {
+    return WindowsWasapiEngineRuntimeMode::Duplex;
+  }
+  return capture_configured_ ? WindowsWasapiEngineRuntimeMode::Capture
+                             : WindowsWasapiEngineRuntimeMode::Render;
 }
 
 platform::WasapiRuntimeSummary

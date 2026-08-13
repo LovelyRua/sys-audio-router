@@ -3,6 +3,7 @@
 #include "core/platform/realtime_audio_channel_slice_sink.h"
 #include "core/platform/realtime_audio_endpoint_queue.h"
 #include "core/platform/realtime_audio_fanout_sink.h"
+#include "core/platform/realtime_audio_input_assembler.h"
 #include "core/platform/realtime_audio_rate_matching_source.h"
 #include "core/platform/windows_wasapi_stream.h"
 #include "core/service/audio_runtime_matrix_binding.h"
@@ -12,7 +13,6 @@
 
 #include <algorithm>
 #include <memory>
-#include <optional>
 #include <utility>
 #include <vector>
 
@@ -22,7 +22,7 @@ namespace {
 
 constexpr std::size_t kEndpointQueueCapacityBlocks = 32;
 
-struct RenderFollowerResources {
+struct EndpointFollowerResources {
   std::unique_ptr<platform::RealtimeAudioEndpointQueue> queue;
   std::unique_ptr<platform::RealtimeAudioRateMatchingSource> rate_matcher;
   std::shared_ptr<graph::Graph> graph;
@@ -31,12 +31,14 @@ struct RenderFollowerResources {
 class WindowsWasapiMatrixRuntime final : public EngineAudioRuntime {
  public:
   WindowsWasapiMatrixRuntime(
-      std::vector<std::unique_ptr<RenderFollowerResources>> resources,
+      std::vector<std::unique_ptr<EndpointFollowerResources>> resources,
+      std::unique_ptr<platform::RealtimeAudioInputAssembler> input_assembler,
       std::unique_ptr<platform::RealtimeAudioChannelSliceSink>
           external_output_slice,
       std::unique_ptr<platform::RealtimeAudioFanoutSink> fanout,
       std::unique_ptr<MultiEndpointAudioRuntime> runtime)
       : resources_(std::move(resources)),
+        input_assembler_(std::move(input_assembler)),
         external_output_slice_(std::move(external_output_slice)),
         fanout_(std::move(fanout)),
         runtime_(std::move(runtime)) {}
@@ -75,7 +77,8 @@ class WindowsWasapiMatrixRuntime final : public EngineAudioRuntime {
   }
 
  private:
-  std::vector<std::unique_ptr<RenderFollowerResources>> resources_;
+  std::vector<std::unique_ptr<EndpointFollowerResources>> resources_;
+  std::unique_ptr<platform::RealtimeAudioInputAssembler> input_assembler_;
   std::unique_ptr<platform::RealtimeAudioChannelSliceSink>
       external_output_slice_;
   std::unique_ptr<platform::RealtimeAudioFanoutSink> fanout_;
@@ -187,30 +190,26 @@ EngineAudioRuntimeBuildResult open_windows_wasapi_matrix_runtime(
   std::vector<const control::AudioRuntimeEndpointConfiguration*>
       capture_endpoints;
   std::vector<const control::AudioRuntimeEndpointConfiguration*>
-      follower_endpoints;
+      render_followers;
   for (const auto& endpoint : topology.endpoints) {
     if (endpoint.direction ==
         control::AudioRuntimeEndpointDirection::Capture) {
       capture_endpoints.push_back(&endpoint);
     } else if (!endpoint.clock_master) {
-      follower_endpoints.push_back(&endpoint);
+      render_followers.push_back(&endpoint);
     }
   }
-  if (capture_endpoints.size() > 1) {
-    return failure("multiple_wasapi_capture_followers_not_supported",
-                   "Alpha matrix runtime supports at most one physical "
-                   "capture endpoint.");
-  }
 
-  std::vector<std::unique_ptr<RenderFollowerResources>> resources;
+  std::vector<std::unique_ptr<EndpointFollowerResources>> resources;
   std::vector<AudioRuntimeMember> follower_runtimes;
   std::vector<platform::RealtimeAudioSink*> fanout_sinks;
-  resources.reserve(follower_endpoints.size());
-  follower_runtimes.reserve(follower_endpoints.size());
-  fanout_sinks.reserve(follower_endpoints.size() +
+  std::vector<platform::RealtimeAudioInputBinding> input_bindings;
+  resources.reserve(render_followers.size() + capture_endpoints.size());
+  follower_runtimes.reserve(render_followers.size() + capture_endpoints.size());
+  fanout_sinks.reserve(render_followers.size() +
                        static_cast<std::size_t>(external_output != nullptr));
 
-  for (const auto* endpoint : follower_endpoints) {
+  for (const auto* endpoint : render_followers) {
     const auto* binding = find_binding(bindings, endpoint->endpoint_id);
     if (binding == nullptr) {
       return failure("audio_runtime_follower_binding_missing",
@@ -227,7 +226,7 @@ EngineAudioRuntimeBuildResult open_windows_wasapi_matrix_runtime(
           "range to cover the complete native device.");
     }
 
-    auto owned = std::make_unique<RenderFollowerResources>();
+    auto owned = std::make_unique<EndpointFollowerResources>();
     owned->queue = std::make_unique<platform::RealtimeAudioEndpointQueue>(
         binding->graph_first_channel, binding->channel_count, graph->frames(),
         kEndpointQueueCapacityBlocks);
@@ -261,6 +260,63 @@ EngineAudioRuntimeBuildResult open_windows_wasapi_matrix_runtime(
     resources.push_back(std::move(owned));
   }
 
+  for (const auto* endpoint : capture_endpoints) {
+    const auto* binding = find_binding(bindings, endpoint->endpoint_id);
+    if (binding == nullptr) {
+      return failure("audio_runtime_capture_binding_missing",
+                     "Capture follower has no graph channel binding.");
+    }
+    const auto probe = probe_capture(endpoint->device_id);
+    if (!probe.ok()) {
+      return failure(probe.errors());
+    }
+    if (!endpoint_uses_entire_device(*endpoint, probe.probe())) {
+      return failure(
+          "wasapi_matrix_partial_native_channel_range_not_supported",
+          "Alpha matrix runtime currently requires each endpoint channel "
+          "range to cover the complete native device.");
+    }
+
+    auto owned = std::make_unique<EndpointFollowerResources>();
+    owned->queue = std::make_unique<platform::RealtimeAudioEndpointQueue>(
+        0, binding->channel_count, graph->frames(),
+        kEndpointQueueCapacityBlocks);
+    owned->rate_matcher =
+        std::make_unique<platform::RealtimeAudioRateMatchingSource>(
+            *owned->queue, probe.probe().mix_format.sample_rate,
+            graph->sample_rate());
+    owned->graph = std::make_shared<graph::Graph>(
+        graph->version(), probe.probe().mix_format.channels, graph->frames(),
+        probe.probe().mix_format.sample_rate);
+    auto opened = endpoint->device_id.empty()
+                      ? WindowsWasapiEngineRuntime::open_default_capture(
+                            owned->graph, &owned->queue->publisher())
+                      : WindowsWasapiEngineRuntime::open_capture(
+                            endpoint->device_id, owned->graph,
+                            &owned->queue->publisher());
+    if (!opened.ok()) {
+      return EngineAudioRuntimeBuildResult::failure(opened.errors());
+    }
+    input_bindings.push_back({owned->rate_matcher.get(),
+                              binding->graph_first_channel,
+                              binding->channel_count});
+    follower_runtimes.push_back(
+        {endpoint->endpoint_id, opened.take_runtime()});
+    resources.push_back(std::move(owned));
+  }
+
+  if (external_input != nullptr && base_layout.external_input_channels != 0) {
+    input_bindings.push_back({external_input, base_layout.external_input_offset,
+                              base_layout.external_input_channels});
+  }
+  auto input_assembler = input_bindings.empty()
+                             ? std::unique_ptr<
+                                   platform::RealtimeAudioInputAssembler>{}
+                             : std::make_unique<
+                                   platform::RealtimeAudioInputAssembler>(
+                                   graph->channels(), graph->frames(),
+                                   std::move(input_bindings));
+
   std::unique_ptr<platform::RealtimeAudioChannelSliceSink>
       external_output_slice;
   if (external_output != nullptr) {
@@ -284,65 +340,34 @@ EngineAudioRuntimeBuildResult open_windows_wasapi_matrix_runtime(
   master_layout.graph_input_channels = graph->channels();
   master_layout.graph_output_channels = graph->channels();
   master_layout.render_output_offset = master_binding->graph_first_channel;
+  if (input_assembler) {
+    master_layout.external_input_offset = 0;
+    master_layout.external_input_channels = graph->channels();
+  }
   if (fanout) {
     master_layout.external_output_offset = 0;
     master_layout.external_output_channels = graph->channels();
   }
 
-  std::optional<WindowsWasapiEngineRuntimeOpenResult> master_opened;
-  if (capture_endpoints.empty()) {
-    master_opened.emplace(
-        master_endpoint.device_id.empty()
-            ? WindowsWasapiEngineRuntime::open_default_render(
-                  graph, external_input, master_layout, fanout.get())
-            : WindowsWasapiEngineRuntime::open_render(
-                  master_endpoint.device_id, graph, external_input,
-                  master_layout, fanout.get()));
-  } else {
-    const auto& capture = *capture_endpoints.front();
-    const auto* capture_binding =
-        find_binding(bindings, capture.endpoint_id);
-    if (capture_binding == nullptr) {
-      return failure("audio_runtime_capture_binding_missing",
-                     "Capture endpoint has no graph channel binding.");
-    }
-    const auto capture_probe = probe_capture(capture.device_id);
-    if (!capture_probe.ok()) {
-      return failure(capture_probe.errors());
-    }
-    if (!endpoint_uses_entire_device(capture, capture_probe.probe())) {
-      return failure(
-          "wasapi_matrix_partial_native_channel_range_not_supported",
-          "Alpha matrix runtime currently requires each endpoint channel "
-          "range to cover the complete native device.");
-    }
-    master_layout.capture_input_offset =
-        capture_binding->graph_first_channel;
-    if (capture.device_id.empty() != master_endpoint.device_id.empty()) {
-      return failure(
-          "mixed_default_and_pinned_duplex_not_supported",
-          "Matrix master duplex must use either two default endpoints or two "
-          "explicit endpoint IDs.");
-    }
-    master_opened.emplace(
-        capture.device_id.empty()
-            ? WindowsWasapiEngineRuntime::open_default_duplex(
-                  graph, external_input, fanout.get(), master_layout)
-            : WindowsWasapiEngineRuntime::open_duplex(
-                  capture.device_id, master_endpoint.device_id, graph,
-                  external_input, fanout.get(), master_layout));
-  }
-  if (!master_opened->ok()) {
-    return EngineAudioRuntimeBuildResult::failure(master_opened->errors());
+  auto master_opened =
+      master_endpoint.device_id.empty()
+          ? WindowsWasapiEngineRuntime::open_default_render(
+                graph, input_assembler.get(), master_layout, fanout.get())
+          : WindowsWasapiEngineRuntime::open_render(
+                master_endpoint.device_id, graph, input_assembler.get(),
+                master_layout, fanout.get());
+  if (!master_opened.ok()) {
+    return EngineAudioRuntimeBuildResult::failure(master_opened.errors());
   }
 
   auto coordinator = std::make_unique<MultiEndpointAudioRuntime>(
       AudioRuntimeMember{master_endpoint.endpoint_id,
-                         master_opened->take_runtime()},
+                         master_opened.take_runtime()},
       std::move(follower_runtimes));
   auto runtime = std::make_unique<WindowsWasapiMatrixRuntime>(
-      std::move(resources), std::move(external_output_slice),
-      std::move(fanout), std::move(coordinator));
+      std::move(resources), std::move(input_assembler),
+      std::move(external_output_slice), std::move(fanout),
+      std::move(coordinator));
   return EngineAudioRuntimeBuildResult::success(std::move(runtime));
 }
 

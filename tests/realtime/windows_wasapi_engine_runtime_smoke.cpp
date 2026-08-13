@@ -6,6 +6,8 @@
 
 static_assert(std::is_base_of_v<sar::platform::WasapiDuplexRuntime,
                                 sar::platform::WindowsWasapiRenderLoop>);
+static_assert(std::is_base_of_v<sar::platform::WasapiDuplexRuntime,
+                                sar::platform::WindowsWasapiCaptureLoop>);
 
 namespace {
 
@@ -26,6 +28,20 @@ sar::control::PresetDocument make_preset() {
 }  // namespace
 
 int main() {
+  const auto null_capture =
+      sar::service::WindowsWasapiEngineRuntime::open_default_capture(nullptr,
+                                                                     nullptr);
+  assert(!null_capture.ok());
+  assert(null_capture.errors()[0].code ==
+         "invalid_capture_runtime_configuration");
+
+  const auto missing_explicit_capture =
+      sar::service::WindowsWasapiEngineRuntime::open_capture({}, nullptr,
+                                                             nullptr);
+  assert(!missing_explicit_capture.ok());
+  assert(missing_explicit_capture.errors()[0].code ==
+         "invalid_capture_runtime_configuration");
+
   const auto null_render =
       sar::service::WindowsWasapiEngineRuntime::open_default_render(nullptr);
   assert(!null_render.ok());

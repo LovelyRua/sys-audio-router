@@ -2,6 +2,7 @@
 
 #include "core/graph/graph.h"
 #include "core/platform/windows_wasapi_duplex_loop.h"
+#include "core/platform/windows_wasapi_capture_loop.h"
 #include "core/platform/windows_wasapi_duplex_supervisor.h"
 #include "core/platform/windows_wasapi_render_loop.h"
 #include "core/service/engine_audio_runtime.h"
@@ -19,6 +20,7 @@ namespace sar::service {
 class WindowsWasapiEngineRuntimeOpenResult;
 
 enum class WindowsWasapiEngineRuntimeMode {
+  Capture,
   Render,
   Duplex,
 };
@@ -28,6 +30,14 @@ class WindowsWasapiEngineRuntime final : public EngineAudioRuntime {
   WindowsWasapiEngineRuntime(const WindowsWasapiEngineRuntime&) = delete;
   WindowsWasapiEngineRuntime& operator=(const WindowsWasapiEngineRuntime&) = delete;
   ~WindowsWasapiEngineRuntime() override;
+
+  [[nodiscard]] static WindowsWasapiEngineRuntimeOpenResult open_default_capture(
+      std::shared_ptr<graph::Graph> graph,
+      platform::RealtimeAudioSink* external_output);
+  [[nodiscard]] static WindowsWasapiEngineRuntimeOpenResult open_capture(
+      std::string capture_device_id,
+      std::shared_ptr<graph::Graph> graph,
+      platform::RealtimeAudioSink* external_output);
 
   [[nodiscard]] static WindowsWasapiEngineRuntimeOpenResult open_default_render(
       std::shared_ptr<graph::Graph> graph,
@@ -82,6 +92,7 @@ class WindowsWasapiEngineRuntime final : public EngineAudioRuntime {
   diagnostics::EngineDiagnostics realtime_diagnostics_;
   platform::WasapiDuplexRuntimeFactory runtime_factory_;
   bool render_configured_ = false;
+  bool capture_configured_ = false;
   platform::WasapiEndpointSelectionPolicy duplex_endpoint_policy_;
   std::unique_ptr<platform::WindowsWasapiDuplexSupervisor> duplex_supervisor_;
   mutable std::mutex duplex_supervisor_mutex_;
