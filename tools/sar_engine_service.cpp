@@ -5,6 +5,7 @@
 #include "core/service/windows_virtual_asio_transport_host.h"
 #include "core/service/windows_wasapi_engine_runtime.h"
 #include "core/service/windows_wasapi_matrix_runtime.h"
+#include "core/service/virtual_asio_matrix_profile.h"
 #include "core/platform/virtual_asio_capture_bus.h"
 #include "core/platform/realtime_audio_rate_matching_source.h"
 #include "core/platform/windows_wasapi_device_provider.h"
@@ -19,6 +20,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <charconv>
 #include <cstddef>
 #include <cstdint>
 #include <cwchar>
@@ -45,42 +47,57 @@ BOOL WINAPI console_handler(DWORD signal) {
   return FALSE;
 }
 
-sar::control::PresetDocument initial_preset() {
+sar::control::PresetDocument initial_preset(std::size_t asio_channels = 2) {
   sar::control::PresetDocument preset;
   preset.sample_rate = 48000;
   preset.frames_per_block = 128;
   preset.nodes.push_back({"matrix", "Main Matrix", "route_matrix"});
   preset.matrix.inputs.push_back({"wasapi-capture-l", "WASAPI Capture L"});
   preset.matrix.inputs.push_back({"wasapi-capture-r", "WASAPI Capture R"});
-  preset.matrix.inputs.push_back({"asio-output-l", "ASIO DAW Out L"});
-  preset.matrix.inputs.push_back({"asio-output-r", "ASIO DAW Out R"});
   preset.matrix.outputs.push_back({"wasapi-render-l", "WASAPI Render L"});
   preset.matrix.outputs.push_back({"wasapi-render-r", "WASAPI Render R"});
-  preset.matrix.outputs.push_back({"asio-input-l", "ASIO DAW In L"});
-  preset.matrix.outputs.push_back({"asio-input-r", "ASIO DAW In R"});
-  preset.matrix.routes.push_back(
-      {"asio-output-l", "wasapi-render-l", 1.0F, false});
-  preset.matrix.routes.push_back(
-      {"asio-output-r", "wasapi-render-r", 1.0F, false});
-  preset.matrix.routes.push_back(
-      {"wasapi-capture-l", "asio-input-l", 1.0F, false});
-  preset.matrix.routes.push_back(
-      {"wasapi-capture-r", "asio-input-r", 1.0F, false});
+  for (std::size_t channel = 0; channel < asio_channels; ++channel) {
+    const auto suffix = asio_channels == 2
+                            ? (channel == 0 ? std::string{"l"}
+                                            : std::string{"r"})
+                            : std::to_string(channel + 1);
+    preset.matrix.inputs.push_back(
+        {"asio-output-" + suffix,
+         "ASIO DAW Out " + std::to_string(channel + 1)});
+    preset.matrix.outputs.push_back(
+        {"asio-input-" + suffix,
+         "ASIO DAW In " + std::to_string(channel + 1)});
+  }
+  const auto routed_channels = std::min<std::size_t>(2, asio_channels);
+  for (std::size_t channel = 0; channel < routed_channels; ++channel) {
+    const auto suffix = asio_channels == 2
+                            ? (channel == 0 ? std::string{"l"}
+                                            : std::string{"r"})
+                            : std::to_string(channel + 1);
+    const auto physical_suffix = channel == 0 ? "l" : "r";
+    preset.matrix.routes.push_back(
+        {"asio-output-" + suffix,
+         std::string{"wasapi-render-"} + physical_suffix, 1.0F, false});
+    preset.matrix.routes.push_back(
+        {std::string{"wasapi-capture-"} + physical_suffix,
+         "asio-input-" + suffix, 1.0F, false});
+  }
   return preset;
 }
 
 sar::platform::WasapiGraphChannelLayout unified_channel_layout(
     std::size_t graph_input_channels,
-    std::size_t graph_output_channels) noexcept {
+    std::size_t graph_output_channels,
+    const sar::service::VirtualAsioMatrixProfile& asio) noexcept {
   return {
       .graph_input_channels = graph_input_channels,
       .graph_output_channels = graph_output_channels,
       .capture_input_offset = 0,
-      .external_input_offset = 2,
-      .external_input_channels = 2,
+      .external_input_offset = asio.daw_output_offset,
+      .external_input_channels = asio.channels,
       .render_output_offset = 0,
-      .external_output_offset = 2,
-      .external_output_channels = 2,
+      .external_output_offset = asio.daw_input_offset,
+      .external_output_channels = asio.channels,
   };
 }
 
@@ -130,18 +147,20 @@ bool upgrade_legacy_stereo_preset(sar::control::PresetDocument& preset) {
 std::unique_ptr<sar::graph::Graph> make_asio_transport_graph(
     const sar::platform::VirtualAsioFormat& format,
     std::uint64_t version) {
-  if (format.input_channels != 2 || format.output_channels != 2) {
+  if (format.input_channels == 0 ||
+      format.input_channels != format.output_channels) {
     return {};
   }
   auto graph = std::make_unique<sar::graph::Graph>(
-      version, 2, format.frames_per_block, format.sample_rate);
+      version, format.input_channels, format.frames_per_block,
+      format.sample_rate);
   graph->add_node(std::make_unique<sar::graph::PassthroughNode>());
   return graph;
 }
 
-sar::control::SessionDocument default_session() {
+sar::control::SessionDocument default_session(std::size_t asio_channels = 2) {
   sar::control::SessionDocument session;
-  session.preset = initial_preset();
+  session.preset = initial_preset(asio_channels);
   session.audio_runtime.mode = sar::control::AudioRuntimeMode::None;
   session.auto_start = false;
   return session;
@@ -504,28 +523,21 @@ sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator(
     }
     if (configuration.mode ==
         sar::control::AudioRuntimeMode::WasapiMatrix) {
-      const auto asio_output = std::ranges::find_if(
-          matrix.inputs, [](const auto& port) {
-            return port.id == "asio-output-l";
-          });
-      const auto asio_input = std::ranges::find_if(
-          matrix.outputs, [](const auto& port) {
-            return port.id == "asio-input-l";
-          });
-      if (asio_output == matrix.inputs.end() ||
-          asio_input == matrix.outputs.end()) {
+      const auto asio = sar::service::virtual_asio_matrix_profile(matrix);
+      if (!asio.has_value()) {
         return sar::service::EngineAudioRuntimeBuildResult::failure({{
             "virtual_asio_matrix_ports_missing",
-            "WASAPI matrix requires the built-in Virtual ASIO stereo ports.",
+            "WASAPI matrix requires equal, contiguous Virtual ASIO input and "
+            "output port groups.",
         }});
       }
       auto matrix_layout = channel_layout;
       matrix_layout.graph_input_channels = matrix.inputs.size();
       matrix_layout.graph_output_channels = matrix.outputs.size();
-      matrix_layout.external_input_offset =
-          static_cast<std::size_t>(asio_output - matrix.inputs.begin());
-      matrix_layout.external_output_offset =
-          static_cast<std::size_t>(asio_input - matrix.outputs.begin());
+      matrix_layout.external_input_offset = asio->daw_output_offset;
+      matrix_layout.external_input_channels = asio->channels;
+      matrix_layout.external_output_offset = asio->daw_input_offset;
+      matrix_layout.external_output_channels = asio->channels;
       return sar::service::open_windows_wasapi_matrix_runtime(
           configuration, matrix, std::move(graph), external_render_input,
           external_capture_output, matrix_layout);
@@ -549,6 +561,7 @@ int main(int argc, char** argv) {
   std::string render_device_id;
   std::wstring session_path;
   bool has_session_path = false;
+  std::size_t requested_asio_channels = 2;
   for (int index = 1; index < argc; ++index) {
     const std::string argument = argv[index];
     if (argument == "--once") {
@@ -571,9 +584,22 @@ int main(int argc, char** argv) {
         std::cerr << "--session requires a valid UTF-8 Windows path.\n";
         return 2;
       }
+    } else if (argument == "--asio-channels" && index + 1 < argc) {
+      const std::string value = argv[++index];
+      std::size_t parsed = 0;
+      const auto converted = std::from_chars(
+          value.data(), value.data() + value.size(), parsed);
+      if (converted.ec != std::errc{} ||
+          converted.ptr != value.data() + value.size() || parsed == 0 ||
+          parsed > sar::platform::kVirtualAsioMaxChannels) {
+        std::cerr << "--asio-channels must be between 1 and "
+                  << sar::platform::kVirtualAsioMaxChannels << ".\n";
+        return 2;
+      }
+      requested_asio_channels = parsed;
     } else {
       std::cerr << "Usage: sar_engine_service [--pipe NAME] [--once] "
-                   "[--session FILE] "
+                   "[--session FILE] [--asio-channels COUNT] "
                    "[--wasapi-render|--wasapi-duplex "
                    "[--capture-id ID --render-id ID]]\n";
       return 2;
@@ -619,7 +645,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  auto desired_session = default_session();
+  auto desired_session = default_session(requested_asio_channels);
   bool session_writes_allowed = has_session_path;
   bool session_file_missing = false;
   std::unique_ptr<SessionFileLock> session_lock;
@@ -654,20 +680,22 @@ int main(int argc, char** argv) {
                  "detail=2x2_to_unified_4x4\n";
   }
 
-  if (desired_session.preset.matrix.inputs.size() < 4 ||
-      desired_session.preset.matrix.outputs.size() < 4) {
+  const auto asio_profile = sar::service::virtual_asio_matrix_profile(
+      desired_session.preset.matrix);
+  if (!asio_profile.has_value()) {
     std::cerr << "unified_matrix_topology_unsupported: The Alpha engine "
-                 "requires at least the four built-in source and destination "
-                 "channels.\n";
+                 "requires equal, contiguous Virtual ASIO input and output "
+                 "port groups.\n";
     return 1;
   }
 
   sar::platform::VirtualAsioRenderBus asio_render_bus(
-      2, desired_session.preset.frames_per_block, 8, 32);
+      asio_profile->channels, desired_session.preset.frames_per_block, 8, 32);
   sar::platform::VirtualAsioCaptureBus asio_capture_bus(
-      2, desired_session.preset.frames_per_block, 8, 32);
+      asio_profile->channels, desired_session.preset.frames_per_block, 8, 32);
   sar::platform::RealtimeAudioRateMatchingSource asio_render_rate_matcher(
-      asio_render_bus, 2, desired_session.preset.frames_per_block,
+      asio_render_bus, asio_profile->channels,
+      desired_session.preset.frames_per_block,
       desired_session.preset.sample_rate, desired_session.preset.sample_rate,
       4);
 
@@ -687,7 +715,8 @@ int main(int argc, char** argv) {
           &asio_render_rate_matcher,
           &asio_capture_bus,
           unified_channel_layout(desired_session.preset.matrix.inputs.size(),
-                                 desired_session.preset.matrix.outputs.size())));
+                                 desired_session.preset.matrix.outputs.size(),
+                                 *asio_profile)));
   if (has_session_path &&
       desired_session.audio_runtime.mode !=
           sar::control::AudioRuntimeMode::None) {
@@ -750,16 +779,18 @@ int main(int argc, char** argv) {
       [&asio_host, &asio_render_bus, &asio_capture_bus](
           const sar::control::PresetDocument& preset,
           std::uint64_t graph_version) {
-        if (preset.matrix.inputs.size() < 4 ||
-            preset.matrix.outputs.size() < 4) {
+        const auto profile = sar::service::virtual_asio_matrix_profile(
+            preset.matrix);
+        if (!profile.has_value() || profile->channels != asio_render_bus.channels() ||
+            profile->channels != asio_capture_bus.channels()) {
           return std::vector<sar::control::PresetError>{{
               "unified_matrix_topology_unsupported",
-              "The Alpha engine requires the built-in ASIO stereo ports and "
-              "at least one stereo physical endpoint.",
+              "Changing Virtual ASIO channel count requires restarting the "
+              "engine service.",
           }};
         }
         if (!asio_render_bus.accepts_consumer_format(
-                2, preset.frames_per_block) ||
+                profile->channels, preset.frames_per_block) ||
             asio_capture_bus.producer_frames() != preset.frames_per_block) {
           return std::vector<sar::control::PresetError>{{
               "virtual_asio_bus_format_requires_restart",
@@ -786,13 +817,13 @@ int main(int argc, char** argv) {
       [&asio_host](const sar::platform::VirtualAsioFormat& format) {
         return make_asio_transport_graph(format, asio_host.graph_generation());
       },
-      [&service] {
+      [&service, asio_channels = asio_profile->channels] {
         const auto session = service->session_document();
         return sar::platform::VirtualAsioFormat{
             .sample_rate = session.preset.sample_rate,
             .frames_per_block = session.preset.frames_per_block,
-            .input_channels = 2,
-            .output_channels = 2,
+            .input_channels = static_cast<std::uint32_t>(asio_channels),
+            .output_channels = static_cast<std::uint32_t>(asio_channels),
         };
       });
   const auto asio_started = asio_broker.start();

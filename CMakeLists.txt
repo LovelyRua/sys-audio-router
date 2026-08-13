@@ -73,6 +73,7 @@ add_library(sar_core
   core/service/engine_audio_runtime.cpp
   core/service/audio_runtime_topology.cpp
   core/service/audio_runtime_matrix_preset.cpp
+  core/service/virtual_asio_matrix_profile.cpp
   core/service/audio_runtime_matrix_binding.cpp
   core/service/multi_endpoint_audio_runtime.cpp
   core/service/windows_wasapi_matrix_runtime.cpp
@@ -240,6 +241,12 @@ add_executable(sar_realtime_audio_rate_matching_source_smoke
 )
 
 target_link_libraries(sar_realtime_audio_rate_matching_source_smoke PRIVATE sar_core)
+
+add_executable(sar_virtual_asio_matrix_profile_smoke
+  tests/realtime/virtual_asio_matrix_profile_smoke.cpp
+)
+
+target_link_libraries(sar_virtual_asio_matrix_profile_smoke PRIVATE sar_core)
 
 add_executable(sar_realtime_audio_input_assembler_smoke
   tests/realtime/realtime_audio_input_assembler_smoke.cpp
@@ -805,6 +812,8 @@ add_test(NAME realtime_audio_endpoint_queue_smoke
   COMMAND sar_realtime_audio_endpoint_queue_smoke)
 add_test(NAME realtime_audio_rate_matching_source_smoke
   COMMAND sar_realtime_audio_rate_matching_source_smoke)
+add_test(NAME virtual_asio_matrix_profile_smoke
+  COMMAND sar_virtual_asio_matrix_profile_smoke)
 add_test(NAME realtime_audio_input_assembler_smoke
   COMMAND sar_realtime_audio_input_assembler_smoke)
 add_test(NAME control_response_smoke COMMAND sar_control_response_smoke)

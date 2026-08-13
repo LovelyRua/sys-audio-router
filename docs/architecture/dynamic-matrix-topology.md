@@ -85,5 +85,15 @@ version. Cleanup occurs only after no process maps the old DLL.
 6. Add matrix device strips, channel grouping, offline-port visibility, and
    transactional apply/rollback for topology edits.
 
+## Current Implementation Step
+
+The engine service now derives the first Virtual ASIO instance's symmetric
+channel profile from contiguous `asio-output-*` and `asio-input-*` matrix port
+groups. The profile drives graph offsets, broker format publication, realtime
+buses, rate matching, and admitted client graphs. `--asio-channels N` can seed
+a new session with an N x N device; changing the count of a running service is
+rejected and requires restart. Persistent multi-instance definitions and GUI
+topology editing remain the next control-plane slice.
+
 Each slice requires wire round-trip tests, preset migration tests, graph
 compiler tests, and Windows package/host acceptance before the next slice.
