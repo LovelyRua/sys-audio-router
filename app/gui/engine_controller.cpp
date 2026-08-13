@@ -216,6 +216,9 @@ QString EngineController::runtimeCaptureDeviceId() const {
 QString EngineController::runtimeRenderDeviceId() const {
   return runtime_render_device_id_;
 }
+QVariantList EngineController::runtimeEndpoints() const {
+  return runtime_endpoints_;
+}
 bool EngineController::busy() const noexcept { return busy_; }
 int EngineController::sampleRate() const noexcept { return sample_rate_; }
 int EngineController::blockSize() const noexcept { return block_size_; }
@@ -426,6 +429,41 @@ void EngineController::configureAudioRuntime(const QString& mode,
           ? capture_device_id.toStdString()
           : std::string{};
   command.audio_runtime.render_device_id = render_device_id.toStdString();
+  dispatch(std::move(command));
+}
+
+void EngineController::configureAudioMatrix(const QVariantList& endpoints) {
+  control::ControlCommand command;
+  command.type = control::ControlCommandType::ConfigureAudioRuntime;
+  command.audio_runtime.mode = control::AudioRuntimeMode::WasapiMatrix;
+  command.audio_runtime.endpoints.reserve(
+      static_cast<std::size_t>(endpoints.size()));
+  for (const auto& value : endpoints) {
+    const auto map = value.toMap();
+    control::AudioRuntimeEndpointConfiguration endpoint;
+    endpoint.endpoint_id =
+        map.value(QStringLiteral("endpointId")).toString().trimmed().toStdString();
+    endpoint.device_id =
+        map.value(QStringLiteral("deviceId")).toString().toStdString();
+    endpoint.direction = map.value(QStringLiteral("direction")).toString() ==
+                                 QStringLiteral("render")
+                             ? control::AudioRuntimeEndpointDirection::Render
+                             : control::AudioRuntimeEndpointDirection::Capture;
+    endpoint.clock_master =
+        map.value(QStringLiteral("clockMaster")).toBool();
+    endpoint.first_channel = static_cast<std::uint32_t>(
+        std::max(0, map.value(QStringLiteral("firstChannel")).toInt()));
+    endpoint.channel_count = static_cast<std::uint32_t>(
+        std::max(0, map.value(QStringLiteral("channelCount")).toInt()));
+    command.audio_runtime.endpoints.push_back(std::move(endpoint));
+  }
+  const auto validation =
+      control::validate_audio_runtime_configuration(command.audio_runtime,
+                                                    false);
+  if (!validation.empty()) {
+    setError(text(validation.front().message));
+    return;
+  }
   dispatch(std::move(command));
 }
 
@@ -734,6 +772,21 @@ void EngineController::applyReply(const EngineReply& reply,
         text(reply.response.audio_runtime.configuration.capture_device_id);
     runtime_render_device_id_ =
         text(reply.response.audio_runtime.configuration.render_device_id);
+    runtime_endpoints_.clear();
+    for (const auto& endpoint :
+         reply.response.audio_runtime.configuration.endpoints) {
+      runtime_endpoints_.push_back(QVariantMap{
+          {QStringLiteral("endpointId"), text(endpoint.endpoint_id)},
+          {QStringLiteral("deviceId"), text(endpoint.device_id)},
+          {QStringLiteral("direction"),
+           endpoint.direction == control::AudioRuntimeEndpointDirection::Render
+               ? QStringLiteral("render")
+               : QStringLiteral("capture")},
+          {QStringLiteral("clockMaster"), endpoint.clock_master},
+          {QStringLiteral("firstChannel"), endpoint.first_channel},
+          {QStringLiteral("channelCount"), endpoint.channel_count},
+      });
+    }
     graph_version_ = reply.response.audio_runtime.graph_version;
     emit runtimeChanged();
     emit sessionChanged();
@@ -812,6 +865,10 @@ void EngineController::updateSession(const control::ControlResponse& response) {
           {QStringLiteral("isWasapi"),
            device.backend == platform::AudioBackendKind::Wasapi},
           {QStringLiteral("direction"), static_cast<int>(device.direction)},
+          {QStringLiteral("channels"),
+           device.formats.empty()
+               ? 0
+               : static_cast<int>(device.formats.front().channels)},
       });
     }
   }

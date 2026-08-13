@@ -364,5 +364,39 @@ int main(int argc, char **argv) {
            !second_controller_command_id.empty();
   }));
   assert(first_controller_command_id != second_controller_command_id);
+
+  ControlCommand matrix_request;
+  const auto matrix_transport = [&](ControlCommand command) {
+    matrix_request = command;
+    auto reply = accepted(command);
+    reply.response.has_audio_runtime_state = true;
+    reply.response.audio_runtime.configured = true;
+    reply.response.audio_runtime.configuration = command.audio_runtime;
+    return reply;
+  };
+  sar::gui::EngineController matrix_controller(matrix_transport, false);
+  matrix_controller.configureAudioMatrix({
+      QVariantMap{{QStringLiteral("endpointId"), QStringLiteral("capture-a")},
+                  {QStringLiteral("deviceId"), QStringLiteral("capture-native")},
+                  {QStringLiteral("direction"), QStringLiteral("capture")},
+                  {QStringLiteral("clockMaster"), false},
+                  {QStringLiteral("firstChannel"), 0},
+                  {QStringLiteral("channelCount"), 2}},
+      QVariantMap{{QStringLiteral("endpointId"), QStringLiteral("render-main")},
+                  {QStringLiteral("deviceId"), QStringLiteral("render-native")},
+                  {QStringLiteral("direction"), QStringLiteral("render")},
+                  {QStringLiteral("clockMaster"), true},
+                  {QStringLiteral("firstChannel"), 0},
+                  {QStringLiteral("channelCount"), 2}},
+  });
+  assert(wait_until([&] { return !matrix_controller.busy(); }));
+  assert(matrix_request.audio_runtime.mode == AudioRuntimeMode::WasapiMatrix);
+  assert(matrix_request.audio_runtime.endpoints.size() == 2);
+  assert(matrix_request.audio_runtime.endpoints[1].clock_master);
+  assert(matrix_controller.runtimeMode() == QStringLiteral("matrix"));
+  assert(matrix_controller.runtimeEndpoints().size() == 2);
+  assert(matrix_controller.runtimeEndpoints()[1].toMap()
+             .value(QStringLiteral("endpointId")) ==
+         QStringLiteral("render-main"));
   return 0;
 }

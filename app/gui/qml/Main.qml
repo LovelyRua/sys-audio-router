@@ -37,6 +37,7 @@ ApplicationWindow {
     property string runtimeDraftMode: "render"
     property string runtimeDraftRenderDeviceId: ""
     property string runtimeDraftCaptureDeviceId: ""
+    property var runtimeMatrixDraft: []
     property var pendingRouteStates: ({})
     property var pendingRouteGains: ({})
     property string pendingGainInputId: ""
@@ -94,7 +95,7 @@ ApplicationWindow {
         for (var index = 0; index < endpoints.length; ++index) {
             var endpoint = endpoints[index]
             var family = endpointFamily(endpoint, index, endpoints.length)
-            var active = runtimeMode === "duplex" ||
+            var active = runtimeMode === "duplex" || runtimeMode === "matrix" ||
                     (source ? family !== "wasapi" : family !== "asio")
             if (active || includeInactive) {
                 projected.push({
@@ -386,17 +387,113 @@ ApplicationWindow {
     }
 
     function syncRuntimeDraft() {
-        var engineMode = engine.runtimeMode === "duplex" ? "duplex" : "render"
+        var engineMode = engine.runtimeMode === "matrix" ? "matrix"
+                       : engine.runtimeMode === "duplex" ? "duplex" : "render"
         var matchesDraft = engineMode === runtimeDraftMode
-                && engine.runtimeRenderDeviceId === runtimeDraftRenderDeviceId
-                && (engineMode !== "duplex"
-                    || engine.runtimeCaptureDeviceId === runtimeDraftCaptureDeviceId)
+                && (engineMode === "matrix"
+                    ? JSON.stringify(engine.runtimeEndpoints) ===
+                      JSON.stringify(runtimeMatrixDraft)
+                    : engine.runtimeRenderDeviceId === runtimeDraftRenderDeviceId
+                      && (engineMode !== "duplex"
+                          || engine.runtimeCaptureDeviceId ===
+                             runtimeDraftCaptureDeviceId))
         if (runtimeDraftDirty && !matchesDraft)
             return
         runtimeDraftDirty = false
         runtimeDraftMode = engineMode
         runtimeDraftRenderDeviceId = engine.runtimeRenderDeviceId
         runtimeDraftCaptureDeviceId = engine.runtimeCaptureDeviceId
+        runtimeMatrixDraft = engine.runtimeEndpoints.slice()
+    }
+
+    function setMatrixEndpoint(index, key, value) {
+        var next = runtimeMatrixDraft.slice()
+        var current = next[index]
+        next[index] = {
+            endpointId: key === "endpointId" ? value : current.endpointId,
+            deviceId: key === "deviceId" ? value : current.deviceId,
+            direction: key === "direction" ? value : current.direction,
+            clockMaster: key === "clockMaster" ? value : current.clockMaster,
+            firstChannel: key === "firstChannel" ? value : current.firstChannel,
+            channelCount: key === "channelCount" ? value : current.channelCount
+        }
+        if (key === "clockMaster" && value) {
+            for (var clearIndex = 0; clearIndex < next.length; ++clearIndex) {
+                if (clearIndex !== index && next[clearIndex].clockMaster)
+                    setMatrixEndpointMaster(next, clearIndex, false)
+            }
+        }
+        runtimeMatrixDraft = next
+        runtimeDraftDirty = true
+    }
+
+    function setMatrixEndpointMaster(endpoints, index, enabled) {
+        var current = endpoints[index]
+        endpoints[index] = {
+            endpointId: current.endpointId,
+            deviceId: current.deviceId,
+            direction: current.direction,
+            clockMaster: enabled,
+            firstChannel: current.firstChannel,
+            channelCount: current.channelCount
+        }
+    }
+
+    function addMatrixEndpoint(direction) {
+        var candidates = engine.devices.filter(function(device) {
+            return device.isWasapi && (direction === "capture"
+                ? device.direction === 0 || device.direction === 2
+                : device.direction === 1 || device.direction === 2)
+        })
+        if (candidates.length === 0)
+            return
+        var ordinal = 1
+        var endpointId = direction + "-" + ordinal
+        while (runtimeMatrixDraft.some(function(endpoint) {
+            return endpoint.endpointId === endpointId
+        })) {
+            ++ordinal
+            endpointId = direction + "-" + ordinal
+        }
+        var next = runtimeMatrixDraft.slice()
+        next.push({
+            endpointId: endpointId,
+            deviceId: candidates[0].id,
+            direction: direction,
+            clockMaster: direction === "render" &&
+                         !next.some(function(endpoint) {
+                             return endpoint.clockMaster
+                         }),
+            firstChannel: 0,
+            channelCount: Math.max(1, candidates[0].channels)
+        })
+        runtimeMatrixDraft = next
+        runtimeDraftDirty = true
+    }
+
+    function removeMatrixEndpoint(index) {
+        var next = runtimeMatrixDraft.slice()
+        next.splice(index, 1)
+        runtimeMatrixDraft = next
+        runtimeDraftDirty = true
+    }
+
+    function matrixDraftValid() {
+        if (runtimeMatrixDraft.length === 0)
+            return false
+        var masters = 0
+        var renders = 0
+        for (var index = 0; index < runtimeMatrixDraft.length; ++index) {
+            var endpoint = runtimeMatrixDraft[index]
+            if (endpoint.endpointId.length === 0 || endpoint.deviceId.length === 0 ||
+                    endpoint.channelCount <= 0)
+                return false
+            if (endpoint.direction === "render")
+                ++renders
+            if (endpoint.clockMaster)
+                ++masters
+        }
+        return renders > 0 && masters === 1
     }
 
     function indexForDevice(model, deviceId) {
@@ -1591,7 +1688,7 @@ ApplicationWindow {
                                 Item { Layout.fillWidth: true }
                                 Text {
                                     text: engine.runtimeConfigured ?
-                                              (engine.runtimeMode === "duplex" ? "DUPLEX" : "RENDER") :
+                                              engine.runtimeMode.toUpperCase() :
                                           "NOT CONFIGURED"
                                     color: engine.runtimeConfigured ? colors.healthy : colors.warning
                                     font.pixelSize: 10
@@ -1607,10 +1704,12 @@ ApplicationWindow {
                                     id: runtimeModeCombo
                                     objectName: "runtimeModeCombo"
                                     Layout.fillWidth: true
-                                    model: ["WASAPI render", "WASAPI duplex"]
-                                    currentIndex: window.runtimeDraftMode === "duplex" ? 1 : 0
+                                    model: ["WASAPI matrix", "WASAPI render", "WASAPI duplex"]
+                                    currentIndex: window.runtimeDraftMode === "matrix" ? 0
+                                                : window.runtimeDraftMode === "duplex" ? 2 : 1
                                     onActivated: function(index) {
-                                        window.runtimeDraftMode = index === 1 ? "duplex" : "render"
+                                        window.runtimeDraftMode = index === 0 ? "matrix"
+                                                                : index === 2 ? "duplex" : "render"
                                         window.runtimeDraftDirty = true
                                     }
                                 }
@@ -1619,6 +1718,7 @@ ApplicationWindow {
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 8
+                                visible: window.runtimeDraftMode !== "matrix"
                                 Text { text: "Render"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
                                 ConsoleCombo {
                                     id: renderDeviceCombo
@@ -1669,6 +1769,118 @@ ApplicationWindow {
                                 }
                             }
 
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 6
+                                visible: window.runtimeDraftMode === "matrix"
+
+                                Repeater {
+                                    model: window.runtimeMatrixDraft
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        required property int index
+                                        Layout.fillWidth: true
+                                        implicitHeight: endpointRow.implicitHeight + 16
+                                        color: colors.canvas
+                                        border.color: modelData.clockMaster ? colors.cyan : colors.line
+                                        radius: 3
+
+                                        RowLayout {
+                                            id: endpointRow
+                                            anchors.fill: parent
+                                            anchors.margins: 8
+                                            spacing: 6
+
+                                            ConsoleCombo {
+                                                Layout.preferredWidth: 90
+                                                model: ["Capture", "Render"]
+                                                currentIndex: modelData.direction === "render" ? 1 : 0
+                                                onActivated: function(selectedIndex) {
+                                                    var direction = selectedIndex === 1 ? "render" : "capture"
+                                                    window.setMatrixEndpoint(index, "direction", direction)
+                                                    if (direction === "capture" && modelData.clockMaster)
+                                                        window.setMatrixEndpoint(index, "clockMaster", false)
+                                                }
+                                            }
+                                            ConsoleField {
+                                                Layout.preferredWidth: 125
+                                                text: modelData.endpointId
+                                                placeholderText: "Endpoint ID"
+                                                onEditingFinished: window.setMatrixEndpoint(
+                                                    index, "endpointId", text.trim())
+                                            }
+                                            ConsoleCombo {
+                                                id: matrixDeviceCombo
+                                                Layout.fillWidth: true
+                                                textRole: "label"
+                                                emptyText: "No matching device"
+                                                model: engine.devices.filter(function(device) {
+                                                    return device.isWasapi &&
+                                                        (modelData.direction === "capture"
+                                                         ? device.direction === 0 || device.direction === 2
+                                                         : device.direction === 1 || device.direction === 2)
+                                                })
+                                                currentIndex: window.indexForDevice(model, modelData.deviceId)
+                                                onActivated: function(selectedIndex) {
+                                                    if (selectedIndex < 0)
+                                                        return
+                                                    window.setMatrixEndpoint(index, "deviceId",
+                                                                             model[selectedIndex].id)
+                                                    window.setMatrixEndpoint(index, "channelCount",
+                                                                             Math.max(1, model[selectedIndex].channels))
+                                                }
+                                            }
+                                            ConsoleField {
+                                                Layout.preferredWidth: 58
+                                                text: String(modelData.channelCount)
+                                                horizontalAlignment: Text.AlignHCenter
+                                                validator: IntValidator { bottom: 1; top: 128 }
+                                                onEditingFinished: window.setMatrixEndpoint(
+                                                    index, "channelCount", Math.max(1, Number(text)))
+                                            }
+                                            FlatButton {
+                                                Layout.preferredWidth: 72
+                                                text: modelData.clockMaster ? "MASTER" : "CLOCK"
+                                                highlighted: modelData.clockMaster
+                                                enabled: modelData.direction === "render"
+                                                onClicked: window.setMatrixEndpoint(index, "clockMaster", true)
+                                            }
+                                            IconButton {
+                                                text: "X"
+                                                tooltipText: "Remove endpoint"
+                                                onClicked: window.removeMatrixEndpoint(index)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    FlatButton {
+                                        text: "+ Capture"
+                                        enabled: engine.devices.some(function(device) {
+                                            return device.isWasapi &&
+                                                   (device.direction === 0 || device.direction === 2)
+                                        })
+                                        onClicked: window.addMatrixEndpoint("capture")
+                                    }
+                                    FlatButton {
+                                        text: "+ Render"
+                                        enabled: engine.devices.some(function(device) {
+                                            return device.isWasapi &&
+                                                   (device.direction === 1 || device.direction === 2)
+                                        })
+                                        onClicked: window.addMatrixEndpoint("render")
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                    Text {
+                                        text: window.runtimeMatrixDraft.length + " endpoints"
+                                        color: colors.muted
+                                        font.pixelSize: 10
+                                    }
+                                }
+                            }
+
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 8
@@ -1686,9 +1898,16 @@ ApplicationWindow {
                                     text: "Apply"
                                     highlighted: true
                                     enabled: engine.connected && !engine.busy &&
-                                             renderDeviceCombo.currentIndex >= 0 &&
-                                            (window.runtimeDraftMode === "render" || captureDeviceCombo.currentIndex >= 0)
+                                             (window.runtimeDraftMode === "matrix"
+                                                ? window.matrixDraftValid()
+                                                : renderDeviceCombo.currentIndex >= 0 &&
+                                                  (window.runtimeDraftMode === "render" ||
+                                                   captureDeviceCombo.currentIndex >= 0))
                                     onClicked: {
+                                        if (window.runtimeDraftMode === "matrix") {
+                                            engine.configureAudioMatrix(window.runtimeMatrixDraft)
+                                            return
+                                        }
                                         var renderDevice = renderDeviceCombo.model[renderDeviceCombo.currentIndex]
                                         var captureDevice = window.runtimeDraftMode === "duplex" &&
                                                 captureDeviceCombo.currentIndex >= 0

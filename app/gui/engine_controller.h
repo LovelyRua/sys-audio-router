@@ -43,6 +43,7 @@ class EngineController final : public QObject {
   Q_PROPERTY(QString runtimeMode READ runtimeMode NOTIFY runtimeChanged)
   Q_PROPERTY(QString runtimeCaptureDeviceId READ runtimeCaptureDeviceId NOTIFY runtimeChanged)
   Q_PROPERTY(QString runtimeRenderDeviceId READ runtimeRenderDeviceId NOTIFY runtimeChanged)
+  Q_PROPERTY(QVariantList runtimeEndpoints READ runtimeEndpoints NOTIFY runtimeChanged)
   Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
   Q_PROPERTY(int sampleRate READ sampleRate NOTIFY sessionChanged)
   Q_PROPERTY(int blockSize READ blockSize NOTIFY sessionChanged)
@@ -97,6 +98,7 @@ class EngineController final : public QObject {
   [[nodiscard]] QString runtimeMode() const;
   [[nodiscard]] QString runtimeCaptureDeviceId() const;
   [[nodiscard]] QString runtimeRenderDeviceId() const;
+  [[nodiscard]] QVariantList runtimeEndpoints() const;
   [[nodiscard]] bool busy() const noexcept;
   [[nodiscard]] int sampleRate() const noexcept;
   [[nodiscard]] int blockSize() const noexcept;
@@ -146,6 +148,7 @@ class EngineController final : public QObject {
   Q_INVOKABLE void configureAudioRuntime(const QString& mode,
                                          const QString& capture_device_id,
                                          const QString& render_device_id);
+  Q_INVOKABLE void configureAudioMatrix(const QVariantList& endpoints);
   Q_INVOKABLE bool routeEnabled(const QString& input_id,
                                 const QString& output_id) const;
   Q_INVOKABLE double routeGain(const QString& input_id,
@@ -235,6 +238,7 @@ class EngineController final : public QObject {
   control::AudioRuntimeMode runtime_mode_ = control::AudioRuntimeMode::None;
   QString runtime_capture_device_id_;
   QString runtime_render_device_id_;
+  QVariantList runtime_endpoints_;
   bool engine_service_owned_ = false;
   bool engine_service_start_attempted_ = false;
   bool service_management_enabled_ = true;
