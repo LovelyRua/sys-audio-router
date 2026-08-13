@@ -49,7 +49,7 @@ int wmain(int argc, wchar_t** argv) {
   const std::wstring control_pipe = L"sar-engine-asio-integration-" + token;
   const std::wstring asio_pipe = control_pipe + L"-virtual-asio";
   std::wstring command = L"\"" + std::wstring(argv[1]) + L"\" --pipe " +
-                         control_pipe + L" --once";
+                         control_pipe + L" --asio-channels 8 --once";
   std::vector<wchar_t> mutable_command(command.begin(), command.end());
   mutable_command.push_back(L'\0');
 
@@ -78,7 +78,7 @@ int wmain(int argc, wchar_t** argv) {
       {
           .request_id = 9001,
           .client_id = "engine-process-smoke",
-          .format = {48000, 256, 2, 2},
+          .format = {48000, 256, 8, 8},
           .queue_capacity_blocks = 8,
           .client_nonce_low = 0x0102030405060708ULL,
           .client_nonce_high = 0x1112131415161718ULL,
@@ -86,8 +86,8 @@ int wmain(int argc, wchar_t** argv) {
   assert(connected.ok());
   auto client = connected.take_client();
 
-  sar::realtime::AudioBuffer input(2, 256);
-  sar::realtime::AudioBuffer output(2, 256);
+  sar::realtime::AudioBuffer input(8, 256);
+  sar::realtime::AudioBuffer output(8, 256);
   for (std::size_t channel = 0; channel < input.channels(); ++channel) {
     for (std::size_t frame = 0; frame < input.frames(); ++frame) {
       input.channel(channel)[frame] =
