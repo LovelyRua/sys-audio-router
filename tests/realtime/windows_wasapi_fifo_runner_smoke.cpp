@@ -30,50 +30,75 @@ sar::platform::WasapiStreamProbe make_probe(
 }  // namespace
 
 int main() {
-  sar::tests::ScriptedWasapiStream capture(
-      make_probe(sar::platform::WasapiStreamDirection::Capture, 2));
-  sar::tests::ScriptedWasapiStream render(
-      make_probe(sar::platform::WasapiStreamDirection::Render, 4));
-  capture.enqueue_capture({.frames = 2, .samples = {{1.0F, 2.0F}}});
-  capture.enqueue_capture({.frames = 2, .samples = {{3.0F, 4.0F}}});
-  capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::TimedOut});
-  capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::TimedOut});
-  render.enqueue_render({.writable_frames = 1});
-  render.enqueue_render({.writable_frames = 1});
-  render.enqueue_render({.writable_frames = 4});
+  {
+    sar::tests::ScriptedWasapiStream capture(
+        make_probe(sar::platform::WasapiStreamDirection::Capture, 2));
+    sar::tests::ScriptedWasapiStream render(
+        make_probe(sar::platform::WasapiStreamDirection::Render, 4));
+    capture.enqueue_capture({.frames = 2, .samples = {{1.0F, 2.0F}}});
+    capture.enqueue_capture({.frames = 2, .samples = {{3.0F, 4.0F}}});
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::TimedOut});
+    capture.enqueue_capture({.status = sar::platform::WasapiStreamIoStatus::TimedOut});
+    render.enqueue_render({.writable_frames = 1});
+    render.enqueue_render({.writable_frames = 1});
+    render.enqueue_render({.writable_frames = 4});
 
-  sar::platform::WindowsWasapiGraphRunner runner(
-      &capture, &render, 1, 1, 4, 2, 4, 8);
-  sar::graph::Graph graph(1, 1, 4, 48000);
-  graph.add_node(std::make_unique<sar::graph::PassthroughNode>());
-  sar::diagnostics::EngineDiagnostics diagnostics;
+    sar::platform::WindowsWasapiGraphRunner runner(
+        &capture, &render, 1, 1, 4, 2, 4, 8);
+    sar::graph::Graph graph(1, 1, 4, 48000);
+    graph.add_node(std::make_unique<sar::graph::PassthroughNode>());
+    sar::diagnostics::EngineDiagnostics diagnostics;
 
-  const auto first = runner.process_once(graph, diagnostics, 1);
-  assert(first.ok() && !first.stats().graph_processed);
-  assert(diagnostics.capture_fifo_fill_frames == 2);
-  const auto second = runner.process_once(graph, diagnostics, 1);
-  assert(second.ok() && second.stats().graph_processed);
-  assert(second.stats().rendered_frames == 1);
-  assert(diagnostics.capture_fifo_fill_frames == 0);
-  assert(diagnostics.render_fifo_fill_frames == 3);
-  const auto third = runner.process_once(graph, diagnostics, 1);
-  assert(third.ok() && !third.stats().graph_processed);
-  assert(third.stats().rendered_frames == 1);
-  assert(diagnostics.render_fifo_fill_frames == 2);
-  const auto fourth = runner.process_once(graph, diagnostics, 1);
-  assert(fourth.ok() && !fourth.stats().graph_processed);
-  assert(fourth.stats().rendered_frames == 2);
-  assert(diagnostics.render_fifo_fill_frames == 0);
+    const auto first = runner.process_once(graph, diagnostics, 1);
+    assert(first.ok() && !first.stats().graph_processed);
+    assert(diagnostics.capture_fifo_fill_frames == 2);
+    const auto second = runner.process_once(graph, diagnostics, 1);
+    assert(second.ok() && second.stats().graph_processed);
+    assert(second.stats().rendered_frames == 1);
+    assert(diagnostics.capture_fifo_fill_frames == 0);
+    assert(diagnostics.render_fifo_fill_frames == 3);
+    const auto third = runner.process_once(graph, diagnostics, 1);
+    assert(third.ok() && !third.stats().graph_processed);
+    assert(third.stats().rendered_frames == 1);
+    assert(diagnostics.render_fifo_fill_frames == 2);
+    const auto fourth = runner.process_once(graph, diagnostics, 1);
+    assert(fourth.ok() && !fourth.stats().graph_processed);
+    assert(fourth.stats().rendered_frames == 2);
+    assert(diagnostics.render_fifo_fill_frames == 0);
 
-  std::vector<float> rendered;
-  for (const auto& submission : render.render_submissions()) {
-    rendered.insert(rendered.end(), submission.samples[0].begin(),
-                    submission.samples[0].end());
+    std::vector<float> rendered;
+    for (const auto& submission : render.render_submissions()) {
+      rendered.insert(rendered.end(), submission.samples[0].begin(),
+                      submission.samples[0].end());
+    }
+    assert((rendered == std::vector<float>{1.0F, 2.0F, 3.0F, 4.0F}));
+    assert(diagnostics.processed_blocks == 1);
+    assert(diagnostics.capture_fifo_overflow_frames == 0);
+    assert(diagnostics.render_fifo_overflow_frames == 0);
   }
-  assert((rendered == std::vector<float>{1.0F, 2.0F, 3.0F, 4.0F}));
-  assert(diagnostics.processed_blocks == 1);
-  assert(diagnostics.capture_fifo_overflow_frames == 0);
-  assert(diagnostics.render_fifo_overflow_frames == 0);
+
+  {
+    sar::tests::ScriptedWasapiStream capture(
+        make_probe(sar::platform::WasapiStreamDirection::Capture, 10));
+    capture.enqueue_capture(
+        {.frames = 10,
+         .samples = {{1.0F, 2.0F, 3.0F, 4.0F, 5.0F,
+                      6.0F, 7.0F, 8.0F, 9.0F, 10.0F}}});
+
+    sar::platform::WindowsWasapiGraphRunner runner(
+        &capture, nullptr, 1, 1, 4, 10, 0, 14);
+    sar::graph::Graph graph(1, 1, 4, 48000);
+    graph.add_node(std::make_unique<sar::graph::PassthroughNode>());
+    sar::diagnostics::EngineDiagnostics diagnostics;
+
+    const auto result = runner.process_once(graph, diagnostics, 1);
+    assert(result.ok() && result.stats().captured_frames == 10);
+    assert(result.stats().graph_processed);
+    assert(diagnostics.processed_blocks == 2);
+    assert(diagnostics.capture_fifo_fill_frames == 2);
+    assert(diagnostics.capture_fifo_overflow_cycles == 0);
+    assert(diagnostics.capture_fifo_overflow_frames == 0);
+  }
   std::cout << "Windows WASAPI FIFO runner smoke test passed\n";
   return 0;
 }
