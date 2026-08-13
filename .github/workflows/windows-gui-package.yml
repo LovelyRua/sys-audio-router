@@ -50,7 +50,25 @@ jobs:
         run: ctest --test-dir build-alpha -C Release --output-on-failure
 
       - name: Install NSIS
-        run: choco install nsis --no-progress -y
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $makensis = 'C:\Program Files (x86)\NSIS\makensis.exe'
+          for ($attempt = 1; $attempt -le 3 -and !(Test-Path $makensis); $attempt++) {
+            choco install nsis --no-progress -y
+            if (!(Test-Path $makensis)) {
+              Start-Sleep -Seconds (5 * $attempt)
+            }
+          }
+          if (!(Test-Path $makensis)) {
+            winget install --id NSIS.NSIS --exact --silent `
+              --accept-package-agreements --accept-source-agreements
+          }
+          if (!(Test-Path $makensis)) {
+            throw 'NSIS installation completed without makensis.exe.'
+          }
+          Split-Path $makensis | Out-File -FilePath $env:GITHUB_PATH `
+            -Encoding utf8 -Append
 
       - name: Create Windows packages
         run: cpack --config build-alpha/CPackConfig.cmake -C Release -B build-alpha/package-output
