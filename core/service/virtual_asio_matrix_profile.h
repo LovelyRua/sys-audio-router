@@ -16,4 +16,8 @@ struct VirtualAsioMatrixProfile {
 [[nodiscard]] std::optional<VirtualAsioMatrixProfile>
 virtual_asio_matrix_profile(const control::PresetRouteMatrix& matrix) noexcept;
 
+[[nodiscard]] bool resize_virtual_asio_matrix_profile(
+    control::PresetDocument& preset,
+    std::size_t channels);
+
 }  // namespace sar::service

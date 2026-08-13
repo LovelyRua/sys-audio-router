@@ -562,6 +562,7 @@ int main(int argc, char** argv) {
   std::wstring session_path;
   bool has_session_path = false;
   std::size_t requested_asio_channels = 2;
+  bool asio_channels_explicit = false;
   for (int index = 1; index < argc; ++index) {
     const std::string argument = argv[index];
     if (argument == "--once") {
@@ -597,6 +598,7 @@ int main(int argc, char** argv) {
         return 2;
       }
       requested_asio_channels = parsed;
+      asio_channels_explicit = true;
     } else {
       std::cerr << "Usage: sar_engine_service [--pipe NAME] [--once] "
                    "[--session FILE] [--asio-channels COUNT] "
@@ -648,6 +650,7 @@ int main(int argc, char** argv) {
   auto desired_session = default_session(requested_asio_channels);
   bool session_writes_allowed = has_session_path;
   bool session_file_missing = false;
+  bool session_profile_resized = false;
   std::unique_ptr<SessionFileLock> session_lock;
   if (has_session_path) {
     const auto lock_path = session_path + L".lock";
@@ -678,6 +681,22 @@ int main(int argc, char** argv) {
   if (upgrade_legacy_stereo_preset(desired_session.preset)) {
     std::cerr << "session_warning code=legacy_matrix_upgraded "
                  "detail=2x2_to_unified_4x4\n";
+  }
+
+  const auto loaded_asio_profile = sar::service::virtual_asio_matrix_profile(
+      desired_session.preset.matrix);
+  if (asio_channels_explicit && loaded_asio_profile.has_value() &&
+      loaded_asio_profile->channels != requested_asio_channels) {
+    if (!sar::service::resize_virtual_asio_matrix_profile(
+            desired_session.preset, requested_asio_channels)) {
+      std::cerr << "virtual_asio_resize_failed: Could not resize the session "
+                   "Virtual ASIO port groups.\n";
+      return 1;
+    }
+    std::cerr << "session_warning code=virtual_asio_channels_resized detail="
+              << loaded_asio_profile->channels << "_to_"
+              << requested_asio_channels << " action=restart_profile\n";
+    session_profile_resized = true;
   }
 
   const auto asio_profile = sar::service::virtual_asio_matrix_profile(
@@ -759,7 +778,8 @@ int main(int argc, char** argv) {
       return 1;
     }
   }
-  if (session_file_missing && session_writes_allowed) {
+  if ((session_file_missing || session_profile_resized) &&
+      session_writes_allowed) {
     if (!save_session_file_atomic(session_path, desired_session)) {
       std::cerr << "session_write_failed: Could not initialize the requested session file.\n";
       service->stop_audio_runtime();

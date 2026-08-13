@@ -24,5 +24,23 @@ int main() {
   matrix.inputs.insert(matrix.inputs.begin() + 3,
                        {"capture-2", "Capture 2"});
   assert(!sar::service::virtual_asio_matrix_profile(matrix).has_value());
+
+  sar::control::PresetDocument preset;
+  preset.matrix.inputs = {{"capture-l", "Capture L"},
+                          {"asio-output-l", "DAW Out L"},
+                          {"asio-output-r", "DAW Out R"}};
+  preset.matrix.outputs = {{"render-l", "Render L"},
+                           {"asio-input-l", "DAW In L"},
+                           {"asio-input-r", "DAW In R"}};
+  preset.matrix.routes = {{"capture-l", "asio-input-l", 1.0F, false},
+                          {"asio-output-l", "render-l", 1.0F, false}};
+  assert(sar::service::resize_virtual_asio_matrix_profile(preset, 8));
+  const auto resized =
+      sar::service::virtual_asio_matrix_profile(preset.matrix);
+  assert(resized.has_value() && resized->channels == 8);
+  assert(preset.matrix.inputs[1].id == "asio-output-1");
+  assert(preset.matrix.inputs[8].id == "asio-output-8");
+  assert(preset.matrix.outputs[1].id == "asio-input-1");
+  assert(preset.matrix.routes.empty());
   return 0;
 }

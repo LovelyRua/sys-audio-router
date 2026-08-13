@@ -1,6 +1,9 @@
 #include "core/service/virtual_asio_matrix_profile.h"
 
+#include <algorithm>
+#include <string>
 #include <string_view>
+#include <unordered_set>
 
 namespace sar::service {
 
@@ -52,6 +55,40 @@ std::optional<VirtualAsioMatrixProfile> virtual_asio_matrix_profile(
       inputs_to_daw.offset,
       outputs_from_daw.count,
   };
+}
+
+bool resize_virtual_asio_matrix_profile(control::PresetDocument& preset,
+                                        std::size_t channels) {
+  const auto profile = virtual_asio_matrix_profile(preset.matrix);
+  if (!profile.has_value() || channels == 0) {
+    return false;
+  }
+
+  auto inputs = preset.matrix.inputs;
+  auto outputs = preset.matrix.outputs;
+  inputs.erase(inputs.begin() + profile->daw_output_offset,
+               inputs.begin() + profile->daw_output_offset + profile->channels);
+  outputs.erase(outputs.begin() + profile->daw_input_offset,
+                outputs.begin() + profile->daw_input_offset + profile->channels);
+  for (std::size_t channel = 0; channel < channels; ++channel) {
+    const auto number = std::to_string(channel + 1);
+    inputs.insert(inputs.begin() + profile->daw_output_offset + channel,
+                  {"asio-output-" + number, "ASIO DAW Out " + number});
+    outputs.insert(outputs.begin() + profile->daw_input_offset + channel,
+                   {"asio-input-" + number, "ASIO DAW In " + number});
+  }
+
+  std::unordered_set<std::string> input_ids;
+  std::unordered_set<std::string> output_ids;
+  for (const auto& input : inputs) input_ids.insert(input.id);
+  for (const auto& output : outputs) output_ids.insert(output.id);
+  std::erase_if(preset.matrix.routes, [&](const auto& route) {
+    return !input_ids.contains(route.input_id) ||
+           !output_ids.contains(route.output_id);
+  });
+  preset.matrix.inputs = std::move(inputs);
+  preset.matrix.outputs = std::move(outputs);
+  return true;
 }
 
 }  // namespace sar::service
