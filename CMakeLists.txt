@@ -68,6 +68,7 @@ add_library(sar_core
   core/graph/route_matrix.cpp
   core/service/engine_audio_runtime.cpp
   core/service/audio_runtime_topology.cpp
+  core/service/multi_endpoint_audio_runtime.cpp
   core/service/engine_control_service.cpp
 )
 
@@ -189,6 +190,12 @@ add_executable(sar_audio_runtime_topology_smoke
 )
 
 target_link_libraries(sar_audio_runtime_topology_smoke PRIVATE sar_core)
+
+add_executable(sar_multi_endpoint_audio_runtime_smoke
+  tests/realtime/multi_endpoint_audio_runtime_smoke.cpp
+)
+
+target_link_libraries(sar_multi_endpoint_audio_runtime_smoke PRIVATE sar_core)
 
 add_executable(sar_realtime_audio_fanout_sink_smoke
   tests/realtime/realtime_audio_fanout_sink_smoke.cpp
@@ -740,6 +747,8 @@ add_test(NAME preset_file_codec_smoke COMMAND sar_preset_file_codec_smoke)
 add_test(NAME session_file_codec_smoke COMMAND sar_session_file_codec_smoke)
 add_test(NAME control_command_smoke COMMAND sar_control_command_smoke)
 add_test(NAME audio_runtime_topology_smoke COMMAND sar_audio_runtime_topology_smoke)
+add_test(NAME multi_endpoint_audio_runtime_smoke
+  COMMAND sar_multi_endpoint_audio_runtime_smoke)
 add_test(NAME realtime_audio_fanout_sink_smoke
   COMMAND sar_realtime_audio_fanout_sink_smoke)
 add_test(NAME control_response_smoke COMMAND sar_control_response_smoke)
