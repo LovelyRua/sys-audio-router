@@ -301,6 +301,18 @@ ApplicationWindow {
         engine.setRoute(inputId, outputId, enabled)
     }
 
+    function hardToggleRoute(inputId, outputId) {
+        if (!engine.connected || engine.busy || !endpointActive(inputId) ||
+                !endpointActive(outputId) || inputId.length === 0 || outputId.length === 0)
+            return
+        if (routeExists(inputId, outputId)) {
+            engine.removeRoute(inputId, outputId)
+            return
+        }
+        setPendingRouteState(inputId, outputId, true)
+        engine.setRoute(inputId, outputId, true)
+    }
+
     function toggleSelectedRoute() {
         toggleRoute(selectedInputId, selectedOutputId)
     }
@@ -359,6 +371,18 @@ ApplicationWindow {
         pendingGainDirty = false
         engine.setRouteGain(pendingGainInputId, pendingGainOutputId,
                             pendingGainLinear)
+    }
+
+    function resetSelectedRouteGain() {
+        pendingGainDirty = false
+        scheduleSelectedRouteGain(1.0, true)
+    }
+
+    Timer {
+        id: gainResetTimer
+        interval: 0
+        repeat: false
+        onTriggered: window.resetSelectedRouteGain()
     }
 
     function syncRuntimeDraft() {
@@ -1217,7 +1241,7 @@ ApplicationWindow {
                                                     var input = matrixInputs[inputIndex]
                                                     var output = matrixOutputs[outputIndex]
                                                     if ((mouse.modifiers & Qt.ShiftModifier) !== 0)
-                                                        engine.removeRoute(input.id, output.id)
+                                                        window.hardToggleRoute(input.id, output.id)
                                                     else
                                                         window.toggleRoute(input.id, output.id)
                                                 }
@@ -1463,8 +1487,8 @@ ApplicationWindow {
                                 }
                                 TapHandler {
                                     acceptedButtons: Qt.LeftButton
-                                    onDoubleTapped: window.scheduleSelectedRouteGain(1.0,
-                                                                                     true)
+                                    exclusiveSignals: TapHandler.DoubleTap
+                                    onDoubleTapped: gainResetTimer.restart()
                                 }
                             }
                             Text {
