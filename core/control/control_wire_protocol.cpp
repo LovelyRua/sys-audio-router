@@ -574,7 +574,7 @@ ControlWireEncodeResult encode_control_response(const ControlResponse& response)
       }
       writer.boolean(endpoint.correction_ppm.has_value());
       if (endpoint.correction_ppm) {
-        writer.scalar(*endpoint.correction_ppm);
+        writer.floating(*endpoint.correction_ppm);
       }
     }
   }
@@ -667,7 +667,7 @@ ControlResponseDecodeResult decode_control_response(
           endpoint.queue_fill_frames = reader.scalar<std::uint64_t>();
         }
         if (reader.boolean()) {
-          endpoint.correction_ppm = reader.scalar<double>();
+          endpoint.correction_ppm = reader.float64();
         }
         response.endpoint_diagnostics.push_back(std::move(endpoint));
       }
