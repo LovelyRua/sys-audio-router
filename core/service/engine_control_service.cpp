@@ -173,8 +173,9 @@ EngineAudioRuntimeResult EngineControlService::configure_audio_runtime_locked(
       };
 
   try {
-    auto rebuilt =
-        audio_runtime_configurator_(configuration, session_->current_graph());
+    auto rebuilt = audio_runtime_configurator_(
+        configuration, session_->current_graph(),
+        session_->current_preset().matrix);
     if (!rebuilt.ok()) {
       if (rebuilt.errors().empty()) {
         return restore_previous_runtime({
@@ -200,11 +201,6 @@ EngineAudioRuntimeResult EngineControlService::configure_audio_runtime_locked(
       }
     }
 
-    const auto configurator = audio_runtime_configurator_;
-    audio_runtime_builder_ =
-        [configurator, configuration](std::shared_ptr<graph::Graph> graph) {
-          return configurator(configuration, std::move(graph));
-        };
     audio_runtime_ = std::move(runtime);
     audio_runtime_configuration_ = std::move(configuration);
   } catch (const std::exception& error) {
@@ -249,7 +245,8 @@ EngineAudioRuntimeResult EngineControlService::start_audio_runtime_locked(
 }
 
 EngineAudioRuntimeResult EngineControlService::rebuild_audio_runtime_locked() {
-  auto rebuilt = build_audio_runtime_locked(session_->current_graph());
+  auto rebuilt = build_audio_runtime_locked(
+      session_->current_graph(), session_->current_preset().matrix);
   if (!rebuilt.ok()) {
     return EngineAudioRuntimeResult::failure(rebuilt.errors());
   }
@@ -259,8 +256,10 @@ EngineAudioRuntimeResult EngineControlService::rebuild_audio_runtime_locked() {
 
 EngineAudioRuntimeBuildResult
 EngineControlService::build_audio_runtime_locked(
-    std::shared_ptr<graph::Graph> graph) {
-  if (!audio_runtime_builder_) {
+    std::shared_ptr<graph::Graph> graph,
+    const control::PresetRouteMatrix& matrix) {
+  if (!audio_runtime_builder_ &&
+      !(audio_runtime_configurator_ && audio_runtime_configuration_)) {
     return EngineAudioRuntimeBuildResult::failure({
         {"audio_runtime_graph_stale",
          "Rebuild the audio runtime for the current graph before starting it."},
@@ -268,7 +267,11 @@ EngineControlService::build_audio_runtime_locked(
   }
 
   try {
-    auto rebuilt = audio_runtime_builder_(std::move(graph));
+    auto rebuilt = audio_runtime_configurator_ && audio_runtime_configuration_
+                       ? audio_runtime_configurator_(
+                             *audio_runtime_configuration_, std::move(graph),
+                             matrix)
+                       : audio_runtime_builder_(std::move(graph));
     if (!rebuilt.ok()) {
       if (rebuilt.errors().empty()) {
         return EngineAudioRuntimeBuildResult::failure({
@@ -437,7 +440,8 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
   const bool restart_runtime_after_preset_commit =
       mutates_preset && !realtime_route_update && audio_runtime_ &&
       audio_runtime_->running();
-  if (restart_runtime_after_preset_commit && !audio_runtime_builder_) {
+  if (restart_runtime_after_preset_commit && !audio_runtime_builder_ &&
+      !(audio_runtime_configurator_ && audio_runtime_configuration_)) {
     return control::encode_control_response(control::command_rejected(
         decoded.command.command_id,
         {{"audio_runtime_graph_change_requires_restart",
@@ -469,7 +473,8 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
       stop_audio_runtime_locked();
       previous_runtime = std::move(audio_runtime_);
 
-      auto rebuilt = build_audio_runtime_locked(update.graph);
+      auto rebuilt = build_audio_runtime_locked(update.graph,
+                                                update.preset.matrix);
       if (!rebuilt.ok()) {
         std::vector<control::PresetError> errors;
         errors.reserve(rebuilt.errors().size());

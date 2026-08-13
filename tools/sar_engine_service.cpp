@@ -466,12 +466,11 @@ sar::service::EngineAudioRuntimeBuildResult convert_runtime_result(
 sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator(
     sar::platform::RealtimeAudioSource* external_render_input,
     sar::platform::RealtimeAudioSink* external_capture_output,
-    sar::platform::WasapiGraphChannelLayout channel_layout,
-    const sar::control::PresetRouteMatrix* matrix) {
-  return [external_render_input, external_capture_output, channel_layout,
-          matrix](
+    sar::platform::WasapiGraphChannelLayout channel_layout) {
+  return [external_render_input, external_capture_output, channel_layout](
              const sar::control::AudioRuntimeConfiguration& configuration,
-             std::shared_ptr<sar::graph::Graph> graph) {
+             std::shared_ptr<sar::graph::Graph> graph,
+             const sar::control::PresetRouteMatrix& matrix) {
     if (configuration.mode ==
         sar::control::AudioRuntimeMode::WasapiRender) {
       if (!configuration.render_device_id.empty()) {
@@ -504,14 +503,8 @@ sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator(
     }
     if (configuration.mode ==
         sar::control::AudioRuntimeMode::WasapiMatrix) {
-      if (matrix == nullptr) {
-        return sar::service::EngineAudioRuntimeBuildResult::failure({
-            {"matrix_document_unavailable",
-             "WASAPI matrix runtime requires the current matrix document."},
-        });
-      }
       return sar::service::open_windows_wasapi_matrix_runtime(
-          configuration, *matrix, std::move(graph), external_render_input,
+          configuration, matrix, std::move(graph), external_render_input,
           external_capture_output, channel_layout);
     }
     return sar::service::EngineAudioRuntimeBuildResult::failure({
@@ -667,8 +660,7 @@ int main(int argc, char** argv) {
           &asio_render_bus,
           &asio_capture_bus,
           unified_channel_layout(desired_session.preset.matrix.inputs.size(),
-                                 desired_session.preset.matrix.outputs.size()),
-          &desired_session.preset.matrix));
+                                 desired_session.preset.matrix.outputs.size())));
   if (has_session_path &&
       desired_session.audio_runtime.mode !=
           sar::control::AudioRuntimeMode::None) {

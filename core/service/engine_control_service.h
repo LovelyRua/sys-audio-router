@@ -24,7 +24,8 @@ class EngineControlServiceCreateResult;
 
 using EngineAudioRuntimeConfigurator = std::function<EngineAudioRuntimeBuildResult(
     const control::AudioRuntimeConfiguration&,
-    std::shared_ptr<graph::Graph>)>;
+    std::shared_ptr<graph::Graph>,
+    const control::PresetRouteMatrix&)>;
 using EnginePresetCommitObserver = std::function<std::vector<control::PresetError>(
     const control::PresetDocument&, std::uint64_t)>;
 using WasapiRecoveryDiagnosticsProvider =
@@ -77,7 +78,8 @@ class EngineControlService {
   [[nodiscard]] EngineAudioRuntimeResult start_audio_runtime_locked(
       std::uint32_t timeout_ms);
   [[nodiscard]] EngineAudioRuntimeBuildResult build_audio_runtime_locked(
-      std::shared_ptr<graph::Graph> graph);
+      std::shared_ptr<graph::Graph> graph,
+      const control::PresetRouteMatrix& matrix);
   [[nodiscard]] EngineAudioRuntimeResult rebuild_audio_runtime_locked();
   [[nodiscard]] EngineAudioRuntimeResult configure_audio_runtime_locked(
       control::AudioRuntimeConfiguration configuration);

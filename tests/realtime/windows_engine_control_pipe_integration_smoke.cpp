@@ -146,7 +146,8 @@ int main() {
           std::vector<sar::platform::AudioDeviceDescriptor>{render_device}));
   service->set_audio_runtime_configurator(
       [](const sar::control::AudioRuntimeConfiguration&,
-         std::shared_ptr<sar::graph::Graph> graph) {
+         std::shared_ptr<sar::graph::Graph> graph,
+         const sar::control::PresetRouteMatrix&) {
         return sar::service::EngineAudioRuntimeBuildResult::success(
             std::make_unique<FakeAudioRuntime>(graph->version()));
       });

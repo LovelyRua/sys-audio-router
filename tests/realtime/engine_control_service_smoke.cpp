@@ -587,14 +587,17 @@ int main() {
          "audio_runtime_configurator_not_installed");
 
   std::uint32_t configure_calls = 0;
+  std::size_t observed_matrix_inputs = 0;
   bool fail_configure = false;
   bool fail_configured_start = false;
   FakeAudioRuntime* configured_runtime_observer = nullptr;
   sar::control::AudioRuntimeConfiguration observed_configuration;
   configure_service->set_audio_runtime_configurator(
       [&](const sar::control::AudioRuntimeConfiguration& configuration,
-          std::shared_ptr<sar::graph::Graph> graph) {
+          std::shared_ptr<sar::graph::Graph> graph,
+          const sar::control::PresetRouteMatrix& matrix) {
         ++configure_calls;
+        observed_matrix_inputs = matrix.inputs.size();
         observed_configuration = configuration;
         if (fail_configure) {
           return sar::service::EngineAudioRuntimeBuildResult::failure({
@@ -691,6 +694,19 @@ int main() {
   assert(render_configured.audio_runtime.configuration.mode ==
          sar::control::AudioRuntimeMode::WasapiRender);
   assert(render_configured.audio_runtime.configuration.render_device_id.empty());
+
+  sar::control::ControlCommand expand_matrix;
+  expand_matrix.command_id = "expand-configured-runtime-matrix";
+  expand_matrix.type = sar::control::ControlCommandType::LoadPreset;
+  expand_matrix.preset = make_preset();
+  expand_matrix.preset.matrix.inputs.push_back({"input-2", "Input 2"});
+  expand_matrix.preset.matrix.outputs.push_back({"output-2", "Output 2"});
+  const auto expanded = send(*configure_service, expand_matrix);
+  assert(expanded.status == sar::control::ControlResponseStatus::Accepted);
+  assert(configure_calls == 5);
+  assert(observed_matrix_inputs == 2);
+  assert(configure_service->session().current_preset().matrix.inputs.size() ==
+         2);
 
   auto devices_create =
       sar::service::EngineControlService::create(make_preset(), 40);
