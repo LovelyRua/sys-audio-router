@@ -85,6 +85,27 @@ void add_follower_diagnostics(diagnostics::EngineDiagnostics& aggregate,
       follower.sample_conversion_import_failures;
   aggregate.sample_conversion_export_failures +=
       follower.sample_conversion_export_failures;
+  aggregate.virtual_asio_pushed_blocks += follower.virtual_asio_pushed_blocks;
+  aggregate.virtual_asio_dropped_blocks += follower.virtual_asio_dropped_blocks;
+  aggregate.virtual_asio_producer_underflows +=
+      follower.virtual_asio_producer_underflows;
+  aggregate.virtual_asio_producer_overflows +=
+      follower.virtual_asio_producer_overflows;
+  aggregate.virtual_asio_consumed_blocks +=
+      follower.virtual_asio_consumed_blocks;
+  aggregate.virtual_asio_mixed_blocks += follower.virtual_asio_mixed_blocks;
+  aggregate.virtual_asio_silent_reads += follower.virtual_asio_silent_reads;
+  aggregate.virtual_asio_clipped_samples +=
+      follower.virtual_asio_clipped_samples;
+  aggregate.virtual_asio_non_finite_samples +=
+      follower.virtual_asio_non_finite_samples;
+  aggregate.virtual_asio_maximum_queue_depth =
+      std::max(aggregate.virtual_asio_maximum_queue_depth,
+               follower.virtual_asio_maximum_queue_depth);
+  aggregate.virtual_asio_active_producers +=
+      follower.virtual_asio_active_producers;
+  aggregate.virtual_asio_peak =
+      std::max(aggregate.virtual_asio_peak, follower.virtual_asio_peak);
   aggregate.last_callback_seconds =
       std::max(aggregate.last_callback_seconds, follower.last_callback_seconds);
   aggregate.peak_callback_seconds =

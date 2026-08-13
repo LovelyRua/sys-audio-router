@@ -79,6 +79,8 @@ int main() {
   follower_a_observer->diagnostics_.processed_blocks = 500;
   follower_a_observer->diagnostics_.xrun_count = 2;
   follower_a_observer->diagnostics_.render_fifo_underflow_frames = 128;
+  follower_a_observer->diagnostics_.virtual_asio_silent_reads = 4;
+  follower_a_observer->diagnostics_.virtual_asio_maximum_queue_depth = 7;
   follower_b_observer->diagnostics_.xrun_count = 3;
   follower_b_observer->diagnostics_.peak_callback_seconds = 0.002;
   follower_b_observer->recovery_ =
@@ -106,6 +108,8 @@ int main() {
   assert(diagnostics.processed_blocks == 100);
   assert(diagnostics.xrun_count == 6);
   assert(diagnostics.render_fifo_underflow_frames == 128);
+  assert(diagnostics.virtual_asio_silent_reads == 4);
+  assert(diagnostics.virtual_asio_maximum_queue_depth == 7);
   assert(diagnostics.peak_callback_seconds == 0.002);
   const auto recovery = runtime.recovery_diagnostics();
   assert(recovery.has_value());
