@@ -14,6 +14,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -44,7 +45,25 @@ void usage() {
                "runtime-state|runtime-start|runtime-stop|set-gain INPUT OUTPUT "
                "VALUE|set-mute INPUT OUTPUT true|false|"
                "runtime-configure-render [RENDER_ID]|"
-               "runtime-configure-duplex [CAPTURE_ID RENDER_ID]\n";
+               "runtime-configure-duplex [CAPTURE_ID RENDER_ID]|"
+               "runtime-configure-matrix (capture|render) ENDPOINT_ID "
+               "(DEVICE_ID|default) FIRST_CHANNEL CHANNEL_COUNT "
+               "(master|follower) [...]\n";
+}
+
+bool parse_uint32(std::string_view text, std::uint32_t& value) noexcept {
+  try {
+    std::size_t consumed = 0;
+    const auto parsed = std::stoull(std::string{text}, &consumed, 10);
+    if (consumed != text.size() ||
+        parsed > std::numeric_limits<std::uint32_t>::max()) {
+      return false;
+    }
+    value = static_cast<std::uint32_t>(parsed);
+    return true;
+  } catch (...) {
+    return false;
+  }
 }
 
 const char* wasapi_recovery_state_name(
@@ -279,6 +298,47 @@ int main(int argc, char** argv) {
     } else if (index < argc) {
       usage();
       return 2;
+    }
+  } else if (operation == "runtime-configure-matrix") {
+    command.type = sar::control::ControlCommandType::ConfigureAudioRuntime;
+    command.audio_runtime.mode =
+        sar::control::AudioRuntimeMode::WasapiMatrix;
+    constexpr int kEndpointArgumentCount = 6;
+    if (index >= argc || (argc - index) % kEndpointArgumentCount != 0) {
+      usage();
+      return 2;
+    }
+    while (index < argc) {
+      const std::string direction = argv[index++];
+      sar::control::AudioRuntimeEndpointConfiguration endpoint;
+      if (direction == "capture") {
+        endpoint.direction =
+            sar::control::AudioRuntimeEndpointDirection::Capture;
+      } else if (direction == "render") {
+        endpoint.direction =
+            sar::control::AudioRuntimeEndpointDirection::Render;
+      } else {
+        usage();
+        return 2;
+      }
+      endpoint.endpoint_id = argv[index++];
+      endpoint.device_id = argv[index++];
+      if (endpoint.device_id == "default") {
+        endpoint.device_id.clear();
+      }
+      if (!parse_uint32(argv[index++], endpoint.first_channel) ||
+          !parse_uint32(argv[index++], endpoint.channel_count)) {
+        usage();
+        return 2;
+      }
+      const std::string clock_role = argv[index++];
+      if (clock_role == "master") {
+        endpoint.clock_master = true;
+      } else if (clock_role != "follower") {
+        usage();
+        return 2;
+      }
+      command.audio_runtime.endpoints.push_back(std::move(endpoint));
     }
   } else if (operation == "set-gain" && index + 2 < argc) {
     command.type = sar::control::ControlCommandType::SetGain;
