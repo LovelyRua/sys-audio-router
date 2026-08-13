@@ -72,6 +72,7 @@ add_library(sar_core
   core/graph/route_matrix.cpp
   core/service/engine_audio_runtime.cpp
   core/service/audio_runtime_topology.cpp
+  core/service/audio_runtime_matrix_preset.cpp
   core/service/audio_runtime_matrix_binding.cpp
   core/service/multi_endpoint_audio_runtime.cpp
   core/service/windows_wasapi_matrix_runtime.cpp
@@ -203,6 +204,12 @@ add_executable(sar_audio_runtime_matrix_binding_smoke
 )
 
 target_link_libraries(sar_audio_runtime_matrix_binding_smoke PRIVATE sar_core)
+
+add_executable(sar_audio_runtime_matrix_preset_smoke
+  tests/realtime/audio_runtime_matrix_preset_smoke.cpp
+)
+
+target_link_libraries(sar_audio_runtime_matrix_preset_smoke PRIVATE sar_core)
 
 add_executable(sar_multi_endpoint_audio_runtime_smoke
   tests/realtime/multi_endpoint_audio_runtime_smoke.cpp
@@ -786,6 +793,8 @@ add_test(NAME control_command_smoke COMMAND sar_control_command_smoke)
 add_test(NAME audio_runtime_topology_smoke COMMAND sar_audio_runtime_topology_smoke)
 add_test(NAME audio_runtime_matrix_binding_smoke
   COMMAND sar_audio_runtime_matrix_binding_smoke)
+add_test(NAME audio_runtime_matrix_preset_smoke
+  COMMAND sar_audio_runtime_matrix_preset_smoke)
 add_test(NAME multi_endpoint_audio_runtime_smoke
   COMMAND sar_multi_endpoint_audio_runtime_smoke)
 add_test(NAME realtime_audio_fanout_sink_smoke
