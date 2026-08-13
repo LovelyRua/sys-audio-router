@@ -56,7 +56,18 @@ class WindowsWasapiMatrixRuntime final : public EngineAudioRuntime {
     return runtime_->apply_realtime_graph_parameters(graph);
   }
   diagnostics::EngineDiagnostics diagnostics() const override {
-    return runtime_->diagnostics();
+    auto aggregate = runtime_->diagnostics();
+    for (const auto& resource : resources_) {
+      const auto queue = resource->queue->stats().queue;
+      aggregate.xrun_count += queue.dropped_blocks;
+      aggregate.virtual_asio_pushed_blocks += queue.published_blocks;
+      aggregate.virtual_asio_dropped_blocks += queue.dropped_blocks;
+      aggregate.virtual_asio_producer_overflows += queue.consumer_overflows;
+      aggregate.virtual_asio_maximum_queue_depth =
+          std::max(aggregate.virtual_asio_maximum_queue_depth,
+                   queue.maximum_queue_depth);
+    }
+    return aggregate;
   }
   std::optional<EngineAudioRecoveryDiagnostics> recovery_diagnostics()
       const override {
