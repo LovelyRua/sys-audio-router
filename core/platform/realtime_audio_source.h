@@ -34,6 +34,11 @@ class RealtimeAudioSource {
   }
 };
 
+class RealtimeAudioQueuedSource : public RealtimeAudioSource {
+ public:
+  [[nodiscard]] virtual std::size_t available_frames() const noexcept = 0;
+};
+
 class RealtimeAudioSink {
  public:
   virtual ~RealtimeAudioSink() = default;

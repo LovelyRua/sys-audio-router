@@ -53,9 +53,21 @@ RealtimeAudioRateMatchingSource::RealtimeAudioRateMatchingSource(
     std::uint32_t source_sample_rate,
     std::uint32_t destination_sample_rate,
     std::size_t latency_blocks)
+    : RealtimeAudioRateMatchingSource(
+          upstream.queued_consumer(), upstream.endpoint_channels(),
+          upstream.frames_per_block(), source_sample_rate,
+          destination_sample_rate, latency_blocks) {}
+
+RealtimeAudioRateMatchingSource::RealtimeAudioRateMatchingSource(
+    RealtimeAudioQueuedSource& upstream,
+    std::size_t channels,
+    std::size_t frames_per_block,
+    std::uint32_t source_sample_rate,
+    std::uint32_t destination_sample_rate,
+    std::size_t latency_blocks)
     : upstream_(upstream),
-      channels_(upstream.endpoint_channels()),
-      block_frames_(upstream.frames_per_block()),
+      channels_(channels),
+      block_frames_(frames_per_block),
       source_sample_rate_(source_sample_rate),
       destination_sample_rate_(destination_sample_rate),
       target_fill_frames_(latency_blocks * block_frames_),
@@ -73,9 +85,10 @@ RealtimeAudioRateMatchingSource::RealtimeAudioRateMatchingSource(
           .maximum_correction_ppm = 500.0,
           .maximum_slew_ppm_per_second = 100.0,
       }) {
-  if (source_sample_rate == 0 || destination_sample_rate == 0 ||
+  if (channels == 0 || frames_per_block == 0 || source_sample_rate == 0 ||
+      destination_sample_rate == 0 ||
       latency_blocks == 0 || latency_blocks >= kFifoBlocks) {
-    throw std::invalid_argument("Invalid endpoint rate matcher configuration");
+    throw std::invalid_argument("Invalid realtime rate matcher configuration");
   }
   nominal_ratio_ = static_cast<double>(destination_sample_rate_) /
                    static_cast<double>(source_sample_rate_);
@@ -139,7 +152,7 @@ bool RealtimeAudioRateMatchingSource::read(
 
 void RealtimeAudioRateMatchingSource::drain_upstream() noexcept {
   for (std::size_t block = 0; block < kMaximumDrainBlocksPerRead; ++block) {
-    if (upstream_.queued_consumer().available_frames() < block_frames_) {
+    if (upstream_.available_frames() < block_frames_) {
       break;
     }
     if (input_fifo_.free_frames() < block_frames_) {
@@ -147,7 +160,7 @@ void RealtimeAudioRateMatchingSource::drain_upstream() noexcept {
                                        std::memory_order_relaxed);
       break;
     }
-    if (!upstream_.queued_consumer().read(ingestion_)) {
+    if (!upstream_.read(ingestion_)) {
       break;
     }
     if (input_fifo_.push(ingestion_, block_frames_) != block_frames_) {
@@ -189,11 +202,9 @@ bool RealtimeAudioRateMatchingSource::generate_output() noexcept {
 RealtimeAudioSourceDiagnostics RealtimeAudioRateMatchingSource::diagnostics()
     const noexcept {
   const auto snapshot = stats();
-  return {
-      .consumed_blocks = snapshot.successful_reads,
-      .silent_reads = snapshot.silent_reads,
-      .maximum_queue_depth = snapshot.maximum_input_fill_frames,
-  };
+  auto result = upstream_.diagnostics();
+  result.silent_reads += snapshot.silent_reads;
+  return result;
 }
 
 RealtimeAudioRateMatchingSourceStats

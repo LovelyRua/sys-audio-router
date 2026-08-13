@@ -25,7 +25,7 @@ struct VirtualAsioCaptureBusStats {
 
 class VirtualAsioCaptureBus;
 
-class VirtualAsioCaptureConsumer final : public RealtimeAudioSource {
+class VirtualAsioCaptureConsumer final : public RealtimeAudioQueuedSource {
  public:
   VirtualAsioCaptureConsumer() = default;
   VirtualAsioCaptureConsumer(const VirtualAsioCaptureConsumer&) = delete;
@@ -36,7 +36,7 @@ class VirtualAsioCaptureConsumer final : public RealtimeAudioSource {
   ~VirtualAsioCaptureConsumer() override;
 
   [[nodiscard]] bool valid() const noexcept;
-  [[nodiscard]] std::size_t available_frames() const noexcept;
+  [[nodiscard]] std::size_t available_frames() const noexcept override;
   [[nodiscard]] bool read(realtime::AudioBuffer& destination) noexcept override;
   void reset() noexcept;
 

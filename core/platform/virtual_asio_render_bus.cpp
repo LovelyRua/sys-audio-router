@@ -200,6 +200,23 @@ bool VirtualAsioRenderBus::read(
   return mixed;
 }
 
+std::size_t VirtualAsioRenderBus::available_frames() const noexcept {
+  std::size_t maximum_frames = 0;
+  for (const auto& owned_slot : slots_) {
+    const auto& slot = *owned_slot;
+    if (slot.state.load(std::memory_order_acquire) != kActive) {
+      continue;
+    }
+    const auto read = slot.read_index.load(std::memory_order_acquire);
+    const auto write = slot.write_index.load(std::memory_order_acquire);
+    const auto blocks = write >= read
+                            ? write - read
+                            : slot.blocks.size() - read + write;
+    maximum_frames = std::max(maximum_frames, blocks * frames_);
+  }
+  return maximum_frames;
+}
+
 VirtualAsioRenderBusStats VirtualAsioRenderBus::stats() const noexcept {
   return {
       pushed_blocks_.load(std::memory_order_relaxed),

@@ -24,11 +24,17 @@ struct RealtimeAudioRateMatchingSourceStats {
   bool primed = false;
 };
 
-// Converts a graph-clocked endpoint queue into a follower-clocked source.
+// Converts a queued source clock into the destination graph clock.
 // All storage and the libsamplerate state are prepared before audio starts.
 class RealtimeAudioRateMatchingSource final : public RealtimeAudioSource {
  public:
   RealtimeAudioRateMatchingSource(RealtimeAudioEndpointQueue& upstream,
+                                  std::uint32_t source_sample_rate,
+                                  std::uint32_t destination_sample_rate,
+                                  std::size_t latency_blocks = 4);
+  RealtimeAudioRateMatchingSource(RealtimeAudioQueuedSource& upstream,
+                                  std::size_t channels,
+                                  std::size_t frames_per_block,
                                   std::uint32_t source_sample_rate,
                                   std::uint32_t destination_sample_rate,
                                   std::size_t latency_blocks = 4);
@@ -43,7 +49,7 @@ class RealtimeAudioRateMatchingSource final : public RealtimeAudioSource {
   void drain_upstream() noexcept;
   [[nodiscard]] bool generate_output() noexcept;
 
-  RealtimeAudioEndpointQueue& upstream_;
+  RealtimeAudioQueuedSource& upstream_;
   std::size_t channels_;
   std::size_t block_frames_;
   std::uint32_t source_sample_rate_;

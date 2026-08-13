@@ -55,7 +55,7 @@ class VirtualAsioRenderProducer {
   std::uint64_t generation_ = 0;
 };
 
-class VirtualAsioRenderBus final : public RealtimeAudioSource {
+class VirtualAsioRenderBus final : public RealtimeAudioQueuedSource {
  public:
   VirtualAsioRenderBus(std::size_t channels,
                        std::size_t frames,
@@ -66,6 +66,7 @@ class VirtualAsioRenderBus final : public RealtimeAudioSource {
 
   [[nodiscard]] VirtualAsioRenderProducer attach();
   [[nodiscard]] bool read(realtime::AudioBuffer& destination) noexcept override;
+  [[nodiscard]] std::size_t available_frames() const noexcept override;
   [[nodiscard]] RealtimeAudioSourceDiagnostics diagnostics()
       const noexcept override;
   [[nodiscard]] VirtualAsioRenderBusStats stats() const noexcept;

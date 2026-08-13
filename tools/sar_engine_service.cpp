@@ -6,6 +6,7 @@
 #include "core/service/windows_wasapi_engine_runtime.h"
 #include "core/service/windows_wasapi_matrix_runtime.h"
 #include "core/platform/virtual_asio_capture_bus.h"
+#include "core/platform/realtime_audio_rate_matching_source.h"
 #include "core/platform/windows_wasapi_device_provider.h"
 
 #ifndef NOMINMAX
@@ -665,6 +666,10 @@ int main(int argc, char** argv) {
       2, desired_session.preset.frames_per_block, 8, 32);
   sar::platform::VirtualAsioCaptureBus asio_capture_bus(
       2, desired_session.preset.frames_per_block, 8, 32);
+  sar::platform::RealtimeAudioRateMatchingSource asio_render_rate_matcher(
+      asio_render_bus, 2, desired_session.preset.frames_per_block,
+      desired_session.preset.sample_rate, desired_session.preset.sample_rate,
+      4);
 
   auto service_result =
       sar::service::EngineControlService::create(desired_session.preset);
@@ -679,7 +684,7 @@ int main(int argc, char** argv) {
       std::make_unique<sar::platform::WindowsWasapiDeviceProvider>());
   service->set_audio_runtime_configurator(
       make_wasapi_runtime_configurator(
-          &asio_render_bus,
+          &asio_render_rate_matcher,
           &asio_capture_bus,
           unified_channel_layout(desired_session.preset.matrix.inputs.size(),
                                  desired_session.preset.matrix.outputs.size())));
