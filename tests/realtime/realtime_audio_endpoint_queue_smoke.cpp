@@ -13,8 +13,10 @@ int main() {
   }
 
   assert(queue.publisher().write(graph_output));
+  assert(queue.queued_consumer().available_frames() == 4);
   sar::realtime::AudioBuffer endpoint_input(2, 4);
   assert(queue.consumer().read(endpoint_input));
+  assert(queue.queued_consumer().available_frames() == 0);
   for (std::size_t frame = 0; frame < 4; ++frame) {
     assert(endpoint_input.channel(0)[frame] ==
            graph_output.channel(2)[frame]);

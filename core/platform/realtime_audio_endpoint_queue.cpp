@@ -26,6 +26,11 @@ RealtimeAudioSource& RealtimeAudioEndpointQueue::consumer() noexcept {
   return consumer_;
 }
 
+VirtualAsioCaptureConsumer&
+RealtimeAudioEndpointQueue::queued_consumer() noexcept {
+  return consumer_;
+}
+
 RealtimeAudioEndpointQueueStats RealtimeAudioEndpointQueue::stats()
     const noexcept {
   return {publisher_.stats(), queue_.stats()};
@@ -37,6 +42,10 @@ std::size_t RealtimeAudioEndpointQueue::graph_first_channel() const noexcept {
 
 std::size_t RealtimeAudioEndpointQueue::endpoint_channels() const noexcept {
   return publisher_.channel_count();
+}
+
+std::size_t RealtimeAudioEndpointQueue::frames_per_block() const noexcept {
+  return queue_.producer_frames();
 }
 
 }  // namespace sar::platform

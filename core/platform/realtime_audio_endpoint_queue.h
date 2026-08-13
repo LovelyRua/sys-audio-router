@@ -27,9 +27,11 @@ class RealtimeAudioEndpointQueue {
 
   [[nodiscard]] RealtimeAudioSink& publisher() noexcept;
   [[nodiscard]] RealtimeAudioSource& consumer() noexcept;
+  [[nodiscard]] VirtualAsioCaptureConsumer& queued_consumer() noexcept;
   [[nodiscard]] RealtimeAudioEndpointQueueStats stats() const noexcept;
   [[nodiscard]] std::size_t graph_first_channel() const noexcept;
   [[nodiscard]] std::size_t endpoint_channels() const noexcept;
+  [[nodiscard]] std::size_t frames_per_block() const noexcept;
 
  private:
   VirtualAsioCaptureBus queue_;

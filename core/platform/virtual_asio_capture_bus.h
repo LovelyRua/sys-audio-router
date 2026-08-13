@@ -36,6 +36,7 @@ class VirtualAsioCaptureConsumer final : public RealtimeAudioSource {
   ~VirtualAsioCaptureConsumer() override;
 
   [[nodiscard]] bool valid() const noexcept;
+  [[nodiscard]] std::size_t available_frames() const noexcept;
   [[nodiscard]] bool read(realtime::AudioBuffer& destination) noexcept override;
   void reset() noexcept;
 
@@ -92,6 +93,9 @@ class VirtualAsioCaptureBus final : public RealtimeAudioSink {
   [[nodiscard]] bool read(std::size_t slot,
                           std::uint64_t generation,
                           realtime::AudioBuffer& destination) noexcept;
+  [[nodiscard]] std::size_t available_frames(
+      std::size_t slot,
+      std::uint64_t generation) const noexcept;
   void detach(std::size_t slot, std::uint64_t generation) noexcept;
   [[nodiscard]] std::size_t increment(const Slot& slot,
                                       std::size_t index) const noexcept;

@@ -54,6 +54,10 @@ bool VirtualAsioCaptureConsumer::valid() const noexcept {
   return bus_ != nullptr;
 }
 
+std::size_t VirtualAsioCaptureConsumer::available_frames() const noexcept {
+  return bus_ != nullptr ? bus_->available_frames(slot_, generation_) : 0;
+}
+
 bool VirtualAsioCaptureConsumer::read(
     realtime::AudioBuffer& destination) noexcept {
   return bus_ != nullptr && bus_->read(slot_, generation_, destination);
@@ -207,6 +211,23 @@ bool VirtualAsioCaptureBus::read(
                          destination.frames();
   slot.consumer_reading.store(false, std::memory_order_release);
   return completed;
+}
+
+std::size_t VirtualAsioCaptureBus::available_frames(
+    std::size_t slot_index,
+    std::uint64_t generation) const noexcept {
+  if (slot_index >= slots_.size()) {
+    return 0;
+  }
+  const auto& slot = *slots_[slot_index];
+  if (slot.state.load(std::memory_order_acquire) != kActive ||
+      slot.generation.load(std::memory_order_relaxed) != generation) {
+    return 0;
+  }
+  const auto read = slot.read_index.load(std::memory_order_acquire);
+  const auto write = slot.write_index.load(std::memory_order_acquire);
+  return slot.pending.available_frames() +
+         queue_depth(slot, read, write) * producer_frames_;
 }
 
 void VirtualAsioCaptureBus::detach(std::size_t slot_index,
