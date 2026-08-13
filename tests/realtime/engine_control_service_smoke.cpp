@@ -708,6 +708,30 @@ int main() {
   assert(configure_service->session().current_preset().matrix.inputs.size() ==
          2);
 
+  configure.command_id = "configure-multi-capture-matrix";
+  configure.audio_runtime = {};
+  configure.audio_runtime.mode =
+      sar::control::AudioRuntimeMode::WasapiMatrix;
+  configure.audio_runtime.endpoints = {
+      {"capture-a", "capture-native-a",
+       sar::control::AudioRuntimeEndpointDirection::Capture, false, 0, 2},
+      {"capture-b", "capture-native-b",
+       sar::control::AudioRuntimeEndpointDirection::Capture, false, 0, 2},
+      {"render-main", "render-native",
+       sar::control::AudioRuntimeEndpointDirection::Render, true, 0, 2},
+  };
+  const auto matrix_configured = send(*configure_service, configure);
+  assert(matrix_configured.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  assert(configure_calls == 6);
+  assert(observed_matrix_inputs == 6);
+  assert(configure_service->session().current_preset().matrix.inputs[0].id ==
+         "capture-a.ch1");
+  assert(configure_service->session().current_preset().matrix.inputs[2].id ==
+         "capture-b.ch1");
+  assert(configure_service->session_document().audio_runtime.endpoints.size() ==
+         3);
+
   auto devices_create =
       sar::service::EngineControlService::create(make_preset(), 40);
   assert(devices_create.ok());

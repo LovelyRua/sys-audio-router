@@ -1,5 +1,7 @@
 #include "core/service/engine_control_service.h"
 
+#include "core/service/audio_runtime_matrix_preset.h"
+
 #include <algorithm>
 #include <exception>
 #include <string>
@@ -131,6 +133,36 @@ EngineAudioRuntimeResult EngineControlService::configure_audio_runtime_locked(
     });
   }
 
+  std::optional<control::PreparedPresetUpdate> matrix_update;
+  if (configuration.mode == control::AudioRuntimeMode::WasapiMatrix) {
+    const auto previous = audio_runtime_configuration_.value_or(
+        control::AudioRuntimeConfiguration{});
+    auto reconciled = reconcile_audio_runtime_matrix_preset(
+        session_->current_preset(), previous, configuration);
+    if (!reconciled.ok()) {
+      std::vector<EngineAudioRuntimeError> errors;
+      errors.reserve(reconciled.errors().size());
+      for (const auto& error : reconciled.errors()) {
+        errors.push_back({error.code, error.message});
+      }
+      return EngineAudioRuntimeResult::failure(std::move(errors));
+    }
+    control::ControlCommand load;
+    load.command_id = "runtime-matrix-reconcile";
+    load.type = control::ControlCommandType::LoadPreset;
+    load.preset = reconciled.take_preset();
+    auto prepared = session_->prepare_preset_update(load);
+    if (!prepared.ok()) {
+      std::vector<EngineAudioRuntimeError> errors;
+      errors.reserve(prepared.errors().size());
+      for (const auto& error : prepared.errors()) {
+        errors.push_back({error.code, error.message});
+      }
+      return EngineAudioRuntimeResult::failure(std::move(errors));
+    }
+    matrix_update.emplace(prepared.take_update());
+  }
+
   const bool restart_after_configure =
       audio_runtime_ && audio_runtime_->running();
   std::unique_ptr<EngineAudioRuntime> previous_runtime;
@@ -173,9 +205,11 @@ EngineAudioRuntimeResult EngineControlService::configure_audio_runtime_locked(
       };
 
   try {
-    auto rebuilt = audio_runtime_configurator_(
-        configuration, session_->current_graph(),
-        session_->current_preset().matrix);
+    const auto graph = matrix_update ? matrix_update->graph
+                                     : session_->current_graph();
+    const auto& matrix = matrix_update ? matrix_update->preset.matrix
+                                       : session_->current_preset().matrix;
+    auto rebuilt = audio_runtime_configurator_(configuration, graph, matrix);
     if (!rebuilt.ok()) {
       if (rebuilt.errors().empty()) {
         return restore_previous_runtime({
@@ -201,8 +235,36 @@ EngineAudioRuntimeResult EngineControlService::configure_audio_runtime_locked(
       }
     }
 
+    if (matrix_update && preset_commit_observer_) {
+      std::vector<control::PresetError> observer_errors;
+      try {
+        observer_errors = preset_commit_observer_(
+            matrix_update->preset, matrix_update->graph_version);
+      } catch (const std::exception& error) {
+        observer_errors.push_back({"preset_commit_observer_exception",
+                                   error.what()});
+      } catch (...) {
+        observer_errors.push_back({
+            "preset_commit_observer_exception",
+            "Preset commit observer raised an unknown exception.",
+        });
+      }
+      if (!observer_errors.empty()) {
+        runtime->stop();
+        std::vector<EngineAudioRuntimeError> errors;
+        errors.reserve(observer_errors.size());
+        for (const auto& error : observer_errors) {
+          errors.push_back({error.code, error.message});
+        }
+        return restore_previous_runtime(std::move(errors));
+      }
+    }
+
     audio_runtime_ = std::move(runtime);
     audio_runtime_configuration_ = std::move(configuration);
+    if (matrix_update) {
+      session_->commit_preset_update(std::move(*matrix_update));
+    }
   } catch (const std::exception& error) {
     return restore_previous_runtime({
         {"audio_runtime_configurator_exception", error.what()},

@@ -503,9 +503,31 @@ sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator(
     }
     if (configuration.mode ==
         sar::control::AudioRuntimeMode::WasapiMatrix) {
+      const auto asio_output = std::ranges::find_if(
+          matrix.inputs, [](const auto& port) {
+            return port.id == "asio-output-l";
+          });
+      const auto asio_input = std::ranges::find_if(
+          matrix.outputs, [](const auto& port) {
+            return port.id == "asio-input-l";
+          });
+      if (asio_output == matrix.inputs.end() ||
+          asio_input == matrix.outputs.end()) {
+        return sar::service::EngineAudioRuntimeBuildResult::failure({{
+            "virtual_asio_matrix_ports_missing",
+            "WASAPI matrix requires the built-in Virtual ASIO stereo ports.",
+        }});
+      }
+      auto matrix_layout = channel_layout;
+      matrix_layout.graph_input_channels = matrix.inputs.size();
+      matrix_layout.graph_output_channels = matrix.outputs.size();
+      matrix_layout.external_input_offset =
+          static_cast<std::size_t>(asio_output - matrix.inputs.begin());
+      matrix_layout.external_output_offset =
+          static_cast<std::size_t>(asio_input - matrix.outputs.begin());
       return sar::service::open_windows_wasapi_matrix_runtime(
           configuration, matrix, std::move(graph), external_render_input,
-          external_capture_output, channel_layout);
+          external_capture_output, matrix_layout);
     }
     return sar::service::EngineAudioRuntimeBuildResult::failure({
         {"unsupported_audio_runtime_mode",
@@ -723,11 +745,12 @@ int main(int argc, char** argv) {
       [&asio_host, &asio_render_bus, &asio_capture_bus](
           const sar::control::PresetDocument& preset,
           std::uint64_t graph_version) {
-        if (preset.matrix.inputs.size() != 4 ||
-            preset.matrix.outputs.size() != 4) {
+        if (preset.matrix.inputs.size() < 4 ||
+            preset.matrix.outputs.size() < 4) {
           return std::vector<sar::control::PresetError>{{
               "unified_matrix_topology_unsupported",
-              "The Alpha engine requires a 4-source, 4-destination global matrix.",
+              "The Alpha engine requires the built-in ASIO stereo ports and "
+              "at least one stereo physical endpoint.",
           }};
         }
         if (!asio_render_bus.accepts_consumer_format(
