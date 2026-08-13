@@ -32,12 +32,14 @@ class WindowsWasapiEngineRuntime final : public EngineAudioRuntime {
   [[nodiscard]] static WindowsWasapiEngineRuntimeOpenResult open_default_render(
       std::shared_ptr<graph::Graph> graph,
       platform::RealtimeAudioSource* external_input = nullptr,
-      platform::WasapiGraphChannelLayout channel_layout = {});
+      platform::WasapiGraphChannelLayout channel_layout = {},
+      platform::RealtimeAudioSink* external_output = nullptr);
   [[nodiscard]] static WindowsWasapiEngineRuntimeOpenResult open_render(
       std::string render_device_id,
       std::shared_ptr<graph::Graph> graph,
       platform::RealtimeAudioSource* external_input = nullptr,
-      platform::WasapiGraphChannelLayout channel_layout = {});
+      platform::WasapiGraphChannelLayout channel_layout = {},
+      platform::RealtimeAudioSink* external_output = nullptr);
   [[nodiscard]] static WindowsWasapiEngineRuntimeOpenResult open_default_duplex(
       std::shared_ptr<graph::Graph> graph,
       platform::RealtimeAudioSource* external_input = nullptr,

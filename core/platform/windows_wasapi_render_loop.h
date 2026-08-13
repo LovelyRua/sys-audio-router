@@ -30,13 +30,15 @@ struct WasapiRenderLoopSummary {
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics,
     RealtimeAudioSource* external_input = nullptr,
-    WasapiGraphChannelLayout channel_layout = {});
+    WasapiGraphChannelLayout channel_layout = {},
+    RealtimeAudioSink* external_output = nullptr);
 [[nodiscard]] WasapiRenderLoopOpenResult open_wasapi_render_loop(
     const std::string& render_device_id,
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics,
     RealtimeAudioSource* external_input = nullptr,
-    WasapiGraphChannelLayout channel_layout = {});
+    WasapiGraphChannelLayout channel_layout = {},
+    RealtimeAudioSink* external_output = nullptr);
 
 class WindowsWasapiRenderLoop : public WasapiDuplexRuntime {
  public:
@@ -65,13 +67,15 @@ class WindowsWasapiRenderLoop : public WasapiDuplexRuntime {
       graph::Graph& graph,
       diagnostics::EngineDiagnostics& diagnostics,
       RealtimeAudioSource* external_input,
-      WasapiGraphChannelLayout channel_layout);
+      WasapiGraphChannelLayout channel_layout,
+      RealtimeAudioSink* external_output);
   friend WasapiRenderLoopOpenResult open_wasapi_render_loop(
       const std::string& render_device_id,
       graph::Graph& graph,
       diagnostics::EngineDiagnostics& diagnostics,
       RealtimeAudioSource* external_input,
-      WasapiGraphChannelLayout channel_layout);
+      WasapiGraphChannelLayout channel_layout,
+      RealtimeAudioSink* external_output);
 
   WindowsWasapiRenderLoop(WindowsWasapiStream render_stream,
                           graph::Graph& graph,
@@ -81,13 +85,15 @@ class WindowsWasapiRenderLoop : public WasapiDuplexRuntime {
                           graph::Graph& graph,
                           diagnostics::EngineDiagnostics& diagnostics,
                           RealtimeAudioSource* external_input,
-                          WasapiGraphChannelLayout channel_layout);
+                          WasapiGraphChannelLayout channel_layout,
+                          RealtimeAudioSink* external_output);
   [[nodiscard]] static WasapiRenderLoopOpenResult open_from_stream(
       WasapiStreamOpenResult stream_result,
       graph::Graph& graph,
       diagnostics::EngineDiagnostics& diagnostics,
       RealtimeAudioSource* external_input,
-      WasapiGraphChannelLayout channel_layout);
+      WasapiGraphChannelLayout channel_layout,
+      RealtimeAudioSink* external_output);
 
   WindowsWasapiStream render_stream_;
   WindowsWasapiGraphRunner runner_;
@@ -117,6 +123,7 @@ class WasapiRenderLoopOpenResult {
     graph::Graph& graph,
     diagnostics::EngineDiagnostics& diagnostics,
     RealtimeAudioSource* external_input,
-    WasapiGraphChannelLayout channel_layout);
+    WasapiGraphChannelLayout channel_layout,
+    RealtimeAudioSink* external_output);
 
 }  // namespace sar::platform
