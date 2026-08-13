@@ -94,9 +94,10 @@ binary protocol. On Windows, `sar_engine_service` hosts that control surface on
 a named pipe and `sar_control_cli` can query state, the merged virtual and
 physical WASAPI device directory, graph, diagnostics, and audio-runtime state;
 start or stop an installed runtime; or apply gain and mute
-commands. Control wire version 8 carries installed/running/runtime graph-version
-state plus the active runtime mode, endpoint selection, and WASAPI runtime
-health telemetry in lifecycle and diagnostics responses. A stopped service can
+commands. Control wire version 10 carries installed/running/runtime graph-version
+state plus the active runtime mode, endpoint selection, aggregate WASAPI health,
+and per-endpoint role, xrun, queue-fill, recovery, and clock-correction telemetry.
+A stopped service can
 configure default or pinned WASAPI render and
 default or pinned-pair duplex runtimes through the same protocol. A running
 runtime can be reconfigured transactionally: the candidate must start before it
@@ -114,7 +115,7 @@ two output channels. The service-owned render bus also keeps a fixed physical
 render quantum for its lifetime, so preset block-size changes are rejected with
 a restart-required error instead of committing an unusable format. A stopped
 runtime can rebuild against a newer graph through its retained endpoint
-configuration. The Qt Quick GUI now binds to control wire v8 from a separate process.
+configuration. The Qt Quick GUI now binds to control wire v10 from a separate process.
 Control command identity is scoped to each GUI process with a UUID prefix. The
 service replay cache stores the original request bytes: an exact retry receives
 the cached response, while reuse of an ID for a different request is rejected

@@ -84,6 +84,15 @@ EngineReply confirmed_state(const ControlCommand &command) {
   reply.response.wasapi_recovery.maximum_render_recovery_silence_frames = 384;
   reply.response.wasapi_recovery
       .maximum_consecutive_capture_rate_clamped_frames = 2'048;
+  sar::control::AudioEndpointRuntimeDiagnostics endpoint;
+  endpoint.endpoint_id = "capture-a";
+  endpoint.role = sar::control::AudioEndpointRuntimeRole::Follower;
+  endpoint.diagnostics.xrun_count = 2;
+  endpoint.diagnostics.render_fifo_underflow_frames = 256;
+  endpoint.recovery = reply.response.wasapi_recovery;
+  endpoint.queue_fill_frames = 384;
+  endpoint.correction_ppm = -17.25;
+  reply.response.endpoint_diagnostics.push_back(std::move(endpoint));
   return reply;
 }
 
@@ -160,6 +169,20 @@ int main(int argc, char **argv) {
   assert(controller.property("wasapiRuntimeHealth").toString() ==
          QStringLiteral("Degraded"));
   assert(controller.property("wasapiWaitTimeoutCycles").toULongLong() == 13);
+  const auto endpoint_diagnostics = controller.endpointDiagnostics();
+  assert(endpoint_diagnostics.size() == 1);
+  const auto endpoint = endpoint_diagnostics[0].toMap();
+  assert(endpoint.value(QStringLiteral("endpointId")).toString() ==
+         QStringLiteral("capture-a"));
+  assert(endpoint.value(QStringLiteral("role")).toString() ==
+         QStringLiteral("FOLLOWER"));
+  assert(endpoint.value(QStringLiteral("health")).toString() ==
+         QStringLiteral("Degraded"));
+  assert(endpoint.value(QStringLiteral("queueFillFrames")).toULongLong() ==
+         384);
+  assert(endpoint.value(QStringLiteral("correctionPpm")).toDouble() ==
+         -17.25);
+  assert(endpoint.value(QStringLiteral("xruns")).toULongLong() == 2);
   assert(controller.lastError().contains(QStringLiteral("timed out")));
 
   {

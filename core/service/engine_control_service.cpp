@@ -45,6 +45,33 @@ control::WasapiRuntimeHealth convert_runtime_health(
   return control::WasapiRuntimeHealth::Faulted;
 }
 
+control::WasapiRecoveryDiagnostics convert_recovery_diagnostics(
+    const EngineAudioRecoveryDiagnostics& recovery) {
+  return {
+      .state = convert_recovery_state(recovery.state),
+      .runtime_health = convert_runtime_health(recovery.runtime_health),
+      .runtime_reason_code = recovery.runtime_reason_code,
+      .recovery_episode_count = recovery.recovery_episode_count,
+      .successful_recovery_count = recovery.successful_recovery_count,
+      .failed_recovery_count = recovery.failed_recovery_count,
+      .last_recovery_duration_ms = recovery.last_recovery_duration_ms,
+      .maximum_recovery_duration_ms = recovery.maximum_recovery_duration_ms,
+      .endpoint_notification_reopen_count =
+          recovery.endpoint_notification_reopen_count,
+      .endpoint_notification_reset_failure_count =
+          recovery.endpoint_notification_reset_failure_count,
+      .endpoint_notification_reopen_pending =
+          recovery.endpoint_notification_reopen_pending,
+      .wait_timeout_cycles = recovery.wait_timeout_cycles,
+      .capture_discontinuity_cycles = recovery.capture_discontinuity_cycles,
+      .render_fifo_underflow_frames = recovery.render_fifo_underflow_frames,
+      .maximum_render_recovery_silence_frames =
+          recovery.maximum_render_recovery_silence_frames,
+      .maximum_consecutive_capture_rate_clamped_frames =
+          recovery.maximum_consecutive_capture_rate_clamped_frames,
+  };
+}
+
 bool updates_realtime_route_parameters(
     control::ControlCommandType type) noexcept {
   return type == control::ControlCommandType::ConnectRoute ||
@@ -671,44 +698,34 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
       const auto runtime_recovery =
           audio_runtime_ ? audio_runtime_->recovery_diagnostics() : std::nullopt;
       const auto recovery = runtime_recovery
-          ? std::optional{control::WasapiRecoveryDiagnostics{
-                .state = convert_recovery_state(runtime_recovery->state),
-                .runtime_health =
-                    convert_runtime_health(runtime_recovery->runtime_health),
-                .runtime_reason_code = runtime_recovery->runtime_reason_code,
-                .recovery_episode_count =
-                    runtime_recovery->recovery_episode_count,
-                .successful_recovery_count =
-                    runtime_recovery->successful_recovery_count,
-                .failed_recovery_count = runtime_recovery->failed_recovery_count,
-                .last_recovery_duration_ms =
-                    runtime_recovery->last_recovery_duration_ms,
-                .maximum_recovery_duration_ms =
-                    runtime_recovery->maximum_recovery_duration_ms,
-                .endpoint_notification_reopen_count =
-                    runtime_recovery->endpoint_notification_reopen_count,
-                .endpoint_notification_reset_failure_count =
-                    runtime_recovery
-                        ->endpoint_notification_reset_failure_count,
-                .endpoint_notification_reopen_pending =
-                    runtime_recovery->endpoint_notification_reopen_pending,
-                .wait_timeout_cycles = runtime_recovery->wait_timeout_cycles,
-                .capture_discontinuity_cycles =
-                    runtime_recovery->capture_discontinuity_cycles,
-                .render_fifo_underflow_frames =
-                    runtime_recovery->render_fifo_underflow_frames,
-                .maximum_render_recovery_silence_frames =
-                    runtime_recovery->maximum_render_recovery_silence_frames,
-                .maximum_consecutive_capture_rate_clamped_frames =
-                    runtime_recovery
-                        ->maximum_consecutive_capture_rate_clamped_frames,
-            }}
+          ? std::optional{
+                convert_recovery_diagnostics(*runtime_recovery)}
           : wasapi_recovery_diagnostics_provider_
                 ? wasapi_recovery_diagnostics_provider_()
                 : std::nullopt;
       if (recovery) {
         response.wasapi_recovery = *recovery;
         response.has_wasapi_recovery = true;
+      }
+      if (audio_runtime_) {
+        const auto endpoints = audio_runtime_->endpoint_diagnostics();
+        response.endpoint_diagnostics.reserve(endpoints.size());
+        for (const auto& endpoint : endpoints) {
+          control::AudioEndpointRuntimeDiagnostics converted{
+              .endpoint_id = endpoint.endpoint_id,
+              .role = endpoint.role == EngineAudioEndpointRole::Master
+                          ? control::AudioEndpointRuntimeRole::Master
+                          : control::AudioEndpointRuntimeRole::Follower,
+              .diagnostics = endpoint.diagnostics,
+              .queue_fill_frames = endpoint.queue_fill_frames,
+              .correction_ppm = endpoint.correction_ppm,
+          };
+          if (endpoint.recovery) {
+            converted.recovery =
+                convert_recovery_diagnostics(*endpoint.recovery);
+          }
+          response.endpoint_diagnostics.push_back(std::move(converted));
+        }
       }
     } catch (...) {
       // Recovery telemetry must not make the control plane unavailable.

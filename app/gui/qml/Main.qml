@@ -2017,6 +2017,71 @@ ApplicationWindow {
                         }
                     }
                     Text {
+                        visible: engine.endpointDiagnostics.length > 0
+                        text: "Endpoint clocks"
+                        color: colors.text
+                        font.pixelSize: 12
+                        font.weight: Font.DemiBold
+                        Layout.topMargin: 8
+                    }
+                    ColumnLayout {
+                        visible: engine.endpointDiagnostics.length > 0
+                        Layout.fillWidth: true
+                        spacing: 1
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 30
+                            color: colors.raised
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12
+                                anchors.rightMargin: 12
+                                spacing: 12
+                                Text { text: "ENDPOINT"; color: colors.muted; font.pixelSize: 9; font.weight: Font.DemiBold; Layout.fillWidth: true }
+                                Text { text: "ROLE"; color: colors.muted; font.pixelSize: 9; Layout.preferredWidth: 76 }
+                                Text { text: "HEALTH"; color: colors.muted; font.pixelSize: 9; Layout.preferredWidth: 90 }
+                                Text { text: "QUEUE"; color: colors.muted; font.pixelSize: 9; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 84 }
+                                Text { text: "CLOCK"; color: colors.muted; font.pixelSize: 9; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 92 }
+                                Text { text: "XRUN"; color: colors.muted; font.pixelSize: 9; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 60 }
+                            }
+                        }
+                        Repeater {
+                            model: engine.endpointDiagnostics
+                            delegate: Rectangle {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 44
+                                color: colors.surface
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 12
+                                    spacing: 12
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 1
+                                        Text { text: modelData.endpointId; color: colors.text; font.pixelSize: 11; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                                        Text { visible: modelData.reason.length > 0; text: modelData.reason; color: colors.muted; font.pixelSize: 9; elide: Text.ElideRight; Layout.fillWidth: true }
+                                    }
+                                    Text { text: modelData.role; color: modelData.role === "MASTER" ? colors.cyan : colors.muted; font.pixelSize: 9; font.weight: Font.DemiBold; Layout.preferredWidth: 76 }
+                                    Text {
+                                        text: modelData.health
+                                        color: modelData.health === "Healthy" ? colors.healthy
+                                              : modelData.health === "Faulted" ? colors.danger
+                                              : modelData.health === "Degraded" ? colors.warning
+                                              : colors.muted
+                                        font.pixelSize: 10
+                                        Layout.preferredWidth: 90
+                                    }
+                                    Text { text: modelData.queueFillAvailable ? modelData.queueFillFrames + " f" : "-"; color: colors.text; font.pixelSize: 10; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 84 }
+                                    Text { text: modelData.correctionAvailable ? Number(modelData.correctionPpm).toFixed(1) + " ppm" : "MASTER"; color: Math.abs(modelData.correctionPpm) >= 450 ? colors.warning : colors.text; font.pixelSize: 10; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 92 }
+                                    Text { text: modelData.xruns; color: modelData.xruns > 0 ? colors.danger : colors.healthy; font.pixelSize: 11; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 60 }
+                                }
+                            }
+                        }
+                    }
+                    Text {
                         text: "WASAPI recovery"
                         color: colors.text
                         font.pixelSize: 12

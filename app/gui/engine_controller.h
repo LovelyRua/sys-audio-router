@@ -55,6 +55,7 @@ class EngineController final : public QObject {
   Q_PROPERTY(int activeClients READ activeClients NOTIFY diagnosticsChanged)
   Q_PROPERTY(double peak READ peak NOTIFY diagnosticsChanged)
   Q_PROPERTY(double callbackPeakUs READ callbackPeakUs NOTIFY diagnosticsChanged)
+  Q_PROPERTY(QVariantList endpointDiagnostics READ endpointDiagnostics NOTIFY diagnosticsChanged)
   Q_PROPERTY(bool wasapiRecoveryAvailable READ wasapiRecoveryAvailable NOTIFY diagnosticsChanged)
   Q_PROPERTY(QString wasapiRecoveryState READ wasapiRecoveryState NOTIFY diagnosticsChanged)
   Q_PROPERTY(QString wasapiRuntimeHealth READ wasapiRuntimeHealth NOTIFY diagnosticsChanged)
@@ -110,6 +111,7 @@ class EngineController final : public QObject {
   [[nodiscard]] int activeClients() const noexcept;
   [[nodiscard]] double peak() const noexcept;
   [[nodiscard]] double callbackPeakUs() const noexcept;
+  [[nodiscard]] QVariantList endpointDiagnostics() const;
   [[nodiscard]] bool wasapiRecoveryAvailable() const noexcept;
   [[nodiscard]] QString wasapiRecoveryState() const;
   [[nodiscard]] QString wasapiRuntimeHealth() const;
@@ -257,6 +259,7 @@ class EngineController final : public QObject {
   int active_clients_ = 0;
   double peak_ = 0.0;
   double callback_peak_us_ = 0.0;
+  QVariantList endpoint_diagnostics_;
   bool wasapi_recovery_available_ = false;
   control::WasapiRecoveryDiagnostics wasapi_recovery_;
   QVariantList inputs_;

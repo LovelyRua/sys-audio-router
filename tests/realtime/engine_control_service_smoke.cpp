@@ -70,6 +70,11 @@ class FakeAudioRuntime final : public sar::service::EngineAudioRuntime {
     return recovery;
   }
 
+  std::vector<sar::service::EngineAudioEndpointDiagnostics>
+  endpoint_diagnostics() const override {
+    return endpoints;
+  }
+
   bool running_ = false;
   std::uint64_t graph_version_ = 10;
   bool fail_start_ = false;
@@ -78,6 +83,7 @@ class FakeAudioRuntime final : public sar::service::EngineAudioRuntime {
   std::uint32_t stop_calls = 0;
   std::uint32_t realtime_parameter_calls = 0;
   std::optional<sar::service::EngineAudioRecoveryDiagnostics> recovery;
+  std::vector<sar::service::EngineAudioEndpointDiagnostics> endpoints;
 };
 
 sar::control::ControlResponse send(
@@ -273,6 +279,14 @@ int main() {
       .maximum_render_recovery_silence_frames = 480,
       .maximum_consecutive_capture_rate_clamped_frames = 240,
   };
+  runtime_observer->endpoints.push_back({
+      .endpoint_id = "capture-a",
+      .role = sar::service::EngineAudioEndpointRole::Follower,
+      .diagnostics = {.xrun_count = 4},
+      .recovery = runtime_observer->recovery,
+      .queue_fill_frames = 384,
+      .correction_ppm = -17.25,
+  });
 
   runtime_start.command_id = "runtime-start-3";
   const auto duplicate_start = send(*service, runtime_start);
@@ -315,6 +329,16 @@ int main() {
              .maximum_render_recovery_silence_frames == 480);
   assert(diagnostic_response.wasapi_recovery
              .maximum_consecutive_capture_rate_clamped_frames == 240);
+  assert(diagnostic_response.endpoint_diagnostics.size() == 1);
+  assert(diagnostic_response.endpoint_diagnostics[0].endpoint_id ==
+         "capture-a");
+  assert(diagnostic_response.endpoint_diagnostics[0].role ==
+         sar::control::AudioEndpointRuntimeRole::Follower);
+  assert(diagnostic_response.endpoint_diagnostics[0].diagnostics.xrun_count ==
+         4);
+  assert(diagnostic_response.endpoint_diagnostics[0].recovery.has_value());
+  assert(diagnostic_response.endpoint_diagnostics[0].queue_fill_frames == 384);
+  assert(diagnostic_response.endpoint_diagnostics[0].correction_ppm == -17.25);
 
   runtime_observer->recovery.reset();
   service->set_wasapi_recovery_diagnostics_provider(

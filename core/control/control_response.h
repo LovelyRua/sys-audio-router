@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -52,6 +53,20 @@ struct WasapiRecoveryDiagnostics {
   std::uint64_t maximum_consecutive_capture_rate_clamped_frames = 0;
 };
 
+enum class AudioEndpointRuntimeRole {
+  Master,
+  Follower,
+};
+
+struct AudioEndpointRuntimeDiagnostics {
+  std::string endpoint_id;
+  AudioEndpointRuntimeRole role = AudioEndpointRuntimeRole::Follower;
+  diagnostics::EngineDiagnostics diagnostics;
+  std::optional<WasapiRecoveryDiagnostics> recovery;
+  std::optional<std::uint64_t> queue_fill_frames;
+  std::optional<double> correction_ppm;
+};
+
 struct ControlResponse {
   std::string command_id;
   ControlResponseStatus status = ControlResponseStatus::Accepted;
@@ -62,6 +77,7 @@ struct ControlResponse {
   bool has_diagnostics = false;
   WasapiRecoveryDiagnostics wasapi_recovery;
   bool has_wasapi_recovery = false;
+  std::vector<AudioEndpointRuntimeDiagnostics> endpoint_diagnostics;
   std::vector<platform::AudioDeviceDescriptor> devices;
   bool has_devices = false;
   std::uint64_t next_graph_version = 0;

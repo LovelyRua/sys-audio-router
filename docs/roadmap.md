@@ -421,15 +421,16 @@ model.
 The first multi-device runtime slice is now present: one WASAPI render endpoint
 owns the master clock, additional render and capture endpoints run as soft-clock
 followers, and multiple captures are sample-rate matched and assembled into
-non-overlapping graph input ranges. The next gate is exposing this topology to
-the control protocol and GUI, followed by two-capture hardware acceptance and
-per-endpoint delay alignment.
+non-overlapping graph input ranges. The topology and per-endpoint clock
+telemetry now cross the control protocol and are visible in the GUI. The next
+gate is two-capture hardware acceptance, hot-plug recovery under multiple
+followers, and per-endpoint delay alignment.
 
 The control application can now submit this binding list directly. Endpoint
 edits atomically compile matrix ports and build the replacement runtime before
 publication; accepted state is then refreshed from the engine rather than kept
-as GUI-local topology. Real two-capture qualification and per-stream telemetry
-remain the next acceptance work.
+as GUI-local topology. Real two-capture qualification remains the next
+acceptance work.
 
 Deliverables:
 

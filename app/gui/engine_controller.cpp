@@ -234,6 +234,9 @@ qulonglong EngineController::virtualAsioProducerOverflows() const noexcept {
 int EngineController::activeClients() const noexcept { return active_clients_; }
 double EngineController::peak() const noexcept { return peak_; }
 double EngineController::callbackPeakUs() const noexcept { return callback_peak_us_; }
+QVariantList EngineController::endpointDiagnostics() const {
+  return endpoint_diagnostics_;
+}
 bool EngineController::wasapiRecoveryAvailable() const noexcept {
   return wasapi_recovery_available_;
 }
@@ -804,6 +807,54 @@ void EngineController::applyReply(const EngineReply& reply,
         static_cast<int>(diagnostics.virtual_asio_active_producers);
     peak_ = diagnostics.virtual_asio_peak;
     callback_peak_us_ = diagnostics.peak_callback_seconds * 1'000'000.0;
+    endpoint_diagnostics_.clear();
+    for (const auto& endpoint : reply.response.endpoint_diagnostics) {
+      QString health = QStringLiteral("Unavailable");
+      QString reason;
+      if (endpoint.recovery) {
+        reason = text(endpoint.recovery->runtime_reason_code);
+        switch (endpoint.recovery->runtime_health) {
+          case control::WasapiRuntimeHealth::Stopped:
+            health = QStringLiteral("Stopped");
+            break;
+          case control::WasapiRuntimeHealth::Healthy:
+            health = QStringLiteral("Healthy");
+            break;
+          case control::WasapiRuntimeHealth::Degraded:
+            health = QStringLiteral("Degraded");
+            break;
+          case control::WasapiRuntimeHealth::Faulted:
+            health = QStringLiteral("Faulted");
+            break;
+        }
+      }
+      endpoint_diagnostics_.push_back(QVariantMap{
+          {QStringLiteral("endpointId"), text(endpoint.endpoint_id)},
+          {QStringLiteral("role"),
+           endpoint.role == control::AudioEndpointRuntimeRole::Master
+               ? QStringLiteral("MASTER")
+               : QStringLiteral("FOLLOWER")},
+          {QStringLiteral("health"), health},
+          {QStringLiteral("reason"), reason},
+          {QStringLiteral("xruns"),
+           QVariant::fromValue<qulonglong>(endpoint.diagnostics.xrun_count)},
+          {QStringLiteral("droppedBlocks"),
+           QVariant::fromValue<qulonglong>(
+               endpoint.diagnostics.virtual_asio_dropped_blocks)},
+          {QStringLiteral("underflowFrames"),
+           QVariant::fromValue<qulonglong>(
+               endpoint.diagnostics.render_fifo_underflow_frames)},
+          {QStringLiteral("queueFillAvailable"),
+           endpoint.queue_fill_frames.has_value()},
+          {QStringLiteral("queueFillFrames"),
+           QVariant::fromValue<qulonglong>(
+               endpoint.queue_fill_frames.value_or(0))},
+          {QStringLiteral("correctionAvailable"),
+           endpoint.correction_ppm.has_value()},
+          {QStringLiteral("correctionPpm"),
+           endpoint.correction_ppm.value_or(0.0)},
+      });
+    }
     diagnostics_changed = true;
   }
   if (reply.response.has_wasapi_recovery) {

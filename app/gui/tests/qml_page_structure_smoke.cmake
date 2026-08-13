@@ -66,6 +66,18 @@ foreach(matrix_runtime_marker
   endif()
 endforeach()
 
+foreach(endpoint_diagnostics_marker
+    "Endpoint clocks"
+    "model: engine.endpointDiagnostics"
+    "modelData.queueFillFrames"
+    "modelData.correctionPpm")
+  string(FIND "${qml}" "${endpoint_diagnostics_marker}" marker_position)
+  if(marker_position LESS 0)
+    message(FATAL_ERROR
+      "Endpoint diagnostics QML marker is missing: ${endpoint_diagnostics_marker}")
+  endif()
+endforeach()
+
 foreach(realtime_ui_marker
     "property real meterLevel"
     "interval: 16"

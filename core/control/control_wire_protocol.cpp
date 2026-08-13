@@ -559,6 +559,24 @@ ControlWireEncodeResult encode_control_response(const ControlResponse& response)
     if (response.has_wasapi_recovery) {
       encode_wasapi_recovery(writer, response.wasapi_recovery);
     }
+    writer.count(response.endpoint_diagnostics.size());
+    for (const auto& endpoint : response.endpoint_diagnostics) {
+      writer.string(endpoint.endpoint_id);
+      writer.scalar(static_cast<std::uint32_t>(endpoint.role));
+      encode_diagnostics(writer, endpoint.diagnostics);
+      writer.boolean(endpoint.recovery.has_value());
+      if (endpoint.recovery) {
+        encode_wasapi_recovery(writer, *endpoint.recovery);
+      }
+      writer.boolean(endpoint.queue_fill_frames.has_value());
+      if (endpoint.queue_fill_frames) {
+        writer.scalar(*endpoint.queue_fill_frames);
+      }
+      writer.boolean(endpoint.correction_ppm.has_value());
+      if (endpoint.correction_ppm) {
+        writer.scalar(*endpoint.correction_ppm);
+      }
+    }
   }
   writer.boolean(response.has_devices);
   if (response.has_devices) {
@@ -631,6 +649,28 @@ ControlResponseDecodeResult decode_control_response(
     response.has_wasapi_recovery = reader.boolean();
     if (reader.ok() && response.has_wasapi_recovery) {
       response.wasapi_recovery = decode_wasapi_recovery(reader);
+    }
+    const auto endpoint_diagnostics_count =
+        reader.version() >= 10 ? reader.count() : 0;
+    if (reader.ok() && reader.version() >= 10) {
+      response.endpoint_diagnostics.reserve(endpoint_diagnostics_count);
+      for (std::uint32_t index = 0;
+           index < endpoint_diagnostics_count && reader.ok(); ++index) {
+        AudioEndpointRuntimeDiagnostics endpoint;
+        endpoint.endpoint_id = reader.string();
+        endpoint.role = reader.enumeration<AudioEndpointRuntimeRole>(1);
+        endpoint.diagnostics = decode_diagnostics(reader);
+        if (reader.boolean()) {
+          endpoint.recovery = decode_wasapi_recovery(reader);
+        }
+        if (reader.boolean()) {
+          endpoint.queue_fill_frames = reader.scalar<std::uint64_t>();
+        }
+        if (reader.boolean()) {
+          endpoint.correction_ppm = reader.scalar<double>();
+        }
+        response.endpoint_diagnostics.push_back(std::move(endpoint));
+      }
     }
   }
   response.has_devices = reader.boolean();

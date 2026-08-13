@@ -128,6 +128,16 @@ int main() {
   response.wasapi_recovery.render_fifo_underflow_frames = 2048;
   response.wasapi_recovery.maximum_render_recovery_silence_frames = 1024;
   response.wasapi_recovery.maximum_consecutive_capture_rate_clamped_frames = 512;
+  sar::control::AudioEndpointRuntimeDiagnostics endpoint_diagnostics;
+  endpoint_diagnostics.endpoint_id = "capture-a";
+  endpoint_diagnostics.role =
+      sar::control::AudioEndpointRuntimeRole::Follower;
+  endpoint_diagnostics.diagnostics.xrun_count = 4;
+  endpoint_diagnostics.diagnostics.render_fifo_underflow_cycles = 2;
+  endpoint_diagnostics.recovery = response.wasapi_recovery;
+  endpoint_diagnostics.queue_fill_frames = 384;
+  endpoint_diagnostics.correction_ppm = -17.25;
+  response.endpoint_diagnostics.push_back(endpoint_diagnostics);
   response.has_audio_runtime_state = true;
   response.audio_runtime.installed = true;
   response.audio_runtime.running = true;
@@ -191,6 +201,19 @@ int main() {
              .maximum_render_recovery_silence_frames == 1024);
   assert(decoded_response.response.wasapi_recovery
              .maximum_consecutive_capture_rate_clamped_frames == 512);
+  assert(decoded_response.response.endpoint_diagnostics.size() == 1);
+  const auto& decoded_endpoint =
+      decoded_response.response.endpoint_diagnostics[0];
+  assert(decoded_endpoint.endpoint_id == "capture-a");
+  assert(decoded_endpoint.role ==
+         sar::control::AudioEndpointRuntimeRole::Follower);
+  assert(decoded_endpoint.diagnostics.xrun_count == 4);
+  assert(decoded_endpoint.diagnostics.render_fifo_underflow_cycles == 2);
+  assert(decoded_endpoint.recovery.has_value());
+  assert(decoded_endpoint.recovery->state ==
+         sar::control::WasapiRecoveryState::Backoff);
+  assert(decoded_endpoint.queue_fill_frames == 384);
+  assert(decoded_endpoint.correction_ppm == -17.25);
   assert(decoded_response.response.has_audio_runtime_state);
   assert(decoded_response.response.audio_runtime.installed);
   assert(decoded_response.response.audio_runtime.running);
