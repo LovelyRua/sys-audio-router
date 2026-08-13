@@ -30,7 +30,8 @@ class AudioRuntimeMatrixPresetResult {
 };
 
 // Replaces physical runtime ports while retaining non-runtime ports and every
-// route whose two endpoints remain present in the candidate topology.
+// route whose two endpoints remain present in the candidate topology. Leaving
+// matrix mode restores the legacy stereo WASAPI ports and direct routes.
 [[nodiscard]] AudioRuntimeMatrixPresetResult
 reconcile_audio_runtime_matrix_preset(
     const control::PresetDocument& current,

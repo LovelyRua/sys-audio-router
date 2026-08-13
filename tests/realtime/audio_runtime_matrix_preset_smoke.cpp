@@ -70,6 +70,36 @@ int main() {
   assert(reconfigured.preset().matrix.inputs[2].id == "asio-output-l");
   assert(reconfigured.preset().matrix.routes.size() == 1);
 
+  sar::control::AudioRuntimeConfiguration legacy;
+  legacy.mode = Mode::WasapiDuplex;
+  legacy.capture_device_id = "capture-native-a";
+  legacy.render_device_id = "render-native-main";
+  auto restored = sar::service::reconcile_audio_runtime_matrix_preset(
+      result.preset(), first, legacy);
+  assert(restored.ok());
+  assert(restored.preset().matrix.inputs.size() == 4);
+  assert(restored.preset().matrix.outputs.size() == 4);
+  assert(restored.preset().matrix.inputs[0].id == "wasapi-capture-l");
+  assert(restored.preset().matrix.inputs[1].id == "wasapi-capture-r");
+  assert(restored.preset().matrix.inputs[2].id == "asio-output-l");
+  assert(restored.preset().matrix.outputs[0].id == "wasapi-render-l");
+  assert(restored.preset().matrix.outputs[2].id == "asio-input-l");
+  assert(restored.preset().matrix.routes.size() == 5);
+
+  const auto has_route = [&](const char* input, const char* output) {
+    for (const auto& route : restored.preset().matrix.routes) {
+      if (route.input_id == input && route.output_id == output) {
+        return true;
+      }
+    }
+    return false;
+  };
+  assert(has_route("asio-output-l", "wasapi-render-l"));
+  assert(has_route("asio-output-r", "wasapi-render-r"));
+  assert(has_route("wasapi-capture-l", "asio-input-l"));
+  assert(has_route("wasapi-capture-r", "asio-input-r"));
+  assert(has_route("asio-output-r", "asio-input-r"));
+
   second.endpoints[0].clock_master = true;
   auto invalid = sar::service::reconcile_audio_runtime_matrix_preset(
       result.preset(), first, second);

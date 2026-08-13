@@ -10,8 +10,9 @@
 
 namespace sar::service {
 
-// Builds one render-clock master plus independently rate-matched render
-// followers. Alpha supports zero or one physical capture endpoint.
+// Builds one render-clock master plus independently rate-matched render and
+// capture followers. Every physical endpoint owns its device clock; only the
+// render master advances the product graph.
 [[nodiscard]] EngineAudioRuntimeBuildResult open_windows_wasapi_matrix_runtime(
     const control::AudioRuntimeConfiguration& configuration,
     const control::PresetRouteMatrix& matrix,

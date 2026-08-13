@@ -30,6 +30,46 @@ void add_runtime_port_ids(
   }
 }
 
+void add_legacy_port_ids(Direction direction,
+                         std::unordered_set<std::string>& ids) {
+  if (direction == Direction::Capture) {
+    ids.insert("wasapi-capture-l");
+    ids.insert("wasapi-capture-r");
+  } else {
+    ids.insert("wasapi-render-l");
+    ids.insert("wasapi-render-r");
+  }
+}
+
+void append_desired_runtime_ports(
+    const control::AudioRuntimeConfiguration& configuration,
+    Direction direction,
+    std::vector<graph::RouteEndpointDescriptor>& ports) {
+  if (configuration.mode != control::AudioRuntimeMode::WasapiMatrix) {
+    if (direction == Direction::Capture) {
+      ports.push_back({"wasapi-capture-l", "WASAPI Capture L"});
+      ports.push_back({"wasapi-capture-r", "WASAPI Capture R"});
+    } else {
+      ports.push_back({"wasapi-render-l", "WASAPI Render L"});
+      ports.push_back({"wasapi-render-r", "WASAPI Render R"});
+    }
+    return;
+  }
+
+  for (const auto& endpoint : configuration.endpoints) {
+    if (endpoint.direction != direction) {
+      continue;
+    }
+    for (std::uint32_t channel = 0; channel < endpoint.channel_count;
+         ++channel) {
+      ports.push_back({
+          endpoint.endpoint_id + ".ch" + std::to_string(channel + 1),
+          endpoint.endpoint_id + " Ch " + std::to_string(channel + 1),
+      });
+    }
+  }
+}
+
 std::vector<graph::RouteEndpointDescriptor> reconcile_axis(
     const std::vector<graph::RouteEndpointDescriptor>& current,
     const control::AudioRuntimeConfiguration& previous_configuration,
@@ -46,27 +86,38 @@ std::vector<graph::RouteEndpointDescriptor> reconcile_axis(
   }
 
   std::unordered_set<std::string> desired;
-  add_runtime_port_ids(next_configuration, direction, desired);
+  if (next_configuration.mode == control::AudioRuntimeMode::WasapiMatrix) {
+    add_runtime_port_ids(next_configuration, direction, desired);
+  } else {
+    add_legacy_port_ids(direction, desired);
+  }
 
   std::vector<graph::RouteEndpointDescriptor> result;
-  for (const auto& endpoint : next_configuration.endpoints) {
-    if (endpoint.direction != direction) {
-      continue;
-    }
-    for (std::uint32_t channel = 0; channel < endpoint.channel_count;
-         ++channel) {
-      result.push_back({
-          endpoint.endpoint_id + ".ch" + std::to_string(channel + 1),
-          endpoint.endpoint_id + " Ch " + std::to_string(channel + 1),
-      });
-    }
-  }
+  append_desired_runtime_ports(next_configuration, direction, result);
   for (const auto& port : current) {
     if (!removed.contains(port.id) && !desired.contains(port.id)) {
       result.push_back(port);
     }
   }
   return result;
+}
+
+void add_route_if_ports_exist(control::PresetDocument& preset,
+                              const std::unordered_set<std::string>& inputs,
+                              const std::unordered_set<std::string>& outputs,
+                              std::string input_id,
+                              std::string output_id) {
+  if (!inputs.contains(input_id) || !outputs.contains(output_id)) {
+    return;
+  }
+  const auto found = std::ranges::find_if(
+      preset.matrix.routes, [&](const auto& route) {
+        return route.input_id == input_id && route.output_id == output_id;
+      });
+  if (found == preset.matrix.routes.end()) {
+    preset.matrix.routes.push_back(
+        {std::move(input_id), std::move(output_id), 1.0F, false});
+  }
 }
 
 std::unordered_set<std::string> port_ids(
@@ -124,13 +175,6 @@ AudioRuntimeMatrixPresetResult reconcile_audio_runtime_matrix_preset(
     return AudioRuntimeMatrixPresetResult::failure(
         std::move(configuration_errors));
   }
-  if (next_configuration.mode != control::AudioRuntimeMode::WasapiMatrix) {
-    return AudioRuntimeMatrixPresetResult::failure({{
-        "audio_runtime_matrix_preset_requires_matrix_mode",
-        "Runtime matrix preset reconciliation requires WASAPI matrix mode.",
-    }});
-  }
-
   auto candidate = current;
   candidate.matrix.inputs = reconcile_axis(
       current.matrix.inputs, previous_configuration, next_configuration,
@@ -145,6 +189,16 @@ AudioRuntimeMatrixPresetResult reconcile_audio_runtime_matrix_preset(
     return !inputs.contains(route.input_id) ||
            !outputs.contains(route.output_id);
   });
+  if (next_configuration.mode != control::AudioRuntimeMode::WasapiMatrix) {
+    add_route_if_ports_exist(candidate, inputs, outputs, "asio-output-l",
+                             "wasapi-render-l");
+    add_route_if_ports_exist(candidate, inputs, outputs, "asio-output-r",
+                             "wasapi-render-r");
+    add_route_if_ports_exist(candidate, inputs, outputs, "wasapi-capture-l",
+                             "asio-input-l");
+    add_route_if_ports_exist(candidate, inputs, outputs, "wasapi-capture-r",
+                             "asio-input-r");
+  }
 
   const auto validation = control::validate_preset(candidate);
   if (!validation.ok()) {

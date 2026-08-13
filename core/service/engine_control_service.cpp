@@ -134,7 +134,12 @@ EngineAudioRuntimeResult EngineControlService::configure_audio_runtime_locked(
   }
 
   std::optional<control::PreparedPresetUpdate> matrix_update;
-  if (configuration.mode == control::AudioRuntimeMode::WasapiMatrix) {
+  const bool changes_matrix_topology =
+      configuration.mode == control::AudioRuntimeMode::WasapiMatrix ||
+      (audio_runtime_configuration_ &&
+       audio_runtime_configuration_->mode ==
+           control::AudioRuntimeMode::WasapiMatrix);
+  if (changes_matrix_topology) {
     const auto previous = audio_runtime_configuration_.value_or(
         control::AudioRuntimeConfiguration{});
     auto reconciled = reconcile_audio_runtime_matrix_preset(
