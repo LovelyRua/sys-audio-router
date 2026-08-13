@@ -1101,6 +1101,34 @@ ApplicationWindow {
                                 property int cellSize: 44
                                 property int groupLabelWidth: window.width < 1100 ? 44 : 56
 
+                                function alignedGridPosition(index, scrollPosition) {
+                                    return Math.round(index * cellSize - scrollPosition)
+                                }
+
+                                function groupStartIndex(endpoints, index, source) {
+                                    var title = window.endpointGroupTitle(
+                                                endpoints[index], index,
+                                                endpoints.length, source)
+                                    while (index > 0 &&
+                                           window.endpointGroupTitle(
+                                               endpoints[index - 1], index - 1,
+                                               endpoints.length, source) === title)
+                                        --index
+                                    return index
+                                }
+
+                                function groupEndIndex(endpoints, index, source) {
+                                    var title = window.endpointGroupTitle(
+                                                endpoints[index], index,
+                                                endpoints.length, source)
+                                    while (index < endpoints.length &&
+                                           window.endpointGroupTitle(
+                                               endpoints[index], index,
+                                               endpoints.length, source) === title)
+                                        ++index
+                                    return index
+                                }
+
                                 function elideCanvasText(context, value, maximumWidth) {
                                     var label = String(value)
                                     if (context.measureText(label).width <= maximumWidth)
@@ -1138,34 +1166,46 @@ ApplicationWindow {
                                         context.font = "10px Segoe UI"
                                         var cellSize = matrixViewport.cellSize
                                         var firstColumn = Math.floor(matrixGridFlick.contentX / cellSize)
-                                        var x = firstColumn * cellSize - matrixGridFlick.contentX
+                                        var paintedGroupEnd = -1
+                                        var x = matrixViewport.alignedGridPosition(
+                                                    firstColumn, matrixGridFlick.contentX)
                                         for (var column = firstColumn;
                                              column < matrixInputs.length && x < width;
-                                             ++column, x += cellSize) {
+                                             ++column,
+                                             x = matrixViewport.alignedGridPosition(
+                                                 column, matrixGridFlick.contentX)) {
                                             var endpoint = matrixInputs[column]
-                                            var group = window.endpointGroupTitle(
-                                                        endpoint, column,
-                                                        matrixInputs.length, true)
-                                            var groupStart = column === 0 || group !== window.endpointGroupTitle(
-                                                        matrixInputs[column - 1], column - 1,
-                                                        matrixInputs.length, true)
-                                            if (groupStart) {
-                                                var groupEnd = column + 1
-                                                while (groupEnd < matrixInputs.length &&
-                                                       window.endpointGroupTitle(
-                                                           matrixInputs[groupEnd], groupEnd,
-                                                           matrixInputs.length, true) === group)
-                                                    ++groupEnd
-                                                var groupWidth = (groupEnd - column) * cellSize
+                                            if (column >= paintedGroupEnd) {
+                                                var groupStart = matrixViewport.groupStartIndex(
+                                                                     matrixInputs, column, true)
+                                                var groupEnd = matrixViewport.groupEndIndex(
+                                                                   matrixInputs, column, true)
+                                                paintedGroupEnd = groupEnd
+                                                var group = window.endpointGroupTitle(
+                                                            endpoint, column,
+                                                            matrixInputs.length, true)
+                                                var groupLeft = matrixViewport.alignedGridPosition(
+                                                                    groupStart,
+                                                                    matrixGridFlick.contentX)
+                                                var groupRight = matrixViewport.alignedGridPosition(
+                                                                     groupEnd,
+                                                                     matrixGridFlick.contentX)
+                                                var groupWidth = groupRight - groupLeft
+                                                var visibleGroupLeft = Math.max(0, groupLeft)
+                                                var visibleGroupRight = Math.min(width, groupRight)
                                                 context.fillStyle = "#20262a"
-                                                context.fillRect(x + 1, 1, groupWidth - 3, 20)
+                                                context.fillRect(groupLeft + 1, 1,
+                                                                 groupWidth - 2, 19)
                                                 context.fillStyle = window.endpointGroupColor(
                                                                     endpoint, column,
                                                                     matrixInputs.length)
-                                                context.fillRect(x + 1, 20, groupWidth - 3, 2)
+                                                context.fillRect(groupLeft, 20,
+                                                                 groupWidth, 2)
                                                 context.font = "bold 9px Segoe UI"
                                                 context.textAlign = "center"
-                                                context.fillText(group, x + groupWidth / 2, 14)
+                                                context.fillText(group,
+                                                                 (visibleGroupLeft + visibleGroupRight) / 2,
+                                                                 14)
                                             }
                                             context.save()
                                             context.font = "10px Segoe UI"
@@ -1193,65 +1233,80 @@ ApplicationWindow {
                                         context.font = "11px Segoe UI"
                                         var cellSize = matrixViewport.cellSize
                                         var firstRow = Math.floor(matrixGridFlick.contentY / cellSize)
-                                        var y = firstRow * cellSize - matrixGridFlick.contentY
+                                        var y = matrixViewport.alignedGridPosition(
+                                                    firstRow, matrixGridFlick.contentY)
+                                        // Paint row cells first so later rows cannot erase a group rail.
                                         for (var row = firstRow;
                                              row < matrixOutputs.length && y < height;
-                                             ++row, y += cellSize) {
-                                            var endpoint = matrixOutputs[row]
-                                            var groupTitle = window.endpointGroupTitle(
-                                                                 endpoint, row,
-                                                                 matrixOutputs.length, false)
-                                            var groupStart = row === 0 ||
-                                                    groupTitle !== window.endpointGroupTitle(
-                                                        matrixOutputs[row - 1], row - 1,
-                                                        matrixOutputs.length, false)
+                                             ++row,
+                                             y = matrixViewport.alignedGridPosition(
+                                                 row, matrixGridFlick.contentY)) {
                                             context.fillStyle = colors.surface
                                             context.fillRect(0, y + 1, width - 3, cellSize - 3)
                                             context.strokeStyle = colors.line
                                             context.strokeRect(0.5, y + 1.5, width - 4, cellSize - 4)
-                                            if (groupStart) {
-                                                var groupEnd = row + 1
-                                                while (groupEnd < matrixOutputs.length &&
-                                                       window.endpointGroupTitle(
-                                                           matrixOutputs[groupEnd], groupEnd,
-                                                           matrixOutputs.length, false) === groupTitle)
-                                                    ++groupEnd
-                                                var groupHeight = (groupEnd - row) * cellSize
-                                                context.fillStyle = "#20262a"
-                                                context.fillRect(1, y + 1,
-                                                                 matrixViewport.groupLabelWidth - 3,
-                                                                 groupHeight - 3)
-                                                context.fillStyle = window.endpointGroupColor(
-                                                                    endpoint, row,
-                                                                    matrixOutputs.length)
-                                                context.fillRect(matrixViewport.groupLabelWidth - 3,
-                                                                 y + 1, 2,
-                                                                 groupHeight - 3)
-                                                context.fillStyle = window.endpointGroupColor(
-                                                                    endpoint, row,
-                                                                    matrixOutputs.length)
-                                                context.font = "bold 8px Segoe UI"
-                                                context.textAlign = "center"
-                                                context.textBaseline = "middle"
-                                                var family = window.endpointFamily(
-                                                                 endpoint, row,
-                                                                 matrixOutputs.length)
-                                                var centerY = y + groupHeight / 2
-                                                context.fillText(family === "wasapi" ? "WASAPI"
-                                                                 : family === "asio" ? "ASIO" : "OTHER",
-                                                                 matrixViewport.groupLabelWidth / 2,
-                                                                 centerY - 6)
-                                                context.fillText(family === "wasapi" ? "RENDER"
-                                                                 : family === "asio" ? "DAW IN" : "DEST",
-                                                                 matrixViewport.groupLabelWidth / 2,
-                                                                 centerY + 7)
-                                            }
-                                            context.fillStyle = endpoint.active ? colors.text : "#596166"
+                                        }
+                                        var paintedGroupEnd = -1
+                                        for (var groupRow = firstRow;
+                                             groupRow < matrixOutputs.length &&
+                                             matrixViewport.alignedGridPosition(
+                                                 groupRow, matrixGridFlick.contentY) < height;
+                                             groupRow = paintedGroupEnd) {
+                                            var endpoint = matrixOutputs[groupRow]
+                                            var groupStart = matrixViewport.groupStartIndex(
+                                                                 matrixOutputs, groupRow, false)
+                                            paintedGroupEnd = matrixViewport.groupEndIndex(
+                                                                  matrixOutputs, groupRow, false)
+                                            var groupTop = matrixViewport.alignedGridPosition(
+                                                               groupStart,
+                                                               matrixGridFlick.contentY)
+                                            var groupBottom = matrixViewport.alignedGridPosition(
+                                                                  paintedGroupEnd,
+                                                                  matrixGridFlick.contentY)
+                                            var groupHeight = groupBottom - groupTop
+                                            var visibleGroupTop = Math.max(0, groupTop)
+                                            var visibleGroupBottom = Math.min(height, groupBottom)
+                                            context.fillStyle = "#20262a"
+                                            context.fillRect(1, groupTop + 1,
+                                                             matrixViewport.groupLabelWidth - 4,
+                                                             groupHeight - 2)
+                                            context.fillStyle = window.endpointGroupColor(
+                                                                endpoint, groupRow,
+                                                                matrixOutputs.length)
+                                            context.fillRect(matrixViewport.groupLabelWidth - 3,
+                                                             groupTop, 2, groupHeight)
+                                            context.font = "bold 8px Segoe UI"
+                                            context.textAlign = "center"
+                                            context.textBaseline = "middle"
+                                            var family = window.endpointFamily(
+                                                             endpoint, groupRow,
+                                                             matrixOutputs.length)
+                                            var centerY = (visibleGroupTop + visibleGroupBottom) / 2
+                                            context.fillText(family === "wasapi" ? "WASAPI"
+                                                             : family === "asio" ? "ASIO" : "OTHER",
+                                                             matrixViewport.groupLabelWidth / 2,
+                                                             centerY - 6)
+                                            context.fillText(family === "wasapi" ? "RENDER"
+                                                             : family === "asio" ? "DAW IN" : "DEST",
+                                                             matrixViewport.groupLabelWidth / 2,
+                                                             centerY + 7)
+                                        }
+                                        // Endpoint labels are the top layer and stay row-aligned.
+                                        y = matrixViewport.alignedGridPosition(
+                                                firstRow, matrixGridFlick.contentY)
+                                        for (var labelRow = firstRow;
+                                             labelRow < matrixOutputs.length && y < height;
+                                             ++labelRow,
+                                             y = matrixViewport.alignedGridPosition(
+                                                 labelRow, matrixGridFlick.contentY)) {
+                                            var labelEndpoint = matrixOutputs[labelRow]
+                                            context.fillStyle = labelEndpoint.active
+                                                                ? colors.text : "#596166"
                                             context.textBaseline = "middle"
                                             context.font = "11px Segoe UI"
                                             context.textAlign = "left"
                                             var label = matrixViewport.elideCanvasText(
-                                                        context, endpoint.label,
+                                                        context, labelEndpoint.label,
                                                         width - matrixViewport.groupLabelWidth - 14)
                                             context.fillText(label,
                                                              matrixViewport.groupLabelWidth + 7,
@@ -1273,6 +1328,7 @@ ApplicationWindow {
                                     contentHeight: Math.max(height,
                                                             matrixOutputs.length * matrixViewport.cellSize)
                                     boundsBehavior: Flickable.StopAtBounds
+                                    pixelAligned: true
                                     clip: true
                                     focus: true
 
@@ -1375,14 +1431,20 @@ ApplicationWindow {
                                         var cellSize = matrixViewport.cellSize
                                         var firstColumn = Math.floor(matrixGridFlick.contentX / cellSize)
                                         var firstRow = Math.floor(matrixGridFlick.contentY / cellSize)
-                                        var startX = firstColumn * cellSize - matrixGridFlick.contentX
-                                        var startY = firstRow * cellSize - matrixGridFlick.contentY
+                                        var startX = matrixViewport.alignedGridPosition(
+                                                             firstColumn, matrixGridFlick.contentX)
+                                        var startY = matrixViewport.alignedGridPosition(
+                                                             firstRow, matrixGridFlick.contentY)
                                         for (var row = firstRow, y = startY;
                                              row < matrixOutputs.length && y < height;
-                                             ++row, y += cellSize) {
+                                             ++row,
+                                             y = matrixViewport.alignedGridPosition(
+                                                 row, matrixGridFlick.contentY)) {
                                             for (var column = firstColumn, x = startX;
                                                  column < matrixInputs.length && x < width;
-                                                 ++column, x += cellSize) {
+                                                 ++column,
+                                                 x = matrixViewport.alignedGridPosition(
+                                                     column, matrixGridFlick.contentX)) {
                                                     var input = matrixInputs[column]
                                                     var output = matrixOutputs[row]
                                                     var inputId = input.id
@@ -1394,16 +1456,6 @@ ApplicationWindow {
                                                 var hovered = matrixMouse.hoverInput === column &&
                                                               matrixMouse.hoverOutput === row
                                                 var routeOn = state === "on" || state === "pending-on"
-                                                var inputGroupStart = column > 0 &&
-                                                        window.endpointFamily(matrixInputs[column], column,
-                                                                              matrixInputs.length) !==
-                                                        window.endpointFamily(matrixInputs[column - 1], column - 1,
-                                                                              matrixInputs.length)
-                                                var outputGroupStart = row > 0 &&
-                                                        window.endpointFamily(matrixOutputs[row], row,
-                                                                              matrixOutputs.length) !==
-                                                        window.endpointFamily(matrixOutputs[row - 1], row - 1,
-                                                                              matrixOutputs.length)
                                                 context.fillStyle = !active ? "#15191b"
                                                                   : routeOn ? "#245a49"
                                                                   : state === "muted" ? "#4a3b20"
@@ -1447,21 +1499,49 @@ ApplicationWindow {
                                                     context.strokeRect(x + 4, y + 4,
                                                                        cellSize - 9, cellSize - 9)
                                                 }
-                                                if (inputGroupStart) {
-                                                    context.fillStyle = colors.cyan
-                                                    context.fillRect(x - 1, y + 1, 2,
-                                                                     cellSize - 3)
-                                                }
-                                                if (outputGroupStart) {
-                                                    context.fillStyle = colors.healthy
-                                                    context.fillRect(x + 1, y - 1,
-                                                                     cellSize - 3, 2)
-                                                }
                                                 if (!engine.connected) {
                                                     context.fillStyle = "#99101315"
                                                     context.fillRect(x + 1, y + 1,
                                                                      cellSize - 3, cellSize - 3)
                                                 }
+                                            }
+                                        }
+                                        // Group separators are continuous viewport rails, not
+                                        // per-cell fragments that expose seams between rows.
+                                        for (var separatorColumn = firstColumn + 1;
+                                             separatorColumn < matrixInputs.length;
+                                             ++separatorColumn) {
+                                            var separatorX = matrixViewport.alignedGridPosition(
+                                                                 separatorColumn,
+                                                                 matrixGridFlick.contentX)
+                                            if (separatorX >= width)
+                                                break
+                                            if (window.endpointFamily(
+                                                    matrixInputs[separatorColumn], separatorColumn,
+                                                    matrixInputs.length) !==
+                                                window.endpointFamily(
+                                                    matrixInputs[separatorColumn - 1], separatorColumn - 1,
+                                                    matrixInputs.length)) {
+                                                context.fillStyle = colors.cyan
+                                                context.fillRect(separatorX - 1, 0, 2, height)
+                                            }
+                                        }
+                                        for (var separatorRow = firstRow + 1;
+                                             separatorRow < matrixOutputs.length;
+                                             ++separatorRow) {
+                                            var separatorY = matrixViewport.alignedGridPosition(
+                                                                 separatorRow,
+                                                                 matrixGridFlick.contentY)
+                                            if (separatorY >= height)
+                                                break
+                                            if (window.endpointFamily(
+                                                    matrixOutputs[separatorRow], separatorRow,
+                                                    matrixOutputs.length) !==
+                                                window.endpointFamily(
+                                                    matrixOutputs[separatorRow - 1], separatorRow - 1,
+                                                    matrixOutputs.length)) {
+                                                context.fillStyle = colors.healthy
+                                                context.fillRect(0, separatorY - 1, width, 2)
                                             }
                                         }
                                     }

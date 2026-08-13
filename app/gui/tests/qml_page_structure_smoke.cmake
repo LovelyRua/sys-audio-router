@@ -44,10 +44,28 @@ foreach(required_marker
     "WASAPI CAPTURE"
     "ASIO / DAW OUT"
     "WASAPI RENDER"
-    "ASIO / DAW IN")
+    "ASIO / DAW IN"
+    "function alignedGridPosition(index, scrollPosition)"
+    "function groupStartIndex(endpoints, index, source)"
+    "function groupEndIndex(endpoints, index, source)"
+    "pixelAligned: true"
+    "var visibleGroupLeft = Math.max(0, groupLeft)"
+    "var visibleGroupTop = Math.max(0, groupTop)"
+    "context.fillRect(separatorX - 1, 0, 2, height)"
+    "context.fillRect(0, separatorY - 1, width, 2)")
   string(FIND "${qml}" "${required_marker}" marker_position)
   if(marker_position LESS 0)
     message(FATAL_ERROR "Routing matrix QML marker is missing: ${required_marker}")
+  endif()
+endforeach()
+
+foreach(legacy_fragmented_boundary
+    "context.fillRect(x - 1, y + 1, 2,"
+    "context.fillRect(x + 1, y - 1,")
+  string(FIND "${qml}" "${legacy_fragmented_boundary}" marker_position)
+  if(NOT marker_position LESS 0)
+    message(FATAL_ERROR
+      "Routing matrix group boundaries must not be painted per cell: ${legacy_fragmented_boundary}")
   endif()
 endforeach()
 
