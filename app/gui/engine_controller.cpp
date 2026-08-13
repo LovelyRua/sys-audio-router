@@ -845,7 +845,9 @@ void EngineController::applyReply(const EngineReply& reply,
       reply.request_type == control::ControlCommandType::SetMute ||
       reply.request_type == control::ControlCommandType::LoadPreset ||
       reply.request_type == control::ControlCommandType::StartAudioRuntime ||
-      reply.request_type == control::ControlCommandType::StopAudioRuntime) {
+      reply.request_type == control::ControlCommandType::StopAudioRuntime ||
+      reply.request_type ==
+          control::ControlCommandType::ConfigureAudioRuntime) {
     QTimer::singleShot(0, this, &EngineController::refresh);
   }
 }

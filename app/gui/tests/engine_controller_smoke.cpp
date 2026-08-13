@@ -367,11 +367,15 @@ int main(int argc, char **argv) {
 
   ControlCommand matrix_request;
   const auto matrix_transport = [&](ControlCommand command) {
-    matrix_request = command;
     auto reply = accepted(command);
-    reply.response.has_audio_runtime_state = true;
-    reply.response.audio_runtime.configured = true;
-    reply.response.audio_runtime.configuration = command.audio_runtime;
+    if (command.type == ControlCommandType::ConfigureAudioRuntime) {
+      matrix_request = command;
+      reply.response.has_audio_runtime_state = true;
+      reply.response.audio_runtime.configured = true;
+      reply.response.audio_runtime.configuration = command.audio_runtime;
+    } else {
+      assert(command.type == ControlCommandType::QuerySessionState);
+    }
     return reply;
   };
   sar::gui::EngineController matrix_controller(matrix_transport, false);
@@ -389,7 +393,10 @@ int main(int argc, char **argv) {
                   {QStringLiteral("firstChannel"), 0},
                   {QStringLiteral("channelCount"), 2}},
   });
-  assert(wait_until([&] { return !matrix_controller.busy(); }));
+  assert(wait_until([&] {
+    return !matrix_controller.busy() &&
+           matrix_request.type == ControlCommandType::ConfigureAudioRuntime;
+  }));
   assert(matrix_request.audio_runtime.mode == AudioRuntimeMode::WasapiMatrix);
   assert(matrix_request.audio_runtime.endpoints.size() == 2);
   assert(matrix_request.audio_runtime.endpoints[1].clock_master);
