@@ -51,6 +51,21 @@ foreach(required_marker
   endif()
 endforeach()
 
+foreach(matrix_runtime_marker
+    "property var runtimeMatrixDraft: []"
+    "function matrixEndpointsEqual(left, right)"
+    "function addMatrixEndpoint(direction)"
+    "function removeMatrixEndpoint(index)"
+    "function matrixDraftValid()"
+    "engine.configureAudioMatrix(window.runtimeMatrixDraft)"
+    "model: [\"WASAPI matrix\", \"WASAPI render\", \"WASAPI duplex\"]")
+  string(FIND "${qml}" "${matrix_runtime_marker}" marker_position)
+  if(marker_position LESS 0)
+    message(FATAL_ERROR
+      "Matrix runtime editor QML marker is missing: ${matrix_runtime_marker}")
+  endif()
+endforeach()
+
 foreach(realtime_ui_marker
     "property real meterLevel"
     "interval: 16"

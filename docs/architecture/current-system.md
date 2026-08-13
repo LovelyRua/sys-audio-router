@@ -20,6 +20,12 @@ master domain, and an allocation-free input assembler places every source in
 its stable graph channel range. The former one-capture duplex special case is
 no longer the matrix topology limit. The Virtual ASIO input remains a strict
 master-domain source and is assembled alongside the soft-clock physical inputs.
+Runtime endpoint configuration now compiles physical endpoint definitions into
+stable `endpoint-id.chN` matrix ports. Configuration is transactional across the
+candidate preset, graph, WASAPI workers, and Virtual ASIO graph refresh: a
+failure preserves the previous topology and running runtime. The GUI exposes
+this endpoint list with direction, native device, channel count, and one render
+clock-master selection instead of limiting configuration to one duplex pair.
 
 The first measured real-device loops now execute this path:
 

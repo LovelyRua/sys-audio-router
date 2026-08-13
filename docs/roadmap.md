@@ -425,6 +425,12 @@ non-overlapping graph input ranges. The next gate is exposing this topology to
 the control protocol and GUI, followed by two-capture hardware acceptance and
 per-endpoint delay alignment.
 
+The control application can now submit this binding list directly. Endpoint
+edits atomically compile matrix ports and build the replacement runtime before
+publication; accepted state is then refreshed from the engine rather than kept
+as GUI-local topology. Real two-capture qualification and per-stream telemetry
+remain the next acceptance work.
+
 Deliverables:
 
 - Matrix routing view.

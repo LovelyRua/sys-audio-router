@@ -391,8 +391,8 @@ ApplicationWindow {
                        : engine.runtimeMode === "duplex" ? "duplex" : "render"
         var matchesDraft = engineMode === runtimeDraftMode
                 && (engineMode === "matrix"
-                    ? JSON.stringify(engine.runtimeEndpoints) ===
-                      JSON.stringify(runtimeMatrixDraft)
+                    ? matrixEndpointsEqual(engine.runtimeEndpoints,
+                                           runtimeMatrixDraft)
                     : engine.runtimeRenderDeviceId === runtimeDraftRenderDeviceId
                       && (engineMode !== "duplex"
                           || engine.runtimeCaptureDeviceId ===
@@ -404,6 +404,21 @@ ApplicationWindow {
         runtimeDraftRenderDeviceId = engine.runtimeRenderDeviceId
         runtimeDraftCaptureDeviceId = engine.runtimeCaptureDeviceId
         runtimeMatrixDraft = engine.runtimeEndpoints.slice()
+    }
+
+    function matrixEndpointsEqual(left, right) {
+        if (left.length !== right.length)
+            return false
+        for (var index = 0; index < left.length; ++index) {
+            if (left[index].endpointId !== right[index].endpointId ||
+                    left[index].deviceId !== right[index].deviceId ||
+                    left[index].direction !== right[index].direction ||
+                    left[index].clockMaster !== right[index].clockMaster ||
+                    left[index].firstChannel !== right[index].firstChannel ||
+                    left[index].channelCount !== right[index].channelCount)
+                return false
+        }
+        return true
     }
 
     function setMatrixEndpoint(index, key, value) {
