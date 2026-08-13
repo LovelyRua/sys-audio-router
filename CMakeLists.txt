@@ -48,6 +48,7 @@ add_library(sar_core
   core/platform/audio_device_registry.cpp
   core/platform/realtime_audio_fanout_sink.cpp
   core/platform/realtime_audio_channel_slice_sink.cpp
+  core/platform/realtime_audio_endpoint_queue.cpp
   core/platform/mock_asio_transport.cpp
   core/platform/mock_audio_device_provider.cpp
   core/platform/sample_converter.cpp
@@ -209,6 +210,12 @@ add_executable(sar_realtime_audio_channel_slice_sink_smoke
 )
 
 target_link_libraries(sar_realtime_audio_channel_slice_sink_smoke PRIVATE sar_core)
+
+add_executable(sar_realtime_audio_endpoint_queue_smoke
+  tests/realtime/realtime_audio_endpoint_queue_smoke.cpp
+)
+
+target_link_libraries(sar_realtime_audio_endpoint_queue_smoke PRIVATE sar_core)
 
 add_executable(sar_control_response_smoke
   tests/realtime/control_response_smoke.cpp
@@ -760,6 +767,8 @@ add_test(NAME realtime_audio_fanout_sink_smoke
   COMMAND sar_realtime_audio_fanout_sink_smoke)
 add_test(NAME realtime_audio_channel_slice_sink_smoke
   COMMAND sar_realtime_audio_channel_slice_sink_smoke)
+add_test(NAME realtime_audio_endpoint_queue_smoke
+  COMMAND sar_realtime_audio_endpoint_queue_smoke)
 add_test(NAME control_response_smoke COMMAND sar_control_response_smoke)
 add_test(NAME control_session_smoke COMMAND sar_control_session_smoke)
 add_test(NAME control_wire_protocol_smoke COMMAND sar_control_wire_protocol_smoke)
