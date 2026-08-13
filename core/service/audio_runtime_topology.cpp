@@ -4,6 +4,26 @@
 
 namespace sar::service {
 
+namespace {
+
+void append_ports(AudioRuntimeTopology& topology) {
+  for (const auto& endpoint : topology.endpoints) {
+    for (std::uint32_t channel = 0; channel < endpoint.channel_count;
+         ++channel) {
+      const auto native_channel = endpoint.first_channel + channel;
+      topology.ports.push_back({
+          endpoint.endpoint_id + ".ch" + std::to_string(channel + 1),
+          endpoint.endpoint_id,
+          endpoint.direction,
+          native_channel,
+          endpoint.clock_master,
+      });
+    }
+  }
+}
+
+}  // namespace
+
 AudioRuntimeTopologyResult AudioRuntimeTopologyResult::success(
     AudioRuntimeTopology topology) {
   return {std::move(topology), {}};
@@ -53,6 +73,7 @@ AudioRuntimeTopologyResult build_audio_runtime_topology(
         break;
       }
     }
+    append_ports(topology);
     return AudioRuntimeTopologyResult::success(std::move(topology));
   }
 
@@ -75,6 +96,7 @@ AudioRuntimeTopologyResult build_audio_runtime_topology(
       0,
       0,
   });
+  append_ports(topology);
   return AudioRuntimeTopologyResult::success(std::move(topology));
 }
 

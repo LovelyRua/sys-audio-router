@@ -32,6 +32,11 @@ int main() {
   assert(result.topology().endpoints.size() == 3);
   assert(result.topology().clock_master_index == 2);
   assert(result.topology().endpoints[2].clock_master);
+  assert(result.topology().ports.size() == 6);
+  assert(result.topology().ports[0].port_id == "capture-a.ch1");
+  assert(result.topology().ports[3].port_id == "render-a.ch2");
+  assert(result.topology().ports[4].native_channel == 0);
+  assert(result.topology().ports[4].clock_master);
 
   matrix.endpoints[2].clock_master = false;
   result = sar::service::build_audio_runtime_topology(matrix);

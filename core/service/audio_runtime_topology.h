@@ -3,13 +3,23 @@
 #include "core/control/control_command.h"
 
 #include <cstddef>
-#include <optional>
+#include <string>
 #include <vector>
 
 namespace sar::service {
 
+struct AudioRuntimePortDescriptor {
+  std::string port_id;
+  std::string endpoint_id;
+  control::AudioRuntimeEndpointDirection direction =
+      control::AudioRuntimeEndpointDirection::Capture;
+  std::uint32_t native_channel = 0;
+  bool clock_master = false;
+};
+
 struct AudioRuntimeTopology {
   std::vector<control::AudioRuntimeEndpointConfiguration> endpoints;
+  std::vector<AudioRuntimePortDescriptor> ports;
   std::size_t clock_master_index = 0;
 };
 
