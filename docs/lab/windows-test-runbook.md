@@ -238,6 +238,22 @@ the reported output directory.
 Run this acceptance from an interactive desktop session. As with device
 inspection, WinRM may not expose the logged-in user's active audio endpoints.
 
+## Multi-Endpoint Matrix Acceptance
+
+After the single-endpoint engine gate passes, run the two-capture/one-render
+matrix gate. It records endpoint inventory, the selected native channel ranges,
+diagnostics before and after an observation window, a persisted session, and
+post-restart diagnostics:
+
+```bat
+scripts\windows-winrm-multi-endpoint-acceptance.cmd 192.168.123.123 codex <password> C:\path\to\build\Release engineer-a
+```
+
+Use explicit endpoint IDs for a stable hardware lane, or omit them for automatic
+selection. See [Windows multi-endpoint machine acceptance](windows-multi-endpoint-acceptance.md)
+for the evidence contract, concurrency model, local interactive command, and
+the explicit WinRM error 12152 diagnosis.
+
 ## Better Future Remote Execution
 
 For non-interactive testing, enable one of:
