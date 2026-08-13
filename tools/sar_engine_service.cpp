@@ -67,10 +67,12 @@ sar::control::PresetDocument initial_preset() {
   return preset;
 }
 
-sar::platform::WasapiGraphChannelLayout unified_channel_layout() noexcept {
+sar::platform::WasapiGraphChannelLayout unified_channel_layout(
+    std::size_t graph_input_channels,
+    std::size_t graph_output_channels) noexcept {
   return {
-      .graph_input_channels = 4,
-      .graph_output_channels = 4,
+      .graph_input_channels = graph_input_channels,
+      .graph_output_channels = graph_output_channels,
       .capture_input_offset = 0,
       .external_input_offset = 2,
       .external_input_channels = 2,
@@ -462,8 +464,9 @@ sar::service::EngineAudioRuntimeBuildResult convert_runtime_result(
 
 sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator(
     sar::platform::RealtimeAudioSource* external_render_input,
-    sar::platform::RealtimeAudioSink* external_capture_output) {
-  return [external_render_input, external_capture_output](
+    sar::platform::RealtimeAudioSink* external_capture_output,
+    sar::platform::WasapiGraphChannelLayout channel_layout) {
+  return [external_render_input, external_capture_output, channel_layout](
              const sar::control::AudioRuntimeConfiguration& configuration,
              std::shared_ptr<sar::graph::Graph> graph) {
     if (configuration.mode ==
@@ -472,12 +475,12 @@ sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator(
         return convert_runtime_result(
             sar::service::WindowsWasapiEngineRuntime::open_render(
                 configuration.render_device_id, std::move(graph),
-                external_render_input, unified_channel_layout()));
+                external_render_input, channel_layout));
       }
       return convert_runtime_result(
           sar::service::WindowsWasapiEngineRuntime::open_default_render(
               std::move(graph), external_render_input,
-              unified_channel_layout()));
+              channel_layout));
     }
     if (configuration.mode ==
         sar::control::AudioRuntimeMode::WasapiDuplex) {
@@ -489,12 +492,12 @@ sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator(
                 std::move(graph),
                 external_render_input,
                 external_capture_output,
-                unified_channel_layout()));
+                channel_layout));
       }
       return convert_runtime_result(
           sar::service::WindowsWasapiEngineRuntime::open_default_duplex(
               std::move(graph), external_render_input,
-              external_capture_output, unified_channel_layout()));
+              external_capture_output, channel_layout));
     }
     return sar::service::EngineAudioRuntimeBuildResult::failure({
         {"unsupported_audio_runtime_mode",
@@ -620,10 +623,11 @@ int main(int argc, char** argv) {
                  "detail=2x2_to_unified_4x4\n";
   }
 
-  if (desired_session.preset.matrix.inputs.size() != 4 ||
-      desired_session.preset.matrix.outputs.size() != 4) {
+  if (desired_session.preset.matrix.inputs.size() < 4 ||
+      desired_session.preset.matrix.outputs.size() < 4) {
     std::cerr << "unified_matrix_topology_unsupported: The Alpha engine "
-                 "requires a 4-source, 4-destination global matrix.\n";
+                 "requires at least the four built-in source and destination "
+                 "channels.\n";
     return 1;
   }
 
@@ -644,7 +648,11 @@ int main(int argc, char** argv) {
   service->add_audio_device_provider(
       std::make_unique<sar::platform::WindowsWasapiDeviceProvider>());
   service->set_audio_runtime_configurator(
-      make_wasapi_runtime_configurator(&asio_render_bus, &asio_capture_bus));
+      make_wasapi_runtime_configurator(
+          &asio_render_bus,
+          &asio_capture_bus,
+          unified_channel_layout(desired_session.preset.matrix.inputs.size(),
+                                 desired_session.preset.matrix.outputs.size())));
   if (has_session_path &&
       desired_session.audio_runtime.mode !=
           sar::control::AudioRuntimeMode::None) {

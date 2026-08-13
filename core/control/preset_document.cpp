@@ -321,13 +321,6 @@ PresetGraphBuildResult build_preset_graph(const PresetDocument& preset,
   std::vector<PresetError> errors;
   const auto* matrix_node = find_route_matrix_node(preset, errors);
 
-  if (preset.matrix.inputs.size() != preset.matrix.outputs.size()) {
-    errors.push_back({
-        "asymmetric_matrix_channel_count",
-        "Preset graph build requires matching matrix input and output counts.",
-    });
-  }
-
   if (!errors.empty()) {
     return PresetGraphBuildResult::failure(std::move(errors));
   }
@@ -339,7 +332,8 @@ PresetGraphBuildResult build_preset_graph(const PresetDocument& preset,
 
   auto matrix = matrix_result.take_matrix();
   graph::GraphBuilder builder(graph_version,
-                              matrix->output_channels(),
+                              std::max(matrix->input_channels(),
+                                       matrix->output_channels()),
                               preset.frames_per_block);
   builder.sample_rate(preset.sample_rate)
       .add_node(matrix_node->id,

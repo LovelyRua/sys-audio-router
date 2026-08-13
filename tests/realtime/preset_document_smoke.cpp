@@ -297,13 +297,27 @@ int main() {
   {
     auto preset = make_valid_preset();
     preset.matrix.outputs.push_back({"broadcast", "Broadcast"});
-    const auto result = sar::control::build_preset_graph(preset);
-    if (const auto failure = expect(!result.ok(), "Expected asymmetric graph failure")) {
+    preset.matrix.routes.push_back({"mic_left", "broadcast", 0.25F});
+    auto result = sar::control::build_preset_graph(preset);
+    if (const auto failure = expect(result.ok(), "Expected rectangular graph success")) {
       return failure;
     }
-    if (const auto failure = expect(has_error_code(result, "asymmetric_matrix_channel_count"),
-                                    "Expected asymmetric_matrix_channel_count error")) {
+    auto graph = result.take_graph();
+    if (const auto failure = expect(graph->channels() == 3,
+                                    "Expected rectangular graph padding channel")) {
       return failure;
+    }
+    sar::realtime::AudioBuffer input(3, preset.frames_per_block);
+    sar::realtime::AudioBuffer output(3, preset.frames_per_block);
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    input.channel(0)[0] = 1.0F;
+    input.channel(1)[0] = 0.5F;
+    graph->process(input, output, diagnostics);
+    if (!sar::tests::nearly_equal(output.channel(0)[0], 1.0F) ||
+        !sar::tests::nearly_equal(output.channel(1)[0], 0.5F) ||
+        !sar::tests::nearly_equal(output.channel(2)[0], 0.25F)) {
+      std::cerr << "Unexpected rectangular preset graph output\n";
+      return 1;
     }
   }
 
