@@ -84,6 +84,10 @@ int main() {
         {.frames = 10,
          .samples = {{1.0F, 2.0F, 3.0F, 4.0F, 5.0F,
                       6.0F, 7.0F, 8.0F, 9.0F, 10.0F}}});
+    capture.enqueue_capture(
+        {.frames = 10,
+         .samples = {{11.0F, 12.0F, 13.0F, 14.0F, 15.0F,
+                      16.0F, 17.0F, 18.0F, 19.0F, 20.0F}}});
 
     sar::platform::WindowsWasapiGraphRunner runner(
         &capture, nullptr, 1, 1, 4, 10, 0, 14);
@@ -96,6 +100,14 @@ int main() {
     assert(result.stats().graph_processed);
     assert(diagnostics.processed_blocks == 2);
     assert(diagnostics.capture_fifo_fill_frames == 2);
+    assert(diagnostics.capture_fifo_overflow_cycles == 0);
+    assert(diagnostics.capture_fifo_overflow_frames == 0);
+
+    const auto second = runner.process_once(graph, diagnostics, 1);
+    assert(second.ok() && second.stats().captured_frames == 10);
+    assert(second.stats().graph_processed);
+    assert(diagnostics.processed_blocks == 5);
+    assert(diagnostics.capture_fifo_fill_frames == 0);
     assert(diagnostics.capture_fifo_overflow_cycles == 0);
     assert(diagnostics.capture_fifo_overflow_frames == 0);
   }

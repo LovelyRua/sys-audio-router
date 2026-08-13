@@ -953,14 +953,18 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
                       : std::size_t{0});
   const auto graph_blocks_to_target =
       (desired_render_fill + graph_block_frames_ - 1) / graph_block_frames_;
-  const auto capture_blocks_available = capture_path_
-      ? (capture_path_->fifo.available_frames() + graph_block_frames_ - 1) /
-            graph_block_frames_
-      : std::size_t{1};
-  const auto graph_limit = fill_render_packet
-      ? std::min(kMaximumGraphBlocksPerCycle, graph_blocks_to_target)
-      : std::min(kMaximumGraphBlocksPerCycle,
-                 std::max(std::size_t{1}, capture_blocks_available));
+  auto graph_limit = std::size_t{1};
+  if (fill_render_packet) {
+    graph_limit =
+        std::min(kMaximumGraphBlocksPerCycle, graph_blocks_to_target);
+  } else if (capture_path_ && !render_path_) {
+    const auto capture_blocks_ready =
+        capture_path_->fifo.available_frames() / graph_block_frames_;
+    graph_limit = std::min(kMaximumGraphBlocksPerCycle, capture_blocks_ready);
+    if (graph_limit == 0 && external_input_ != nullptr) {
+      graph_limit = 1;
+    }
+  }
   for (std::size_t block_index = 0; block_index < graph_limit; ++block_index) {
     bool external_only_block = false;
     const bool render_has_space =
