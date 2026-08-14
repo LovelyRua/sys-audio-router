@@ -21,7 +21,7 @@ const WindowsVirtualAsioInstanceDescriptor& legacy_instance() {
       kWindowsVirtualAsioClsidString,
       kWindowsVirtualAsioDisplayName,
       L"System Audio Route",
-      L"sys-audio-route-virtual-asio",
+      L"virtual-asio",
   };
   return instance;
 }

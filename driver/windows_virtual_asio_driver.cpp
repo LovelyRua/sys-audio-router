@@ -6,6 +6,7 @@
 #include "third_party/asio_sdk_2.3.4/common/iasiodrv.h"
 
 #include <atomic>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <condition_variable>
@@ -32,6 +33,88 @@ constexpr long kMinimumBufferFrames = 64;
 constexpr long kMaximumBufferFrames = 2048;
 constexpr long kPreferredBufferFrames = 256;
 constexpr double kDefaultSampleRate = 48000.0;
+
+struct VirtualAsioInstanceDescriptor {
+  CLSID clsid{};
+  std::wstring display_name;
+  std::wstring broker_pipe_name;
+};
+
+std::wstring clsid_string(REFCLSID clsid) {
+  std::array<wchar_t, 40> value{};
+  const auto length = StringFromGUID2(clsid, value.data(),
+                                      static_cast<int>(value.size()));
+  return length > 1 ? std::wstring(value.data(), length - 1) : std::wstring{};
+}
+
+bool read_registry_string(HKEY key,
+                          const wchar_t* name,
+                          std::wstring& value) {
+  DWORD type = 0;
+  DWORD bytes = 0;
+  auto result = RegQueryValueExW(key, name, nullptr, &type, nullptr, &bytes);
+  if (result != ERROR_SUCCESS || (type != REG_SZ && type != REG_EXPAND_SZ) ||
+      bytes < sizeof(wchar_t)) {
+    return false;
+  }
+  std::vector<wchar_t> buffer(bytes / sizeof(wchar_t) + 1, L'\0');
+  result = RegQueryValueExW(key, name, nullptr, &type,
+                            reinterpret_cast<BYTE*>(buffer.data()), &bytes);
+  if (result != ERROR_SUCCESS) {
+    return false;
+  }
+  value.assign(buffer.data());
+  return !value.empty();
+}
+
+bool resolve_instance(REFCLSID clsid, VirtualAsioInstanceDescriptor& instance) {
+  const auto text = clsid_string(clsid);
+  if (text.empty()) {
+    return false;
+  }
+  const auto key_path = std::wstring(L"CLSID\\") + text;
+  HKEY key = nullptr;
+  if (RegOpenKeyExW(HKEY_CLASSES_ROOT, key_path.c_str(), 0, KEY_QUERY_VALUE,
+                    &key) == ERROR_SUCCESS) {
+    std::wstring display_name;
+    std::wstring broker_token;
+    const auto valid = read_registry_string(key, nullptr, display_name) &&
+                       read_registry_string(key, L"BrokerToken", broker_token);
+    RegCloseKey(key);
+    if (valid && broker_token.find_first_of(L"\\/") == std::wstring::npos) {
+      instance.clsid = clsid;
+      instance.display_name = std::move(display_name);
+      instance.broker_pipe_name =
+          std::wstring(L"sys-audio-route-control-") + broker_token;
+      return true;
+    }
+  }
+  if (!IsEqualCLSID(clsid, sar::driver::kWindowsVirtualAsioClsid)) {
+    return false;
+  }
+  instance.clsid = clsid;
+  instance.display_name = sar::driver::kWindowsVirtualAsioDisplayName;
+  // Keep the environment override available to unregistered development and
+  // smoke-test loads of the legacy CLSID.
+  instance.broker_pipe_name.clear();
+  return true;
+}
+
+std::string narrow_display_name(const std::wstring& value) {
+  if (value.empty()) {
+    return "System Audio Route";
+  }
+  const auto required = WideCharToMultiByte(CP_UTF8, 0, value.c_str(), -1,
+                                             nullptr, 0, nullptr, nullptr);
+  if (required <= 1) {
+    return "System Audio Route";
+  }
+  std::string result(static_cast<std::size_t>(required), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, value.c_str(), -1, result.data(), required,
+                      nullptr, nullptr);
+  result.pop_back();
+  return result;
+}
 
 bool supported_sample_rate(ASIOSampleRate sample_rate) noexcept {
   constexpr double rates[] = {44100.0, 48000.0, 88200.0, 96000.0,
@@ -73,7 +156,11 @@ void copy_asio_string(char* destination,
 
 class VirtualAsioDriver final : public IASIO {
  public:
-  VirtualAsioDriver() noexcept { module_objects.fetch_add(1); }
+  explicit VirtualAsioDriver(VirtualAsioInstanceDescriptor instance)
+      : instance_(std::move(instance)),
+        driver_name_(narrow_display_name(instance_.display_name)) {
+    module_objects.fetch_add(1);
+  }
 
   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,
                                            void** object) noexcept override {
@@ -84,7 +171,7 @@ class VirtualAsioDriver final : public IASIO {
     // ASIO hosts conventionally request the driver's CLSID as its interface
     // identifier because IASIO does not define a separate COM IID.
     if (!IsEqualIID(iid, IID_IUnknown) &&
-        !IsEqualIID(iid, sar::driver::kWindowsVirtualAsioClsid)) {
+        !IsEqualIID(iid, instance_.clsid)) {
       return E_NOINTERFACE;
     }
     *object = static_cast<IASIO*>(this);
@@ -108,7 +195,8 @@ class VirtualAsioDriver final : public IASIO {
     std::scoped_lock lock(control_mutex_);
     system_handle_ = system_handle;
     initialized_ = true;
-    const auto format = WindowsVirtualAsioRuntime::query_engine_format();
+    const auto format = WindowsVirtualAsioRuntime::query_engine_format(
+        instance_.broker_pipe_name);
     if (format.ok() && format.format.input_channels != 0 &&
         format.format.output_channels != 0 &&
         format.format.input_channels <=
@@ -136,7 +224,7 @@ class VirtualAsioDriver final : public IASIO {
   }
 
   void getDriverName(char* name) override {
-    copy_asio_string(name, 32, "System Audio Route");
+    copy_asio_string(name, 32, driver_name_.c_str());
   }
 
   long getDriverVersion() override {
@@ -392,6 +480,7 @@ class VirtualAsioDriver final : public IASIO {
         callbacks->bufferSwitchTimeInfo != nullptr &&
         callbacks->asioMessage(kAsioSupportsTimeInfo, 0, nullptr, nullptr) == 1;
     WindowsVirtualAsioRuntimeConfig runtime_config{
+        .broker_pipe_name = instance_.broker_pipe_name,
         .sample_rate = static_cast<std::uint32_t>(sample_rate_),
         .frames_per_block = static_cast<std::uint32_t>(buffer_frames),
         .input_channels = static_cast<std::uint32_t>(input_channels_),
@@ -504,6 +593,8 @@ class VirtualAsioDriver final : public IASIO {
   }
 
   std::atomic_ulong references_ = 1;
+  VirtualAsioInstanceDescriptor instance_;
+  std::string driver_name_;
   std::mutex control_mutex_;
   std::condition_variable runtime_operation_cv_;
   void* system_handle_ = nullptr;
@@ -526,7 +617,10 @@ class VirtualAsioDriver final : public IASIO {
 
 class VirtualAsioClassFactory final : public IClassFactory {
  public:
-  VirtualAsioClassFactory() noexcept { module_objects.fetch_add(1); }
+  explicit VirtualAsioClassFactory(VirtualAsioInstanceDescriptor instance)
+      : instance_(std::move(instance)) {
+    module_objects.fetch_add(1);
+  }
 
   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid,
                                            void** object) noexcept override {
@@ -565,7 +659,12 @@ class VirtualAsioClassFactory final : public IClassFactory {
     if (outer != nullptr) {
       return CLASS_E_NOAGGREGATION;
     }
-    auto* driver = new (std::nothrow) VirtualAsioDriver();
+    VirtualAsioDriver* driver = nullptr;
+    try {
+      driver = new (std::nothrow) VirtualAsioDriver(instance_);
+    } catch (const std::bad_alloc&) {
+      return E_OUTOFMEMORY;
+    }
     if (driver == nullptr) {
       return E_OUTOFMEMORY;
     }
@@ -590,6 +689,7 @@ class VirtualAsioClassFactory final : public IClassFactory {
   ~VirtualAsioClassFactory() { module_objects.fetch_sub(1); }
 
   std::atomic_ulong references_ = 1;
+  VirtualAsioInstanceDescriptor instance_;
 };
 
 }  // namespace
@@ -615,10 +715,17 @@ STDAPI DllGetClassObject(REFCLSID clsid,
     return E_POINTER;
   }
   *object = nullptr;
-  if (!IsEqualCLSID(clsid, sar::driver::kWindowsVirtualAsioClsid)) {
-    return CLASS_E_CLASSNOTAVAILABLE;
+  VirtualAsioClassFactory* factory = nullptr;
+  try {
+    VirtualAsioInstanceDescriptor instance;
+    if (!resolve_instance(clsid, instance)) {
+      return CLASS_E_CLASSNOTAVAILABLE;
+    }
+    factory =
+        new (std::nothrow) VirtualAsioClassFactory(std::move(instance));
+  } catch (const std::bad_alloc&) {
+    return E_OUTOFMEMORY;
   }
-  auto* factory = new (std::nothrow) VirtualAsioClassFactory();
   if (factory == nullptr) {
     return E_OUTOFMEMORY;
   }

@@ -106,7 +106,7 @@ void exercise_scope(
   assert(read_string(root, kClsid, nullptr) ==
          sar::driver::kWindowsVirtualAsioDisplayName);
   assert(read_string(root, kClsid, L"BrokerToken") ==
-         L"sys-audio-route-virtual-asio");
+         L"virtual-asio");
   assert(read_string(root, kInproc, nullptr) == absolute_path(dll_path));
   assert(read_string(root, kInproc, L"ThreadingModel") == L"Both");
   assert(read_string(root, kAsio, L"CLSID") ==
