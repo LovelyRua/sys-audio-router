@@ -3,11 +3,45 @@
 #include "core/control/control_wire_protocol.h"
 #include "core/platform/virtual_asio_client_registry.h"
 
+#include <algorithm>
+#include <cctype>
 #include <iterator>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 
 namespace sar::control {
+
+namespace {
+
+bool valid_token(std::string_view value) noexcept {
+  return !value.empty() && std::ranges::all_of(value, [](unsigned char c) {
+           return std::isalnum(c) != 0 || c == '-' || c == '_' || c == '.';
+         });
+}
+
+bool valid_clsid(std::string_view value) noexcept {
+  if (value.size() != 38 || value.front() != '{' || value.back() != '}') {
+    return false;
+  }
+  for (std::size_t index = 1; index + 1 < value.size(); ++index) {
+    if (index == 9 || index == 14 || index == 19 || index == 24) {
+      if (value[index] != '-') return false;
+    } else if (std::isxdigit(static_cast<unsigned char>(value[index])) == 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::string folded_identity(std::string value) {
+  std::ranges::transform(value, value.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  return value;
+}
+
+}  // namespace
 
 VirtualAsioDeviceDefinition default_virtual_asio_device_definition() {
   return {
@@ -108,6 +142,15 @@ SessionDocumentValidationResult validate_session_document(
           "Virtual ASIO device identity fields must be non-empty and bounded.",
       });
     }
+    if (!valid_token(device.device_id) || !valid_clsid(device.clsid) ||
+        device.registry_name.find_first_of("\\/") != std::string::npos ||
+        !valid_token(device.broker_token)) {
+      errors.push_back({
+          "invalid_virtual_asio_device_system_identity",
+          "Virtual ASIO device IDs, CLSIDs, registry names, and broker tokens "
+          "must be valid Windows system identities.",
+      });
+    }
     if (device.input_channels == 0 || device.output_channels == 0 ||
         device.input_channels > platform::kVirtualAsioMaxChannels ||
         device.output_channels > platform::kVirtualAsioMaxChannels) {
@@ -116,10 +159,10 @@ SessionDocumentValidationResult validate_session_document(
           "Virtual ASIO channel counts must be between one and sixty-four.",
       });
     }
-    if (!device_ids.insert(device.device_id).second ||
-        !clsids.insert(device.clsid).second ||
-        !registry_names.insert(device.registry_name).second ||
-        !broker_tokens.insert(device.broker_token).second) {
+    if (!device_ids.insert(folded_identity(device.device_id)).second ||
+        !clsids.insert(folded_identity(device.clsid)).second ||
+        !registry_names.insert(folded_identity(device.registry_name)).second ||
+        !broker_tokens.insert(folded_identity(device.broker_token)).second) {
       errors.push_back({
           "duplicate_virtual_asio_device_identity",
           "Virtual ASIO device IDs, CLSIDs, registry names, and broker tokens "

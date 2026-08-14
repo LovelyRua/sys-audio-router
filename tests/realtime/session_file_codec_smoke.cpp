@@ -89,6 +89,19 @@ int main() {
   assert(decoded.session().virtual_asio_devices[0].broker_token ==
          "virtual-asio");
 
+  auto invalid_identity = session;
+  invalid_identity.virtual_asio_devices[0].broker_token = "nested\\pipe";
+  assert(!sar::control::validate_session_document(invalid_identity).ok());
+  auto duplicate_identity = session;
+  auto duplicate_device =
+      sar::control::default_virtual_asio_device_definition();
+  duplicate_device.device_id = "DEFAULT";
+  duplicate_device.clsid = "{83D4C47A-9834-41F4-A5EE-62BFB8F28D8A}";
+  duplicate_device.registry_name = "System Audio Route Aux";
+  duplicate_device.broker_token = "virtual-asio-aux";
+  duplicate_identity.virtual_asio_devices.push_back(duplicate_device);
+  assert(!sar::control::validate_session_document(duplicate_identity).ok());
+
   auto legacy_v2 = encoded.bytes();
   const auto endpoint_count_offset = runtime_endpoint_count_offset(legacy_v2);
   const auto auto_start_offset = endpoint_count_offset + 4;
