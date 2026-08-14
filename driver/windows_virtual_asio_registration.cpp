@@ -12,12 +12,29 @@
 namespace sar::driver {
 namespace {
 
-constexpr wchar_t kAsioKey[] =
-    L"Software\\ASIO\\System Audio Route";
-constexpr wchar_t kClsidKey[] =
-    L"Software\\Classes\\CLSID\\{7F16C8A9-4A0C-4D31-9A5B-2C6E7F8D1042}";
-constexpr wchar_t kInprocKey[] =
-    L"Software\\Classes\\CLSID\\{7F16C8A9-4A0C-4D31-9A5B-2C6E7F8D1042}\\InprocServer32";
+constexpr wchar_t kAsioParentKey[] = L"Software\\ASIO";
+constexpr wchar_t kClsidParentKey[] = L"Software\\Classes\\CLSID";
+constexpr wchar_t kBrokerTokenValue[] = L"BrokerToken";
+
+const WindowsVirtualAsioInstanceDescriptor& legacy_instance() {
+  static const WindowsVirtualAsioInstanceDescriptor instance = {
+      kWindowsVirtualAsioClsidString,
+      kWindowsVirtualAsioDisplayName,
+      L"System Audio Route",
+      L"sys-audio-route-virtual-asio",
+  };
+  return instance;
+}
+
+struct ResolvedInstance {
+  std::wstring clsid;
+  std::wstring display_name;
+  std::wstring registry_name;
+  std::wstring broker_token;
+  std::wstring clsid_key;
+  std::wstring inproc_key;
+  std::wstring asio_key;
+};
 
 HKEY registry_root(WindowsVirtualAsioRegistrationScope scope) noexcept {
   return scope == WindowsVirtualAsioRegistrationScope::CurrentUser
@@ -42,6 +59,81 @@ WindowsVirtualAsioRegistrationResult native_failure(
   return WindowsVirtualAsioRegistrationResult::failure({{
       std::move(code), std::move(message), static_cast<std::uint32_t>(native),
   }});
+}
+
+bool contains_nul(std::wstring_view value) noexcept {
+  return value.find(L'\0') != std::wstring_view::npos;
+}
+
+bool canonicalize_clsid(std::wstring_view input, std::wstring& output) {
+  if (input.size() != 38 || input.front() != L'{' || input.back() != L'}') {
+    return false;
+  }
+  output.assign(input);
+  for (std::size_t index = 1; index + 1 < input.size(); ++index) {
+    const bool separator =
+        index == 9 || index == 14 || index == 19 || index == 24;
+    if (separator) {
+      if (input[index] != L'-') {
+        return false;
+      }
+      continue;
+    }
+    const auto character = input[index];
+    if (character >= L'0' && character <= L'9') {
+      continue;
+    }
+    if (character >= L'a' && character <= L'f') {
+      output[index] = static_cast<wchar_t>(character - L'a' + L'A');
+      continue;
+    }
+    if (character < L'A' || character > L'F') {
+      return false;
+    }
+  }
+  return true;
+}
+
+WindowsVirtualAsioRegistrationResult resolve_instance(
+    const WindowsVirtualAsioInstanceDescriptor& instance,
+    ResolvedInstance& resolved) {
+  if (instance.clsid.empty() || contains_nul(instance.clsid)) {
+    return native_failure("virtual_asio_instance_clsid_invalid",
+                          "Virtual ASIO instance CLSID is invalid.",
+                          ERROR_INVALID_PARAMETER);
+  }
+  std::wstring canonical;
+  if (!canonicalize_clsid(instance.clsid, canonical)) {
+    return native_failure("virtual_asio_instance_clsid_invalid",
+                          "Virtual ASIO instance CLSID is invalid.",
+                          ERROR_INVALID_PARAMETER);
+  }
+  if (instance.display_name.empty() || contains_nul(instance.display_name)) {
+    return native_failure("virtual_asio_instance_display_name_invalid",
+                          "Virtual ASIO instance display name is invalid.",
+                          ERROR_INVALID_PARAMETER);
+  }
+  if (instance.registry_name.empty() || contains_nul(instance.registry_name) ||
+      instance.registry_name.find_first_of(L"\\/") != std::wstring::npos) {
+    return native_failure("virtual_asio_instance_registry_name_invalid",
+                          "Virtual ASIO instance registry name is invalid.",
+                          ERROR_INVALID_PARAMETER);
+  }
+  if (instance.broker_token.empty() || contains_nul(instance.broker_token)) {
+    return native_failure("virtual_asio_instance_broker_token_invalid",
+                          "Virtual ASIO instance broker token is invalid.",
+                          ERROR_INVALID_PARAMETER);
+  }
+
+  resolved.clsid = std::move(canonical);
+  resolved.display_name = instance.display_name;
+  resolved.registry_name = instance.registry_name;
+  resolved.broker_token = instance.broker_token;
+  resolved.clsid_key = std::wstring(kClsidParentKey) + L"\\" + resolved.clsid;
+  resolved.inproc_key = resolved.clsid_key + L"\\InprocServer32";
+  resolved.asio_key =
+      std::wstring(kAsioParentKey) + L"\\" + resolved.registry_name;
+  return WindowsVirtualAsioRegistrationResult::success();
 }
 
 LSTATUS set_string(HKEY key, const wchar_t* name,
@@ -200,8 +292,14 @@ WindowsVirtualAsioRegistrationResult::errors() const noexcept {
 
 WindowsVirtualAsioRegistrationResult register_windows_virtual_asio_driver(
     std::wstring dll_path,
+    const WindowsVirtualAsioInstanceDescriptor& instance,
     WindowsVirtualAsioRegistryView view,
     WindowsVirtualAsioRegistrationScope scope) {
+  ResolvedInstance resolved_instance;
+  const auto instance_result = resolve_instance(instance, resolved_instance);
+  if (!instance_result.ok()) {
+    return instance_result;
+  }
   std::wstring absolute;
   const auto resolved = resolve_driver_path(dll_path, absolute);
   if (!resolved.ok()) {
@@ -211,20 +309,30 @@ WindowsVirtualAsioRegistrationResult register_windows_virtual_asio_driver(
   const auto access = view_access(view);
   const auto root = registry_root(scope);
   HKEY clsid = nullptr;
-  auto native = create_key(root, kClsidKey, access, clsid);
+  auto native = create_key(root, resolved_instance.clsid_key.c_str(), access,
+                           clsid);
   if (native != ERROR_SUCCESS) {
     return native_failure("virtual_asio_clsid_key_create_failed",
                           "Could not create the COM class key.", native);
   }
-  native = set_string(clsid, nullptr, kWindowsVirtualAsioDisplayName);
-  RegCloseKey(clsid);
+  native = set_string(clsid, nullptr, resolved_instance.display_name);
   if (native != ERROR_SUCCESS) {
+    RegCloseKey(clsid);
     return native_failure("virtual_asio_clsid_name_write_failed",
                           "Could not write the COM class name.", native);
   }
+  native = set_string(clsid, kBrokerTokenValue,
+                      resolved_instance.broker_token);
+  RegCloseKey(clsid);
+  if (native != ERROR_SUCCESS) {
+    return native_failure("virtual_asio_broker_token_write_failed",
+                          "Could not write the Virtual ASIO broker token.",
+                          native);
+  }
 
   HKEY inproc = nullptr;
-  native = create_key(root, kInprocKey, access, inproc);
+  native = create_key(root, resolved_instance.inproc_key.c_str(), access,
+                      inproc);
   if (native == ERROR_SUCCESS) {
     native = set_string(inproc, nullptr, absolute);
   }
@@ -240,12 +348,12 @@ WindowsVirtualAsioRegistrationResult register_windows_virtual_asio_driver(
   }
 
   HKEY asio = nullptr;
-  native = create_key(root, kAsioKey, access, asio);
+  native = create_key(root, resolved_instance.asio_key.c_str(), access, asio);
   if (native == ERROR_SUCCESS) {
-    native = set_string(asio, L"CLSID", kWindowsVirtualAsioClsidString);
+    native = set_string(asio, L"CLSID", resolved_instance.clsid);
   }
   if (native == ERROR_SUCCESS) {
-    native = set_string(asio, L"Description", kWindowsVirtualAsioDisplayName);
+    native = set_string(asio, L"Description", resolved_instance.display_name);
   }
   if (asio != nullptr) {
     RegCloseKey(asio);
@@ -255,14 +363,28 @@ WindowsVirtualAsioRegistrationResult register_windows_virtual_asio_driver(
                           "Could not write the ASIO discovery key.", native);
   }
   return verify_windows_virtual_asio_driver_registration(
-      std::move(absolute), view, scope);
+      std::move(absolute), instance, view, scope);
+}
+
+WindowsVirtualAsioRegistrationResult register_windows_virtual_asio_driver(
+    std::wstring dll_path,
+    WindowsVirtualAsioRegistryView view,
+    WindowsVirtualAsioRegistrationScope scope) {
+  return register_windows_virtual_asio_driver(std::move(dll_path),
+                                              legacy_instance(), view, scope);
 }
 
 WindowsVirtualAsioRegistrationResult
 verify_windows_virtual_asio_driver_registration(
     std::wstring dll_path,
+    const WindowsVirtualAsioInstanceDescriptor& instance,
     WindowsVirtualAsioRegistryView view,
     WindowsVirtualAsioRegistrationScope scope) {
+  ResolvedInstance resolved_instance;
+  const auto instance_result = resolve_instance(instance, resolved_instance);
+  if (!instance_result.ok()) {
+    return instance_result;
+  }
   std::wstring absolute;
   const auto resolved = resolve_driver_path(dll_path, absolute);
   if (!resolved.ok()) {
@@ -272,23 +394,30 @@ verify_windows_virtual_asio_driver_registration(
   const auto access = view_access(view);
   const auto root = registry_root(scope);
   std::vector<WindowsVirtualAsioRegistrationError> errors;
-  append_value_error(errors, root, kClsidKey, nullptr,
-                     kWindowsVirtualAsioDisplayName,
+  append_value_error(errors, root, resolved_instance.clsid_key.c_str(), nullptr,
+                     resolved_instance.display_name.c_str(),
                      "virtual_asio_clsid_name_invalid",
                      "The COM class name is missing or incorrect.", access);
-  append_value_error(errors, root, kInprocKey, nullptr, absolute.c_str(),
+  append_value_error(errors, root, resolved_instance.clsid_key.c_str(),
+                     kBrokerTokenValue, resolved_instance.broker_token.c_str(),
+                     "virtual_asio_broker_token_invalid",
+                     "The Virtual ASIO broker token is missing or incorrect.",
+                     access);
+  append_value_error(errors, root, resolved_instance.inproc_key.c_str(), nullptr,
+                     absolute.c_str(),
                      "virtual_asio_inproc_path_invalid",
                      "The COM in-process server path is missing or incorrect.",
                      access, true);
-  append_value_error(errors, root, kInprocKey, L"ThreadingModel", L"Both",
+  append_value_error(errors, root, resolved_instance.inproc_key.c_str(),
+                     L"ThreadingModel", L"Both",
                      "virtual_asio_threading_model_invalid",
                      "The COM threading model is missing or incorrect.", access);
-  append_value_error(errors, root, kAsioKey, L"CLSID",
-                     kWindowsVirtualAsioClsidString,
+  append_value_error(errors, root, resolved_instance.asio_key.c_str(), L"CLSID",
+                     resolved_instance.clsid.c_str(),
                      "virtual_asio_discovery_clsid_invalid",
                      "The ASIO discovery CLSID is missing or incorrect.", access);
-  append_value_error(errors, root, kAsioKey, L"Description",
-                     kWindowsVirtualAsioDisplayName,
+  append_value_error(errors, root, resolved_instance.asio_key.c_str(),
+                     L"Description", resolved_instance.display_name.c_str(),
                      "virtual_asio_discovery_description_invalid",
                      "The ASIO discovery description is missing or incorrect.",
                      access);
@@ -298,19 +427,34 @@ verify_windows_virtual_asio_driver_registration(
   return WindowsVirtualAsioRegistrationResult::success();
 }
 
-WindowsVirtualAsioRegistrationResult unregister_windows_virtual_asio_driver(
+WindowsVirtualAsioRegistrationResult
+verify_windows_virtual_asio_driver_registration(
+    std::wstring dll_path,
     WindowsVirtualAsioRegistryView view,
     WindowsVirtualAsioRegistrationScope scope) {
+  return verify_windows_virtual_asio_driver_registration(
+      std::move(dll_path), legacy_instance(), view, scope);
+}
+
+WindowsVirtualAsioRegistrationResult unregister_windows_virtual_asio_driver(
+    const WindowsVirtualAsioInstanceDescriptor& instance,
+    WindowsVirtualAsioRegistryView view,
+    WindowsVirtualAsioRegistrationScope scope) {
+  ResolvedInstance resolved_instance;
+  const auto instance_result = resolve_instance(instance, resolved_instance);
+  if (!instance_result.ok()) {
+    return instance_result;
+  }
   const auto access = view_access(view);
   const auto root = registry_root(scope);
-  auto native = delete_child(root, L"Software\\ASIO", L"System Audio Route", access);
+  auto native = delete_child(root, kAsioParentKey,
+                             resolved_instance.registry_name.c_str(), access);
   if (native != ERROR_SUCCESS) {
     return native_failure("virtual_asio_discovery_delete_failed",
                           "Could not remove the ASIO discovery key.", native);
   }
   native = delete_child(root,
-      L"Software\\Classes\\CLSID",
-      L"{7F16C8A9-4A0C-4D31-9A5B-2C6E7F8D1042}", access);
+      kClsidParentKey, resolved_instance.clsid.c_str(), access);
   if (native != ERROR_SUCCESS) {
     return native_failure("virtual_asio_clsid_delete_failed",
                           "Could not remove the COM class key.", native);
@@ -318,11 +462,23 @@ WindowsVirtualAsioRegistrationResult unregister_windows_virtual_asio_driver(
   return WindowsVirtualAsioRegistrationResult::success();
 }
 
+WindowsVirtualAsioRegistrationResult unregister_windows_virtual_asio_driver(
+    WindowsVirtualAsioRegistryView view,
+    WindowsVirtualAsioRegistrationScope scope) {
+  return unregister_windows_virtual_asio_driver(legacy_instance(), view, scope);
+}
+
 WindowsVirtualAsioRegistrationResult
 unregister_windows_virtual_asio_driver_if_owned(
     std::wstring dll_path,
+    const WindowsVirtualAsioInstanceDescriptor& instance,
     WindowsVirtualAsioRegistryView view,
     WindowsVirtualAsioRegistrationScope scope) {
+  ResolvedInstance resolved_instance;
+  const auto instance_result = resolve_instance(instance, resolved_instance);
+  if (!instance_result.ok()) {
+    return instance_result;
+  }
   std::wstring expected;
   const auto resolved = resolve_driver_path(dll_path, expected);
   if (!resolved.ok()) {
@@ -331,7 +487,8 @@ unregister_windows_virtual_asio_driver_if_owned(
 
   std::wstring registered;
   const auto native = read_string(
-      registry_root(scope), kInprocKey, nullptr, view_access(view), registered);
+      registry_root(scope), resolved_instance.inproc_key.c_str(), nullptr,
+      view_access(view), registered);
   if (native == ERROR_FILE_NOT_FOUND || native == ERROR_PATH_NOT_FOUND) {
     return WindowsVirtualAsioRegistrationResult::success();
   }
@@ -344,7 +501,16 @@ unregister_windows_virtual_asio_driver_if_owned(
   if (!equal_path(registered, expected)) {
     return WindowsVirtualAsioRegistrationResult::success();
   }
-  return unregister_windows_virtual_asio_driver(view, scope);
+  return unregister_windows_virtual_asio_driver(instance, view, scope);
+}
+
+WindowsVirtualAsioRegistrationResult
+unregister_windows_virtual_asio_driver_if_owned(
+    std::wstring dll_path,
+    WindowsVirtualAsioRegistryView view,
+    WindowsVirtualAsioRegistrationScope scope) {
+  return unregister_windows_virtual_asio_driver_if_owned(
+      std::move(dll_path), legacy_instance(), view, scope);
 }
 
 }  // namespace sar::driver

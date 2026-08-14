@@ -59,12 +59,33 @@ std::wstring executable_path() {
 void exercise_scope(
     const wchar_t* dll_path,
     sar::driver::WindowsVirtualAsioRegistrationScope scope) {
+  using sar::driver::WindowsVirtualAsioInstanceDescriptor;
   using sar::driver::WindowsVirtualAsioRegistryView;
   constexpr wchar_t kClsid[] =
       L"Software\\Classes\\CLSID\\{7F16C8A9-4A0C-4D31-9A5B-2C6E7F8D1042}";
   constexpr wchar_t kInproc[] =
       L"Software\\Classes\\CLSID\\{7F16C8A9-4A0C-4D31-9A5B-2C6E7F8D1042}\\InprocServer32";
   constexpr wchar_t kAsio[] = L"Software\\ASIO\\System Audio Route";
+  const WindowsVirtualAsioInstanceDescriptor instance_a = {
+      L"{83d4c47a-9834-41f4-a5ee-62bfb8f28d8a}",
+      L"System Audio Route Test A",
+      L"System Audio Route Test A",
+      L"registration-instance-a",
+  };
+  const WindowsVirtualAsioInstanceDescriptor instance_b = {
+      L"{11C53C37-D8A7-48F5-8678-055E10E45462}",
+      L"System Audio Route Test B",
+      L"System Audio Route Test B",
+      L"registration-instance-b",
+  };
+  constexpr wchar_t kClsidA[] =
+      L"Software\\Classes\\CLSID\\{83D4C47A-9834-41F4-A5EE-62BFB8F28D8A}";
+  constexpr wchar_t kInprocA[] =
+      L"Software\\Classes\\CLSID\\{83D4C47A-9834-41F4-A5EE-62BFB8F28D8A}\\InprocServer32";
+  constexpr wchar_t kAsioA[] = L"Software\\ASIO\\System Audio Route Test A";
+  constexpr wchar_t kClsidB[] =
+      L"Software\\Classes\\CLSID\\{11C53C37-D8A7-48F5-8678-055E10E45462}";
+  constexpr wchar_t kAsioB[] = L"Software\\ASIO\\System Audio Route Test B";
   const auto root = scope ==
                             sar::driver::WindowsVirtualAsioRegistrationScope::CurrentUser
                         ? HKEY_CURRENT_USER
@@ -84,6 +105,8 @@ void exercise_scope(
              .ok());
   assert(read_string(root, kClsid, nullptr) ==
          sar::driver::kWindowsVirtualAsioDisplayName);
+  assert(read_string(root, kClsid, L"BrokerToken") ==
+         L"sys-audio-route-virtual-asio");
   assert(read_string(root, kInproc, nullptr) == absolute_path(dll_path));
   assert(read_string(root, kInproc, L"ThreadingModel") == L"Both");
   assert(read_string(root, kAsio, L"CLSID") ==
@@ -104,6 +127,63 @@ void exercise_scope(
   assert(sar::driver::register_windows_virtual_asio_driver(
              dll_path, WindowsVirtualAsioRegistryView::ProcessDefault, scope)
              .ok());
+
+  assert(sar::driver::register_windows_virtual_asio_driver(
+             dll_path, instance_a,
+             WindowsVirtualAsioRegistryView::ProcessDefault, scope)
+             .ok());
+  assert(sar::driver::register_windows_virtual_asio_driver(
+             dll_path, instance_b,
+             WindowsVirtualAsioRegistryView::ProcessDefault, scope)
+             .ok());
+  assert(read_string(root, kClsidA, nullptr) == instance_a.display_name);
+  assert(read_string(root, kClsidA, L"BrokerToken") ==
+         instance_a.broker_token);
+  assert(read_string(root, kInprocA, nullptr) == absolute_path(dll_path));
+  assert(read_string(root, kAsioA, L"CLSID") ==
+         L"{83D4C47A-9834-41F4-A5EE-62BFB8F28D8A}");
+  assert(read_string(root, kAsioA, L"Description") ==
+         instance_a.display_name);
+  assert(read_string(root, kClsidB, L"BrokerToken") ==
+         instance_b.broker_token);
+
+  assert(sar::driver::unregister_windows_virtual_asio_driver(
+             instance_a, WindowsVirtualAsioRegistryView::ProcessDefault, scope)
+             .ok());
+  assert(key_missing(root, kClsidA));
+  assert(key_missing(root, kAsioA));
+  assert(sar::driver::verify_windows_virtual_asio_driver_registration(
+             dll_path, instance_b,
+             WindowsVirtualAsioRegistryView::ProcessDefault, scope)
+             .ok());
+
+  HKEY clsid_b = nullptr;
+  assert(RegOpenKeyExW(root, kClsidB, 0, KEY_SET_VALUE, &clsid_b) ==
+         ERROR_SUCCESS);
+  assert(RegSetValueExW(clsid_b, L"BrokerToken", 0, REG_SZ,
+                        reinterpret_cast<const BYTE*>(invalid),
+                        sizeof(invalid)) == ERROR_SUCCESS);
+  RegCloseKey(clsid_b);
+  assert(!sar::driver::verify_windows_virtual_asio_driver_registration(
+              dll_path, instance_b,
+              WindowsVirtualAsioRegistryView::ProcessDefault, scope)
+              .ok());
+  assert(sar::driver::register_windows_virtual_asio_driver(
+             dll_path, instance_b,
+             WindowsVirtualAsioRegistryView::ProcessDefault, scope)
+             .ok());
+
+  assert(sar::driver::unregister_windows_virtual_asio_driver_if_owned(
+             executable_path(), instance_b,
+             WindowsVirtualAsioRegistryView::ProcessDefault, scope)
+             .ok());
+  assert(!key_missing(root, kClsidB));
+  assert(sar::driver::unregister_windows_virtual_asio_driver_if_owned(
+             dll_path, instance_b,
+             WindowsVirtualAsioRegistryView::ProcessDefault, scope)
+             .ok());
+  assert(key_missing(root, kClsidB));
+  assert(key_missing(root, kAsioB));
 
   assert(sar::driver::unregister_windows_virtual_asio_driver_if_owned(
              executable_path(), WindowsVirtualAsioRegistryView::ProcessDefault,
@@ -138,6 +218,21 @@ void exercise_scope(
 
 int wmain(int argc, wchar_t** argv) {
   assert(argc == 2);
+  const sar::driver::WindowsVirtualAsioInstanceDescriptor invalid_instance = {
+      L"not-a-guid", L"Invalid", L"Invalid", L"invalid"};
+  const sar::driver::WindowsVirtualAsioInstanceDescriptor invalid_name = {
+      L"{83D4C47A-9834-41F4-A5EE-62BFB8F28D8A}", L"Invalid",
+      L"Invalid\\Nested", L"invalid"};
+  assert(!sar::driver::register_windows_virtual_asio_driver(
+              argv[1], invalid_instance,
+              sar::driver::WindowsVirtualAsioRegistryView::ProcessDefault,
+              sar::driver::WindowsVirtualAsioRegistrationScope::CurrentUser)
+              .ok());
+  assert(!sar::driver::register_windows_virtual_asio_driver(
+              argv[1], invalid_name,
+              sar::driver::WindowsVirtualAsioRegistryView::ProcessDefault,
+              sar::driver::WindowsVirtualAsioRegistrationScope::CurrentUser)
+              .ok());
   const std::wstring token = L"registration-" +
                              std::to_wstring(GetCurrentProcessId()) + L"-" +
                              std::to_wstring(GetTickCount64());
