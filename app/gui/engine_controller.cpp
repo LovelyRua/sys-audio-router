@@ -870,7 +870,7 @@ void EngineController::applyReply(const EngineReply& reply,
   }
   if (reply.request_type ==
           control::ControlCommandType::QueryVirtualAsioDevices &&
-      reply.response.has_virtual_asio_devices) {
+      command_succeeded && reply.response.has_virtual_asio_devices) {
     emit virtualAsioDevicesRefreshed();
   }
   if (reply.request_type ==

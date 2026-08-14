@@ -201,7 +201,7 @@ render-only blocks with zero xruns and 987 supervised duplex blocks across a
 xrun, 1,088 render underflow frames, zero capture/render overflow, and a
 279.6-microsecond peak callback. FIFO diagnostics are mirrored into atomic
 worker snapshots so service queries do not race the realtime diagnostics writer.
-Control wire version 8 and `sar_control_cli` now expose runtime state, start,
+Control wire version 11 and `sar_control_cli` now expose runtime state, start,
 stop, WASAPI runtime configuration, runtime health, recovery state, endpoint
 selection, and Virtual ASIO producer, queue, silence, peak, clipping, and
 non-finite-sample evidence without restarting the service process. This lets a
@@ -414,10 +414,16 @@ baseline.
 The dynamic topology boundary now persists Virtual ASIO instance identities,
 supports engine-defined channel counts, registers multiple CLSIDs against one
 DLL, and runs independent instance brokers over non-overlapping matrix slices.
-GUI topology operations, registration synchronization, explicit port
-availability, and rectangular aggregate ASIO groups remain. Fixed channel
-offsets in the alpha preset are migration scaffolding, not the extensibility
-model.
+The GUI can add, remove, rename, enable, and resize these instances through one
+transaction. The engine synchronizes current-user registrations with rollback,
+persists the replacement session atomically, and performs a planned service
+restart. Process-level coverage connects the same client identity to two broker
+instances with different channel layouts and verifies that their mappings and
+events remain isolated. Explicit per-port availability and rectangular
+aggregate ASIO groups remain. Fixed channel offsets in the alpha preset are
+migration scaffolding, not the extensibility model. The next acceptance gate is
+two simultaneously running DAWs selecting different registered instances and
+proving independent audio flow on the Windows test machine.
 
 The first multi-device runtime slice is now present: one WASAPI render endpoint
 owns the master clock, additional render and capture endpoints run as soft-clock
