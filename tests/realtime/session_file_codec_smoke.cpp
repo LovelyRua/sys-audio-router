@@ -21,6 +21,8 @@ sar::control::SessionDocument make_session() {
   session.audio_runtime.mode = sar::control::AudioRuntimeMode::WasapiDuplex;
   session.audio_runtime.capture_device_id = "capture-device";
   session.audio_runtime.render_device_id = "render-device";
+  session.virtual_asio_devices.push_back(
+      sar::control::default_virtual_asio_device_definition());
   session.auto_start = true;
   return session;
 }
@@ -46,6 +48,14 @@ std::size_t runtime_mode_offset(const std::vector<std::uint8_t>& bytes) {
   return 20 + read_u32(bytes, 16);
 }
 
+std::size_t runtime_endpoint_count_offset(
+    const std::vector<std::uint8_t>& bytes) {
+  auto offset = runtime_mode_offset(bytes) + 1;
+  offset += 4 + read_u32(bytes, offset);
+  offset += 4 + read_u32(bytes, offset);
+  return offset;
+}
+
 void assert_decode_fails(const std::vector<std::uint8_t>& bytes) {
   assert(!sar::control::decode_session_file(bytes).ok());
 }
@@ -63,7 +73,8 @@ int main() {
 
   const auto decoded = sar::control::decode_session_file(encoded.bytes());
   assert(decoded.ok());
-  assert(decoded.session().schema_version == 1);
+  assert(decoded.session().schema_version ==
+         sar::control::kSessionDocumentSchemaVersion);
   assert(decoded.session().preset.sample_rate == 48000);
   assert(decoded.session().preset.frames_per_block == 64);
   assert(decoded.session().preset.matrix.routes.size() == 1);
@@ -74,14 +85,33 @@ int main() {
   assert(decoded.session().audio_runtime.capture_device_id == "capture-device");
   assert(decoded.session().audio_runtime.render_device_id == "render-device");
   assert(decoded.session().auto_start);
+  assert(decoded.session().virtual_asio_devices.size() == 1);
+  assert(decoded.session().virtual_asio_devices[0].broker_token ==
+         "virtual-asio");
 
-  auto legacy_v1 = encoded.bytes();
-  legacy_v1.erase(legacy_v1.end() - 5, legacy_v1.end() - 1);
+  auto legacy_v2 = encoded.bytes();
+  const auto endpoint_count_offset = runtime_endpoint_count_offset(legacy_v2);
+  const auto auto_start_offset = endpoint_count_offset + 4;
+  legacy_v2.resize(auto_start_offset + 1);
+  legacy_v2[4] = 2;
+  write_u32(legacy_v2, 12, 1);
+  write_u32(legacy_v2, 8,
+            static_cast<std::uint32_t>(legacy_v2.size() - 12));
+  const auto decoded_v2 = sar::control::decode_session_file(legacy_v2);
+  assert(decoded_v2.ok());
+  assert(decoded_v2.session().virtual_asio_devices.size() == 1);
+
+  auto legacy_v1 = legacy_v2;
+  legacy_v1.erase(legacy_v1.begin() +
+                      static_cast<std::ptrdiff_t>(endpoint_count_offset),
+                  legacy_v1.begin() +
+                      static_cast<std::ptrdiff_t>(endpoint_count_offset + 4));
   legacy_v1[4] = 1;
   // Session v1 files contain the original control-wire v8 preset payload.
   legacy_v1[24] = 8;
   legacy_v1[25] = 0;
-  write_u32(legacy_v1, 8, read_u32(legacy_v1, 8) - 4);
+  write_u32(legacy_v1, 8,
+            static_cast<std::uint32_t>(legacy_v1.size() - 12));
   const auto decoded_v1 = sar::control::decode_session_file(legacy_v1);
   assert(decoded_v1.ok());
   assert(decoded_v1.session().audio_runtime.mode ==
@@ -100,11 +130,11 @@ int main() {
   assert_decode_fails(trailing);
 
   auto unknown_file_version = encoded.bytes();
-  unknown_file_version[4] = 3;
+  unknown_file_version[4] = 4;
   assert_decode_fails(unknown_file_version);
 
   auto unknown_schema_version = encoded.bytes();
-  write_u32(unknown_schema_version, 12, 2);
+  write_u32(unknown_schema_version, 12, 3);
   assert_decode_fails(unknown_schema_version);
 
   const auto mode_offset = runtime_mode_offset(encoded.bytes());
@@ -118,7 +148,7 @@ int main() {
   assert_decode_fails(invalid_runtime_payload);
 
   auto invalid_bool = encoded.bytes();
-  invalid_bool.back() = 2;
+  invalid_bool[auto_start_offset] = 2;
   assert_decode_fails(invalid_bool);
 
   auto oversized_string = encoded.bytes();

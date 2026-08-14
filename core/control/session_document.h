@@ -8,12 +8,27 @@
 
 namespace sar::control {
 
-inline constexpr std::uint32_t kSessionDocumentSchemaVersion = 1;
+inline constexpr std::uint32_t kSessionDocumentSchemaVersion = 2;
+inline constexpr std::size_t kMaximumVirtualAsioDevices = 16;
+
+struct VirtualAsioDeviceDefinition {
+  std::string device_id;
+  std::string clsid;
+  std::string registry_name;
+  std::string broker_token;
+  std::uint32_t input_channels = 2;
+  std::uint32_t output_channels = 2;
+  bool enabled = true;
+};
+
+[[nodiscard]] VirtualAsioDeviceDefinition
+default_virtual_asio_device_definition();
 
 struct SessionDocument {
   std::uint32_t schema_version = kSessionDocumentSchemaVersion;
   PresetDocument preset;
   AudioRuntimeConfiguration audio_runtime;
+  std::vector<VirtualAsioDeviceDefinition> virtual_asio_devices;
   bool auto_start = false;
 };
 

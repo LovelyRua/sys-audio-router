@@ -203,6 +203,17 @@ SessionFileEncodeResult encode_session_file(const SessionDocument& session) {
     append_integer(bytes, endpoint.channel_count);
   }
   append_integer(bytes, static_cast<std::uint8_t>(session.auto_start ? 1 : 0));
+  append_integer(bytes, static_cast<std::uint32_t>(
+                            session.virtual_asio_devices.size()));
+  for (const auto& device : session.virtual_asio_devices) {
+    append_string(bytes, device.device_id);
+    append_string(bytes, device.clsid);
+    append_string(bytes, device.registry_name);
+    append_string(bytes, device.broker_token);
+    append_integer(bytes, device.input_channels);
+    append_integer(bytes, device.output_channels);
+    append_integer(bytes, static_cast<std::uint8_t>(device.enabled ? 1 : 0));
+  }
 
   if (bytes.size() > kSessionFileMaxBytes) {
     return SessionFileEncodeResult::failure(
@@ -248,7 +259,8 @@ SessionFileDecodeResult decode_session_file(
   std::uint8_t runtime_mode = 0;
   std::uint8_t auto_start = 0;
   if (!reader.integer(session.schema_version) ||
-      session.schema_version != kSessionDocumentSchemaVersion ||
+      session.schema_version == 0 ||
+      session.schema_version > kSessionDocumentSchemaVersion ||
       !reader.integer(preset_size) ||
       !reader.span(preset_size, preset_bytes)) {
     return SessionFileDecodeResult::failure(
@@ -304,11 +316,42 @@ SessionFileDecodeResult decode_session_file(
       session.audio_runtime.endpoints.push_back(std::move(endpoint));
     }
   }
-  if (!reader.integer(auto_start) || auto_start > 1 ||
-      reader.remaining() != 0) {
+  if (!reader.integer(auto_start) || auto_start > 1) {
     return SessionFileDecodeResult::failure(
         file_error("Session runtime payload is invalid."));
   }
+  if (version >= 3) {
+    std::uint32_t device_count = 0;
+    if (!reader.integer(device_count) || device_count == 0 ||
+        device_count > kMaximumVirtualAsioDevices) {
+      return SessionFileDecodeResult::failure(
+          file_error("Session Virtual ASIO device list is invalid."));
+    }
+    session.virtual_asio_devices.reserve(device_count);
+    for (std::uint32_t index = 0; index < device_count; ++index) {
+      VirtualAsioDeviceDefinition device;
+      std::uint8_t enabled = 0;
+      if (!reader.string(device.device_id) || !reader.string(device.clsid) ||
+          !reader.string(device.registry_name) ||
+          !reader.string(device.broker_token) ||
+          !reader.integer(device.input_channels) ||
+          !reader.integer(device.output_channels) ||
+          !reader.integer(enabled) || enabled > 1) {
+        return SessionFileDecodeResult::failure(
+            file_error("Session Virtual ASIO device is invalid."));
+      }
+      device.enabled = enabled == 1;
+      session.virtual_asio_devices.push_back(std::move(device));
+    }
+  } else {
+    session.virtual_asio_devices.push_back(
+        default_virtual_asio_device_definition());
+  }
+  if (reader.remaining() != 0) {
+    return SessionFileDecodeResult::failure(
+        file_error("Session runtime payload is invalid."));
+  }
+  session.schema_version = kSessionDocumentSchemaVersion;
   session.audio_runtime.mode = static_cast<AudioRuntimeMode>(runtime_mode);
   session.auto_start = auto_start == 1;
 

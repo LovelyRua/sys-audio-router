@@ -161,6 +161,10 @@ std::unique_ptr<sar::graph::Graph> make_asio_transport_graph(
 sar::control::SessionDocument default_session(std::size_t asio_channels = 2) {
   sar::control::SessionDocument session;
   session.preset = initial_preset(asio_channels);
+  auto asio = sar::control::default_virtual_asio_device_definition();
+  asio.input_channels = static_cast<std::uint32_t>(asio_channels);
+  asio.output_channels = static_cast<std::uint32_t>(asio_channels);
+  session.virtual_asio_devices.push_back(std::move(asio));
   session.audio_runtime.mode = sar::control::AudioRuntimeMode::None;
   session.auto_start = false;
   return session;
@@ -696,6 +700,14 @@ int main(int argc, char** argv) {
     std::cerr << "session_warning code=virtual_asio_channels_resized detail="
               << loaded_asio_profile->channels << "_to_"
               << requested_asio_channels << " action=restart_profile\n";
+    if (desired_session.virtual_asio_devices.empty()) {
+      desired_session.virtual_asio_devices.push_back(
+          sar::control::default_virtual_asio_device_definition());
+    }
+    desired_session.virtual_asio_devices.front().input_channels =
+        static_cast<std::uint32_t>(requested_asio_channels);
+    desired_session.virtual_asio_devices.front().output_channels =
+        static_cast<std::uint32_t>(requested_asio_channels);
     session_profile_resized = true;
   }
 

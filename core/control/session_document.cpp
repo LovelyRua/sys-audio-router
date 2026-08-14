@@ -1,11 +1,25 @@
 #include "core/control/session_document.h"
 
 #include "core/control/control_wire_protocol.h"
+#include "core/platform/virtual_asio_client_registry.h"
 
 #include <iterator>
+#include <unordered_set>
 #include <utility>
 
 namespace sar::control {
+
+VirtualAsioDeviceDefinition default_virtual_asio_device_definition() {
+  return {
+      .device_id = "default",
+      .clsid = "{7F16C8A9-4A0C-4D31-9A5B-2C6E7F8D1042}",
+      .registry_name = "System Audio Route",
+      .broker_token = "virtual-asio",
+      .input_channels = 2,
+      .output_channels = 2,
+      .enabled = true,
+  };
+}
 
 SessionDocumentValidationResult SessionDocumentValidationResult::success() {
   return SessionDocumentValidationResult({});
@@ -67,6 +81,52 @@ SessionDocumentValidationResult validate_session_document(
   errors.insert(errors.end(),
                 std::make_move_iterator(runtime_errors.begin()),
                 std::make_move_iterator(runtime_errors.end()));
+
+  if (session.virtual_asio_devices.empty() ||
+      session.virtual_asio_devices.size() > kMaximumVirtualAsioDevices) {
+    errors.push_back({
+        "invalid_virtual_asio_device_count",
+        "Session requires between one and sixteen Virtual ASIO devices.",
+    });
+  }
+  std::unordered_set<std::string> device_ids;
+  std::unordered_set<std::string> clsids;
+  std::unordered_set<std::string> registry_names;
+  std::unordered_set<std::string> broker_tokens;
+  for (const auto& device : session.virtual_asio_devices) {
+    const bool empty_field = device.device_id.empty() || device.clsid.empty() ||
+                             device.registry_name.empty() ||
+                             device.broker_token.empty();
+    const bool oversized =
+        device.device_id.size() > kControlWireMaxStringBytes ||
+        device.clsid.size() > kControlWireMaxStringBytes ||
+        device.registry_name.size() > kControlWireMaxStringBytes ||
+        device.broker_token.size() > kControlWireMaxStringBytes;
+    if (empty_field || oversized) {
+      errors.push_back({
+          "invalid_virtual_asio_device_identity",
+          "Virtual ASIO device identity fields must be non-empty and bounded.",
+      });
+    }
+    if (device.input_channels == 0 || device.output_channels == 0 ||
+        device.input_channels > platform::kVirtualAsioMaxChannels ||
+        device.output_channels > platform::kVirtualAsioMaxChannels) {
+      errors.push_back({
+          "invalid_virtual_asio_device_channels",
+          "Virtual ASIO channel counts must be between one and sixty-four.",
+      });
+    }
+    if (!device_ids.insert(device.device_id).second ||
+        !clsids.insert(device.clsid).second ||
+        !registry_names.insert(device.registry_name).second ||
+        !broker_tokens.insert(device.broker_token).second) {
+      errors.push_back({
+          "duplicate_virtual_asio_device_identity",
+          "Virtual ASIO device IDs, CLSIDs, registry names, and broker tokens "
+          "must be unique.",
+      });
+    }
+  }
 
   if (session.auto_start && runtime.mode == AudioRuntimeMode::None) {
     errors.push_back({
