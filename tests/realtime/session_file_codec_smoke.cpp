@@ -115,10 +115,19 @@ int main() {
   assert(decoded_v2.session().virtual_asio_devices.size() == 1);
 
   auto legacy_v1 = legacy_v2;
+  const auto legacy_preset_size = read_u32(legacy_v1, 16);
+  const auto legacy_preset_trailing_field = 20 + legacy_preset_size - 1;
+  legacy_v1.erase(
+      legacy_v1.begin() +
+      static_cast<std::ptrdiff_t>(legacy_preset_trailing_field));
+  write_u32(legacy_v1, 16, legacy_preset_size - 1);
+  write_u32(legacy_v1, 28, read_u32(legacy_v1, 28) - 1);
+  const auto legacy_endpoint_count_offset =
+      runtime_endpoint_count_offset(legacy_v1);
   legacy_v1.erase(legacy_v1.begin() +
-                      static_cast<std::ptrdiff_t>(endpoint_count_offset),
+                      static_cast<std::ptrdiff_t>(legacy_endpoint_count_offset),
                   legacy_v1.begin() +
-                      static_cast<std::ptrdiff_t>(endpoint_count_offset + 4));
+                      static_cast<std::ptrdiff_t>(legacy_endpoint_count_offset + 4));
   legacy_v1[4] = 1;
   // Session v1 files contain the original control-wire v8 preset payload.
   legacy_v1[24] = 8;

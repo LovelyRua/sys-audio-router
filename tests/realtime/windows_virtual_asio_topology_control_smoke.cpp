@@ -52,8 +52,14 @@ sar::control::SessionDocument initial_session() {
       {"asio-input-l", "ASIO DAW In 1"},
       {"asio-input-r", "ASIO DAW In 2"},
   };
-  session.virtual_asio_devices.push_back(
-      sar::control::default_virtual_asio_device_definition());
+  session.virtual_asio_devices.push_back({
+      .device_id = "topology-old",
+      .clsid = "{705B4C39-BEB4-47E7-8FA9-B61F1C901A00}",
+      .registry_name = "SAR Topology Test Old",
+      .broker_token = "topology-old",
+      .input_channels = 2,
+      .output_channels = 2,
+  });
   return session;
 }
 
@@ -116,10 +122,12 @@ void delete_registration(const std::wstring& clsid,
 
 int wmain(int argc, wchar_t** argv) {
   assert(argc == 2);
+  const std::wstring clsid_old = L"{705B4C39-BEB4-47E7-8FA9-B61F1C901A00}";
   const std::wstring clsid_a = L"{705B4C39-BEB4-47E7-8FA9-B61F1C901A01}";
   const std::wstring clsid_b = L"{705B4C39-BEB4-47E7-8FA9-B61F1C901A02}";
   const std::wstring name_a = L"SAR Topology Test A";
   const std::wstring name_b = L"SAR Topology Test B";
+  delete_registration(clsid_old, L"SAR Topology Test Old");
   delete_registration(clsid_a, name_a);
   delete_registration(clsid_b, name_b);
 
@@ -142,8 +150,15 @@ int wmain(int argc, wchar_t** argv) {
   mutable_command.push_back(L'\0');
   STARTUPINFOW startup{.cb = sizeof(STARTUPINFOW)};
   PROCESS_INFORMATION process{};
+  HANDLE job = CreateJobObjectW(nullptr, nullptr);
+  assert(job != nullptr);
+  JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+  limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+  assert(SetInformationJobObject(job, JobObjectExtendedLimitInformation,
+                                 &limits, sizeof(limits)));
   assert(CreateProcessW(nullptr, mutable_command.data(), nullptr, nullptr, FALSE,
                         CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process));
+  assert(AssignProcessToJobObject(job, process.hProcess));
   CloseHandle(process.hThread);
   assert(wait_for_pipe(control_pipe));
 
@@ -185,6 +200,7 @@ int wmain(int argc, wchar_t** argv) {
   assert(GetExitCodeProcess(process.hProcess, &exit_code));
   assert(exit_code == 0);
   CloseHandle(process.hProcess);
+  CloseHandle(job);
 
   const auto decoded_session =
       sar::control::decode_session_file(read_file(session_path));

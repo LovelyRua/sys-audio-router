@@ -41,7 +41,7 @@ std::vector<std::uint8_t> as_u8(std::span<const std::byte> input) {
 
 void usage() {
   std::cerr << "Usage: sar_control_cli [--pipe NAME] state|devices|diagnostics|graph|"
-               "preset-save FILE|preset-load FILE|"
+               "preset-save FILE|preset-load FILE|virtual-asio-list|"
                "runtime-state|runtime-start|runtime-stop|set-gain INPUT OUTPUT "
                "VALUE|set-mute INPUT OUTPUT true|false|"
                "runtime-configure-render [RENDER_ID]|"
@@ -277,6 +277,9 @@ int main(int argc, char** argv) {
     }
   } else if (operation == "runtime-state") {
     command.type = sar::control::ControlCommandType::QueryAudioRuntime;
+  } else if (operation == "virtual-asio-list") {
+    command.type =
+        sar::control::ControlCommandType::QueryVirtualAsioDevices;
   } else if (operation == "runtime-start") {
     command.type = sar::control::ControlCommandType::StartAudioRuntime;
   } else if (operation == "runtime-stop") {
@@ -525,6 +528,10 @@ int main(int argc, char** argv) {
                               .render_device_id);
     }
   }
+  if (response.response.has_virtual_asio_devices) {
+    std::cout << " virtual_asio_devices="
+              << response.response.virtual_asio_devices.size();
+  }
   std::cout << '\n';
   if (response.response.has_devices) {
     for (std::size_t device_index = 0;
@@ -553,6 +560,21 @@ int main(int argc, char** argv) {
                   << " format=" << sample_format_name(format.sample_format)
                   << '\n';
       }
+    }
+  }
+  if (response.response.has_virtual_asio_devices) {
+    for (std::size_t index = 0;
+         index < response.response.virtual_asio_devices.size(); ++index) {
+      const auto& device = response.response.virtual_asio_devices[index];
+      std::cout << "virtual_asio_device index=" << index
+                << " id=" << std::quoted(device.device_id)
+                << " clsid=" << std::quoted(device.clsid)
+                << " registry_name=" << std::quoted(device.registry_name)
+                << " broker_token=" << std::quoted(device.broker_token)
+                << " inputs=" << device.input_channels
+                << " outputs=" << device.output_channels
+                << " enabled=" << (device.enabled ? "true" : "false")
+                << '\n';
     }
   }
   return 0;
