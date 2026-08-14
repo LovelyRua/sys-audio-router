@@ -428,6 +428,12 @@ if(WIN32)
   target_link_libraries(sar_engine_service
     PRIVATE sar_core sar_virtual_asio_registration)
 
+  add_executable(sar_windows_virtual_asio_topology_control_smoke
+    tests/realtime/windows_virtual_asio_topology_control_smoke.cpp
+  )
+  target_link_libraries(sar_windows_virtual_asio_topology_control_smoke
+    PRIVATE sar_core advapi32)
+
   add_executable(sar_bootstrap_launcher WIN32
     tools/sar_bootstrap_launcher.cpp
   )
@@ -858,6 +864,9 @@ if(WIN32)
   add_test(NAME windows_virtual_asio_registration_smoke
            COMMAND sar_windows_virtual_asio_registration_smoke
                    $<TARGET_FILE:sar_virtual_asio_driver>)
+  add_test(NAME windows_virtual_asio_topology_control_smoke
+           COMMAND sar_windows_virtual_asio_topology_control_smoke
+                   $<TARGET_FILE:sar_engine_service>)
   add_test(NAME windows_virtual_asio_registration_help
            COMMAND sar_virtual_asio_register --help)
   add_test(NAME windows_virtual_asio_driver_unlocked
