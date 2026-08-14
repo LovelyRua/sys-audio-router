@@ -111,6 +111,7 @@ endforeach()
 
 foreach(virtual_asio_marker
     "property var virtualAsioDraft: []"
+    "property bool virtualAsioAwaitingRefresh: false"
     "function syncVirtualAsioDraft()"
     "function virtualAsioDraftError()"
     "objectName: \"virtualAsioDevicesPanel\""
@@ -122,6 +123,10 @@ foreach(virtual_asio_marker
     "objectName: \"removeVirtualAsioDeviceButton\""
     "objectName: \"applyVirtualAsioDevicesButton\""
     "engine.configureVirtualAsioDevices("
+    "function onVirtualAsioTopologyApplied()"
+    "window.virtualAsioAwaitingRefresh = true"
+    "function onVirtualAsioDevicesRefreshed()"
+    "window.virtualAsioDraftDirty = false"
     "Applying this topology restarts the engine service")
   string(FIND "${qml}" "${virtual_asio_marker}" marker_position)
   if(marker_position LESS 0)

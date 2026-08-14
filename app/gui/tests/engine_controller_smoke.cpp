@@ -3,8 +3,10 @@
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QEventLoop>
+#include <QMetaObject>
 #include <QThread>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cassert>
@@ -475,10 +477,7 @@ int main(int argc, char **argv) {
     if (command.type == ControlCommandType::ConfigureVirtualAsioDevices) {
       topology_request = command;
       topology_devices = command.virtual_asio_devices;
-      auto reply = accepted(command);
-      reply.response.has_virtual_asio_devices = true;
-      reply.response.virtual_asio_devices = topology_devices;
-      return reply;
+      return accepted(command);
     }
     if (command.type == ControlCommandType::QueryVirtualAsioDevices) {
       auto reply = accepted(command);
@@ -489,6 +488,14 @@ int main(int argc, char **argv) {
     return confirmed_state(command);
   };
   sar::gui::EngineController topology_controller(topology_transport, false);
+  int topology_applied_count = 0;
+  int topology_refreshed_count = 0;
+  QObject::connect(&topology_controller,
+                   &sar::gui::EngineController::virtualAsioTopologyApplied,
+                   [&] { ++topology_applied_count; });
+  QObject::connect(&topology_controller,
+                   &sar::gui::EngineController::virtualAsioDevicesRefreshed,
+                   [&] { ++topology_refreshed_count; });
   topology_controller.refresh();
   assert(wait_until([&] {
     return !topology_controller.busy() &&
@@ -498,6 +505,7 @@ int main(int argc, char **argv) {
       topology_controller.virtualAsioDevices().front().toMap();
   assert(initial_device.value(QStringLiteral("registryName")).toString() ==
          QStringLiteral("System Audio Route"));
+  assert(topology_refreshed_count == 1);
   topology_controller.configureVirtualAsioDevices({
       QVariantMap{{QStringLiteral("deviceId"), QString{}},
                   {QStringLiteral("clsid"), QString{}},
@@ -510,8 +518,10 @@ int main(int argc, char **argv) {
   assert(wait_until([&] {
     return !topology_controller.busy() &&
            topology_request.type ==
-               ControlCommandType::ConfigureVirtualAsioDevices;
+               ControlCommandType::ConfigureVirtualAsioDevices &&
+           topology_refreshed_count == 2;
   }));
+  assert(topology_applied_count == 1);
   assert(topology_request.virtual_asio_devices.size() == 1);
   const auto &generated = topology_request.virtual_asio_devices.front();
   assert(!generated.device_id.empty());
@@ -535,5 +545,59 @@ int main(int argc, char **argv) {
   assert(topology_request.type !=
          ControlCommandType::ConfigureVirtualAsioDevices);
   assert(topology_controller.lastError().contains(QStringLiteral("name")));
+
+  int empty_topology_refreshes = 0;
+  const auto empty_topology_transport = [&](ControlCommand command) {
+    if (command.type == ControlCommandType::QueryVirtualAsioDevices)
+      return accepted(command);
+    return confirmed_state(command);
+  };
+  sar::gui::EngineController empty_topology_controller(
+      empty_topology_transport, false);
+  QObject::connect(
+      &empty_topology_controller,
+      &sar::gui::EngineController::virtualAsioDevicesRefreshed,
+      [&] { ++empty_topology_refreshes; });
+  empty_topology_controller.refresh();
+  assert(wait_until([&] { return !empty_topology_controller.busy(); }));
+  assert(empty_topology_refreshes == 0);
+
+  std::mutex poll_mutex;
+  std::vector<ControlCommandType> poll_requests;
+  const auto poll_transport = [&](ControlCommand command) {
+    {
+      const std::scoped_lock lock(poll_mutex);
+      poll_requests.push_back(command.type);
+    }
+    if (command.type == ControlCommandType::QuerySessionState)
+      return confirmed_state(command);
+    return accepted(command);
+  };
+  sar::gui::EngineController poll_controller(poll_transport, false);
+  QElapsedTimer poll_timer;
+  poll_timer.start();
+  while (poll_timer.elapsed() < 5000) {
+    {
+      const std::scoped_lock lock(poll_mutex);
+      if (poll_requests.size() >= 100)
+        break;
+    }
+    assert(QMetaObject::invokeMethod(&poll_controller, "schedulePoll",
+                                     Qt::DirectConnection));
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+    QThread::msleep(1);
+  }
+  assert(wait_until([&] {
+    const std::scoped_lock lock(poll_mutex);
+    return poll_requests.size() >= 100;
+  }));
+  {
+    const std::scoped_lock lock(poll_mutex);
+    assert(std::ranges::count(poll_requests,
+                              ControlCommandType::QuerySessionState) == 1);
+    assert(std::ranges::count(
+               poll_requests,
+               ControlCommandType::QueryVirtualAsioDevices) == 0);
+  }
   return 0;
 }

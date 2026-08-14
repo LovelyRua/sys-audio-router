@@ -557,11 +557,6 @@ void EngineController::configureVirtualAsioDevices(
         "Enabled Virtual ASIO input and output channel totals must match"));
     return;
   }
-  const auto validation = control::validate_command(command);
-  if (!validation.ok()) {
-    setError(text(validation.errors().front().message));
-    return;
-  }
   dispatch(std::move(command));
 }
 
@@ -874,6 +869,11 @@ void EngineController::applyReply(const EngineReply& reply,
     updateVirtualAsioDevices(reply.response);
   }
   if (reply.request_type ==
+          control::ControlCommandType::QueryVirtualAsioDevices &&
+      reply.response.has_virtual_asio_devices) {
+    emit virtualAsioDevicesRefreshed();
+  }
+  if (reply.request_type ==
       control::ControlCommandType::ConfigureVirtualAsioDevices) {
     setStatus(QStringLiteral("Virtual ASIO topology applied; restarting engine"));
     emit virtualAsioTopologyApplied();
@@ -1015,7 +1015,7 @@ void EngineController::applyReply(const EngineReply& reply,
     QTimer::singleShot(0, this, &EngineController::refresh);
   } else if (reply.request_type ==
                  control::ControlCommandType::QuerySessionState &&
-             !reply.response.has_virtual_asio_devices) {
+             !reply.response.has_virtual_asio_devices && !command.poll) {
     control::ControlCommand topology_query;
     topology_query.type = control::ControlCommandType::QueryVirtualAsioDevices;
     enqueue({std::move(topology_query), PendingPresetAction::None, {},

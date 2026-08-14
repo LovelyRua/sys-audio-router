@@ -175,6 +175,7 @@ class EngineController final : public QObject {
   void busyChanged();
   void sessionChanged();
   void virtualAsioDevicesChanged();
+  void virtualAsioDevicesRefreshed();
   void virtualAsioTopologyApplied();
   void diagnosticsChanged();
   void feedbackChanged();
@@ -221,7 +222,7 @@ class EngineController final : public QObject {
   void updateSession(const control::ControlResponse& response);
   void updateVirtualAsioDevices(const control::ControlResponse& response);
   void updatePresetView(const control::PresetDocument& preset);
-  void schedulePoll();
+  Q_SLOT void schedulePoll();
   void ensureEngineService();
   void stopEngineService();
   void setError(QString error);

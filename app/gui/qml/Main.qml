@@ -40,6 +40,7 @@ ApplicationWindow {
     property var runtimeMatrixDraft: []
     property var virtualAsioDraft: []
     property bool virtualAsioDraftDirty: false
+    property bool virtualAsioAwaitingRefresh: false
     property var pendingRouteStates: ({})
     property var pendingRouteGains: ({})
     property string pendingGainInputId: ""
@@ -651,9 +652,18 @@ ApplicationWindow {
             window.meterTarget = engine.peak
         }
         function onRuntimeChanged() { window.syncRuntimeDraft() }
-        function onVirtualAsioDevicesChanged() { window.syncVirtualAsioDraft() }
+        function onVirtualAsioDevicesChanged() {
+            if (!window.virtualAsioAwaitingRefresh)
+                window.syncVirtualAsioDraft()
+        }
         function onVirtualAsioTopologyApplied() {
-            window.virtualAsioDraftDirty = false
+            window.virtualAsioAwaitingRefresh = true
+        }
+        function onVirtualAsioDevicesRefreshed() {
+            if (window.virtualAsioAwaitingRefresh) {
+                window.virtualAsioAwaitingRefresh = false
+                window.virtualAsioDraftDirty = false
+            }
             window.syncVirtualAsioDraft()
         }
         function onSessionChanged() {
