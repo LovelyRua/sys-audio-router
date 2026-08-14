@@ -113,6 +113,7 @@ struct WindowsVirtualAsioBufferBinding {
 };
 
 struct WindowsVirtualAsioRuntimeConfig {
+  std::wstring broker_pipe_name;
   std::uint32_t sample_rate = 0;
   std::uint32_t frames_per_block = 0;
   std::uint32_t input_channels = 0;
@@ -139,6 +140,9 @@ class WindowsVirtualAsioRuntime {
       WindowsVirtualAsioRuntimeConfig config);
   [[nodiscard]] static service::WindowsVirtualAsioBrokerFormatResult
   query_engine_format(std::uint32_t timeout_ms = 250);
+  [[nodiscard]] static service::WindowsVirtualAsioBrokerFormatResult
+  query_engine_format(std::wstring broker_pipe_name,
+                      std::uint32_t timeout_ms = 250);
 
   [[nodiscard]] bool start(std::string& error);
   void stop() noexcept;

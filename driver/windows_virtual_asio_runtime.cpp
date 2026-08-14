@@ -69,7 +69,7 @@ bool secure_random(std::array<std::uint64_t, 3>& values) noexcept {
              BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0;
 }
 
-std::wstring broker_pipe_name() {
+std::wstring default_broker_pipe_name() {
   std::array<wchar_t, 512> value{};
   const auto length = GetEnvironmentVariableW(
       L"SAR_VIRTUAL_ASIO_PIPE", value.data(),
@@ -132,13 +132,21 @@ WindowsVirtualAsioRuntime::~WindowsVirtualAsioRuntime() {
 
 service::WindowsVirtualAsioBrokerFormatResult
 WindowsVirtualAsioRuntime::query_engine_format(std::uint32_t timeout_ms) {
+  return query_engine_format({}, timeout_ms);
+}
+
+service::WindowsVirtualAsioBrokerFormatResult
+WindowsVirtualAsioRuntime::query_engine_format(std::wstring broker_pipe_name,
+                                               std::uint32_t timeout_ms) {
   std::array<std::uint64_t, 3> random{};
   if (!secure_random(random)) {
     return {{}, {{"virtual_asio_format_identity_failed",
                   "Could not generate the format query identity.", 0}}};
   }
   service::NamedPipeControlConfig pipe_config;
-  pipe_config.pipe_name = broker_pipe_name();
+  pipe_config.pipe_name = broker_pipe_name.empty()
+                              ? default_broker_pipe_name()
+                              : std::move(broker_pipe_name);
   pipe_config.maximum_message_bytes =
       static_cast<std::uint32_t>(control::kVirtualAsioBrokerMaxMessageBytes);
   return service::WindowsVirtualAsioBrokerClient::query_format(
@@ -172,7 +180,9 @@ WindowsVirtualAsioRuntimeOpenResult WindowsVirtualAsioRuntime::open(
     return {nullptr, "Could not generate the broker connection identity."};
   }
   service::NamedPipeControlConfig pipe_config;
-  pipe_config.pipe_name = broker_pipe_name();
+  pipe_config.pipe_name = config.broker_pipe_name.empty()
+                              ? default_broker_pipe_name()
+                              : config.broker_pipe_name;
   pipe_config.maximum_message_bytes =
       static_cast<std::uint32_t>(control::kVirtualAsioBrokerMaxMessageBytes);
   control::VirtualAsioBrokerConnectRequest request{
