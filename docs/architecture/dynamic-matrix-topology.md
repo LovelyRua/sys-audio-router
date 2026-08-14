@@ -87,13 +87,15 @@ version. Cleanup occurs only after no process maps the old DLL.
 
 ## Current Implementation Step
 
-The engine service now derives the first Virtual ASIO instance's symmetric
-channel profile from contiguous `asio-output-*` and `asio-input-*` matrix port
-groups. The profile drives graph offsets, broker format publication, realtime
-buses, rate matching, and admitted client graphs. `--asio-channels N` can seed
-a new session with an N x N device; changing the count of a running service is
-rejected and requires restart. Persistent multi-instance definitions and GUI
-topology editing remain the next control-plane slice.
+The session now persists multiple Virtual ASIO definitions. The engine derives
+the aggregate symmetric profile from contiguous `asio-output-*` and
+`asio-input-*` matrix port groups, then compiles enabled definitions into
+non-overlapping input/output slices. Every instance owns independent realtime
+buses, rate matching, transport sessions, and a broker pipe; one DLL resolves
+the requested CLSID and broker token at COM activation. `--asio-channels N`
+still seeds a new one-instance N x N session, and live topology changes require
+an engine restart. GUI create/rename/resize/remove commands and automatic
+registration synchronization remain the next control-plane slice.
 
 Each slice requires wire round-trip tests, preset migration tests, graph
 compiler tests, and Windows package/host acceptance before the next slice.

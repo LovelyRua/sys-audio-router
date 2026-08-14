@@ -411,10 +411,11 @@ edits now have a bounded 64-entry undo/redo history; rejected engine commands
 leave the history unchanged, and loading a preset establishes a new history
 baseline.
 
-The next matrix increment is the dynamic topology boundary documented in
-`docs/architecture/dynamic-matrix-topology.md`: stable device/port identities,
-explicit availability, rectangular graph compilation, multiple registered ASIO
-instances, and multiple clock-domain-aware WASAPI bindings. Fixed channel
+The dynamic topology boundary now persists Virtual ASIO instance identities,
+supports engine-defined channel counts, registers multiple CLSIDs against one
+DLL, and runs independent instance brokers over non-overlapping matrix slices.
+GUI topology operations, registration synchronization, explicit port
+availability, and rectangular aggregate ASIO groups remain. Fixed channel
 offsets in the alpha preset are migration scaffolding, not the extensibility
 model.
 

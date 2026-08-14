@@ -98,6 +98,25 @@ ASIOTime* buffer_switch_time_info(ASIOTime* time,
   return time;
 }
 
+void register_test_instance(const std::wstring& key_path,
+                            const std::wstring& display_name,
+                            const std::wstring& broker_token) {
+  HKEY key = nullptr;
+  assert(RegCreateKeyExW(HKEY_CURRENT_USER, key_path.c_str(), 0, nullptr, 0,
+                         KEY_SET_VALUE, nullptr, &key, nullptr) ==
+         ERROR_SUCCESS);
+  const auto write = [key](const wchar_t* name, const std::wstring& value) {
+    assert(RegSetValueExW(
+               key, name, 0, REG_SZ,
+               reinterpret_cast<const BYTE*>(value.c_str()),
+               static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t))) ==
+           ERROR_SUCCESS);
+  };
+  write(nullptr, display_name);
+  write(L"BrokerToken", broker_token);
+  RegCloseKey(key);
+}
+
 }  // namespace
 
 int wmain(int argc, wchar_t** argv) {
@@ -145,9 +164,10 @@ int wmain(int argc, wchar_t** argv) {
   const auto recovered = clock_128.advance(late_now);
   assert(recovered.skipped_periods == 1);
   assert(recovered.deadline_qpc > late_now);
+  const std::wstring instance_token =
+      L"asio-com-smoke-" + std::to_wstring(GetCurrentProcessId());
   const std::wstring pipe_name =
-      L"sys-audio-route-asio-com-smoke-" +
-      std::to_wstring(GetCurrentProcessId());
+      L"sys-audio-route-control-" + instance_token;
   sar::service::WindowsVirtualAsioTransportHost transport_host({
       .endpoint_token = "asio-com-smoke",
       .maximum_clients = 2,
@@ -170,6 +190,36 @@ int wmain(int argc, wchar_t** argv) {
   assert(can_unload != nullptr);
   assert(get_class != nullptr);
   assert(can_unload() == S_OK);
+
+  constexpr wchar_t custom_clsid_text[] =
+      L"{83D4C47A-9834-41F4-A5EE-62BFB8F28D8A}";
+  const std::wstring custom_key =
+      std::wstring(L"Software\\Classes\\CLSID\\") + custom_clsid_text;
+  register_test_instance(custom_key, L"System Audio Route COM Test",
+                         instance_token);
+  CLSID custom_clsid{};
+  assert(SUCCEEDED(CLSIDFromString(custom_clsid_text, &custom_clsid)));
+  IClassFactory* custom_factory = nullptr;
+  assert(get_class(custom_clsid, IID_IClassFactory,
+                   reinterpret_cast<void**>(&custom_factory)) == S_OK);
+  IUnknown* custom_driver = nullptr;
+  assert(custom_factory->CreateInstance(
+             nullptr, custom_clsid,
+             reinterpret_cast<void**>(&custom_driver)) == S_OK);
+  auto* custom_asio = static_cast<IASIO*>(custom_driver);
+  char custom_name[32] = {};
+  custom_asio->getDriverName(custom_name);
+  assert(std::strcmp(custom_name, "System Audio Route COM Test") == 0);
+  assert(custom_asio->init(nullptr) == ASIOTrue);
+  long custom_inputs = 0;
+  long custom_outputs = 0;
+  assert(custom_asio->getChannels(&custom_inputs, &custom_outputs) == ASE_OK);
+  assert(custom_inputs == 8);
+  assert(custom_outputs == 8);
+  assert(custom_driver->Release() == 0);
+  assert(custom_factory->Release() == 0);
+  assert(RegDeleteTreeW(HKEY_CURRENT_USER, custom_key.c_str()) ==
+         ERROR_SUCCESS);
 
   CLSID unknown = sar::driver::kWindowsVirtualAsioClsid;
   ++unknown.Data1;

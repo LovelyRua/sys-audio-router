@@ -110,10 +110,14 @@ diagnostics over the same control protocol. Graph mutations now prepare a new
 graph and runtime, stop the previous runtime, start the candidate, refresh active
 Virtual ASIO client graphs, and commit only after every step succeeds. A failed
 candidate restores the previous running runtime and leaves the preset unchanged.
-The Alpha Virtual ASIO DLL and service currently enforce exactly two input and
-two output channels. The service-owned render bus also keeps a fixed physical
-render quantum for its lifetime, so preset block-size changes are rejected with
-a restart-required error instead of committing an unusable format. A stopped
+The Alpha Virtual ASIO DLL now discovers its channel counts from the selected
+engine instance instead of enforcing stereo. Session schema v2 persists up to
+sixteen Virtual ASIO definitions, and the service compiles each enabled
+definition into independent render/capture buses, rate matcher, transport host,
+broker pipe, and non-overlapping matrix channel slices. The service-owned buses
+still keep a fixed physical quantum for their lifetime, so preset block-size or
+topology changes are rejected with a restart-required error instead of
+committing an unusable format. A stopped
 runtime can rebuild against a newer graph through its retained endpoint
 configuration. The Qt Quick GUI now binds to control wire v10 from a separate process.
 Control command identity is scoped to each GUI process with a UUID prefix. The
@@ -159,9 +163,10 @@ It preallocates fixed-format client-to-engine and engine-to-client block queues,
 keeps push/pop allocation-free and lock-free, tracks drops, underruns, sequence
 discontinuities, and connection generations, and has a two-thread stress smoke.
 It is not itself a driver. A separate x64 DLL now supplies the initial official
-SDK `IASIO` interface, COM activation, fixed stereo channel and format queries,
+SDK `IASIO` interface, COM activation, engine-defined channel and format queries,
 double-buffer allocation, and start/stop/dispose lifecycle. Its registration
-utility writes matching COM and ASIO discovery entries. A dedicated MMCSS worker
+utility writes matching COM and ASIO discovery entries. One DLL can resolve
+multiple registered CLSIDs and route each instance to its own broker token. A dedicated MMCSS worker
 now schedules the negotiated double buffers and exchanges planar float blocks
 with the service broker through the existing bounded shared queues. The worker
 does not wait for engine output; an empty queue produces deterministic silence.
