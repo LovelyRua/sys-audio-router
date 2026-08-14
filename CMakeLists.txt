@@ -866,6 +866,11 @@ if(WIN32)
            COMMAND sar_virtual_asio_register)
   set_tests_properties(windows_virtual_asio_registration_missing_action
                        PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME windows_virtual_asio_registration_partial_instance
+           COMMAND sar_virtual_asio_register --unregister
+                   --clsid {83D4C47A-9834-41F4-A5EE-62BFB8F28D8A})
+  set_tests_properties(windows_virtual_asio_registration_partial_instance
+                       PROPERTIES WILL_FAIL TRUE)
   add_test(NAME windows_virtual_asio_object_names_smoke
            COMMAND sar_windows_virtual_asio_object_names_smoke)
   add_test(NAME windows_virtual_asio_events_smoke

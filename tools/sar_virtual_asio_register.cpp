@@ -18,7 +18,9 @@ void print_usage() {
       << "Usage: sar_virtual_asio_register "
          "(--register [DLL]|--verify [DLL]|--unregister|"
          "--unregister-owned [DLL]|--check-unlocked [DLL]) "
-         "[--user|--machine] [--x64|--x86]\n"
+         "[--user|--machine] [--x64|--x86] "
+         "[--clsid GUID --display-name NAME --registry-name NAME "
+         "--broker-token TOKEN]\n"
          "DLL defaults to SystemAudioRouteVirtualASIO.dll beside this tool.\n";
 }
 
@@ -112,6 +114,7 @@ int wmain(int argc, wchar_t** argv) {
   WindowsVirtualAsioRegistrationScope scope =
       WindowsVirtualAsioRegistrationScope::LocalMachine;
   std::wstring dll_path;
+  sar::driver::WindowsVirtualAsioInstanceDescriptor instance;
 
   for (int index = 1; index < argc; ++index) {
     const std::wstring argument = argv[index];
@@ -145,6 +148,14 @@ int wmain(int argc, wchar_t** argv) {
       scope = WindowsVirtualAsioRegistrationScope::CurrentUser;
     } else if (argument == L"--machine") {
       scope = WindowsVirtualAsioRegistrationScope::LocalMachine;
+    } else if (argument == L"--clsid" && index + 1 < argc) {
+      instance.clsid = argv[++index];
+    } else if (argument == L"--display-name" && index + 1 < argc) {
+      instance.display_name = argv[++index];
+    } else if (argument == L"--registry-name" && index + 1 < argc) {
+      instance.registry_name = argv[++index];
+    } else if (argument == L"--broker-token" && index + 1 < argc) {
+      instance.broker_token = argv[++index];
     } else if (argument == L"--help" || argument == L"-h") {
       print_usage();
       return 0;
@@ -162,6 +173,19 @@ int wmain(int argc, wchar_t** argv) {
     std::cerr << "Choose exactly one registration action.\n";
     return 2;
   }
+  const auto instance_field_count = static_cast<int>(!instance.clsid.empty()) +
+                                    static_cast<int>(!instance.display_name.empty()) +
+                                    static_cast<int>(!instance.registry_name.empty()) +
+                                    static_cast<int>(!instance.broker_token.empty());
+  if (instance_field_count != 0 && instance_field_count != 4) {
+    std::cerr << "Specify all four Virtual ASIO instance identity options.\n";
+    return 2;
+  }
+  const bool custom_instance = instance_field_count == 4;
+  if (custom_instance && check_unlocked) {
+    std::cerr << "Instance identity options do not apply to --check-unlocked.\n";
+    return 2;
+  }
   if ((register_driver || verify_driver || unregister_owned_driver ||
        check_unlocked) &&
       dll_path.empty()) {
@@ -171,17 +195,29 @@ int wmain(int argc, wchar_t** argv) {
     return check_driver_unlocked(dll_path);
   }
 
-  const auto result = register_driver
-      ? sar::driver::register_windows_virtual_asio_driver(
-            std::move(dll_path), view, scope)
-      : verify_driver
-          ? sar::driver::verify_windows_virtual_asio_driver_registration(
-                std::move(dll_path), view, scope)
-          : unregister_owned_driver
-              ? sar::driver::unregister_windows_virtual_asio_driver_if_owned(
-                    std::move(dll_path), view, scope)
-              : sar::driver::unregister_windows_virtual_asio_driver(
-                    view, scope);
+  const auto result = custom_instance
+      ? register_driver
+            ? sar::driver::register_windows_virtual_asio_driver(
+                  std::move(dll_path), instance, view, scope)
+            : verify_driver
+                  ? sar::driver::verify_windows_virtual_asio_driver_registration(
+                        std::move(dll_path), instance, view, scope)
+                  : unregister_owned_driver
+                        ? sar::driver::unregister_windows_virtual_asio_driver_if_owned(
+                              std::move(dll_path), instance, view, scope)
+                        : sar::driver::unregister_windows_virtual_asio_driver(
+                              instance, view, scope)
+      : register_driver
+            ? sar::driver::register_windows_virtual_asio_driver(
+                  std::move(dll_path), view, scope)
+            : verify_driver
+                  ? sar::driver::verify_windows_virtual_asio_driver_registration(
+                        std::move(dll_path), view, scope)
+                  : unregister_owned_driver
+                        ? sar::driver::unregister_windows_virtual_asio_driver_if_owned(
+                              std::move(dll_path), view, scope)
+                        : sar::driver::unregister_windows_virtual_asio_driver(
+                              view, scope);
   if (!result.ok()) {
     for (const auto& error : result.errors()) {
       std::cerr << error.code << ": " << error.message
