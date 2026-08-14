@@ -104,6 +104,8 @@ struct ControlResponse {
   };
   AudioRuntimeState audio_runtime;
   bool has_audio_runtime_state = false;
+  std::vector<VirtualAsioDeviceDefinition> virtual_asio_devices;
+  bool has_virtual_asio_devices = false;
 };
 
 [[nodiscard]] ControlResponse command_accepted(std::string command_id);

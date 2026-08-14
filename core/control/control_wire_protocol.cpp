@@ -467,6 +467,29 @@ platform::AudioDeviceDescriptor decode_device(Reader& reader) {
   return device;
 }
 
+void encode_virtual_asio_device(
+    Writer& writer, const VirtualAsioDeviceDefinition& device) {
+  writer.string(device.device_id);
+  writer.string(device.clsid);
+  writer.string(device.registry_name);
+  writer.string(device.broker_token);
+  writer.scalar(device.input_channels);
+  writer.scalar(device.output_channels);
+  writer.boolean(device.enabled);
+}
+
+VirtualAsioDeviceDefinition decode_virtual_asio_device(Reader& reader) {
+  VirtualAsioDeviceDefinition device;
+  device.device_id = reader.string();
+  device.clsid = reader.string();
+  device.registry_name = reader.string();
+  device.broker_token = reader.string();
+  device.input_channels = reader.scalar<std::uint32_t>();
+  device.output_channels = reader.scalar<std::uint32_t>();
+  device.enabled = reader.boolean();
+  return device;
+}
+
 }  // namespace
 
 ControlWireEncodeResult encode_control_command(const ControlCommand& command) {
@@ -493,6 +516,10 @@ ControlWireEncodeResult encode_control_command(const ControlCommand& command) {
     writer.scalar(endpoint.first_channel);
     writer.scalar(endpoint.channel_count);
   }
+  writer.count(command.virtual_asio_devices.size());
+  for (const auto& device : command.virtual_asio_devices) {
+    encode_virtual_asio_device(writer, device);
+  }
   return writer.finish();
 }
 
@@ -506,7 +533,10 @@ ControlCommandDecodeResult decode_control_command(
   command.schema_version = reader.scalar<std::uint32_t>();
   command.command_id = reader.string();
   command.type = reader.enumeration<ControlCommandType>(
-      static_cast<std::uint32_t>(ControlCommandType::ConfigureAudioRuntime));
+      static_cast<std::uint32_t>(
+          reader.version() >= 11
+              ? ControlCommandType::ConfigureVirtualAsioDevices
+              : ControlCommandType::ConfigureAudioRuntime));
   command.endpoint_id = reader.string();
   command.endpoint_label = reader.string();
   command.input_id = reader.string();
@@ -533,6 +563,16 @@ ControlCommandDecodeResult decode_control_command(
       endpoint.first_channel = reader.scalar<std::uint32_t>();
       endpoint.channel_count = reader.scalar<std::uint32_t>();
       command.audio_runtime.endpoints.push_back(std::move(endpoint));
+    }
+  }
+  const auto virtual_asio_device_count =
+      reader.version() >= 11 ? reader.count() : 0;
+  if (reader.ok() && reader.version() >= 11) {
+    command.virtual_asio_devices.reserve(virtual_asio_device_count);
+    for (std::uint32_t index = 0;
+         index < virtual_asio_device_count && reader.ok(); ++index) {
+      command.virtual_asio_devices.push_back(
+          decode_virtual_asio_device(reader));
     }
   }
   reader.finish();
@@ -618,6 +658,13 @@ ControlWireEncodeResult encode_control_response(const ControlResponse& response)
       writer.boolean(endpoint.clock_master);
       writer.scalar(endpoint.first_channel);
       writer.scalar(endpoint.channel_count);
+    }
+  }
+  writer.boolean(response.has_virtual_asio_devices);
+  if (response.has_virtual_asio_devices) {
+    writer.count(response.virtual_asio_devices.size());
+    for (const auto& device : response.virtual_asio_devices) {
+      encode_virtual_asio_device(writer, device);
     }
   }
   return writer.finish();
@@ -733,6 +780,17 @@ ControlResponseDecodeResult decode_control_response(
         response.audio_runtime.configuration.endpoints.push_back(
             std::move(endpoint));
       }
+    }
+  }
+  response.has_virtual_asio_devices =
+      reader.version() >= 11 ? reader.boolean() : false;
+  if (reader.ok() && response.has_virtual_asio_devices) {
+    const auto device_count = reader.count();
+    response.virtual_asio_devices.reserve(device_count);
+    for (std::uint32_t index = 0; index < device_count && reader.ok();
+         ++index) {
+      response.virtual_asio_devices.push_back(
+          decode_virtual_asio_device(reader));
     }
   }
   reader.finish();

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/control/preset_document.h"
+#include "core/control/virtual_asio_device_definition.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -26,6 +27,8 @@ enum class ControlCommandType {
   StartAudioRuntime,
   StopAudioRuntime,
   ConfigureAudioRuntime,
+  QueryVirtualAsioDevices,
+  ConfigureVirtualAsioDevices,
 };
 
 enum class AudioRuntimeMode {
@@ -74,6 +77,7 @@ struct ControlCommand {
   bool mute = false;
   PresetDocument preset;
   AudioRuntimeConfiguration audio_runtime;
+  std::vector<VirtualAsioDeviceDefinition> virtual_asio_devices;
 };
 
 class ControlCommandValidationResult {

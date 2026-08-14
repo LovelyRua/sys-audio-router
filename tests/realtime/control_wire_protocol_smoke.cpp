@@ -51,6 +51,15 @@ int main() {
       {"render-1", "native-render-1",
        sar::control::AudioRuntimeEndpointDirection::Render, true, 0, 2},
   };
+  command.virtual_asio_devices = {{
+      .device_id = "main",
+      .clsid = "{7F16C8A9-4A0C-4D31-9A5B-2C6E7F8D1042}",
+      .registry_name = "System Audio Route Main",
+      .broker_token = "main",
+      .input_channels = 8,
+      .output_channels = 8,
+      .enabled = true,
+  }};
 
   const auto encoded_command = sar::control::encode_control_command(command);
   assert(encoded_command.ok());
@@ -71,6 +80,8 @@ int main() {
   assert(decoded_command.command.audio_runtime.endpoints[0].device_id ==
          "native-capture-1");
   assert(decoded_command.command.audio_runtime.endpoints[1].clock_master);
+  assert(decoded_command.command.virtual_asio_devices.size() == 1);
+  assert(decoded_command.command.virtual_asio_devices[0].input_channels == 8);
 
   auto legacy_command = command;
   legacy_command.audio_runtime = {};
@@ -78,8 +89,9 @@ int main() {
       sar::control::AudioRuntimeMode::WasapiDuplex;
   legacy_command.audio_runtime.capture_device_id = "legacy-capture";
   legacy_command.audio_runtime.render_device_id = "legacy-render";
+  legacy_command.virtual_asio_devices.clear();
   auto encoded_v8 = sar::control::encode_control_command(legacy_command).bytes;
-  encoded_v8.resize(encoded_v8.size() - sizeof(std::uint32_t));
+  encoded_v8.resize(encoded_v8.size() - 2 * sizeof(std::uint32_t));
   write_u16(encoded_v8, 4, 8);
   write_u32(encoded_v8, 8,
             static_cast<std::uint32_t>(encoded_v8.size() -
@@ -154,6 +166,8 @@ int main() {
       false,
       true,
   });
+  response.has_virtual_asio_devices = true;
+  response.virtual_asio_devices = command.virtual_asio_devices;
 
   const auto encoded_response = sar::control::encode_control_response(response);
   assert(encoded_response.ok());
@@ -165,6 +179,10 @@ int main() {
   assert(decoded_response.response.active_graph.nodes.size() == 1);
   assert(decoded_response.response.devices.size() == 1);
   assert(decoded_response.response.devices[0].is_virtual);
+  assert(decoded_response.response.has_virtual_asio_devices);
+  assert(decoded_response.response.virtual_asio_devices.size() == 1);
+  assert(decoded_response.response.virtual_asio_devices[0].broker_token ==
+         "main");
   assert(decoded_response.response.diagnostics.processed_blocks == 123);
   assert(decoded_response.response.diagnostics.virtual_asio_pushed_blocks == 456);
   assert(decoded_response.response.diagnostics.virtual_asio_producer_underflows ==

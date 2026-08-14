@@ -10,7 +10,7 @@
 
 namespace sar::control {
 
-inline constexpr std::uint16_t kControlWireVersion = 10;
+inline constexpr std::uint16_t kControlWireVersion = 11;
 inline constexpr std::size_t kControlWireHeaderSize = 12;
 inline constexpr std::size_t kControlWireMaxMessageBytes = 1024 * 1024;
 inline constexpr std::size_t kControlWireMaxStringBytes = 64 * 1024;

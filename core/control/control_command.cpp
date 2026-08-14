@@ -217,6 +217,17 @@ ControlCommandValidationResult validate_command(const ControlCommand& command) {
     case ControlCommandType::QueryAudioRuntime:
     case ControlCommandType::StartAudioRuntime:
     case ControlCommandType::StopAudioRuntime:
+    case ControlCommandType::QueryVirtualAsioDevices:
+      break;
+
+    case ControlCommandType::ConfigureVirtualAsioDevices:
+      if (command.virtual_asio_devices.empty() ||
+          command.virtual_asio_devices.size() > kMaximumVirtualAsioDevices) {
+        errors.push_back({
+            "invalid_virtual_asio_device_count",
+            "ConfigureVirtualAsioDevices requires between one and sixteen devices.",
+        });
+      }
       break;
 
     case ControlCommandType::ConfigureAudioRuntime: {
@@ -299,6 +310,8 @@ bool control_command_mutates_preset(ControlCommandType type) noexcept {
     case ControlCommandType::StartAudioRuntime:
     case ControlCommandType::StopAudioRuntime:
     case ControlCommandType::ConfigureAudioRuntime:
+    case ControlCommandType::QueryVirtualAsioDevices:
+    case ControlCommandType::ConfigureVirtualAsioDevices:
       return false;
   }
 
@@ -411,6 +424,8 @@ ControlApplyResult apply_command(const PresetDocument& current,
     case ControlCommandType::StartAudioRuntime:
     case ControlCommandType::StopAudioRuntime:
     case ControlCommandType::ConfigureAudioRuntime:
+    case ControlCommandType::QueryVirtualAsioDevices:
+    case ControlCommandType::ConfigureVirtualAsioDevices:
     case ControlCommandType::LoadPreset:
       break;
   }

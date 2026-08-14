@@ -13,6 +13,7 @@
 #include "core/platform/virtual_asio_capture_bus.h"
 #include "core/platform/realtime_audio_rate_matching_source.h"
 #include "core/platform/windows_wasapi_device_provider.h"
+#include "driver/windows_virtual_asio_registration.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -27,7 +28,9 @@
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <cwchar>
+#include <filesystem>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -41,6 +44,42 @@
 namespace {
 
 std::atomic_bool stop_requested = false;
+
+std::wstring utf8_to_wide(const std::string& value) {
+  if (value.empty()) return {};
+  const auto required = MultiByteToWideChar(
+      CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
+      static_cast<int>(value.size()), nullptr, 0);
+  if (required <= 0) return {};
+  std::wstring result(static_cast<std::size_t>(required), L'\0');
+  if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(),
+                          static_cast<int>(value.size()), result.data(),
+                          required) != required) {
+    return {};
+  }
+  return result;
+}
+
+std::wstring adjacent_virtual_asio_driver_path() {
+  std::wstring executable(32768, L'\0');
+  const auto length = GetModuleFileNameW(
+      nullptr, executable.data(), static_cast<DWORD>(executable.size()));
+  if (length == 0 || length >= executable.size()) return {};
+  executable.resize(length);
+  return (std::filesystem::path(executable).parent_path() /
+          L"SystemAudioRouteVirtualASIO.dll")
+      .wstring();
+}
+
+sar::driver::WindowsVirtualAsioInstanceDescriptor registration_descriptor(
+    const sar::control::VirtualAsioDeviceDefinition& device) {
+  return {
+      utf8_to_wide(device.clsid),
+      utf8_to_wide(device.registry_name),
+      utf8_to_wide(device.registry_name),
+      utf8_to_wide(device.broker_token),
+  };
+}
 
 BOOL WINAPI console_handler(DWORD signal) {
   if (signal == CTRL_C_EVENT || signal == CTRL_BREAK_EVENT ||
@@ -435,6 +474,66 @@ bool save_session_file_atomic(const std::wstring& path,
     return false;
   }
   return true;
+}
+
+std::vector<sar::control::PresetError> synchronize_virtual_asio_registration(
+    const std::wstring& driver_path,
+    const std::vector<sar::control::VirtualAsioDeviceDefinition>& previous,
+    const std::vector<sar::control::VirtualAsioDeviceDefinition>& desired) {
+  using sar::driver::WindowsVirtualAsioRegistrationScope;
+  using sar::driver::WindowsVirtualAsioRegistryView;
+  constexpr auto view = WindowsVirtualAsioRegistryView::X64;
+  constexpr auto scope = WindowsVirtualAsioRegistrationScope::CurrentUser;
+
+  const auto enabled_with_clsid = [](const auto& devices,
+                                     const std::string& clsid) {
+    return std::ranges::any_of(devices, [&](const auto& device) {
+      return device.enabled && _stricmp(device.clsid.c_str(), clsid.c_str()) == 0;
+    });
+  };
+  const auto restore_previous = [&] {
+    for (const auto& device : previous) {
+      if (device.enabled) {
+        static_cast<void>(sar::driver::register_windows_virtual_asio_driver(
+            driver_path, registration_descriptor(device), view, scope));
+      }
+    }
+    for (const auto& device : desired) {
+      if (device.enabled && !enabled_with_clsid(previous, device.clsid)) {
+        static_cast<void>(
+            sar::driver::unregister_windows_virtual_asio_driver_if_owned(
+                driver_path, registration_descriptor(device), view, scope));
+      }
+    }
+  };
+  const auto convert_failure = [](const auto& result) {
+    std::vector<sar::control::PresetError> errors;
+    for (const auto& error : result.errors()) {
+      errors.push_back({error.code, error.message});
+    }
+    return errors;
+  };
+
+  for (const auto& device : desired) {
+    if (!device.enabled) continue;
+    const auto result = sar::driver::register_windows_virtual_asio_driver(
+        driver_path, registration_descriptor(device), view, scope);
+    if (!result.ok()) {
+      restore_previous();
+      return convert_failure(result);
+    }
+  }
+  for (const auto& device : previous) {
+    if (!device.enabled || enabled_with_clsid(desired, device.clsid)) continue;
+    const auto result =
+        sar::driver::unregister_windows_virtual_asio_driver_if_owned(
+            driver_path, registration_descriptor(device), view, scope);
+    if (!result.ok()) {
+      restore_previous();
+      return convert_failure(result);
+    }
+  }
+  return {};
 }
 
 bool command_changes_persisted_session(
@@ -965,6 +1064,7 @@ int main(int argc, char** argv) {
     asio_brokers.push_back(std::move(broker));
   }
 
+  const auto virtual_asio_driver_path = adjacent_virtual_asio_driver_path();
   std::mutex request_mutex;
   sar::service::WindowsNamedPipeControlServer pipe_server(
       pipe_config,
@@ -972,10 +1072,117 @@ int main(int argc, char** argv) {
        &request_mutex,
        &desired_session,
        &session_path,
+       &asio_hosts,
+       &virtual_asio_driver_path,
        session_writes_allowed](std::span<const std::byte> request) {
         std::lock_guard request_lock(request_mutex);
         const auto request_bytes = as_u8(request);
         const auto command = sar::control::decode_control_command(request_bytes);
+        auto encode_response = [](sar::control::ControlResponse response) {
+          const auto encoded = sar::control::encode_control_response(response);
+          if (!encoded.ok()) {
+            return sar::service::NamedPipeControlResult::failure(
+                {"control_response_encode_failed",
+                 "Engine control response could not be encoded.", 0});
+          }
+          return sar::service::NamedPipeControlResult::success(
+              as_bytes(encoded.bytes));
+        };
+        if (command.ok() &&
+            command.command.type ==
+                sar::control::ControlCommandType::QueryVirtualAsioDevices) {
+          auto response =
+              sar::control::command_accepted(command.command.command_id);
+          response.virtual_asio_devices = desired_session.virtual_asio_devices;
+          response.has_virtual_asio_devices = true;
+          return encode_response(std::move(response));
+        }
+        if (command.ok() &&
+            command.command.type == sar::control::ControlCommandType::
+                                        ConfigureVirtualAsioDevices) {
+          const auto validation =
+              sar::control::validate_command(command.command);
+          if (!validation.ok()) {
+            return encode_response(sar::control::command_rejected(
+                command.command.command_id, validation.errors()));
+          }
+          if (!session_writes_allowed || virtual_asio_driver_path.empty()) {
+            return encode_response(sar::control::command_rejected(
+                command.command.command_id,
+                {{"virtual_asio_topology_persistence_unavailable",
+                  "Virtual ASIO topology changes require a writable engine session and adjacent driver."}}));
+          }
+          if (service->audio_runtime_running()) {
+            return encode_response(sar::control::command_rejected(
+                command.command.command_id,
+                {{"audio_runtime_running",
+                  "Stop the audio runtime before changing Virtual ASIO topology."}}));
+          }
+          const auto active_clients = std::ranges::any_of(
+              asio_hosts, [](const auto& host) {
+                return host->active_session_count() != 0;
+              });
+          if (active_clients) {
+            return encode_response(sar::control::command_rejected(
+                command.command.command_id,
+                {{"virtual_asio_clients_active",
+                  "Close every DAW using System Audio Route before changing topology."}}));
+          }
+
+          std::size_t input_channels = 0;
+          std::size_t output_channels = 0;
+          for (const auto& device : command.command.virtual_asio_devices) {
+            if (!device.enabled) continue;
+            input_channels += device.input_channels;
+            output_channels += device.output_channels;
+          }
+          if (input_channels == 0 || input_channels != output_channels ||
+              input_channels > sar::control::kControlWireMaxArrayElements) {
+            return encode_response(sar::control::command_rejected(
+                command.command.command_id,
+                {{"virtual_asio_aggregate_shape_unsupported",
+                  "Enabled Virtual ASIO input and output channel totals must be equal and bounded."}}));
+          }
+          auto candidate = desired_session;
+          candidate.virtual_asio_devices =
+              command.command.virtual_asio_devices;
+          if (!sar::service::resize_virtual_asio_matrix_profile(
+                  candidate.preset, output_channels)) {
+            return encode_response(sar::control::command_rejected(
+                command.command.command_id,
+                {{"virtual_asio_matrix_resize_failed",
+                  "The Virtual ASIO matrix port groups could not be resized."}}));
+          }
+          const auto session_validation =
+              sar::control::validate_session_document(candidate);
+          if (!session_validation.ok()) {
+            return encode_response(sar::control::command_rejected(
+                command.command.command_id, session_validation.errors()));
+          }
+          const auto registration_errors = synchronize_virtual_asio_registration(
+              virtual_asio_driver_path, desired_session.virtual_asio_devices,
+              candidate.virtual_asio_devices);
+          if (!registration_errors.empty()) {
+            return encode_response(sar::control::command_rejected(
+                command.command.command_id, registration_errors));
+          }
+          if (!save_session_file_atomic(session_path, candidate)) {
+            static_cast<void>(synchronize_virtual_asio_registration(
+                virtual_asio_driver_path, candidate.virtual_asio_devices,
+                desired_session.virtual_asio_devices));
+            return encode_response(sar::control::command_rejected(
+                command.command.command_id,
+                {{"session_write_failed",
+                  "Could not persist the Virtual ASIO topology."}}));
+          }
+          desired_session = std::move(candidate);
+          auto response =
+              sar::control::command_accepted(command.command.command_id);
+          response.virtual_asio_devices = desired_session.virtual_asio_devices;
+          response.has_virtual_asio_devices = true;
+          stop_requested.store(true, std::memory_order_release);
+          return encode_response(std::move(response));
+        }
         const auto response = service->handle_wire_request(request_bytes);
         if (!response.ok()) {
           return sar::service::NamedPipeControlResult::failure(

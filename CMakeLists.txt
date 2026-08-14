@@ -425,7 +425,8 @@ if(WIN32)
     tools/sar_engine_service.cpp
   )
 
-  target_link_libraries(sar_engine_service PRIVATE sar_core)
+  target_link_libraries(sar_engine_service
+    PRIVATE sar_core sar_virtual_asio_registration)
 
   add_executable(sar_bootstrap_launcher WIN32
     tools/sar_bootstrap_launcher.cpp
