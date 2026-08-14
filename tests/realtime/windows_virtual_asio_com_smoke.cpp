@@ -199,7 +199,7 @@ int wmain(int argc, wchar_t** argv) {
   auto* asio = static_cast<IASIO*>(driver);
   char driver_name[32] = {};
   asio->getDriverName(driver_name);
-  assert(std::strcmp(driver_name, "System Audio Route") == 0);
+  assert(std::strcmp(driver_name, "System Audio Route Virtual ASIO") == 0);
   assert(asio->getDriverVersion() == 1);
   assert(asio->start() == ASE_InvalidMode);
   assert(asio->init(nullptr) == ASIOTrue);
