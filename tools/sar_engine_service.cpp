@@ -6,6 +6,10 @@
 #include "core/service/windows_wasapi_engine_runtime.h"
 #include "core/service/windows_wasapi_matrix_runtime.h"
 #include "core/service/virtual_asio_matrix_profile.h"
+#include "core/service/virtual_asio_instance_layout.h"
+#include "core/platform/realtime_audio_channel_slice_sink.h"
+#include "core/platform/realtime_audio_fanout_sink.h"
+#include "core/platform/realtime_audio_input_assembler.h"
 #include "core/platform/virtual_asio_capture_bus.h"
 #include "core/platform/realtime_audio_rate_matching_source.h"
 #include "core/platform/windows_wasapi_device_provider.h"
@@ -720,15 +724,67 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  sar::platform::VirtualAsioRenderBus asio_render_bus(
-      asio_profile->channels, desired_session.preset.frames_per_block, 8, 32);
-  sar::platform::VirtualAsioCaptureBus asio_capture_bus(
-      asio_profile->channels, desired_session.preset.frames_per_block, 8, 32);
-  sar::platform::RealtimeAudioRateMatchingSource asio_render_rate_matcher(
-      asio_render_bus, asio_profile->channels,
-      desired_session.preset.frames_per_block,
-      desired_session.preset.sample_rate, desired_session.preset.sample_rate,
-      4);
+  const auto asio_layout = sar::service::virtual_asio_instance_layout(
+      desired_session.virtual_asio_devices, *asio_profile);
+  if (!asio_layout.has_value()) {
+    std::cerr << "virtual_asio_instance_layout_invalid: Enabled Virtual ASIO "
+                 "device channel totals must match the matrix port groups.\n";
+    return 1;
+  }
+
+  std::vector<std::unique_ptr<sar::platform::VirtualAsioRenderBus>>
+      asio_render_buses;
+  std::vector<std::unique_ptr<sar::platform::VirtualAsioCaptureBus>>
+      asio_capture_buses;
+  std::vector<std::unique_ptr<sar::platform::RealtimeAudioRateMatchingSource>>
+      asio_rate_matchers;
+  std::vector<sar::platform::RealtimeAudioInputBinding> asio_input_bindings;
+  asio_render_buses.reserve(asio_layout->instances.size());
+  asio_capture_buses.reserve(asio_layout->instances.size());
+  asio_rate_matchers.reserve(asio_layout->instances.size());
+  asio_input_bindings.reserve(asio_layout->instances.size());
+  for (const auto& instance : asio_layout->instances) {
+    auto render_bus = std::make_unique<sar::platform::VirtualAsioRenderBus>(
+        instance.output_channels, desired_session.preset.frames_per_block, 8,
+        32);
+    auto capture_bus = std::make_unique<sar::platform::VirtualAsioCaptureBus>(
+        instance.input_channels, desired_session.preset.frames_per_block, 8,
+        32);
+    auto rate_matcher =
+        std::make_unique<sar::platform::RealtimeAudioRateMatchingSource>(
+            *render_bus, instance.output_channels,
+            desired_session.preset.frames_per_block,
+            desired_session.preset.sample_rate,
+            desired_session.preset.sample_rate, 4);
+    asio_input_bindings.push_back({
+        .source = rate_matcher.get(),
+        .destination_first_channel = instance.daw_output_offset,
+        .channel_count = instance.output_channels,
+    });
+    asio_render_buses.push_back(std::move(render_bus));
+    asio_capture_buses.push_back(std::move(capture_bus));
+    asio_rate_matchers.push_back(std::move(rate_matcher));
+  }
+  sar::platform::RealtimeAudioInputAssembler asio_input_assembler(
+      asio_layout->output_channels, desired_session.preset.frames_per_block,
+      std::move(asio_input_bindings));
+  std::vector<std::unique_ptr<sar::platform::RealtimeAudioChannelSliceSink>>
+      asio_output_slices;
+  std::vector<sar::platform::RealtimeAudioSink*> asio_output_slice_ptrs;
+  asio_output_slices.reserve(asio_layout->instances.size());
+  asio_output_slice_ptrs.reserve(asio_layout->instances.size());
+  for (std::size_t index = 0; index < asio_layout->instances.size(); ++index) {
+    const auto& instance = asio_layout->instances[index];
+    auto slice =
+        std::make_unique<sar::platform::RealtimeAudioChannelSliceSink>(
+            instance.daw_input_offset, instance.input_channels,
+            desired_session.preset.frames_per_block,
+            *asio_capture_buses[index]);
+    asio_output_slice_ptrs.push_back(slice.get());
+    asio_output_slices.push_back(std::move(slice));
+  }
+  sar::platform::RealtimeAudioFanoutSink asio_output_fanout(
+      std::move(asio_output_slice_ptrs));
 
   auto service_result =
       sar::service::EngineControlService::create(desired_session.preset);
@@ -743,8 +799,8 @@ int main(int argc, char** argv) {
       std::make_unique<sar::platform::WindowsWasapiDeviceProvider>());
   service->set_audio_runtime_configurator(
       make_wasapi_runtime_configurator(
-          &asio_render_rate_matcher,
-          &asio_capture_bus,
+          &asio_input_assembler,
+          &asio_output_fanout,
           unified_channel_layout(desired_session.preset.matrix.inputs.size(),
                                  desired_session.preset.matrix.outputs.size(),
                                  *asio_profile)));
@@ -799,71 +855,114 @@ int main(int argc, char** argv) {
     }
   }
 
-  const std::wstring asio_pipe_name =
-      pipe_config.pipe_name + L"-virtual-asio";
-  sar::service::WindowsVirtualAsioTransportHost asio_host({
-      .endpoint_token = "engine",
-      .maximum_clients = 8,
-      .queue_capacity_blocks = 8,
-      .wait_timeout_ms = 20,
-  }, &asio_render_bus, &asio_capture_bus);
+  std::vector<std::unique_ptr<sar::service::WindowsVirtualAsioTransportHost>>
+      asio_hosts;
+  std::vector<std::unique_ptr<sar::service::WindowsVirtualAsioBrokerServer>>
+      asio_brokers;
+  asio_hosts.reserve(asio_layout->instances.size());
+  asio_brokers.reserve(asio_layout->instances.size());
+  for (std::size_t index = 0; index < asio_layout->instances.size(); ++index) {
+    const auto& instance = asio_layout->instances[index];
+    const auto& definition =
+        desired_session.virtual_asio_devices[instance.definition_index];
+    asio_hosts.push_back(std::make_unique<
+                         sar::service::WindowsVirtualAsioTransportHost>(
+        sar::service::WindowsVirtualAsioHostConfig{
+            .endpoint_token = definition.device_id,
+            .maximum_clients = 8,
+            .queue_capacity_blocks = 8,
+            .wait_timeout_ms = 20,
+        },
+        asio_render_buses[index].get(), asio_capture_buses[index].get()));
+  }
   service->set_preset_commit_observer(
-      [&asio_host, &asio_render_bus, &asio_capture_bus](
+      [&asio_hosts, &asio_render_buses, &asio_capture_buses, &asio_layout](
           const sar::control::PresetDocument& preset,
           std::uint64_t graph_version) {
         const auto profile = sar::service::virtual_asio_matrix_profile(
             preset.matrix);
-        if (!profile.has_value() || profile->channels != asio_render_bus.channels() ||
-            profile->channels != asio_capture_bus.channels()) {
+        if (!profile.has_value() ||
+            profile->channels != asio_layout->output_channels ||
+            profile->channels != asio_layout->input_channels) {
           return std::vector<sar::control::PresetError>{{
               "unified_matrix_topology_unsupported",
               "Changing Virtual ASIO channel count requires restarting the "
               "engine service.",
           }};
         }
-        if (!asio_render_bus.accepts_consumer_format(
-                profile->channels, preset.frames_per_block) ||
-            asio_capture_bus.producer_frames() != preset.frames_per_block) {
-          return std::vector<sar::control::PresetError>{{
-              "virtual_asio_bus_format_requires_restart",
-              "Changing frames per block requires restarting the engine service.",
-          }};
+        for (std::size_t index = 0; index < asio_layout->instances.size();
+             ++index) {
+          const auto& instance = asio_layout->instances[index];
+          if (!asio_render_buses[index]->accepts_consumer_format(
+                  instance.output_channels, preset.frames_per_block) ||
+              asio_capture_buses[index]->producer_frames() !=
+                  preset.frames_per_block) {
+            return std::vector<sar::control::PresetError>{{
+                "virtual_asio_bus_format_requires_restart",
+                "Changing frames per block requires restarting the engine service.",
+            }};
+          }
         }
-        const auto refreshed = asio_host.refresh_graphs(
-            [&preset, graph_version](
-                const sar::platform::VirtualAsioFormat& format) {
-              if (format.sample_rate != preset.sample_rate) {
-                return std::unique_ptr<sar::graph::Graph>{};
-              }
-              return make_asio_transport_graph(format, graph_version);
-            });
         std::vector<sar::control::PresetError> errors;
-        errors.reserve(refreshed.errors.size());
-        for (const auto& error : refreshed.errors) {
-          errors.push_back({error.code, error.message});
+        for (auto& host : asio_hosts) {
+          const auto refreshed = host->refresh_graphs(
+              [&preset, graph_version](
+                  const sar::platform::VirtualAsioFormat& format) {
+                if (format.sample_rate != preset.sample_rate) {
+                  return std::unique_ptr<sar::graph::Graph>{};
+                }
+                return make_asio_transport_graph(format, graph_version);
+              });
+          for (const auto& error : refreshed.errors) {
+            errors.push_back({error.code, error.message});
+          }
+          if (!errors.empty()) {
+            break;
+          }
         }
         return errors;
       });
-  sar::service::WindowsVirtualAsioBrokerServer asio_broker(
-      asio_pipe_name, asio_host,
-      [&asio_host](const sar::platform::VirtualAsioFormat& format) {
-        return make_asio_transport_graph(format, asio_host.graph_generation());
-      },
-      [&service, asio_channels = asio_profile->channels] {
-        const auto session = service->session_document();
-        return sar::platform::VirtualAsioFormat{
-            .sample_rate = session.preset.sample_rate,
-            .frames_per_block = session.preset.frames_per_block,
-            .input_channels = static_cast<std::uint32_t>(asio_channels),
-            .output_channels = static_cast<std::uint32_t>(asio_channels),
-        };
-      });
-  const auto asio_started = asio_broker.start();
-  if (!asio_started.ok()) {
-    std::cerr << asio_started.error().code << ": "
-              << asio_started.error().message << '\n';
-    service->stop_audio_runtime();
-    return 1;
+  for (std::size_t index = 0; index < asio_layout->instances.size(); ++index) {
+    const auto& instance = asio_layout->instances[index];
+    const auto& definition =
+        desired_session.virtual_asio_devices[instance.definition_index];
+    const std::wstring broker_token(definition.broker_token.begin(),
+                                    definition.broker_token.end());
+    const auto asio_pipe_name = pipe_config.pipe_name + L"-" + broker_token;
+    auto& host = *asio_hosts[index];
+    auto broker =
+        std::make_unique<sar::service::WindowsVirtualAsioBrokerServer>(
+            asio_pipe_name, host,
+            [&host](const sar::platform::VirtualAsioFormat& format) {
+              return make_asio_transport_graph(format,
+                                               host.graph_generation());
+            },
+            [&service, input_channels = instance.input_channels,
+             output_channels = instance.output_channels] {
+              const auto session = service->session_document();
+              return sar::platform::VirtualAsioFormat{
+                  .sample_rate = session.preset.sample_rate,
+                  .frames_per_block = session.preset.frames_per_block,
+                  .input_channels =
+                      static_cast<std::uint32_t>(input_channels),
+                  .output_channels =
+                      static_cast<std::uint32_t>(output_channels),
+              };
+            });
+    const auto asio_started = broker->start();
+    if (!asio_started.ok()) {
+      std::cerr << asio_started.error().code << ": "
+                << asio_started.error().message << '\n';
+      for (auto& started_broker : asio_brokers) {
+        started_broker->stop();
+      }
+      for (auto& started_host : asio_hosts) {
+        started_host->stop_all();
+      }
+      service->stop_audio_runtime();
+      return 1;
+    }
+    asio_brokers.push_back(std::move(broker));
   }
 
   std::mutex request_mutex;
@@ -901,8 +1000,8 @@ int main(int argc, char** argv) {
       });
   const auto started = pipe_server.start();
   if (!started.ok()) {
-    asio_broker.stop();
-    asio_host.stop_all();
+    for (auto& broker : asio_brokers) broker->stop();
+    for (auto& host : asio_hosts) host->stop_all();
     service->stop_audio_runtime();
     std::cerr << started.error().code << ": " << started.error().message << '\n';
     return 1;
@@ -910,17 +1009,19 @@ int main(int argc, char** argv) {
 
   SetConsoleCtrlHandler(console_handler, TRUE);
   std::cout << "engine_service_state=running pipe=" << pipe_display_name
-            << " asio_pipe=" << pipe_display_name << "-virtual-asio\n";
+            << " asio_instances=" << asio_brokers.size() << '\n';
   while (!stop_requested.load()) {
     if (once && pipe_server.stats().completed_requests >= 1) {
       break;
     }
-    static_cast<void>(asio_host.reap_stopped_sessions());
+    for (auto& host : asio_hosts) {
+      static_cast<void>(host->reap_stopped_sessions());
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
   pipe_server.stop();
-  asio_broker.stop();
-  asio_host.stop_all();
+  for (auto& broker : asio_brokers) broker->stop();
+  for (auto& host : asio_hosts) host->stop_all();
   service->stop_audio_runtime();
   bool session_write_failed = false;
   if (session_writes_allowed && !save_session_file_atomic(session_path, desired_session)) {
@@ -928,10 +1029,14 @@ int main(int argc, char** argv) {
     session_write_failed = true;
   }
   const auto stats = pipe_server.stats();
+  std::uint64_t asio_requests = 0;
+  for (const auto& broker : asio_brokers) {
+    asio_requests += broker->stats().completed_requests;
+  }
   std::cout << "engine_service_state=stopped requests="
             << stats.completed_requests << " protocol_errors="
             << stats.protocol_errors << " handler_errors="
-            << stats.handler_errors << " asio_requests="
-            << asio_broker.stats().completed_requests << '\n';
+            << stats.handler_errors << " asio_requests=" << asio_requests
+            << '\n';
   return session_write_failed ? 1 : 0;
 }
