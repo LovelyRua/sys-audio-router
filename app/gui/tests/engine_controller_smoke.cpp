@@ -44,6 +44,19 @@ EngineReply disconnected(const ControlCommand &command) {
 
 EngineReply confirmed_state(const ControlCommand &command) {
   auto reply = accepted(command);
+  if (command.type == ControlCommandType::QueryVirtualAsioDevices) {
+    reply.response.has_virtual_asio_devices = true;
+    reply.response.virtual_asio_devices = {{
+        .device_id = "default",
+        .clsid = "{7F16C8A9-4A0C-4D31-9A5B-2C6E7F8D1042}",
+        .registry_name = "System Audio Route",
+        .broker_token = "virtual-asio",
+        .input_channels = 2,
+        .output_channels = 2,
+        .enabled = true,
+    }};
+    return reply;
+  }
   reply.response.has_session_state = true;
   reply.response.has_preset = true;
   reply.response.preset.sample_rate = 48'000;
@@ -124,7 +137,8 @@ int main(int argc, char **argv) {
         command.type == ControlCommandType::DisconnectRoute) {
       return uncertain(command);
     }
-    assert(command.type == ControlCommandType::QuerySessionState);
+    assert(command.type == ControlCommandType::QuerySessionState ||
+           command.type == ControlCommandType::QueryVirtualAsioDevices);
     return confirmed_state(command);
   };
 
@@ -187,19 +201,21 @@ int main(int argc, char **argv) {
 
   {
     const std::scoped_lock lock(mutex);
-    assert(requests.size() == 2);
+    assert(requests.size() == 3);
     assert(requests[0].type == ControlCommandType::ConfigureAudioRuntime);
     assert(requests[0].audio_runtime.mode == AudioRuntimeMode::WasapiDuplex);
     assert(requests[0].audio_runtime.capture_device_id == "capture-1");
     assert(requests[0].audio_runtime.render_device_id == "render-1");
     assert(requests[1].type == ControlCommandType::QuerySessionState);
+    assert(requests[2].type == ControlCommandType::QueryVirtualAsioDevices);
     assert(requests[0].command_id != requests[1].command_id);
+    assert(requests[1].command_id != requests[2].command_id);
   }
 
   controller.setRoute(QStringLiteral("daw"), QStringLiteral("monitor"), false);
   assert(wait_until([&] {
     std::scoped_lock lock(mutex);
-    return requests.size() == 4 && !controller.busy();
+    return requests.size() == 6 && !controller.busy();
   }));
   assert(controller.routeEnabled(QStringLiteral("daw"),
                                  QStringLiteral("monitor")));
@@ -209,20 +225,22 @@ int main(int argc, char **argv) {
 
   {
     const std::scoped_lock lock(mutex);
-    assert(requests[2].type == ControlCommandType::SetMute);
-    assert(requests[2].mute);
-    assert(requests[3].type == ControlCommandType::QuerySessionState);
+    assert(requests[3].type == ControlCommandType::SetMute);
+    assert(requests[3].mute);
+    assert(requests[4].type == ControlCommandType::QuerySessionState);
+    assert(requests[5].type == ControlCommandType::QueryVirtualAsioDevices);
   }
 
   controller.removeRoute(QStringLiteral("daw"), QStringLiteral("monitor"));
   assert(wait_until([&] {
     std::scoped_lock lock(mutex);
-    return requests.size() == 6 && !controller.busy();
+    return requests.size() == 9 && !controller.busy();
   }));
   {
     const std::scoped_lock lock(mutex);
-    assert(requests[4].type == ControlCommandType::DisconnectRoute);
-    assert(requests[5].type == ControlCommandType::QuerySessionState);
+    assert(requests[6].type == ControlCommandType::DisconnectRoute);
+    assert(requests[7].type == ControlCommandType::QuerySessionState);
+    assert(requests[8].type == ControlCommandType::QueryVirtualAsioDevices);
   }
 
   const std::array recovery_states{
@@ -251,6 +269,8 @@ int main(int argc, char **argv) {
   };
   std::atomic_size_t recovery_reply_index = 0;
   const auto recovery_transport = [&](ControlCommand command) {
+    if (command.type == ControlCommandType::QueryVirtualAsioDevices)
+      return confirmed_state(command);
     assert(command.type == ControlCommandType::QuerySessionState);
     auto reply = confirmed_state(command);
     const auto index = recovery_reply_index.fetch_add(1);
@@ -292,6 +312,8 @@ int main(int argc, char **argv) {
 
   std::atomic_size_t health_reply_index = 0;
   const auto health_transport = [&](ControlCommand command) {
+    if (command.type == ControlCommandType::QueryVirtualAsioDevices)
+      return confirmed_state(command);
     assert(command.type == ControlCommandType::QuerySessionState);
     auto reply = confirmed_state(command);
     const auto index = health_reply_index.fetch_add(1);
@@ -312,6 +334,8 @@ int main(int argc, char **argv) {
 
   std::atomic_int reconnect_attempt = 0;
   const auto reconnect_transport = [&](ControlCommand command) {
+    if (command.type == ControlCommandType::QueryVirtualAsioDevices)
+      return confirmed_state(command);
     assert(command.type == ControlCommandType::QuerySessionState);
     if (reconnect_attempt.fetch_add(1) == 0) {
       return disconnected(command);
@@ -342,6 +366,9 @@ int main(int argc, char **argv) {
       state.response.command_id = command.command_id;
       return state;
     }
+    if (command.type == ControlCommandType::QueryVirtualAsioDevices) {
+      return confirmed_state(command);
+    }
     assert(command.type == ControlCommandType::SetMute);
     assert(!command.mute);
     muted_state.response.preset.matrix.routes.front().muted = false;
@@ -361,10 +388,12 @@ int main(int argc, char **argv) {
   }));
   {
     const std::scoped_lock lock(muted_mutex);
-    assert(muted_requests.size() == 3);
+    assert(muted_requests.size() == 5);
     assert(muted_requests[0].type == ControlCommandType::QuerySessionState);
-    assert(muted_requests[1].type == ControlCommandType::SetMute);
-    assert(muted_requests[2].type == ControlCommandType::QuerySessionState);
+    assert(muted_requests[1].type == ControlCommandType::QueryVirtualAsioDevices);
+    assert(muted_requests[2].type == ControlCommandType::SetMute);
+    assert(muted_requests[3].type == ControlCommandType::QuerySessionState);
+    assert(muted_requests[4].type == ControlCommandType::QueryVirtualAsioDevices);
   }
 
   std::string first_controller_command_id;
@@ -396,8 +425,11 @@ int main(int argc, char **argv) {
       reply.response.has_audio_runtime_state = true;
       reply.response.audio_runtime.configured = true;
       reply.response.audio_runtime.configuration = command.audio_runtime;
-    } else {
+    } else if (command.type == ControlCommandType::QuerySessionState) {
       assert(command.type == ControlCommandType::QuerySessionState);
+    } else {
+      assert(command.type == ControlCommandType::QueryVirtualAsioDevices);
+      return confirmed_state(command);
     }
     return reply;
   };
@@ -428,5 +460,80 @@ int main(int argc, char **argv) {
   assert(matrix_controller.runtimeEndpoints()[1].toMap()
              .value(QStringLiteral("endpointId")) ==
          QStringLiteral("render-main"));
+
+  ControlCommand topology_request;
+  std::vector<sar::control::VirtualAsioDeviceDefinition> topology_devices = {{
+      .device_id = "default",
+      .clsid = "{7F16C8A9-4A0C-4D31-9A5B-2C6E7F8D1042}",
+      .registry_name = "System Audio Route",
+      .broker_token = "virtual-asio",
+      .input_channels = 2,
+      .output_channels = 2,
+      .enabled = true,
+  }};
+  const auto topology_transport = [&](ControlCommand command) {
+    if (command.type == ControlCommandType::ConfigureVirtualAsioDevices) {
+      topology_request = command;
+      topology_devices = command.virtual_asio_devices;
+      auto reply = accepted(command);
+      reply.response.has_virtual_asio_devices = true;
+      reply.response.virtual_asio_devices = topology_devices;
+      return reply;
+    }
+    if (command.type == ControlCommandType::QueryVirtualAsioDevices) {
+      auto reply = accepted(command);
+      reply.response.has_virtual_asio_devices = true;
+      reply.response.virtual_asio_devices = topology_devices;
+      return reply;
+    }
+    return confirmed_state(command);
+  };
+  sar::gui::EngineController topology_controller(topology_transport, false);
+  topology_controller.refresh();
+  assert(wait_until([&] {
+    return !topology_controller.busy() &&
+           topology_controller.virtualAsioDevices().size() == 1;
+  }));
+  const auto initial_device =
+      topology_controller.virtualAsioDevices().front().toMap();
+  assert(initial_device.value(QStringLiteral("registryName")).toString() ==
+         QStringLiteral("System Audio Route"));
+  topology_controller.configureVirtualAsioDevices({
+      QVariantMap{{QStringLiteral("deviceId"), QString{}},
+                  {QStringLiteral("clsid"), QString{}},
+                  {QStringLiteral("registryName"), QStringLiteral("Studio A")},
+                  {QStringLiteral("brokerToken"), QString{}},
+                  {QStringLiteral("inputChannels"), 8},
+                  {QStringLiteral("outputChannels"), 8},
+                  {QStringLiteral("enabled"), true}},
+  });
+  assert(wait_until([&] {
+    return !topology_controller.busy() &&
+           topology_request.type ==
+               ControlCommandType::ConfigureVirtualAsioDevices;
+  }));
+  assert(topology_request.virtual_asio_devices.size() == 1);
+  const auto &generated = topology_request.virtual_asio_devices.front();
+  assert(!generated.device_id.empty());
+  assert(generated.clsid.size() == 38);
+  assert(!generated.broker_token.empty());
+  assert(generated.registry_name == "Studio A");
+  assert(generated.input_channels == 8);
+  assert(generated.output_channels == 8);
+  assert(generated.enabled);
+  assert(topology_controller.virtualAsioDevices().front().toMap()
+             .value(QStringLiteral("deviceId"))
+             .toString() == QString::fromStdString(generated.device_id));
+
+  topology_request = {};
+  topology_controller.configureVirtualAsioDevices({
+      QVariantMap{{QStringLiteral("registryName"), QString{}},
+                  {QStringLiteral("inputChannels"), 2},
+                  {QStringLiteral("outputChannels"), 2},
+                  {QStringLiteral("enabled"), true}},
+  });
+  assert(topology_request.type !=
+         ControlCommandType::ConfigureVirtualAsioDevices);
+  assert(topology_controller.lastError().contains(QStringLiteral("name")));
   return 0;
 }

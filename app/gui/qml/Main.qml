@@ -38,6 +38,8 @@ ApplicationWindow {
     property string runtimeDraftRenderDeviceId: ""
     property string runtimeDraftCaptureDeviceId: ""
     property var runtimeMatrixDraft: []
+    property var virtualAsioDraft: []
+    property bool virtualAsioDraftDirty: false
     property var pendingRouteStates: ({})
     property var pendingRouteGains: ({})
     property string pendingGainInputId: ""
@@ -511,6 +513,124 @@ ApplicationWindow {
         return renders > 0 && masters === 1
     }
 
+    function virtualAsioDevicesEqual(left, right) {
+        if (left.length !== right.length)
+            return false
+        for (var index = 0; index < left.length; ++index) {
+            var a = left[index]
+            var b = right[index]
+            if (a.deviceId !== b.deviceId || a.clsid !== b.clsid ||
+                    a.registryName !== b.registryName ||
+                    a.brokerToken !== b.brokerToken ||
+                    a.inputChannels !== b.inputChannels ||
+                    a.outputChannels !== b.outputChannels ||
+                    a.enabled !== b.enabled)
+                return false
+        }
+        return true
+    }
+
+    function syncVirtualAsioDraft() {
+        if (virtualAsioDraftDirty &&
+                !virtualAsioDevicesEqual(engine.virtualAsioDevices,
+                                         virtualAsioDraft))
+            return
+        virtualAsioDraft = engine.virtualAsioDevices.slice()
+        virtualAsioDraftDirty = false
+    }
+
+    function setVirtualAsioDevice(index, key, value) {
+        if (index < 0 || index >= virtualAsioDraft.length)
+            return
+        var next = virtualAsioDraft.slice()
+        var current = next[index]
+        next[index] = {
+            deviceId: current.deviceId,
+            clsid: current.clsid,
+            registryName: key === "registryName" ? value : current.registryName,
+            brokerToken: current.brokerToken,
+            inputChannels: key === "inputChannels" ? value : current.inputChannels,
+            outputChannels: key === "outputChannels" ? value : current.outputChannels,
+            enabled: key === "enabled" ? value : current.enabled
+        }
+        virtualAsioDraft = next
+        virtualAsioDraftDirty = true
+    }
+
+    function addVirtualAsioDevice() {
+        if (virtualAsioDraft.length >= 16)
+            return
+        var ordinal = 1
+        var deviceName = "System Audio Route " + ordinal
+        while (virtualAsioDraft.some(function(device) {
+            return device.registryName.toLowerCase() === deviceName.toLowerCase()
+        })) {
+            ++ordinal
+            deviceName = "System Audio Route " + ordinal
+        }
+        var next = virtualAsioDraft.slice()
+        next.push({
+            deviceId: "",
+            clsid: "",
+            registryName: deviceName,
+            brokerToken: "",
+            inputChannels: 2,
+            outputChannels: 2,
+            enabled: true
+        })
+        virtualAsioDraft = next
+        virtualAsioDraftDirty = true
+    }
+
+    function removeVirtualAsioDevice(index) {
+        if (virtualAsioDraft.length <= 1)
+            return
+        var next = virtualAsioDraft.slice()
+        next.splice(index, 1)
+        virtualAsioDraft = next
+        virtualAsioDraftDirty = true
+    }
+
+    function virtualAsioDraftError() {
+        if (virtualAsioDraft.length === 0)
+            return "At least one Virtual ASIO device is required"
+        if (virtualAsioDraft.length > 16)
+            return "A maximum of 16 Virtual ASIO devices is supported"
+        var seen = ({})
+        var enabledInputs = 0
+        var enabledOutputs = 0
+        for (var index = 0; index < virtualAsioDraft.length; ++index) {
+            var device = virtualAsioDraft[index]
+            var name = String(device.registryName).trim()
+            if (name.length === 0 || name.indexOf("\\") >= 0 ||
+                    name.indexOf("/") >= 0)
+                return "Every device needs a valid ASIO name"
+            if (device.inputChannels < 1 || device.inputChannels > 64 ||
+                    device.outputChannels < 1 || device.outputChannels > 64)
+                return "Channel counts must be between 1 and 64"
+            var identities = [device.deviceId, device.clsid,
+                              device.registryName, device.brokerToken]
+            for (var identityIndex = 0; identityIndex < identities.length;
+                    ++identityIndex) {
+                var identity = String(identities[identityIndex]).toLowerCase()
+                if (identity.length === 0)
+                    continue
+                if (seen[identity] !== undefined)
+                    return "Device identities and names must be unique"
+                seen[identity] = true
+            }
+            if (device.enabled) {
+                enabledInputs += Number(device.inputChannels)
+                enabledOutputs += Number(device.outputChannels)
+            }
+        }
+        if (enabledInputs === 0)
+            return "Enable at least one Virtual ASIO device"
+        if (enabledInputs !== enabledOutputs)
+            return "Enabled input and output channel totals must match"
+        return ""
+    }
+
     function indexForDevice(model, deviceId) {
         for (var index = 0; index < model.length; ++index) {
             if (model[index].id === deviceId)
@@ -531,6 +651,11 @@ ApplicationWindow {
             window.meterTarget = engine.peak
         }
         function onRuntimeChanged() { window.syncRuntimeDraft() }
+        function onVirtualAsioDevicesChanged() { window.syncVirtualAsioDraft() }
+        function onVirtualAsioTopologyApplied() {
+            window.virtualAsioDraftDirty = false
+            window.syncVirtualAsioDraft()
+        }
         function onSessionChanged() {
             window.rebuildRouteStateCache()
             window.pendingRouteStates = ({})
@@ -552,6 +677,7 @@ ApplicationWindow {
 
     Component.onCompleted: {
         syncRuntimeDraft()
+        syncVirtualAsioDraft()
         rebuildRouteStateCache()
     }
 
@@ -2021,6 +2147,168 @@ ApplicationWindow {
                                             captureDevice === null ? "" : captureDevice.id,
                                             renderDevice.id)
                                     }
+                                }
+                            }
+                        }
+                    }
+                    Rectangle {
+                        objectName: "virtualAsioDevicesPanel"
+                        Layout.fillWidth: true
+                        color: colors.surface
+                        border.color: colors.line
+                        radius: 4
+                        implicitHeight: virtualAsioColumn.implicitHeight + 28
+
+                        ColumnLayout {
+                            id: virtualAsioColumn
+                            anchors.fill: parent
+                            anchors.margins: 14
+                            spacing: 8
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text {
+                                    text: "Virtual ASIO devices"
+                                    color: colors.text
+                                    font.pixelSize: 13
+                                    font.weight: Font.DemiBold
+                                }
+                                Text {
+                                    text: window.virtualAsioDraft.length + " / 16"
+                                    color: colors.muted
+                                    font.pixelSize: 10
+                                }
+                                Item { Layout.fillWidth: true }
+                                FlatButton {
+                                    objectName: "addVirtualAsioDeviceButton"
+                                    text: "+ Add"
+                                    enabled: engine.connected && !engine.busy &&
+                                             window.virtualAsioDraft.length < 16
+                                    onClicked: window.addVirtualAsioDevice()
+                                }
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Item { Layout.preferredWidth: 42 }
+                                Text { text: "ASIO NAME"; color: colors.muted; font.pixelSize: 9; Layout.fillWidth: true }
+                                Text { text: "INPUTS"; color: colors.muted; font.pixelSize: 9; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 62 }
+                                Text { text: "OUTPUTS"; color: colors.muted; font.pixelSize: 9; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 62 }
+                                Item { Layout.preferredWidth: 34 }
+                            }
+
+                            Repeater {
+                                model: window.virtualAsioDraft
+                                delegate: ColumnLayout {
+                                    required property var modelData
+                                    required property int index
+                                    Layout.fillWidth: true
+                                    spacing: 4
+
+                                    Rectangle {
+                                        visible: index > 0
+                                        Layout.fillWidth: true
+                                        height: 1
+                                        color: colors.line
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        Switch {
+                                            objectName: "virtualAsioEnabledSwitch"
+                                            Layout.preferredWidth: 42
+                                            checked: modelData.enabled
+                                            enabled: engine.connected && !engine.busy
+                                            onClicked: window.setVirtualAsioDevice(
+                                                index, "enabled", checked)
+                                            ToolTip.visible: hovered
+                                            ToolTip.text: checked ? "Enabled" : "Disabled"
+                                        }
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
+                                            ConsoleField {
+                                                objectName: "virtualAsioNameField"
+                                                Layout.fillWidth: true
+                                                text: modelData.registryName
+                                                placeholderText: "ASIO device name"
+                                                enabled: engine.connected && !engine.busy
+                                                onEditingFinished: window.setVirtualAsioDevice(
+                                                    index, "registryName", text.trim())
+                                            }
+                                            Text {
+                                                text: modelData.deviceId.length > 0
+                                                      ? modelData.deviceId : "Identity assigned on Apply"
+                                                color: colors.muted
+                                                font.pixelSize: 9
+                                                elide: Text.ElideMiddle
+                                                Layout.fillWidth: true
+                                            }
+                                        }
+                                        ConsoleField {
+                                            objectName: "virtualAsioInputChannelsField"
+                                            Layout.preferredWidth: 62
+                                            text: String(modelData.inputChannels)
+                                            horizontalAlignment: Text.AlignHCenter
+                                            validator: IntValidator { bottom: 1; top: 64 }
+                                            enabled: engine.connected && !engine.busy
+                                            onEditingFinished: {
+                                                var channels = Math.max(1, Math.min(64, Number(text)))
+                                                text = String(channels)
+                                                window.setVirtualAsioDevice(
+                                                    index, "inputChannels", channels)
+                                            }
+                                        }
+                                        ConsoleField {
+                                            objectName: "virtualAsioOutputChannelsField"
+                                            Layout.preferredWidth: 62
+                                            text: String(modelData.outputChannels)
+                                            horizontalAlignment: Text.AlignHCenter
+                                            validator: IntValidator { bottom: 1; top: 64 }
+                                            enabled: engine.connected && !engine.busy
+                                            onEditingFinished: {
+                                                var channels = Math.max(1, Math.min(64, Number(text)))
+                                                text = String(channels)
+                                                window.setVirtualAsioDevice(
+                                                    index, "outputChannels", channels)
+                                            }
+                                        }
+                                        IconButton {
+                                            objectName: "removeVirtualAsioDeviceButton"
+                                            text: "X"
+                                            tooltipText: "Remove Virtual ASIO device"
+                                            enabled: engine.connected && !engine.busy &&
+                                                     window.virtualAsioDraft.length > 1
+                                            onClicked: window.removeVirtualAsioDevice(index)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle { Layout.fillWidth: true; height: 1; color: colors.line }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Text {
+                                    text: window.virtualAsioDraftError().length > 0
+                                          ? window.virtualAsioDraftError()
+                                          : "Applying this topology restarts the engine service"
+                                    color: window.virtualAsioDraftError().length > 0
+                                           ? colors.warning : colors.muted
+                                    font.pixelSize: 10
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+                                FlatButton {
+                                    objectName: "applyVirtualAsioDevicesButton"
+                                    text: "Apply"
+                                    highlighted: true
+                                    enabled: engine.connected && !engine.busy &&
+                                             window.virtualAsioDraftDirty &&
+                                             window.virtualAsioDraftError().length === 0
+                                    onClicked: engine.configureVirtualAsioDevices(
+                                        window.virtualAsioDraft)
                                 }
                             }
                         }

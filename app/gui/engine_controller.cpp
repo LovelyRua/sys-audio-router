@@ -44,6 +44,8 @@ std::uint32_t transaction_timeout_ms(
     control::ControlCommandType command_type) noexcept {
   if (control::control_command_mutates_preset(command_type) ||
       command_type == control::ControlCommandType::ConfigureAudioRuntime ||
+      command_type ==
+          control::ControlCommandType::ConfigureVirtualAsioDevices ||
       command_type == control::ControlCommandType::StartAudioRuntime ||
       command_type == control::ControlCommandType::StopAudioRuntime) {
     return 5000;
@@ -137,6 +139,7 @@ EngineController::EngineController(EngineTransport transport,
       return;
     }
     engine_service_owned_ = true;
+    virtual_asio_restart_armed_ = false;
     setStatus(QStringLiteral("Engine service started"));
     QTimer::singleShot(100, this, &EngineController::refresh);
   });
@@ -157,6 +160,18 @@ EngineController::EngineController(EngineTransport transport,
             const bool was_owned = engine_service_owned_;
             engine_service_owned_ = false;
             engine_service_start_attempted_ = false;
+            const bool planned_restart =
+                virtual_asio_restart_armed_ &&
+                exit_status == QProcess::NormalExit && exit_code == 0;
+            if (planned_restart) {
+              setStatus(QStringLiteral("Virtual ASIO topology applied; restarting engine"));
+              QTimer::singleShot(100, this, [this] {
+                if (!shutting_down_) {
+                  ensureEngineService();
+                }
+              });
+              return;
+            }
             if (!shutting_down_ && was_owned) {
               const auto reason = exit_status == QProcess::CrashExit
                                       ? QStringLiteral("crashed")
@@ -319,6 +334,9 @@ QVariantList EngineController::inputs() const { return inputs_; }
 QVariantList EngineController::outputs() const { return outputs_; }
 QVariantList EngineController::routes() const { return routes_; }
 QVariantList EngineController::devices() const { return devices_; }
+QVariantList EngineController::virtualAsioDevices() const {
+  return virtual_asio_devices_;
+}
 int EngineController::routeRevision() const noexcept { return route_revision_; }
 QStringList EngineController::presetNames() const { return preset_names_; }
 QString EngineController::activePresetName() const {
@@ -465,6 +483,83 @@ void EngineController::configureAudioMatrix(const QVariantList& endpoints) {
                                                     false);
   if (!validation.empty()) {
     setError(text(validation.front().message));
+    return;
+  }
+  dispatch(std::move(command));
+}
+
+void EngineController::configureVirtualAsioDevices(
+    const QVariantList& devices) {
+  if (devices.isEmpty() ||
+      devices.size() >
+          static_cast<qsizetype>(control::kMaximumVirtualAsioDevices)) {
+    setError(QStringLiteral(
+        "Configure between 1 and 16 Virtual ASIO devices"));
+    return;
+  }
+  control::ControlCommand command;
+  command.type = control::ControlCommandType::ConfigureVirtualAsioDevices;
+  command.virtual_asio_devices.reserve(
+      static_cast<std::size_t>(devices.size()));
+  std::uint64_t enabled_input_channels = 0;
+  std::uint64_t enabled_output_channels = 0;
+  for (const auto& value : devices) {
+    const auto map = value.toMap();
+    control::VirtualAsioDeviceDefinition device;
+    auto device_id =
+        map.value(QStringLiteral("deviceId")).toString().trimmed();
+    auto clsid = map.value(QStringLiteral("clsid")).toString().trimmed();
+    auto broker_token =
+        map.value(QStringLiteral("brokerToken")).toString().trimmed();
+    if (device_id.isEmpty() || clsid.isEmpty() || broker_token.isEmpty()) {
+      const auto uuid = QUuid::createUuid();
+      const auto token = uuid.toString(QUuid::WithoutBraces);
+      if (device_id.isEmpty()) {
+        device_id = QStringLiteral("asio-") + token;
+      }
+      if (clsid.isEmpty()) {
+        clsid = uuid.toString(QUuid::WithBraces).toUpper();
+      }
+      if (broker_token.isEmpty()) {
+        broker_token = QStringLiteral("virtual-asio-") + token;
+      }
+    }
+    device.device_id = device_id.toStdString();
+    device.clsid = clsid.toStdString();
+    device.registry_name = map.value(QStringLiteral("registryName"))
+                               .toString()
+                               .trimmed()
+                               .toStdString();
+    device.broker_token = broker_token.toStdString();
+    device.input_channels = static_cast<std::uint32_t>(
+        std::max(0, map.value(QStringLiteral("inputChannels")).toInt()));
+    device.output_channels = static_cast<std::uint32_t>(
+        std::max(0, map.value(QStringLiteral("outputChannels")).toInt()));
+    device.enabled = map.value(QStringLiteral("enabled"), true).toBool();
+    if (device.registry_name.empty()) {
+      setError(QStringLiteral("Every Virtual ASIO device needs a name"));
+      return;
+    }
+    if (device.input_channels == 0 || device.input_channels > 64 ||
+        device.output_channels == 0 || device.output_channels > 64) {
+      setError(QStringLiteral("Virtual ASIO channel counts must be between 1 and 64"));
+      return;
+    }
+    if (device.enabled) {
+      enabled_input_channels += device.input_channels;
+      enabled_output_channels += device.output_channels;
+    }
+    command.virtual_asio_devices.push_back(std::move(device));
+  }
+  if (enabled_input_channels == 0 ||
+      enabled_input_channels != enabled_output_channels) {
+    setError(QStringLiteral(
+        "Enabled Virtual ASIO input and output channel totals must match"));
+    return;
+  }
+  const auto validation = control::validate_command(command);
+  if (!validation.ok()) {
+    setError(text(validation.errors().front().message));
     return;
   }
   dispatch(std::move(command));
@@ -638,6 +733,10 @@ void EngineController::startNextCommand() {
   }
   active_command_ = std::move(queued_commands_.front());
   queued_commands_.pop_front();
+  if (active_command_->command.type ==
+      control::ControlCommandType::ConfigureVirtualAsioDevices) {
+    virtual_asio_restart_armed_ = true;
+  }
   auto command = active_command_->command;
   command.command_id = command_prefix_ + std::to_string(++command_sequence_);
   auto transport = transport_;
@@ -753,6 +852,10 @@ void EngineController::applyReply(const EngineReply& reply,
     setError(reply.error);
   }
   if (!command_succeeded) {
+    if (command.command.type ==
+        control::ControlCommandType::ConfigureVirtualAsioDevices) {
+      virtual_asio_restart_armed_ = false;
+    }
     if (reply.delivery_uncertain) {
       QTimer::singleShot(0, this, &EngineController::refresh);
     } else if (!reply.transport_ok && service_management_enabled_) {
@@ -766,6 +869,14 @@ void EngineController::applyReply(const EngineReply& reply,
   if (reply.response.has_session_state || reply.response.has_preset ||
       reply.response.has_devices || reply.response.has_active_graph) {
     updateSession(reply.response);
+  }
+  if (reply.response.has_virtual_asio_devices) {
+    updateVirtualAsioDevices(reply.response);
+  }
+  if (reply.request_type ==
+      control::ControlCommandType::ConfigureVirtualAsioDevices) {
+    setStatus(QStringLiteral("Virtual ASIO topology applied; restarting engine"));
+    emit virtualAsioTopologyApplied();
   }
   if (reply.response.has_audio_runtime_state) {
     runtime_running_ = reply.response.audio_runtime.running;
@@ -898,8 +1009,17 @@ void EngineController::applyReply(const EngineReply& reply,
       reply.request_type == control::ControlCommandType::StartAudioRuntime ||
       reply.request_type == control::ControlCommandType::StopAudioRuntime ||
       reply.request_type ==
-          control::ControlCommandType::ConfigureAudioRuntime) {
+          control::ControlCommandType::ConfigureAudioRuntime ||
+      reply.request_type ==
+          control::ControlCommandType::ConfigureVirtualAsioDevices) {
     QTimer::singleShot(0, this, &EngineController::refresh);
+  } else if (reply.request_type ==
+                 control::ControlCommandType::QuerySessionState &&
+             !reply.response.has_virtual_asio_devices) {
+    control::ControlCommand topology_query;
+    topology_query.type = control::ControlCommandType::QueryVirtualAsioDevices;
+    enqueue({std::move(topology_query), PendingPresetAction::None, {},
+             command.poll});
   }
 }
 
@@ -929,6 +1049,30 @@ void EngineController::updateSession(const control::ControlResponse& response) {
     graph_version_ = response.active_graph.version;
   }
   emit sessionChanged();
+}
+
+void EngineController::updateVirtualAsioDevices(
+    const control::ControlResponse& response) {
+  QVariantList next;
+  next.reserve(static_cast<qsizetype>(response.virtual_asio_devices.size()));
+  for (const auto& device : response.virtual_asio_devices) {
+    next.push_back(QVariantMap{
+        {QStringLiteral("deviceId"), text(device.device_id)},
+        {QStringLiteral("clsid"), text(device.clsid)},
+        {QStringLiteral("registryName"), text(device.registry_name)},
+        {QStringLiteral("brokerToken"), text(device.broker_token)},
+        {QStringLiteral("inputChannels"),
+         static_cast<int>(device.input_channels)},
+        {QStringLiteral("outputChannels"),
+         static_cast<int>(device.output_channels)},
+        {QStringLiteral("enabled"), device.enabled},
+    });
+  }
+  if (virtual_asio_devices_ == next) {
+    return;
+  }
+  virtual_asio_devices_ = std::move(next);
+  emit virtualAsioDevicesChanged();
 }
 
 void EngineController::updatePresetView(

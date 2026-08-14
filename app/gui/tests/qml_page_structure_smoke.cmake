@@ -109,6 +109,37 @@ foreach(realtime_ui_marker
   endif()
 endforeach()
 
+foreach(virtual_asio_marker
+    "property var virtualAsioDraft: []"
+    "function syncVirtualAsioDraft()"
+    "function virtualAsioDraftError()"
+    "objectName: \"virtualAsioDevicesPanel\""
+    "objectName: \"addVirtualAsioDeviceButton\""
+    "objectName: \"virtualAsioEnabledSwitch\""
+    "objectName: \"virtualAsioNameField\""
+    "objectName: \"virtualAsioInputChannelsField\""
+    "objectName: \"virtualAsioOutputChannelsField\""
+    "objectName: \"removeVirtualAsioDeviceButton\""
+    "objectName: \"applyVirtualAsioDevicesButton\""
+    "engine.configureVirtualAsioDevices("
+    "Applying this topology restarts the engine service")
+  string(FIND "${qml}" "${virtual_asio_marker}" marker_position)
+  if(marker_position LESS 0)
+    message(FATAL_ERROR
+      "Virtual ASIO topology QML marker is missing: ${virtual_asio_marker}")
+  endif()
+endforeach()
+
+foreach(qml_generated_system_identity
+    "function newVirtualAsioClsid()"
+    "function randomHex(")
+  string(FIND "${qml}" "${qml_generated_system_identity}" marker_position)
+  if(NOT marker_position LESS 0)
+    message(FATAL_ERROR
+      "QML must not generate Virtual ASIO system identities: ${qml_generated_system_identity}")
+  endif()
+endforeach()
+
 string(FIND "${qml}" "routeSwitch.checked &&" gain_requires_route_toggle)
 if(NOT gain_requires_route_toggle LESS 0)
   message(FATAL_ERROR "Selected-route gain must not require toggling the route")

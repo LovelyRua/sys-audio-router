@@ -77,6 +77,7 @@ class EngineController final : public QObject {
   Q_PROPERTY(QVariantList outputs READ outputs NOTIFY sessionChanged)
   Q_PROPERTY(QVariantList routes READ routes NOTIFY sessionChanged)
   Q_PROPERTY(QVariantList devices READ devices NOTIFY sessionChanged)
+  Q_PROPERTY(QVariantList virtualAsioDevices READ virtualAsioDevices NOTIFY virtualAsioDevicesChanged)
   Q_PROPERTY(int routeRevision READ routeRevision NOTIFY sessionChanged)
   Q_PROPERTY(QStringList presetNames READ presetNames NOTIFY presetsChanged)
   Q_PROPERTY(QString activePresetName READ activePresetName NOTIFY presetsChanged)
@@ -134,6 +135,7 @@ class EngineController final : public QObject {
   [[nodiscard]] QVariantList outputs() const;
   [[nodiscard]] QVariantList routes() const;
   [[nodiscard]] QVariantList devices() const;
+  [[nodiscard]] QVariantList virtualAsioDevices() const;
   [[nodiscard]] int routeRevision() const noexcept;
   [[nodiscard]] QStringList presetNames() const;
   [[nodiscard]] QString activePresetName() const;
@@ -151,6 +153,7 @@ class EngineController final : public QObject {
                                          const QString& capture_device_id,
                                          const QString& render_device_id);
   Q_INVOKABLE void configureAudioMatrix(const QVariantList& endpoints);
+  Q_INVOKABLE void configureVirtualAsioDevices(const QVariantList& devices);
   Q_INVOKABLE bool routeEnabled(const QString& input_id,
                                 const QString& output_id) const;
   Q_INVOKABLE double routeGain(const QString& input_id,
@@ -171,6 +174,8 @@ class EngineController final : public QObject {
   void runtimeChanged();
   void busyChanged();
   void sessionChanged();
+  void virtualAsioDevicesChanged();
+  void virtualAsioTopologyApplied();
   void diagnosticsChanged();
   void feedbackChanged();
   void presetsChanged();
@@ -214,6 +219,7 @@ class EngineController final : public QObject {
   void updateBusyState();
   void applyReply(const EngineReply& reply, const QueuedCommand& command);
   void updateSession(const control::ControlResponse& response);
+  void updateVirtualAsioDevices(const control::ControlResponse& response);
   void updatePresetView(const control::PresetDocument& preset);
   void schedulePoll();
   void ensureEngineService();
@@ -243,6 +249,7 @@ class EngineController final : public QObject {
   QVariantList runtime_endpoints_;
   bool engine_service_owned_ = false;
   bool engine_service_start_attempted_ = false;
+  bool virtual_asio_restart_armed_ = false;
   bool service_management_enabled_ = true;
   bool connection_error_active_ = false;
   bool shutting_down_ = false;
@@ -266,6 +273,7 @@ class EngineController final : public QObject {
   QVariantList outputs_;
   QVariantList routes_;
   QVariantList devices_;
+  QVariantList virtual_asio_devices_;
   int route_revision_ = 0;
   QStringList preset_names_;
   QString active_preset_name_;
