@@ -704,8 +704,16 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 - Physical ASIO registrations can now be enumerated from the current-user and
   machine registry views and probed through `IASIO` for channel, buffer, sample
   rate, and sample type capabilities. These results feed the common platform
-  device model and diagnostic CLI. No physical-ASIO callback stream is attached
-  to the graph yet; discovery and initialization are control-plane work only.
+  device model and diagnostic CLI. A bounded control-open path now activates and
+  initializes a selected driver, negotiates sample rate and block size, validates
+  channel formats, creates ASIO buffers, and attaches input-only, output-only, or
+  duplex callbacks to an owned graph runtime. Callback storage is preallocated;
+  teardown withdraws published callback targets and drains in-flight callbacks
+  before releasing buffers and the driver. Reset, buffer-size, latency, and
+  resync messages are atomically published for later control-plane recovery.
+  Service protocol integration, automatic reopen, and real hardware flow remain
+  outstanding, so this must not yet be described as a qualified physical-ASIO
+  backend.
 - The first Qt Quick GUI exists and controls route state, gain, runtime
   lifecycle, device listing, diagnostics, and preset browsing with atomic
   save/load. Route edits have a bounded undo/redo history that commits only

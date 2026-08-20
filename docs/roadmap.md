@@ -451,8 +451,13 @@ Physical ASIO discovery is now present as a separate Windows platform slice.
 It enumerates per-user and machine ASIO registrations, resolves the registered
 COM server, initializes `IASIO`, and reports channel, buffer-size, sample-rate,
 and sample-type capabilities through the common device model and a diagnostic
-CLI. The callback-driven physical-ASIO streaming worker and graph attachment are
-the next step; discovery must not be mistaken for a live hardware transport.
+CLI. The callback transport, vendor lifecycle, control-plane negotiation, and
+engine runtime are now implemented. They support input-only, output-only, and
+duplex hosts; preallocate callback storage; process the graph without callback
+locks or allocation; drain callbacks before teardown; and publish ASIO reset,
+buffer-size, latency, and resync requests into an atomic control-plane mailbox.
+The remaining gates are a real-hardware measurement CLI, service/matrix
+configuration, controlled stop/reopen policy, and physical-device acceptance.
 
 Deliverables:
 
