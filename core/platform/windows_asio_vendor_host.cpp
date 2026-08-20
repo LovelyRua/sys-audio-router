@@ -16,6 +16,7 @@ namespace sar::platform {
 namespace {
 
 std::atomic<WindowsAsioCallbackTransport*> callback_transport{nullptr};
+std::atomic<WindowsAsioHostEvents*> callback_host_events{nullptr};
 std::atomic_uint32_t callbacks_in_flight{0};
 std::atomic_flag callback_slot = ATOMIC_FLAG_INIT;
 
@@ -33,7 +34,14 @@ ASIOTime* buffer_switch_time_info(ASIOTime* time, long index, ASIOBool direct) {
 }
 
 void sample_rate_changed(ASIOSampleRate) {}
-long asio_message(long, long, void*, double*) { return 0; }
+long asio_message(long selector, long value, void*, double*) {
+  callbacks_in_flight.fetch_add(1, std::memory_order_acquire);
+  long result = 0;
+  if (auto* events = callback_host_events.load(std::memory_order_acquire))
+    result = events->asio_message(selector, value);
+  callbacks_in_flight.fetch_sub(1, std::memory_order_release);
+  return result;
+}
 
 ASIOCallbacks callbacks{buffer_switch, sample_rate_changed, asio_message,
                         buffer_switch_time_info};
@@ -93,6 +101,7 @@ std::unique_ptr<WindowsAsioVendorHost> WindowsAsioVendorHost::create(
     result.error = WindowsAsioVendorHostError::CallbackSlotBusy;
     return {};
   }
+  callback_host_events.store(config.host_events, std::memory_order_release);
   std::vector<ASIOBufferInfo> infos;
   try {
     infos.resize(config.channels.size());
@@ -159,6 +168,7 @@ WindowsAsioVendorHostResult WindowsAsioVendorHost::teardown() noexcept {
     running_ = false;
   }
   callback_transport.store(nullptr, std::memory_order_release);
+  callback_host_events.store(nullptr, std::memory_order_release);
   while (callbacks_in_flight.load(std::memory_order_acquire) != 0)
     std::this_thread::yield();
   transport_.reset();

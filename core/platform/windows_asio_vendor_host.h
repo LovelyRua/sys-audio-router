@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/platform/windows_asio_callback_transport.h"
+#include "core/platform/windows_asio_host_events.h"
 
 #include <cstdint>
 #include <memory>
@@ -48,6 +49,7 @@ struct WindowsAsioVendorHostConfig {
   std::vector<WindowsAsioVendorChannel> channels;
   WindowsAsioGraphProcess graph_process = nullptr;
   void* graph_context = nullptr;
+  WindowsAsioHostEvents* host_events = nullptr;
 };
 
 struct WindowsAsioVendorHostResult {

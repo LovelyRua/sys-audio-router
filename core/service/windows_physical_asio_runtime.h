@@ -3,6 +3,7 @@
 #include "core/diagnostics/engine_diagnostics.h"
 #include "core/graph/graph.h"
 #include "core/platform/windows_asio_control_open.h"
+#include "core/platform/windows_asio_host_events.h"
 
 #include <atomic>
 #include <cstdint>
@@ -73,6 +74,8 @@ class WindowsPhysicalAsioRuntime {
   [[nodiscard]] WindowsPhysicalAsioRuntimeError start() noexcept;
   [[nodiscard]] WindowsPhysicalAsioRuntimeError stop() noexcept;
   [[nodiscard]] WindowsPhysicalAsioRuntimeSummary summary() const noexcept;
+  [[nodiscard]] platform::WindowsAsioHostEventSnapshot drain_host_events()
+      noexcept;
 
  private:
   explicit WindowsPhysicalAsioRuntime(
@@ -89,6 +92,7 @@ class WindowsPhysicalAsioRuntime {
   std::unique_ptr<realtime::AudioBuffer> graph_input_;
   std::unique_ptr<realtime::AudioBuffer> graph_output_;
   diagnostics::EngineDiagnostics diagnostics_;
+  platform::WindowsAsioHostEvents host_events_;
   std::atomic<WindowsPhysicalAsioRuntimeState> state_{
       WindowsPhysicalAsioRuntimeState::Ready};
   std::atomic<std::uint64_t> rejected_callbacks_{0};

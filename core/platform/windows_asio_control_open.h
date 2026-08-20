@@ -35,6 +35,7 @@ struct WindowsAsioControlOpenRequest {
   WindowsAsioGraphProcess graph_process = nullptr;
   void* graph_context = nullptr;
   void* system_reference = nullptr;
+  WindowsAsioHostEvents* host_events = nullptr;
 };
 
 struct WindowsAsioNegotiatedChannel {

@@ -55,6 +55,11 @@ class MockLifecycle final : public platform::WindowsAsioDriverLifecycle {
   long start() noexcept override {
     ++state_->start_calls;
     if (state_->start_result == ASE_OK && state_->callbacks) {
+      assert(state_->callbacks->asioMessage(kAsioSelectorSupported,
+                                            kAsioResetRequest, nullptr,
+                                            nullptr) == 1);
+      assert(state_->callbacks->asioMessage(kAsioResetRequest, 0, nullptr,
+                                            nullptr) == 1);
       state_->callbacks->bufferSwitch(0, ASIOFalse);
     }
     return state_->start_result;
@@ -174,6 +179,10 @@ void run_shape(std::size_t inputs, std::size_t outputs) {
   assert(summary.rejected_callbacks == 0);
   assert(summary.diagnostics_available);
   assert(summary.diagnostics.processed_blocks == 1);
+  const auto events = opened.runtime->drain_host_events();
+  assert(events.contains(platform::WindowsAsioHostEvent::ResetRequest));
+  assert(events.reset_requests == 1);
+  assert(opened.runtime->drain_host_events().empty());
   assert(state->start_calls == 1);
   assert(state->stop_calls == 1);
 }

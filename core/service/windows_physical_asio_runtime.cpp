@@ -22,6 +22,7 @@ WindowsPhysicalAsioRuntime::WindowsPhysicalAsioRuntime(
 
 WindowsPhysicalAsioRuntime::~WindowsPhysicalAsioRuntime() {
   static_cast<void>(stop());
+  control_open_.host.reset();
 }
 
 WindowsPhysicalAsioRuntimeOpenResult WindowsPhysicalAsioRuntime::open(
@@ -43,6 +44,7 @@ WindowsPhysicalAsioRuntimeOpenResult WindowsPhysicalAsioRuntime::open(
 
   request.graph_process = &WindowsPhysicalAsioRuntime::graph_callback;
   request.graph_context = runtime.get();
+  request.host_events = &runtime->host_events_;
   runtime->control_open_ = platform::open_windows_asio_control(
       request, activator, negotiator);
   if (!runtime->control_open_.ok()) {
@@ -137,6 +139,11 @@ WindowsPhysicalAsioRuntimeSummary WindowsPhysicalAsioRuntime::summary() const
     result.diagnostics = diagnostics_;
   }
   return result;
+}
+
+platform::WindowsAsioHostEventSnapshot
+WindowsPhysicalAsioRuntime::drain_host_events() noexcept {
+  return host_events_.drain();
 }
 
 bool WindowsPhysicalAsioRuntime::graph_callback(

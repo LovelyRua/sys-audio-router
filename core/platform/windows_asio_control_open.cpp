@@ -242,6 +242,7 @@ WindowsAsioControlOpenResult open_windows_asio_control(
   host_config.frames_per_block = negotiated.config.frames_per_block;
   host_config.graph_process = request.graph_process;
   host_config.graph_context = request.graph_context;
+  host_config.host_events = request.host_events;
   try {
     host_config.channels.reserve(negotiated.config.inputs.size() +
                                  negotiated.config.outputs.size());
