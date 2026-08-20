@@ -695,9 +695,17 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
   produced in ten seconds, with zero dropped blocks, xrun, FIFO overflow, or
   FIFO underflow. Captured peak was 0.366211 and RMS was 0.252209. Per-client
   long-duration clock adaptation and engine-period contention remain outstanding.
-- No virtual WDM/WASAPI driver implementation exists yet. A five-day ACX 1.1
-  versus SysVAD/PortCls decision spike is now required before product driver
-  implementation.
+- No installable virtual WDM/WASAPI endpoint exists yet. The first driver-facing
+  boundary now defines and validates a versioned shared-section transport ABI,
+  fixed ring/slot metadata, generation changes, and deterministic loss policy.
+  It deliberately keeps user-controlled offsets out of the packet path after
+  attach validation. The next driver milestone is an ACX stereo endpoint on a
+  supported Windows 11 test host, followed by test signing and live flow.
+- Physical ASIO registrations can now be enumerated from the current-user and
+  machine registry views and probed through `IASIO` for channel, buffer, sample
+  rate, and sample type capabilities. These results feed the common platform
+  device model and diagnostic CLI. No physical-ASIO callback stream is attached
+  to the graph yet; discovery and initialization are control-plane work only.
 - The first Qt Quick GUI exists and controls route state, gain, runtime
   lifecycle, device listing, diagnostics, and preset browsing with atomic
   save/load. Route edits have a bounded undo/redo history that commits only

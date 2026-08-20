@@ -363,6 +363,14 @@ It must produce an installable test-signed stereo endpoint, demonstrate or
 falsify a bounded user-mode audio transport boundary, record supported Windows
 versions and signing/install costs, and end with an architecture decision.
 
+The bounded transport boundary is now implemented and covered by a Windows
+smoke test. It defines a versioned C ABI for section attachment, fixed-size ring
+and slot metadata, generation changes, deterministic overflow/underflow policy,
+and checked user-mode layout calculation. Kernel packet code must retain a
+trusted nonpaged copy of validated offsets and treat all mutable packet metadata
+as hostile. The ACX endpoint, test signing, installation, and live audio flow
+remain outstanding and require a supported Windows 11 driver test machine.
+
 Deliverables:
 
 - Multiple virtual playback endpoints.
@@ -438,6 +446,13 @@ edits atomically compile matrix ports and build the replacement runtime before
 publication; accepted state is then refreshed from the engine rather than kept
 as GUI-local topology. Real two-capture qualification remains the next
 acceptance work.
+
+Physical ASIO discovery is now present as a separate Windows platform slice.
+It enumerates per-user and machine ASIO registrations, resolves the registered
+COM server, initializes `IASIO`, and reports channel, buffer-size, sample-rate,
+and sample-type capabilities through the common device model and a diagnostic
+CLI. The callback-driven physical-ASIO streaming worker and graph attachment are
+the next step; discovery must not be mistaken for a live hardware transport.
 
 Deliverables:
 
