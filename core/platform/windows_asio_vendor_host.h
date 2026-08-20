@@ -34,6 +34,7 @@ enum class WindowsAsioVendorHostError : std::uint8_t {
   StartFailed,
   StopFailed,
   DisposeBuffersFailed,
+  ResourceExhausted,
 };
 
 struct WindowsAsioVendorChannel {

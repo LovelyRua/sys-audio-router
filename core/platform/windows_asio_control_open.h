@@ -24,6 +24,8 @@ enum class WindowsAsioControlOpenError : std::uint8_t {
   SampleEncodingUnsupported,
   LifecycleUnavailable,
   VendorHostCreationFailed,
+  DriverLimitsExceeded,
+  ResourceExhausted,
 };
 
 struct WindowsAsioControlOpenRequest {

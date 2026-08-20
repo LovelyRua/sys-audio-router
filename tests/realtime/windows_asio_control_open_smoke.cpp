@@ -1,5 +1,10 @@
 #include "core/platform/windows_asio_control_open.h"
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+
 #include "third_party/asio_sdk_2.3.4/common/iasiodrv.h"
 
 #include <array>
@@ -174,6 +179,13 @@ int main() {
   auto unsupported_encoding = open_windows_asio_control(request(), activator, *negotiator);
   assert(unsupported_encoding.error == WindowsAsioControlOpenError::SampleEncodingUnsupported);
   state->sample_type = ASIOSTFloat32LSB;
+
+  state->inputs = 1025;
+  auto excessive_channels = open_windows_asio_control(
+      request(), activator, *negotiator);
+  assert(excessive_channels.error ==
+         WindowsAsioControlOpenError::DriverLimitsExceeded);
+  state->inputs = 2;
 
   FixedNegotiator fixed;
   fixed.result.config.sample_rate = 48000.0;

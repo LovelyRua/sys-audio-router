@@ -93,7 +93,13 @@ std::unique_ptr<WindowsAsioVendorHost> WindowsAsioVendorHost::create(
     result.error = WindowsAsioVendorHostError::CallbackSlotBusy;
     return {};
   }
-  std::vector<ASIOBufferInfo> infos(config.channels.size());
+  std::vector<ASIOBufferInfo> infos;
+  try {
+    infos.resize(config.channels.size());
+  } catch (...) {
+    result.error = WindowsAsioVendorHostError::ResourceExhausted;
+    return {};
+  }
   for (std::size_t i = 0; i < config.channels.size(); ++i) {
     infos[i].isInput = config.channels[i].input ? ASIOTrue : ASIOFalse;
     infos[i].channelNum = config.channels[i].channel;
@@ -107,11 +113,18 @@ std::unique_ptr<WindowsAsioVendorHost> WindowsAsioVendorHost::create(
   host->buffers_created_ = true;
   WindowsAsioCallbackTransportConfig transport_config;
   transport_config.frames_per_block = config.frames_per_block;
-  for (std::size_t i = 0; i < infos.size(); ++i) {
-    WindowsAsioChannelBinding binding{config.channels[i].encoding,
-                                      {infos[i].buffers[0], infos[i].buffers[1]}};
-    (config.channels[i].input ? transport_config.inputs : transport_config.outputs)
-        .push_back(binding);
+  try {
+    for (std::size_t i = 0; i < infos.size(); ++i) {
+      WindowsAsioChannelBinding binding{
+          config.channels[i].encoding,
+          {infos[i].buffers[0], infos[i].buffers[1]}};
+      (config.channels[i].input ? transport_config.inputs
+                                : transport_config.outputs)
+          .push_back(binding);
+    }
+  } catch (...) {
+    result.error = WindowsAsioVendorHostError::ResourceExhausted;
+    return {};
   }
   auto opened = WindowsAsioCallbackTransport::create(
       std::move(transport_config), config.graph_process, config.graph_context);

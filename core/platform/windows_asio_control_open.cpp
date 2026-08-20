@@ -17,6 +17,8 @@
 namespace sar::platform {
 namespace {
 
+constexpr long kMaximumPhysicalAsioChannelsPerDirection = 1024;
+
 bool asio_ok(long value) noexcept { return value == ASE_OK || value == ASE_SUCCESS; }
 
 bool parse_clsid(const std::string& text, CLSID& clsid) noexcept {
@@ -175,6 +177,9 @@ class DefaultNegotiator final : public WindowsAsioDriverNegotiator {
     if (!driver.channels(inputs, outputs) || inputs < 0 || outputs < 0 ||
         (inputs == 0 && outputs == 0))
       return {WindowsAsioControlOpenError::ChannelQueryFailed, {}};
+    if (inputs > kMaximumPhysicalAsioChannelsPerDirection ||
+        outputs > kMaximumPhysicalAsioChannelsPerDirection)
+      return {WindowsAsioControlOpenError::DriverLimitsExceeded, {}};
     long minimum = 0, maximum = 0, preferred = 0, granularity = 0;
     if (!driver.buffer_sizes(minimum, maximum, preferred, granularity) ||
         minimum <= 0 || maximum < minimum || !valid_block(preferred, minimum, maximum, granularity))
@@ -187,21 +192,25 @@ class DefaultNegotiator final : public WindowsAsioDriverNegotiator {
     WindowsAsioNegotiatedConfig config;
     config.sample_rate = request.sample_rate;
     config.frames_per_block = static_cast<std::uint32_t>(requested);
-    for (const bool input : {true, false}) {
-      const auto count = input ? inputs : outputs;
-      auto& channels = input ? config.inputs : config.outputs;
-      channels.reserve(static_cast<std::size_t>(count));
-      for (long index = 0; index < count; ++index) {
-        long type = 0;
-        std::string name;
-        if (!driver.channel_info(index, input, type, name))
-          return {WindowsAsioControlOpenError::ChannelInfoFailed, {}};
-        WindowsAsioSampleEncoding encoding{};
-        if (!sample_encoding(type, encoding))
-          return {WindowsAsioControlOpenError::SampleEncodingUnsupported, {}};
-        channels.push_back({static_cast<std::uint32_t>(index), input, encoding,
-                            std::move(name)});
+    try {
+      for (const bool input : {true, false}) {
+        const auto count = input ? inputs : outputs;
+        auto& channels = input ? config.inputs : config.outputs;
+        channels.reserve(static_cast<std::size_t>(count));
+        for (long index = 0; index < count; ++index) {
+          long type = 0;
+          std::string name;
+          if (!driver.channel_info(index, input, type, name))
+            return {WindowsAsioControlOpenError::ChannelInfoFailed, {}};
+          WindowsAsioSampleEncoding encoding{};
+          if (!sample_encoding(type, encoding))
+            return {WindowsAsioControlOpenError::SampleEncodingUnsupported, {}};
+          channels.push_back({static_cast<std::uint32_t>(index), input,
+                              encoding, std::move(name)});
+        }
       }
+    } catch (...) {
+      return {WindowsAsioControlOpenError::ResourceExhausted, {}};
     }
     return {WindowsAsioControlOpenError::None, std::move(config)};
   }
@@ -233,10 +242,19 @@ WindowsAsioControlOpenResult open_windows_asio_control(
   host_config.frames_per_block = negotiated.config.frames_per_block;
   host_config.graph_process = request.graph_process;
   host_config.graph_context = request.graph_context;
-  for (const auto& channel : negotiated.config.inputs)
-    host_config.channels.push_back({static_cast<long>(channel.index), true, channel.encoding});
-  for (const auto& channel : negotiated.config.outputs)
-    host_config.channels.push_back({static_cast<long>(channel.index), false, channel.encoding});
+  try {
+    host_config.channels.reserve(negotiated.config.inputs.size() +
+                                 negotiated.config.outputs.size());
+    for (const auto& channel : negotiated.config.inputs)
+      host_config.channels.push_back(
+          {static_cast<long>(channel.index), true, channel.encoding});
+    for (const auto& channel : negotiated.config.outputs)
+      host_config.channels.push_back(
+          {static_cast<long>(channel.index), false, channel.encoding});
+  } catch (...) {
+    return {WindowsAsioControlOpenError::ResourceExhausted,
+            std::move(negotiated.config), {}};
+  }
   WindowsAsioVendorHostResult host_result;
   auto host = WindowsAsioVendorHost::create(std::move(lifecycle), std::move(host_config), host_result);
   if (!host)
@@ -260,6 +278,8 @@ const char* windows_asio_control_open_error_name(WindowsAsioControlOpenError err
     case WindowsAsioControlOpenError::SampleEncodingUnsupported: return "sample_encoding_unsupported";
     case WindowsAsioControlOpenError::LifecycleUnavailable: return "lifecycle_unavailable";
     case WindowsAsioControlOpenError::VendorHostCreationFailed: return "vendor_host_creation_failed";
+    case WindowsAsioControlOpenError::DriverLimitsExceeded: return "driver_limits_exceeded";
+    case WindowsAsioControlOpenError::ResourceExhausted: return "resource_exhausted";
   }
   return "unknown";
 }
