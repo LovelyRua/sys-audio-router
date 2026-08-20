@@ -23,6 +23,24 @@ bool graph(void* opaque, const sar::realtime::AudioBuffer& input,
   return true;
 }
 
+bool render_only_graph(void*, const sar::realtime::AudioBuffer& input,
+                       sar::realtime::AudioBuffer& output) noexcept {
+  assert(input.channels() == 0);
+  for (std::size_t channel = 0; channel < output.channels(); ++channel) {
+    auto destination = output.channel(channel);
+    for (std::size_t frame = 0; frame < output.frames(); ++frame)
+      destination[frame] = frame == 0 ? 1.5F : 0.25F;
+  }
+  return true;
+}
+
+bool capture_only_graph(void*, const sar::realtime::AudioBuffer& input,
+                        sar::realtime::AudioBuffer& output) noexcept {
+  assert(input.channels() == 1);
+  assert(output.channels() == 0);
+  return input.channel(0)[0] == 0.25F;
+}
+
 bool near(float actual, float expected) {
   return std::fabs(actual - expected) < 0.0001F;
 }
@@ -85,4 +103,28 @@ int main() {
   assert(!WindowsAsioCallbackTransport::create(
               std::move(invalid), graph, &state).ok());
   assert(!WindowsAsioCallbackTransport::create({}, graph, &state).ok());
+
+  std::array<float, frames> render_a{}, render_b{};
+  WindowsAsioCallbackTransportConfig render_only;
+  render_only.frames_per_block = frames;
+  render_only.outputs = {{WindowsAsioSampleEncoding::Float32Lsb,
+                          {render_a.data(), render_b.data()}}};
+  auto render_transport = WindowsAsioCallbackTransport::create(
+      std::move(render_only), render_only_graph);
+  assert(render_transport.ok());
+  assert(render_transport.transport->process(0) ==
+         WindowsAsioCallbackStatus::Completed);
+  assert(render_a[0] == 1.5F);
+
+  std::array<float, frames> capture_a{0.25F, 0.5F, 0.75F, 1.0F};
+  std::array<float, frames> capture_b{};
+  WindowsAsioCallbackTransportConfig capture_only;
+  capture_only.frames_per_block = frames;
+  capture_only.inputs = {{WindowsAsioSampleEncoding::Float32Lsb,
+                          {capture_a.data(), capture_b.data()}}};
+  auto capture_transport = WindowsAsioCallbackTransport::create(
+      std::move(capture_only), capture_only_graph);
+  assert(capture_transport.ok());
+  assert(capture_transport.transport->process(0) ==
+         WindowsAsioCallbackStatus::Completed);
 }

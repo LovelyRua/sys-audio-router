@@ -9,7 +9,7 @@
 namespace sar::platform {
 namespace {
 
-float sanitize(float value) noexcept {
+float sanitize_integer(float value) noexcept {
   return std::isfinite(value) ? std::clamp(value, -1.0F, 1.0F) : 0.0F;
 }
 
@@ -56,14 +56,15 @@ float read_sample(const std::byte* source,
 
 void write_sample(std::byte* destination, WindowsAsioSampleEncoding encoding,
                   float input) noexcept {
-  const auto value = sanitize(input);
   if (encoding == WindowsAsioSampleEncoding::Float32Lsb) {
+    const auto value = std::isfinite(input) ? input : 0.0F;
     std::memcpy(destination, &value, sizeof(value)); return;
   }
   if (encoding == WindowsAsioSampleEncoding::Float64Lsb) {
-    const double widened = value;
+    const double widened = std::isfinite(input) ? input : 0.0F;
     std::memcpy(destination, &widened, sizeof(widened)); return;
   }
+  const auto value = sanitize_integer(input);
   if (encoding == WindowsAsioSampleEncoding::Int16Lsb) {
     const auto raw = static_cast<std::int16_t>(std::lrint(
         value * (value < 0.0F ? 32768.0F : 32767.0F)));
@@ -89,8 +90,9 @@ void write_sample(std::byte* destination, WindowsAsioSampleEncoding encoding,
 WindowsAsioCallbackTransportOpenResult WindowsAsioCallbackTransport::create(
     WindowsAsioCallbackTransportConfig config,
     WindowsAsioGraphProcess graph_process, void* graph_context) noexcept {
-  if (config.frames_per_block == 0 || config.inputs.empty() ||
-      config.outputs.empty() || graph_process == nullptr) return {};
+  if (config.frames_per_block == 0 ||
+      (config.inputs.empty() && config.outputs.empty()) ||
+      graph_process == nullptr) return {};
   for (const auto& binding : config.inputs)
     if (!binding.halves[0] || !binding.halves[1]) return {};
   for (const auto& binding : config.outputs)
