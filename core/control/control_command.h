@@ -36,6 +36,7 @@ enum class AudioRuntimeMode {
   WasapiRender,
   WasapiDuplex,
   WasapiMatrix,
+  PhysicalAsio,
 };
 
 enum class AudioRuntimeEndpointDirection {
@@ -60,9 +61,15 @@ struct AudioRuntimeConfiguration {
   std::string capture_device_id;
   std::string render_device_id;
   std::vector<AudioRuntimeEndpointConfiguration> endpoints;
+  std::string physical_asio_driver_clsid;
+  std::uint32_t physical_asio_sample_rate = 0;
+  std::uint32_t physical_asio_block_frames = 0;
+  std::vector<std::uint32_t> physical_asio_input_channels;
+  std::vector<std::uint32_t> physical_asio_output_channels;
 };
 
 inline constexpr std::size_t kMaximumAudioRuntimeEndpoints = 32;
+inline constexpr std::size_t kMaximumPhysicalAsioChannels = 256;
 
 struct ControlCommand {
   std::uint32_t schema_version = 1;

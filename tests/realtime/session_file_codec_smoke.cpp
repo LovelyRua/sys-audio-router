@@ -104,8 +104,9 @@ int main() {
 
   auto legacy_v2 = encoded.bytes();
   const auto endpoint_count_offset = runtime_endpoint_count_offset(legacy_v2);
-  const auto auto_start_offset = endpoint_count_offset + 4;
-  legacy_v2.resize(auto_start_offset + 1);
+  const auto legacy_auto_start_offset = endpoint_count_offset + 4;
+  const auto auto_start_offset = legacy_auto_start_offset + 20;
+  legacy_v2.resize(legacy_auto_start_offset + 1);
   legacy_v2[4] = 2;
   write_u32(legacy_v2, 12, 1);
   write_u32(legacy_v2, 8,
@@ -152,7 +153,7 @@ int main() {
   assert_decode_fails(trailing);
 
   auto unknown_file_version = encoded.bytes();
-  unknown_file_version[4] = 4;
+  unknown_file_version[4] = 5;
   assert_decode_fails(unknown_file_version);
 
   auto unknown_schema_version = encoded.bytes();
@@ -274,4 +275,27 @@ int main() {
   invalid_runtime.audio_runtime.mode =
       static_cast<sar::control::AudioRuntimeMode>(99);
   assert(!sar::control::encode_session_file(invalid_runtime).ok());
+
+  auto physical = session;
+  physical.audio_runtime = {};
+  physical.audio_runtime.mode = sar::control::AudioRuntimeMode::PhysicalAsio;
+  physical.audio_runtime.physical_asio_driver_clsid =
+      "{12345678-1234-1234-1234-1234567890AB}";
+  physical.audio_runtime.physical_asio_sample_rate = 48000;
+  physical.audio_runtime.physical_asio_block_frames = 128;
+  physical.audio_runtime.physical_asio_input_channels = {0, 1};
+  physical.audio_runtime.physical_asio_output_channels = {2, 3};
+  const auto encoded_physical = sar::control::encode_session_file(physical);
+  assert(encoded_physical.ok());
+  const auto decoded_physical =
+      sar::control::decode_session_file(encoded_physical.bytes());
+  assert(decoded_physical.ok());
+  assert(decoded_physical.session().audio_runtime.mode ==
+         sar::control::AudioRuntimeMode::PhysicalAsio);
+  assert(decoded_physical.session().audio_runtime.physical_asio_driver_clsid ==
+         physical.audio_runtime.physical_asio_driver_clsid);
+  assert(decoded_physical.session().audio_runtime.physical_asio_input_channels ==
+         std::vector<std::uint32_t>({0, 1}));
+  assert(decoded_physical.session().audio_runtime.physical_asio_output_channels ==
+         std::vector<std::uint32_t>({2, 3}));
 }

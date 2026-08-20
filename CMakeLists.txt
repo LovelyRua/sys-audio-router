@@ -203,6 +203,12 @@ add_executable(sar_control_command_smoke
 
 target_link_libraries(sar_control_command_smoke PRIVATE sar_core)
 
+add_executable(sar_physical_asio_control_model_smoke
+  tests/realtime/physical_asio_control_model_smoke.cpp
+)
+
+target_link_libraries(sar_physical_asio_control_model_smoke PRIVATE sar_core)
+
 add_executable(sar_audio_runtime_topology_smoke
   tests/realtime/audio_runtime_topology_smoke.cpp
 )
@@ -884,6 +890,8 @@ add_test(NAME preset_document_smoke COMMAND sar_preset_document_smoke)
 add_test(NAME preset_file_codec_smoke COMMAND sar_preset_file_codec_smoke)
 add_test(NAME session_file_codec_smoke COMMAND sar_session_file_codec_smoke)
 add_test(NAME control_command_smoke COMMAND sar_control_command_smoke)
+add_test(NAME physical_asio_control_model_smoke
+  COMMAND sar_physical_asio_control_model_smoke)
 add_test(NAME audio_runtime_topology_smoke COMMAND sar_audio_runtime_topology_smoke)
 add_test(NAME audio_runtime_matrix_binding_smoke
   COMMAND sar_audio_runtime_matrix_binding_smoke)

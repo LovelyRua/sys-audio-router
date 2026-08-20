@@ -516,6 +516,17 @@ ControlWireEncodeResult encode_control_command(const ControlCommand& command) {
     writer.scalar(endpoint.first_channel);
     writer.scalar(endpoint.channel_count);
   }
+  writer.string(command.audio_runtime.physical_asio_driver_clsid);
+  writer.scalar(command.audio_runtime.physical_asio_sample_rate);
+  writer.scalar(command.audio_runtime.physical_asio_block_frames);
+  writer.count(command.audio_runtime.physical_asio_input_channels.size());
+  for (const auto channel : command.audio_runtime.physical_asio_input_channels) {
+    writer.scalar(channel);
+  }
+  writer.count(command.audio_runtime.physical_asio_output_channels.size());
+  for (const auto channel : command.audio_runtime.physical_asio_output_channels) {
+    writer.scalar(channel);
+  }
   writer.count(command.virtual_asio_devices.size());
   for (const auto& device : command.virtual_asio_devices) {
     encode_virtual_asio_device(writer, device);
@@ -545,7 +556,7 @@ ControlCommandDecodeResult decode_control_command(
   command.mute = reader.boolean();
   command.preset = decode_preset(reader);
   command.audio_runtime.mode = reader.enumeration<AudioRuntimeMode>(
-      reader.version() >= 9 ? 3 : 2);
+      reader.version() >= 12 ? 4 : (reader.version() >= 9 ? 3 : 2));
   command.audio_runtime.capture_device_id = reader.string();
   command.audio_runtime.render_device_id = reader.string();
   const auto runtime_endpoint_count =
@@ -563,6 +574,25 @@ ControlCommandDecodeResult decode_control_command(
       endpoint.first_channel = reader.scalar<std::uint32_t>();
       endpoint.channel_count = reader.scalar<std::uint32_t>();
       command.audio_runtime.endpoints.push_back(std::move(endpoint));
+    }
+  }
+  if (reader.ok() && reader.version() >= 12) {
+    command.audio_runtime.physical_asio_driver_clsid = reader.string();
+    command.audio_runtime.physical_asio_sample_rate =
+        reader.scalar<std::uint32_t>();
+    command.audio_runtime.physical_asio_block_frames =
+        reader.scalar<std::uint32_t>();
+    const auto input_count = reader.count();
+    command.audio_runtime.physical_asio_input_channels.reserve(input_count);
+    for (std::uint32_t index = 0; index < input_count && reader.ok(); ++index) {
+      command.audio_runtime.physical_asio_input_channels.push_back(
+          reader.scalar<std::uint32_t>());
+    }
+    const auto output_count = reader.count();
+    command.audio_runtime.physical_asio_output_channels.reserve(output_count);
+    for (std::uint32_t index = 0; index < output_count && reader.ok(); ++index) {
+      command.audio_runtime.physical_asio_output_channels.push_back(
+          reader.scalar<std::uint32_t>());
     }
   }
   const auto virtual_asio_device_count =
@@ -658,6 +688,21 @@ ControlWireEncodeResult encode_control_response(const ControlResponse& response)
       writer.boolean(endpoint.clock_master);
       writer.scalar(endpoint.first_channel);
       writer.scalar(endpoint.channel_count);
+    }
+    writer.string(response.audio_runtime.configuration.physical_asio_driver_clsid);
+    writer.scalar(response.audio_runtime.configuration.physical_asio_sample_rate);
+    writer.scalar(response.audio_runtime.configuration.physical_asio_block_frames);
+    writer.count(response.audio_runtime.configuration
+                     .physical_asio_input_channels.size());
+    for (const auto channel : response.audio_runtime.configuration
+                                  .physical_asio_input_channels) {
+      writer.scalar(channel);
+    }
+    writer.count(response.audio_runtime.configuration
+                     .physical_asio_output_channels.size());
+    for (const auto channel : response.audio_runtime.configuration
+                                  .physical_asio_output_channels) {
+      writer.scalar(channel);
     }
   }
   writer.boolean(response.has_virtual_asio_devices);
@@ -759,7 +804,7 @@ ControlResponseDecodeResult decode_control_response(
     response.audio_runtime.graph_version = reader.scalar<std::uint64_t>();
     response.audio_runtime.configured = reader.boolean();
     response.audio_runtime.configuration.mode = reader.enumeration<AudioRuntimeMode>(
-        reader.version() >= 9 ? 3 : 2);
+        reader.version() >= 12 ? 4 : (reader.version() >= 9 ? 3 : 2));
     response.audio_runtime.configuration.capture_device_id = reader.string();
     response.audio_runtime.configuration.render_device_id = reader.string();
     const auto runtime_endpoint_count =
@@ -779,6 +824,24 @@ ControlResponseDecodeResult decode_control_response(
         endpoint.channel_count = reader.scalar<std::uint32_t>();
         response.audio_runtime.configuration.endpoints.push_back(
             std::move(endpoint));
+      }
+    }
+    if (reader.ok() && reader.version() >= 12) {
+      auto& configuration = response.audio_runtime.configuration;
+      configuration.physical_asio_driver_clsid = reader.string();
+      configuration.physical_asio_sample_rate = reader.scalar<std::uint32_t>();
+      configuration.physical_asio_block_frames = reader.scalar<std::uint32_t>();
+      const auto input_count = reader.count();
+      configuration.physical_asio_input_channels.reserve(input_count);
+      for (std::uint32_t index = 0; index < input_count && reader.ok(); ++index) {
+        configuration.physical_asio_input_channels.push_back(
+            reader.scalar<std::uint32_t>());
+      }
+      const auto output_count = reader.count();
+      configuration.physical_asio_output_channels.reserve(output_count);
+      for (std::uint32_t index = 0; index < output_count && reader.ok(); ++index) {
+        configuration.physical_asio_output_channels.push_back(
+            reader.scalar<std::uint32_t>());
       }
     }
   }

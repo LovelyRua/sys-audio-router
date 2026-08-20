@@ -91,7 +91,8 @@ int main() {
   legacy_command.audio_runtime.render_device_id = "legacy-render";
   legacy_command.virtual_asio_devices.clear();
   auto encoded_v8 = sar::control::encode_control_command(legacy_command).bytes;
-  encoded_v8.resize(encoded_v8.size() - 2 * sizeof(std::uint32_t));
+  // v8 has no endpoint count, Physical ASIO payload, or Virtual ASIO count.
+  encoded_v8.resize(encoded_v8.size() - 7 * sizeof(std::uint32_t));
   write_u16(encoded_v8, 4, 8);
   write_u32(encoded_v8, 8,
             static_cast<std::uint32_t>(encoded_v8.size() -
@@ -101,6 +102,35 @@ int main() {
   assert(decoded_v8.command.audio_runtime.mode ==
          sar::control::AudioRuntimeMode::WasapiDuplex);
   assert(decoded_v8.command.audio_runtime.endpoints.empty());
+
+  auto physical_command = command;
+  physical_command.audio_runtime = {};
+  physical_command.audio_runtime.mode =
+      sar::control::AudioRuntimeMode::PhysicalAsio;
+  physical_command.audio_runtime.physical_asio_driver_clsid =
+      "{12345678-1234-1234-1234-1234567890AB}";
+  physical_command.audio_runtime.physical_asio_sample_rate = 96000;
+  physical_command.audio_runtime.physical_asio_block_frames = 256;
+  physical_command.audio_runtime.physical_asio_input_channels = {0, 2};
+  physical_command.audio_runtime.physical_asio_output_channels = {1, 3};
+  const auto encoded_physical =
+      sar::control::encode_control_command(physical_command);
+  assert(encoded_physical.ok());
+  const auto decoded_physical =
+      sar::control::decode_control_command(encoded_physical.bytes);
+  assert(decoded_physical.ok());
+  assert(decoded_physical.command.audio_runtime.mode ==
+         sar::control::AudioRuntimeMode::PhysicalAsio);
+  assert(decoded_physical.command.audio_runtime.physical_asio_driver_clsid ==
+         physical_command.audio_runtime.physical_asio_driver_clsid);
+  assert(decoded_physical.command.audio_runtime.physical_asio_sample_rate ==
+         96000);
+  assert(decoded_physical.command.audio_runtime.physical_asio_block_frames ==
+         256);
+  assert(decoded_physical.command.audio_runtime.physical_asio_input_channels ==
+         std::vector<std::uint32_t>({0, 2}));
+  assert(decoded_physical.command.audio_runtime.physical_asio_output_channels ==
+         std::vector<std::uint32_t>({1, 3}));
 
   sar::control::ControlResponse response;
   response.command_id = command.command_id;

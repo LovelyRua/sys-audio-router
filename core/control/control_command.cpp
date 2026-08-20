@@ -68,6 +68,67 @@ std::vector<PresetError> validate_audio_runtime_configuration(
     bool allow_none) {
   std::vector<PresetError> errors;
 
+  const auto has_physical_asio_fields = [&] {
+    return !configuration.physical_asio_driver_clsid.empty() ||
+           configuration.physical_asio_sample_rate != 0 ||
+           configuration.physical_asio_block_frames != 0 ||
+           !configuration.physical_asio_input_channels.empty() ||
+           !configuration.physical_asio_output_channels.empty();
+  };
+
+  if (configuration.mode == AudioRuntimeMode::PhysicalAsio) {
+    if (!configuration.capture_device_id.empty() ||
+        !configuration.render_device_id.empty() ||
+        !configuration.endpoints.empty()) {
+      errors.push_back({"unexpected_wasapi_configuration",
+                        "Physical ASIO mode does not accept WASAPI devices or endpoints."});
+    }
+    if (configuration.physical_asio_driver_clsid.empty()) {
+      errors.push_back({"empty_physical_asio_driver_clsid",
+                        "Physical ASIO mode requires a driver CLSID."});
+    } else if (configuration.physical_asio_driver_clsid.size() > 128) {
+      errors.push_back({"physical_asio_driver_clsid_too_long",
+                        "Physical ASIO driver CLSID exceeds the supported length."});
+    }
+    if (configuration.physical_asio_sample_rate < 8000 ||
+        configuration.physical_asio_sample_rate > 768000) {
+      errors.push_back({"invalid_physical_asio_sample_rate",
+                        "Physical ASIO sample rate must be between 8000 and 768000 Hz."});
+    }
+    if (configuration.physical_asio_block_frames == 0 ||
+        configuration.physical_asio_block_frames > 65536) {
+      errors.push_back({"invalid_physical_asio_block_frames",
+                        "Physical ASIO block size must be between 1 and 65536 frames."});
+    }
+    const auto& inputs = configuration.physical_asio_input_channels;
+    const auto& outputs = configuration.physical_asio_output_channels;
+    if (inputs.empty() && outputs.empty()) {
+      errors.push_back({"empty_physical_asio_channel_selection",
+                        "Physical ASIO mode requires at least one input or output channel."});
+    }
+    if (inputs.size() > kMaximumPhysicalAsioChannels ||
+        outputs.size() > kMaximumPhysicalAsioChannels) {
+      errors.push_back({"too_many_physical_asio_channels",
+                        "Physical ASIO channel selection exceeds the supported capacity."});
+    }
+    const auto validate_channels = [&](const std::vector<std::uint32_t>& channels,
+                                       const char* duplicate_code) {
+      std::unordered_set<std::uint32_t> unique;
+      for (const auto channel : channels) {
+        if (channel >= kMaximumPhysicalAsioChannels) {
+          errors.push_back({"physical_asio_channel_out_of_range",
+                            "Physical ASIO channel index exceeds the supported range."});
+        } else if (!unique.insert(channel).second) {
+          errors.push_back({duplicate_code,
+                            "Physical ASIO channel selections must be unique."});
+        }
+      }
+    };
+    validate_channels(inputs, "duplicate_physical_asio_input_channel");
+    validate_channels(outputs, "duplicate_physical_asio_output_channel");
+    return errors;
+  }
+
   if (configuration.mode == AudioRuntimeMode::None) {
     if (!allow_none) {
       errors.push_back({"missing_audio_runtime_mode",
@@ -75,11 +136,16 @@ std::vector<PresetError> validate_audio_runtime_configuration(
     }
     if (!configuration.capture_device_id.empty() ||
         !configuration.render_device_id.empty() ||
-        !configuration.endpoints.empty()) {
+        !configuration.endpoints.empty() || has_physical_asio_fields()) {
       errors.push_back({"unexpected_audio_runtime_endpoint",
                         "A disabled audio runtime cannot specify endpoints."});
     }
     return errors;
+  }
+
+  if (has_physical_asio_fields()) {
+    errors.push_back({"unexpected_physical_asio_configuration",
+                      "WASAPI modes do not accept Physical ASIO configuration."});
   }
 
   if (configuration.mode == AudioRuntimeMode::WasapiRender) {

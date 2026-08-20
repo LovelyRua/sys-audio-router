@@ -46,9 +46,37 @@ void usage() {
                "VALUE|set-mute INPUT OUTPUT true|false|"
                "runtime-configure-render [RENDER_ID]|"
                "runtime-configure-duplex [CAPTURE_ID RENDER_ID]|"
+               "runtime-configure-physical-asio DRIVER_CLSID SAMPLE_RATE "
+               "BLOCK_FRAMES INPUT_CHANNELS OUTPUT_CHANNELS|"
                "runtime-configure-matrix (capture|render) ENDPOINT_ID "
                "(DEVICE_ID|default) FIRST_CHANNEL CHANNEL_COUNT "
                "(master|follower) [...]\n";
+}
+
+bool parse_uint32(std::string_view text, std::uint32_t& value) noexcept;
+
+bool parse_channel_list(std::string_view text,
+                        std::vector<std::uint32_t>& channels) noexcept {
+  if (text == "-") {
+    return true;
+  }
+  std::size_t begin = 0;
+  while (begin < text.size()) {
+    const auto end = text.find(',', begin);
+    const auto item = text.substr(begin, end == std::string_view::npos
+                                             ? text.size() - begin
+                                             : end - begin);
+    std::uint32_t channel = 0;
+    if (item.empty() || !parse_uint32(item, channel)) {
+      return false;
+    }
+    channels.push_back(channel);
+    if (end == std::string_view::npos) {
+      return true;
+    }
+    begin = end + 1;
+  }
+  return false;
 }
 
 bool parse_uint32(std::string_view text, std::uint32_t& value) noexcept {
@@ -233,6 +261,8 @@ const char* runtime_mode_name(sar::control::AudioRuntimeMode mode) {
       return "wasapi-duplex";
     case sar::control::AudioRuntimeMode::WasapiMatrix:
       return "wasapi-matrix";
+    case sar::control::AudioRuntimeMode::PhysicalAsio:
+      return "physical-asio";
   }
   return "unknown";
 }
@@ -299,6 +329,27 @@ int main(int argc, char** argv) {
       command.audio_runtime.capture_device_id = argv[index++];
       command.audio_runtime.render_device_id = argv[index++];
     } else if (index < argc) {
+      usage();
+      return 2;
+    }
+  } else if (operation == "runtime-configure-physical-asio") {
+    command.type = sar::control::ControlCommandType::ConfigureAudioRuntime;
+    command.audio_runtime.mode = sar::control::AudioRuntimeMode::PhysicalAsio;
+    if (index + 4 >= argc) {
+      usage();
+      return 2;
+    }
+    command.audio_runtime.physical_asio_driver_clsid = argv[index++];
+    if (!parse_uint32(argv[index++],
+                      command.audio_runtime.physical_asio_sample_rate) ||
+        !parse_uint32(argv[index++],
+                      command.audio_runtime.physical_asio_block_frames) ||
+        !parse_channel_list(
+            argv[index++],
+            command.audio_runtime.physical_asio_input_channels) ||
+        !parse_channel_list(
+            argv[index++],
+            command.audio_runtime.physical_asio_output_channels)) {
       usage();
       return 2;
     }

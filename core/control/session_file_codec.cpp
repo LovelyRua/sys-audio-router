@@ -202,6 +202,19 @@ SessionFileEncodeResult encode_session_file(const SessionDocument& session) {
     append_integer(bytes, endpoint.first_channel);
     append_integer(bytes, endpoint.channel_count);
   }
+  append_string(bytes, session.audio_runtime.physical_asio_driver_clsid);
+  append_integer(bytes, session.audio_runtime.physical_asio_sample_rate);
+  append_integer(bytes, session.audio_runtime.physical_asio_block_frames);
+  append_integer(bytes, static_cast<std::uint32_t>(
+                            session.audio_runtime.physical_asio_input_channels.size()));
+  for (const auto channel : session.audio_runtime.physical_asio_input_channels) {
+    append_integer(bytes, channel);
+  }
+  append_integer(bytes, static_cast<std::uint32_t>(
+                            session.audio_runtime.physical_asio_output_channels.size()));
+  for (const auto channel : session.audio_runtime.physical_asio_output_channels) {
+    append_integer(bytes, channel);
+  }
   append_integer(bytes, static_cast<std::uint8_t>(session.auto_start ? 1 : 0));
   append_integer(bytes, static_cast<std::uint32_t>(
                             session.virtual_asio_devices.size()));
@@ -276,9 +289,11 @@ SessionFileDecodeResult decode_session_file(
   }
   session.preset = decoded_preset.preset();
 
-  const auto maximum_runtime_mode =
-      version == 1 ? static_cast<std::uint8_t>(AudioRuntimeMode::WasapiDuplex)
-                   : static_cast<std::uint8_t>(AudioRuntimeMode::WasapiMatrix);
+  const auto maximum_runtime_mode = version >= 4
+      ? static_cast<std::uint8_t>(AudioRuntimeMode::PhysicalAsio)
+      : (version == 1
+             ? static_cast<std::uint8_t>(AudioRuntimeMode::WasapiDuplex)
+             : static_cast<std::uint8_t>(AudioRuntimeMode::WasapiMatrix));
   if (!reader.integer(runtime_mode) || runtime_mode > maximum_runtime_mode ||
       !reader.string(session.audio_runtime.capture_device_id) ||
       !reader.string(session.audio_runtime.render_device_id)) {
@@ -314,6 +329,42 @@ SessionFileDecodeResult decode_session_file(
             file_error("Session runtime endpoint channel range is invalid."));
       }
       session.audio_runtime.endpoints.push_back(std::move(endpoint));
+    }
+  }
+  if (version >= 4) {
+    auto& runtime = session.audio_runtime;
+    std::uint32_t input_count = 0;
+    std::uint32_t output_count = 0;
+    if (!reader.string(runtime.physical_asio_driver_clsid) ||
+        !reader.integer(runtime.physical_asio_sample_rate) ||
+        !reader.integer(runtime.physical_asio_block_frames) ||
+        !reader.integer(input_count) ||
+        input_count > kMaximumPhysicalAsioChannels) {
+      return SessionFileDecodeResult::failure(
+          file_error("Session Physical ASIO configuration is invalid."));
+    }
+    runtime.physical_asio_input_channels.reserve(input_count);
+    for (std::uint32_t index = 0; index < input_count; ++index) {
+      std::uint32_t channel = 0;
+      if (!reader.integer(channel)) {
+        return SessionFileDecodeResult::failure(
+            file_error("Session Physical ASIO input channels are invalid."));
+      }
+      runtime.physical_asio_input_channels.push_back(channel);
+    }
+    if (!reader.integer(output_count) ||
+        output_count > kMaximumPhysicalAsioChannels) {
+      return SessionFileDecodeResult::failure(
+          file_error("Session Physical ASIO output channels are invalid."));
+    }
+    runtime.physical_asio_output_channels.reserve(output_count);
+    for (std::uint32_t index = 0; index < output_count; ++index) {
+      std::uint32_t channel = 0;
+      if (!reader.integer(channel)) {
+        return SessionFileDecodeResult::failure(
+            file_error("Session Physical ASIO output channels are invalid."));
+      }
+      runtime.physical_asio_output_channels.push_back(channel);
     }
   }
   if (!reader.integer(auto_start) || auto_start > 1) {
