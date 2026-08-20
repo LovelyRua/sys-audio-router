@@ -9,6 +9,7 @@
 #include <memory>
 #include <mutex>
 #include <new>
+#include <optional>
 #include <thread>
 #include <utility>
 
@@ -235,7 +236,27 @@ EngineAudioRuntimeBuildResult open_windows_physical_asio_engine_runtime(
     return failure("physical_asio_invalid_request",
                    "Physical ASIO runtime configuration is incomplete.");
   }
-  const auto probed = probe(configuration.physical_asio_driver_clsid);
+  auto apartment = PhysicalAsioControlApartment::create();
+  if (!apartment) {
+    return failure("physical_asio_control_apartment_unavailable",
+                   "Physical ASIO control thread could not be created.");
+  }
+  struct ProbeContext {
+    WindowsPhysicalAsioProbe* probe;
+    const std::string* clsid;
+    std::optional<platform::WindowsAsioDriverProbeResult> result;
+  } probe_context{&probe, &configuration.physical_asio_driver_clsid};
+  apartment->invoke(probe_context, [](ProbeContext& value) noexcept {
+    try {
+      value.result.emplace((*value.probe)(*value.clsid));
+    } catch (...) {
+    }
+  });
+  if (!probe_context.result) {
+    return failure("physical_asio_driver_probe_failed",
+                   "Physical ASIO driver inspection raised an exception.");
+  }
+  const auto& probed = *probe_context.result;
   if (!probed.ok()) {
     return failure("physical_asio_driver_probe_failed",
                    "Physical ASIO driver could not be inspected.");
@@ -262,11 +283,6 @@ EngineAudioRuntimeBuildResult open_windows_physical_asio_engine_runtime(
   request.driver = driver;
   request.sample_rate = configuration.physical_asio_sample_rate;
   request.preferred_block_frames = configuration.physical_asio_block_frames;
-  auto apartment = PhysicalAsioControlApartment::create();
-  if (!apartment) {
-    return failure("physical_asio_control_apartment_unavailable",
-                   "Physical ASIO control thread could not be created.");
-  }
   struct OpenContext {
     std::shared_ptr<graph::Graph> graph;
     platform::WindowsAsioControlOpenRequest request;

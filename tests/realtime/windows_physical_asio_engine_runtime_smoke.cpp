@@ -187,7 +187,8 @@ void control_lifecycle_stays_on_one_thread() {
   RecordingNegotiator negotiator(record);
   auto opened = sar::service::open_windows_physical_asio_engine_runtime(
       configuration(), std::make_shared<sar::graph::Graph>(31, 2, 128, 48000),
-      [](const std::string&) {
+      [record](const std::string&) {
+        record->add();
         return sar::platform::WindowsAsioDriverProbeResult::success(probe());
       },
       activator, negotiator);
