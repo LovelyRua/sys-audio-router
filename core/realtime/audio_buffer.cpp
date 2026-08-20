@@ -7,8 +7,8 @@ namespace sar::realtime {
 
 AudioBuffer::AudioBuffer(std::size_t channels, std::size_t frames)
     : channels_(channels), frames_(frames), samples_(channels * frames, 0.0F) {
-  if (channels == 0 || frames == 0) {
-    throw std::invalid_argument("AudioBuffer requires non-zero channels and frames");
+  if (frames == 0) {
+    throw std::invalid_argument("AudioBuffer requires a non-zero frame count");
   }
 }
 

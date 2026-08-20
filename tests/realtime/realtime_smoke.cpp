@@ -16,6 +16,13 @@ constexpr float kSecondGain = 0.25F;
 }  // namespace
 
 int main() {
+  sar::realtime::AudioBuffer empty_bus(0, 128);
+  if (empty_bus.channels() != 0 || empty_bus.frames() != 128) {
+    std::cerr << "Expected a zero-channel bus to preserve its frame domain\n";
+    return 1;
+  }
+  empty_bus.clear();
+
   sar::realtime::AudioBuffer input(2, 128);
   sar::realtime::AudioBuffer output(2, 128);
   sar::diagnostics::EngineDiagnostics diagnostics;
