@@ -2,6 +2,8 @@
 
 #include "core/service/windows_physical_asio_runtime.h"
 
+#include "core/graph/node.h"
+
 #include <algorithm>
 #include <memory>
 #include <utility>
@@ -61,6 +63,27 @@ class PhysicalAsioEngineRuntime final : public EngineAudioRuntime {
 
 }  // namespace
 
+std::shared_ptr<graph::Graph> build_windows_physical_asio_direct_graph(
+    const control::AudioRuntimeConfiguration& configuration,
+    const platform::WindowsAsioDriverProbe& driver,
+    std::uint64_t graph_version) {
+  const auto channels = std::max(driver.input_channels,
+                                 driver.output_channels);
+  if (channels == 0 || configuration.physical_asio_sample_rate == 0 ||
+      configuration.physical_asio_block_frames == 0) {
+    return {};
+  }
+  try {
+    auto graph = std::make_shared<graph::Graph>(
+        graph_version, channels, configuration.physical_asio_block_frames,
+        configuration.physical_asio_sample_rate);
+    graph->add_node(std::make_unique<graph::PassthroughNode>());
+    return graph;
+  } catch (...) {
+    return {};
+  }
+}
+
 EngineAudioRuntimeBuildResult open_windows_physical_asio_engine_runtime(
     const control::AudioRuntimeConfiguration& configuration,
     std::shared_ptr<graph::Graph> graph,
@@ -87,15 +110,12 @@ EngineAudioRuntimeBuildResult open_windows_physical_asio_engine_runtime(
         "This alpha requires selecting every driver channel in native order; "
         "sparse Physical ASIO channel mapping is not implemented yet.");
   }
-  const auto required_channels =
-      std::max(driver.input_channels, driver.output_channels);
-  if (required_channels == 0 || graph->channels() != required_channels ||
-      graph->frames() != configuration.physical_asio_block_frames ||
-      graph->sample_rate() != configuration.physical_asio_sample_rate) {
+  auto direct_graph = build_windows_physical_asio_direct_graph(
+      configuration, driver, graph->version());
+  if (!direct_graph) {
     return failure(
-        "physical_asio_graph_shape_mismatch",
-        "Preset graph channels, block size, and sample rate must match the "
-        "selected Physical ASIO driver configuration.");
+        "physical_asio_direct_graph_build_failed",
+        "Physical ASIO direct-I/O graph could not be created.");
   }
 
   platform::WindowsAsioControlOpenRequest request;
@@ -103,7 +123,7 @@ EngineAudioRuntimeBuildResult open_windows_physical_asio_engine_runtime(
   request.sample_rate = configuration.physical_asio_sample_rate;
   request.preferred_block_frames = configuration.physical_asio_block_frames;
   auto opened = WindowsPhysicalAsioRuntime::open(
-      graph, std::move(request), activator, negotiator);
+      direct_graph, std::move(request), activator, negotiator);
   if (!opened.ok()) {
     return failure(
         std::string("physical_asio_") +
@@ -112,7 +132,7 @@ EngineAudioRuntimeBuildResult open_windows_physical_asio_engine_runtime(
             platform::windows_asio_control_open_error_name(
                 opened.control_open_error));
   }
-  const auto version = graph->version();
+  const auto version = direct_graph->version();
   return EngineAudioRuntimeBuildResult::success(
       std::make_unique<PhysicalAsioEngineRuntime>(std::move(opened.runtime),
                                                   version));

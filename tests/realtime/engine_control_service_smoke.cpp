@@ -842,4 +842,68 @@ int main() {
   assert(!invalid_devices.has_devices);
   assert(!invalid_devices.errors.empty());
   assert(invalid_devices.errors[0].code == "empty_device_formats");
+
+  auto physical_create =
+      sar::service::EngineControlService::create(make_preset(), 50);
+  assert(physical_create.ok());
+  auto physical_service = physical_create.take_service();
+  FakeAudioRuntime* physical_runtime = nullptr;
+  physical_service->set_audio_runtime_configurator(
+      [&](const sar::control::AudioRuntimeConfiguration& configuration,
+          std::shared_ptr<sar::graph::Graph> graph,
+          const sar::control::PresetRouteMatrix&) {
+        assert(configuration.mode ==
+               sar::control::AudioRuntimeMode::PhysicalAsio);
+        assert(configuration.physical_asio_driver_clsid == "{motu-driver}");
+        assert(configuration.physical_asio_input_channels ==
+               std::vector<std::uint32_t>({0, 1}));
+        assert(configuration.physical_asio_output_channels ==
+               std::vector<std::uint32_t>({0, 1}));
+        auto runtime =
+            std::make_unique<FakeAudioRuntime>(graph->version());
+        physical_runtime = runtime.get();
+        return sar::service::EngineAudioRuntimeBuildResult::success(
+            std::move(runtime));
+      });
+
+  sar::control::ControlCommand physical_configure;
+  physical_configure.command_id = "configure-physical-asio";
+  physical_configure.type =
+      sar::control::ControlCommandType::ConfigureAudioRuntime;
+  physical_configure.audio_runtime.mode =
+      sar::control::AudioRuntimeMode::PhysicalAsio;
+  physical_configure.audio_runtime.physical_asio_driver_clsid =
+      "{motu-driver}";
+  physical_configure.audio_runtime.physical_asio_sample_rate = 48000;
+  physical_configure.audio_runtime.physical_asio_block_frames = 128;
+  physical_configure.audio_runtime.physical_asio_input_channels = {0, 1};
+  physical_configure.audio_runtime.physical_asio_output_channels = {0, 1};
+  const auto physical_configured =
+      send(*physical_service, physical_configure);
+  assert(physical_configured.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  assert(physical_configured.audio_runtime.configured);
+  assert(!physical_configured.audio_runtime.running);
+  assert(physical_service->session_document().audio_runtime.mode ==
+         sar::control::AudioRuntimeMode::PhysicalAsio);
+
+  sar::control::ControlCommand physical_start;
+  physical_start.command_id = "start-physical-asio";
+  physical_start.type =
+      sar::control::ControlCommandType::StartAudioRuntime;
+  const auto physical_started = send(*physical_service, physical_start);
+  assert(physical_started.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  assert(physical_started.audio_runtime.running);
+  assert(physical_runtime != nullptr && physical_runtime->start_calls == 1);
+  assert(physical_service->session_document().auto_start);
+
+  sar::control::ControlCommand physical_stop;
+  physical_stop.command_id = "stop-physical-asio";
+  physical_stop.type = sar::control::ControlCommandType::StopAudioRuntime;
+  const auto physical_stopped = send(*physical_service, physical_stop);
+  assert(physical_stopped.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  assert(!physical_stopped.audio_runtime.running);
+  assert(!physical_service->session_document().auto_start);
 }

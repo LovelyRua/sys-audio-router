@@ -80,14 +80,14 @@ int main() {
   assert(has_error(sparse_result,
                    "physical_asio_channel_subset_not_implemented"));
 
-  auto wrong_graph =
-      sar::service::open_windows_physical_asio_engine_runtime(
-          configuration(),
-          std::make_shared<sar::graph::Graph>(1, 1, 128, 48000),
-          [](const std::string&) {
-            return sar::platform::WindowsAsioDriverProbeResult::success(
-                probe());
-          },
-          activator, negotiator);
-  assert(has_error(wrong_graph, "physical_asio_graph_shape_mismatch"));
+  auto asymmetric = probe();
+  asymmetric.input_channels = 8;
+  asymmetric.output_channels = 2;
+  auto direct = sar::service::build_windows_physical_asio_direct_graph(
+      configuration(), asymmetric, 19);
+  assert(direct);
+  assert(direct->version() == 19);
+  assert(direct->channels() == 8);
+  assert(direct->frames() == 128);
+  assert(direct->sample_rate() == 48000);
 }
