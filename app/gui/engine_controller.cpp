@@ -1136,6 +1136,10 @@ void EngineController::updateSession(const control::ControlResponse& response) {
            device.formats.empty()
                ? 0
                : static_cast<int>(device.formats.front().channels)},
+          {QStringLiteral("inputChannels"),
+           static_cast<int>(device.input_channels)},
+          {QStringLiteral("outputChannels"),
+           static_cast<int>(device.output_channels)},
       });
     }
   }

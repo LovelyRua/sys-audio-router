@@ -82,7 +82,9 @@ foreach(matrix_runtime_marker
     "objectName: \"physicalAsioEditor\""
     "objectName: \"physicalAsioDriverCombo\""
     "function selectAsioDriverDraft(device)"
-    "device.direction === 2 ? \"0\" : channels"
+    "function canonicalChannelList(value)"
+    "defaultChannelList(device.inputChannels)"
+    "defaultChannelList(device.outputChannels)"
     "engine.configurePhysicalAsio("
     "contentHeight: devicesContent.implicitHeight + 48")
   string(FIND "${qml}" "${matrix_runtime_marker}" marker_position)

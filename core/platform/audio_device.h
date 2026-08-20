@@ -44,6 +44,10 @@ struct AudioDeviceDescriptor {
   std::vector<AudioFormat> formats;
   bool is_default = false;
   bool is_virtual = false;
+  // Direction-specific counts supplement AudioFormat::channels, whose legacy
+  // meaning remains the maximum channel count supported by this descriptor.
+  std::uint32_t input_channels = 0;
+  std::uint32_t output_channels = 0;
 };
 
 struct AudioDeviceError {

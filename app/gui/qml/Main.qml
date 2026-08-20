@@ -407,8 +407,10 @@ ApplicationWindow {
                     ? engine.runtimePhysicalAsioDriverClsid === runtimeDraftAsioDriverClsid
                       && String(engine.runtimePhysicalAsioSampleRate) === runtimeDraftAsioSampleRate
                       && String(engine.runtimePhysicalAsioBlockFrames) === runtimeDraftAsioBlockFrames
-                      && engine.runtimePhysicalAsioInputChannels === runtimeDraftAsioInputChannels
-                      && engine.runtimePhysicalAsioOutputChannels === runtimeDraftAsioOutputChannels
+                      && canonicalChannelList(engine.runtimePhysicalAsioInputChannels) ===
+                         canonicalChannelList(runtimeDraftAsioInputChannels)
+                      && canonicalChannelList(engine.runtimePhysicalAsioOutputChannels) ===
+                         canonicalChannelList(runtimeDraftAsioOutputChannels)
                     : engine.runtimeRenderDeviceId === runtimeDraftRenderDeviceId
                       && (engineMode !== "duplex"
                           || engine.runtimeCaptureDeviceId ===
@@ -441,16 +443,26 @@ ApplicationWindow {
         return values.join(",")
     }
 
+    function canonicalChannelList(value) {
+        var trimmed = String(value).trim()
+        if (trimmed.length === 0)
+            return ""
+        var parts = trimmed.split(",")
+        var values = []
+        for (var index = 0; index < parts.length; ++index) {
+            var part = parts[index].trim()
+            if (!/^\d+$/.test(part))
+                return trimmed
+            values.push(Number(part))
+        }
+        values.sort(function(left, right) { return left - right })
+        return values.join(",")
+    }
+
     function selectAsioDriverDraft(device) {
         runtimeDraftAsioDriverClsid = asioClsid(device)
-        // AudioDeviceDescriptor currently exposes max(input, output), not the
-        // two counts independently. For duplex drivers, channel zero is the
-        // only default that is guaranteed to exist on both sides.
-        var channels = defaultChannelList(device.channels)
-        runtimeDraftAsioInputChannels = device.direction === 1 ? ""
-                : device.direction === 2 ? "0" : channels
-        runtimeDraftAsioOutputChannels = device.direction === 0 ? ""
-                : device.direction === 2 ? "0" : channels
+        runtimeDraftAsioInputChannels = defaultChannelList(device.inputChannels)
+        runtimeDraftAsioOutputChannels = defaultChannelList(device.outputChannels)
         runtimeDraftDirty = true
     }
 
@@ -2252,7 +2264,7 @@ ApplicationWindow {
                                 }
                                 Text {
                                     Layout.fillWidth: true
-                                    text: "Duplex defaults to Ch 0 in/out; enter additional channel indexes explicitly"
+                                    text: "Channel lists follow the driver's reported input and output topology"
                                     color: colors.muted
                                     font.pixelSize: 9
                                     elide: Text.ElideRight

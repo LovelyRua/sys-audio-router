@@ -285,6 +285,8 @@ AudioDeviceListResult WindowsAsioDeviceProvider::list_devices() const {
                        : (!probe.driver_name.empty() ? probe.driver_name
                                                      : entry.registry_name);
     device.backend = AudioBackendKind::Asio;
+    device.input_channels = probe.input_channels;
+    device.output_channels = probe.output_channels;
     device.direction = probe.input_channels > 0 && probe.output_channels > 0
                            ? AudioDeviceDirection::Duplex
                        : probe.input_channels > 0

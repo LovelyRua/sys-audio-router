@@ -582,6 +582,8 @@ int main(int argc, char **argv) {
           .direction = sar::platform::AudioDeviceDirection::Duplex,
           .formats = {{.sample_rate = 48'000, .channels = 8,
                        .frames_per_block = 128}},
+          .input_channels = 8,
+          .output_channels = 4,
       });
       return reply;
     }
@@ -596,6 +598,10 @@ int main(int argc, char **argv) {
   assert(physical_asio_controller.devices().front().toMap()
              .value(QStringLiteral("isAsio"))
              .toBool());
+  assert(physical_asio_controller.devices().front().toMap()
+             .value(QStringLiteral("inputChannels")) == 8);
+  assert(physical_asio_controller.devices().front().toMap()
+             .value(QStringLiteral("outputChannels")) == 4);
   physical_asio_controller.configurePhysicalAsio(
       QStringLiteral("{11111111-2222-3333-4444-555555555555}"), 48'000,
       128, QStringLiteral("0,1,2,3"), QStringLiteral("0,1"));

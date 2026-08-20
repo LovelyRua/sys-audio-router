@@ -195,6 +195,8 @@ int main() {
       {{48000, 2, 128, 32, 32, sar::platform::AudioSampleFormat::IeeeFloat}},
       false,
       true,
+      6,
+      4,
   });
   response.has_virtual_asio_devices = true;
   response.virtual_asio_devices = command.virtual_asio_devices;
@@ -209,6 +211,8 @@ int main() {
   assert(decoded_response.response.active_graph.nodes.size() == 1);
   assert(decoded_response.response.devices.size() == 1);
   assert(decoded_response.response.devices[0].is_virtual);
+  assert(decoded_response.response.devices[0].input_channels == 6);
+  assert(decoded_response.response.devices[0].output_channels == 4);
   assert(decoded_response.response.has_virtual_asio_devices);
   assert(decoded_response.response.virtual_asio_devices.size() == 1);
   assert(decoded_response.response.virtual_asio_devices[0].broker_token ==

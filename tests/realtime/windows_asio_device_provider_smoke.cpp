@@ -64,6 +64,8 @@ int main() {
   assert(device.label == "Studio Hardware ASIO");
   assert(device.backend == AudioBackendKind::Asio);
   assert(device.direction == AudioDeviceDirection::Duplex);
+  assert(device.input_channels == 8);
+  assert(device.output_channels == 4);
   assert(device.formats.size() == 3);
   assert(device.formats[1].sample_rate == 48000);
   assert(device.formats[1].channels == 8);

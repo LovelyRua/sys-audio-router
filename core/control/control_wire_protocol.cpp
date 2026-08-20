@@ -439,6 +439,8 @@ void encode_device(Writer& writer, const platform::AudioDeviceDescriptor& device
   }
   writer.boolean(device.is_default);
   writer.boolean(device.is_virtual);
+  writer.scalar(device.input_channels);
+  writer.scalar(device.output_channels);
 }
 
 platform::AudioDeviceDescriptor decode_device(Reader& reader) {
@@ -464,6 +466,10 @@ platform::AudioDeviceDescriptor decode_device(Reader& reader) {
   }
   device.is_default = reader.boolean();
   device.is_virtual = reader.boolean();
+  if (reader.ok() && reader.version() >= 13) {
+    device.input_channels = reader.scalar<std::uint32_t>();
+    device.output_channels = reader.scalar<std::uint32_t>();
+  }
   return device;
 }
 
