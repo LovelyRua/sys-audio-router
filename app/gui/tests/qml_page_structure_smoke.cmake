@@ -81,6 +81,8 @@ foreach(matrix_runtime_marker
     "model: [\"WASAPI matrix\", \"WASAPI render\", \"WASAPI duplex\", \"Physical ASIO\"]"
     "objectName: \"physicalAsioEditor\""
     "objectName: \"physicalAsioDriverCombo\""
+    "function selectAsioDriverDraft(device)"
+    "device.direction === 2 ? \"0\" : channels"
     "engine.configurePhysicalAsio("
     "contentHeight: devicesContent.implicitHeight + 48")
   string(FIND "${qml}" "${matrix_runtime_marker}" marker_position)

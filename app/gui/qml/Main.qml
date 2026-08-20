@@ -441,6 +441,19 @@ ApplicationWindow {
         return values.join(",")
     }
 
+    function selectAsioDriverDraft(device) {
+        runtimeDraftAsioDriverClsid = asioClsid(device)
+        // AudioDeviceDescriptor currently exposes max(input, output), not the
+        // two counts independently. For duplex drivers, channel zero is the
+        // only default that is guaranteed to exist on both sides.
+        var channels = defaultChannelList(device.channels)
+        runtimeDraftAsioInputChannels = device.direction === 1 ? ""
+                : device.direction === 2 ? "0" : channels
+        runtimeDraftAsioOutputChannels = device.direction === 0 ? ""
+                : device.direction === 2 ? "0" : channels
+        runtimeDraftDirty = true
+    }
+
     function indexForAsioDriver(model, clsid) {
         for (var index = 0; index < model.length; ++index) {
             if (asioClsid(model[index]).toLowerCase() === clsid.toLowerCase())
@@ -1993,6 +2006,11 @@ ApplicationWindow {
                                         window.runtimeDraftMode = index === 0 ? "matrix"
                                                                 : index === 2 ? "duplex"
                                                                 : index === 3 ? "physical-asio" : "render"
+                                        if (window.runtimeDraftMode === "physical-asio" &&
+                                                window.runtimeDraftAsioDriverClsid.length === 0 &&
+                                                physicalAsioDriverCombo.model.length > 0)
+                                            window.selectAsioDriverDraft(
+                                                physicalAsioDriverCombo.model[0])
                                         window.runtimeDraftDirty = true
                                     }
                                 }
@@ -2187,14 +2205,7 @@ ApplicationWindow {
                                         onActivated: function(index) {
                                             if (index < 0)
                                                 return
-                                            var device = model[index]
-                                            window.runtimeDraftAsioDriverClsid = window.asioClsid(device)
-                                            var channels = window.defaultChannelList(device.channels)
-                                            window.runtimeDraftAsioInputChannels =
-                                                    device.direction === 1 ? "" : channels
-                                            window.runtimeDraftAsioOutputChannels =
-                                                    device.direction === 0 ? "" : channels
-                                            window.runtimeDraftDirty = true
+                                            window.selectAsioDriverDraft(model[index])
                                         }
                                     }
                                 }
@@ -2238,6 +2249,13 @@ ApplicationWindow {
                                         placeholderText: "Outputs, e.g. 0,1"
                                         onTextEdited: { window.runtimeDraftAsioOutputChannels = text; window.runtimeDraftDirty = true }
                                     }
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "Duplex defaults to Ch 0 in/out; enter additional channel indexes explicitly"
+                                    color: colors.muted
+                                    font.pixelSize: 9
+                                    elide: Text.ElideRight
                                 }
                             }
 
