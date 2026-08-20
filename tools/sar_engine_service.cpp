@@ -1,6 +1,7 @@
 #include "core/control/session_file_codec.h"
 #include "core/service/engine_control_service.h"
 #include "core/service/windows_named_pipe_control.h"
+#include "core/service/windows_physical_asio_engine_runtime.h"
 #include "core/service/windows_virtual_asio_broker_server.h"
 #include "core/service/windows_virtual_asio_transport_host.h"
 #include "core/service/windows_wasapi_engine_runtime.h"
@@ -12,6 +13,7 @@
 #include "core/platform/realtime_audio_input_assembler.h"
 #include "core/platform/virtual_asio_capture_bus.h"
 #include "core/platform/realtime_audio_rate_matching_source.h"
+#include "core/platform/windows_asio_device_provider.h"
 #include "core/platform/windows_wasapi_device_provider.h"
 #include "driver/windows_virtual_asio_registration.h"
 
@@ -649,6 +651,11 @@ sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator(
           configuration, matrix, std::move(graph), external_render_input,
           external_capture_output, matrix_layout);
     }
+    if (configuration.mode ==
+        sar::control::AudioRuntimeMode::PhysicalAsio) {
+      return sar::service::open_windows_physical_asio_engine_runtime(
+          configuration, std::move(graph));
+    }
     return sar::service::EngineAudioRuntimeBuildResult::failure({
         {"unsupported_audio_runtime_mode",
          "Windows service does not support the requested runtime mode."},
@@ -896,6 +903,8 @@ int main(int argc, char** argv) {
   auto service = service_result.take_service();
   service->add_audio_device_provider(
       std::make_unique<sar::platform::WindowsWasapiDeviceProvider>());
+  service->add_audio_device_provider(
+      std::make_unique<sar::platform::WindowsAsioDeviceProvider>());
   service->set_audio_runtime_configurator(
       make_wasapi_runtime_configurator(
           &asio_input_assembler,

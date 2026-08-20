@@ -17,7 +17,7 @@ bool compatible_sample_rate(double negotiated, std::uint32_t graph_rate) noexcep
 }  // namespace
 
 WindowsPhysicalAsioRuntime::WindowsPhysicalAsioRuntime(
-    std::unique_ptr<graph::Graph> graph) noexcept
+    std::shared_ptr<graph::Graph> graph) noexcept
     : graph_(std::move(graph)) {}
 
 WindowsPhysicalAsioRuntime::~WindowsPhysicalAsioRuntime() {
@@ -26,7 +26,7 @@ WindowsPhysicalAsioRuntime::~WindowsPhysicalAsioRuntime() {
 }
 
 WindowsPhysicalAsioRuntimeOpenResult WindowsPhysicalAsioRuntime::open(
-    std::unique_ptr<graph::Graph> graph,
+    std::shared_ptr<graph::Graph> graph,
     platform::WindowsAsioControlOpenRequest request,
     platform::WindowsAsioDriverActivator& activator,
     platform::WindowsAsioDriverNegotiator& negotiator) noexcept {

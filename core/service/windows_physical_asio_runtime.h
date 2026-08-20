@@ -66,7 +66,7 @@ class WindowsPhysicalAsioRuntime {
   ~WindowsPhysicalAsioRuntime();
 
   [[nodiscard]] static WindowsPhysicalAsioRuntimeOpenResult open(
-      std::unique_ptr<graph::Graph> graph,
+      std::shared_ptr<graph::Graph> graph,
       platform::WindowsAsioControlOpenRequest request,
       platform::WindowsAsioDriverActivator& activator,
       platform::WindowsAsioDriverNegotiator& negotiator) noexcept;
@@ -79,7 +79,7 @@ class WindowsPhysicalAsioRuntime {
 
  private:
   explicit WindowsPhysicalAsioRuntime(
-      std::unique_ptr<graph::Graph> graph) noexcept;
+      std::shared_ptr<graph::Graph> graph) noexcept;
   [[nodiscard]] static bool graph_callback(
       void* context, const realtime::AudioBuffer& input,
       realtime::AudioBuffer& output) noexcept;
@@ -87,7 +87,7 @@ class WindowsPhysicalAsioRuntime {
       const realtime::AudioBuffer& input,
       realtime::AudioBuffer& output) noexcept;
 
-  std::unique_ptr<graph::Graph> graph_;
+  std::shared_ptr<graph::Graph> graph_;
   platform::WindowsAsioControlOpenResult control_open_;
   std::unique_ptr<realtime::AudioBuffer> graph_input_;
   std::unique_ptr<realtime::AudioBuffer> graph_output_;

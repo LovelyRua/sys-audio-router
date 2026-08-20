@@ -92,6 +92,7 @@ target_link_libraries(sar_core PRIVATE sar_libsamplerate)
 
 if(WIN32)
   target_sources(sar_core PRIVATE
+    core/service/windows_physical_asio_engine_runtime.cpp
     core/service/windows_physical_asio_runtime.cpp
     core/platform/windows_asio_callback_transport.cpp
     core/platform/windows_asio_control_open.cpp
@@ -616,6 +617,12 @@ if(WIN32)
   )
   target_link_libraries(sar_windows_asio_control_open_smoke PRIVATE sar_core)
 
+  add_executable(sar_windows_physical_asio_engine_runtime_smoke
+    tests/realtime/windows_physical_asio_engine_runtime_smoke.cpp
+  )
+  target_link_libraries(sar_windows_physical_asio_engine_runtime_smoke
+    PRIVATE sar_core)
+
   add_executable(sar_windows_physical_asio_runtime_smoke
     tests/realtime/windows_physical_asio_runtime_smoke.cpp
   )
@@ -1054,6 +1061,8 @@ if(WIN32)
            COMMAND sar_windows_asio_vendor_host_smoke)
   add_test(NAME windows_asio_control_open_smoke
            COMMAND sar_windows_asio_control_open_smoke)
+  add_test(NAME windows_physical_asio_engine_runtime_smoke
+           COMMAND sar_windows_physical_asio_engine_runtime_smoke)
   add_test(NAME windows_physical_asio_runtime_smoke
            COMMAND sar_windows_physical_asio_runtime_smoke)
   add_test(NAME windows_asio_host_events_smoke
