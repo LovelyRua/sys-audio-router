@@ -45,8 +45,8 @@ int main() {
   auto empty = valid;
   empty.physical_asio_input_channels.clear();
   empty.physical_asio_output_channels.clear();
-  assert(has_error(sar::control::validate_audio_runtime_configuration(empty, false),
-                   "empty_physical_asio_channel_selection"));
+  assert(sar::control::validate_audio_runtime_configuration(empty, false)
+             .empty());
 
   auto duplicate = valid;
   duplicate.physical_asio_input_channels = {1, 1};

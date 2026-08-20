@@ -549,10 +549,9 @@ void EngineController::configurePhysicalAsio(
   const auto inputs = parse_channel_list(input_channels);
   const auto outputs = parse_channel_list(output_channels);
   if (driver_clsid.trimmed().isEmpty() || sample_rate <= 0 ||
-      block_frames <= 0 || !inputs || !outputs ||
-      (inputs->empty() && outputs->empty())) {
+      block_frames <= 0 || !inputs || !outputs) {
     setError(QStringLiteral(
-        "Choose an ASIO driver and valid sample rate, block size, and channel lists"));
+        "Choose an ASIO driver and valid sample rate, block size, and channel lists; leave both lists empty to use all channels"));
     return;
   }
 

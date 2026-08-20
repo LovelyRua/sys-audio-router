@@ -23,6 +23,7 @@ EngineAudioRuntimeBuildResult failure(std::string code, std::string message) {
 
 bool is_complete_contiguous(const std::vector<std::uint32_t>& selected,
                             std::uint32_t available) noexcept {
+  if (selected.empty()) return true;
   if (selected.size() != available) return false;
   for (std::uint32_t index = 0; index < available; ++index) {
     if (selected[index] != index) return false;

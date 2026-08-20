@@ -461,8 +461,10 @@ ApplicationWindow {
 
     function selectAsioDriverDraft(device) {
         runtimeDraftAsioDriverClsid = asioClsid(device)
-        runtimeDraftAsioInputChannels = defaultChannelList(device.inputChannels)
-        runtimeDraftAsioOutputChannels = defaultChannelList(device.outputChannels)
+        runtimeDraftAsioInputChannels = device.inputChannels > 0
+                ? defaultChannelList(device.inputChannels) : ""
+        runtimeDraftAsioOutputChannels = device.outputChannels > 0
+                ? defaultChannelList(device.outputChannels) : ""
         runtimeDraftDirty = true
     }
 
@@ -2251,20 +2253,20 @@ ApplicationWindow {
                                         objectName: "physicalAsioInputChannelsField"
                                         Layout.fillWidth: true
                                         text: window.runtimeDraftAsioInputChannels
-                                        placeholderText: "Inputs, e.g. 0,1"
+                                        placeholderText: "Inputs (blank = all)"
                                         onTextEdited: { window.runtimeDraftAsioInputChannels = text; window.runtimeDraftDirty = true }
                                     }
                                     ConsoleField {
                                         objectName: "physicalAsioOutputChannelsField"
                                         Layout.fillWidth: true
                                         text: window.runtimeDraftAsioOutputChannels
-                                        placeholderText: "Outputs, e.g. 0,1"
+                                        placeholderText: "Outputs (blank = all)"
                                         onTextEdited: { window.runtimeDraftAsioOutputChannels = text; window.runtimeDraftDirty = true }
                                     }
                                 }
                                 Text {
                                     Layout.fillWidth: true
-                                    text: "Channel lists follow the driver's reported input and output topology"
+                                    text: "Channel capabilities are read when this driver is applied"
                                     color: colors.muted
                                     font.pixelSize: 9
                                     elide: Text.ElideRight
@@ -2293,9 +2295,7 @@ ApplicationWindow {
                                                 : window.runtimeDraftMode === "physical-asio"
                                                 ? physicalAsioDriverCombo.currentIndex >= 0 &&
                                                   Number(window.runtimeDraftAsioSampleRate) > 0 &&
-                                                  Number(window.runtimeDraftAsioBlockFrames) > 0 &&
-                                                  (window.runtimeDraftAsioInputChannels.trim().length > 0 ||
-                                                   window.runtimeDraftAsioOutputChannels.trim().length > 0)
+                                                  Number(window.runtimeDraftAsioBlockFrames) > 0
                                                 : renderDeviceCombo.currentIndex >= 0 &&
                                                   (window.runtimeDraftMode === "render" ||
                                                    captureDeviceCombo.currentIndex >= 0))

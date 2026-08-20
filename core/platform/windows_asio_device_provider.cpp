@@ -256,7 +256,7 @@ AudioBackendKind WindowsAsioDeviceProvider::backend() const noexcept {
 }
 
 AudioDeviceListResult WindowsAsioDeviceProvider::list_devices() const {
-  if (!registry_reader_ || !probe_) {
+  if (!registry_reader_) {
     return AudioDeviceListResult::failure({{
         "asio_provider_not_configured",
         "ASIO device provider dependencies are not configured.",
@@ -268,47 +268,25 @@ AudioDeviceListResult WindowsAsioDeviceProvider::list_devices() const {
   }
 
   std::vector<AudioDeviceDescriptor> devices;
-  AudioDeviceError first_probe_error;
   for (const auto& entry : registry.entries()) {
-    const auto probed = probe_(entry.clsid);
-    if (!probed.ok()) {
-      if (first_probe_error.code.empty()) {
-        first_probe_error = probed.error();
-      }
-      continue;
-    }
-    const auto& probe = probed.probe();
     AudioDeviceDescriptor device;
     device.id = "asio:" + lowercase(entry.clsid);
-    device.label = !entry.description.empty()
-                       ? entry.description
-                       : (!probe.driver_name.empty() ? probe.driver_name
-                                                     : entry.registry_name);
+    device.label = !entry.description.empty() ? entry.description
+                                               : entry.registry_name;
     device.backend = AudioBackendKind::Asio;
-    device.input_channels = probe.input_channels;
-    device.output_channels = probe.output_channels;
-    device.direction = probe.input_channels > 0 && probe.output_channels > 0
-                           ? AudioDeviceDirection::Duplex
-                       : probe.input_channels > 0
-                           ? AudioDeviceDirection::Input
-                           : AudioDeviceDirection::Output;
-    const auto channels =
-        std::max(probe.input_channels, probe.output_channels);
-    for (const auto rate : probe.supported_sample_rates) {
-      device.formats.push_back({
-          .sample_rate = rate,
-          .channels = channels,
-          .frames_per_block = probe.preferred_buffer_frames,
-          .bits_per_sample = probe.bits_per_sample,
-          .valid_bits_per_sample = probe.bits_per_sample,
-          .sample_format = probe.sample_format,
-      });
-    }
+    // Device listing runs on every GUI state query. Loading third-party ASIO
+    // DLLs here can block the entire control plane. Capabilities are probed
+    // only after the user applies this driver on its control apartment.
+    device.direction = AudioDeviceDirection::Duplex;
+    device.formats.push_back({
+        .sample_rate = 48000,
+        .channels = 1,
+        .frames_per_block = 128,
+        .bits_per_sample = 32,
+        .valid_bits_per_sample = 32,
+        .sample_format = AudioSampleFormat::IeeeFloat,
+    });
     devices.push_back(std::move(device));
-  }
-  if (devices.empty() && !registry.entries().empty() &&
-      !first_probe_error.code.empty()) {
-    return AudioDeviceListResult::failure({std::move(first_probe_error)});
   }
   auto errors = validate_audio_devices(devices);
   if (!errors.empty()) {

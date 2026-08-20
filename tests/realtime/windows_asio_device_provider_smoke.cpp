@@ -34,6 +34,8 @@ sar::platform::WindowsAsioDriverProbeResult probe(const std::string& clsid) {
 int main() {
   using namespace sar::platform;
 
+  std::uint32_t probe_calls = 0;
+
   WindowsAsioDeviceProvider provider(
       [] {
         return WindowsAsioRegistryResult::success({
@@ -53,24 +55,28 @@ int main() {
             },
         });
       },
-      probe);
+      [&](const std::string& clsid) {
+        ++probe_calls;
+        return probe(clsid);
+      });
   assert(provider.backend() == AudioBackendKind::Asio);
   const auto listed = provider.list_devices();
   assert(listed.ok());
-  assert(listed.devices().size() == 1);
+  assert(listed.devices().size() == 2);
+  assert(probe_calls == 0);
   const auto& device = listed.devices().front();
   assert(device.id ==
          "asio:{11111111-2222-3333-4444-555555555555}");
   assert(device.label == "Studio Hardware ASIO");
   assert(device.backend == AudioBackendKind::Asio);
   assert(device.direction == AudioDeviceDirection::Duplex);
-  assert(device.input_channels == 8);
-  assert(device.output_channels == 4);
-  assert(device.formats.size() == 3);
-  assert(device.formats[1].sample_rate == 48000);
-  assert(device.formats[1].channels == 8);
-  assert(device.formats[1].frames_per_block == 128);
-  assert(device.formats[1].sample_format == AudioSampleFormat::IeeeFloat);
+  assert(device.input_channels == 0);
+  assert(device.output_channels == 0);
+  assert(device.formats.size() == 1);
+  assert(device.formats[0].sample_rate == 48000);
+  assert(device.formats[0].channels == 1);
+  assert(device.formats[0].frames_per_block == 128);
+  assert(device.formats[0].sample_format == AudioSampleFormat::IeeeFloat);
 
   WindowsAsioDeviceProvider all_broken(
       [] {
@@ -81,8 +87,8 @@ int main() {
       },
       probe);
   const auto failed = all_broken.list_devices();
-  assert(!failed.ok());
-  assert(failed.errors().front().code == "injected_probe_failure");
+  assert(failed.ok());
+  assert(failed.devices().size() == 1);
 
   WindowsAsioDeviceProvider empty(
       [] { return WindowsAsioRegistryResult::success({}); }, probe);

@@ -102,10 +102,8 @@ std::vector<PresetError> validate_audio_runtime_configuration(
     }
     const auto& inputs = configuration.physical_asio_input_channels;
     const auto& outputs = configuration.physical_asio_output_channels;
-    if (inputs.empty() && outputs.empty()) {
-      errors.push_back({"empty_physical_asio_channel_selection",
-                        "Physical ASIO mode requires at least one input or output channel."});
-    }
+    // Empty input and output lists select all native driver channels. This
+    // allows routine device enumeration to remain registry-only.
     if (inputs.size() > kMaximumPhysicalAsioChannels ||
         outputs.size() > kMaximumPhysicalAsioChannels) {
       errors.push_back({"too_many_physical_asio_channels",

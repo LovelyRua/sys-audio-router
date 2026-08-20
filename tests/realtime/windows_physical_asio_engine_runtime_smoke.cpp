@@ -238,6 +238,19 @@ int main() {
   assert(has_error(sparse_result,
                    "physical_asio_channel_subset_not_implemented"));
 
+  auto all_channels = configuration();
+  all_channels.physical_asio_input_channels.clear();
+  all_channels.physical_asio_output_channels.clear();
+  auto all_channels_result =
+      sar::service::open_windows_physical_asio_engine_runtime(
+          all_channels, std::make_shared<sar::graph::Graph>(1, 2, 128, 48000),
+          [](const std::string&) {
+            return sar::platform::WindowsAsioDriverProbeResult::success(
+                probe());
+          },
+          activator, negotiator);
+  assert(all_channels_result.ok());
+
   auto asymmetric = probe();
   asymmetric.input_channels = 8;
   asymmetric.output_channels = 2;
