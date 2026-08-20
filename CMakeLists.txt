@@ -58,6 +58,7 @@ add_library(sar_core
   core/platform/virtual_asio_capture_bus.cpp
   core/platform/virtual_asio_render_bus.cpp
   core/platform/virtual_asio_shared_memory_layout.cpp
+  core/platform/virtual_wasapi_transport_layout.cpp
   core/platform/virtual_endpoint.cpp
   core/platform/wasapi_endpoint_selection_policy.cpp
   core/platform/wasapi_recovery_policy.cpp
@@ -314,6 +315,12 @@ add_executable(sar_virtual_asio_shared_memory_layout_smoke
 )
 
 target_link_libraries(sar_virtual_asio_shared_memory_layout_smoke PRIVATE sar_core)
+
+add_executable(sar_virtual_wasapi_transport_layout_smoke
+  tests/realtime/virtual_wasapi_transport_layout_smoke.cpp
+)
+
+target_link_libraries(sar_virtual_wasapi_transport_layout_smoke PRIVATE sar_core)
 
 add_executable(sar_virtual_asio_render_bus_smoke
   tests/realtime/virtual_asio_render_bus_smoke.cpp
@@ -852,6 +859,8 @@ add_test(NAME virtual_asio_client_registry_stress_smoke
          COMMAND sar_virtual_asio_client_registry_stress_smoke)
 add_test(NAME virtual_asio_shared_memory_layout_smoke
          COMMAND sar_virtual_asio_shared_memory_layout_smoke)
+add_test(NAME virtual_wasapi_transport_layout_smoke
+         COMMAND sar_virtual_wasapi_transport_layout_smoke)
 add_test(NAME virtual_asio_render_bus_smoke
          COMMAND sar_virtual_asio_render_bus_smoke)
 add_test(NAME virtual_asio_capture_bus_smoke

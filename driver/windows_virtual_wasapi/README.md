@@ -24,7 +24,9 @@ a separate sequential or manual passive-level WDF queue owned by the control dev
 - `SAR_VWASAPI_IOCTL_QUERY_CAPABILITIES` returns `SarVirtualWasapiTransportCapabilities`.
 - `SAR_VWASAPI_IOCTL_ATTACH_TRANSPORT` validates request sizes and direction, references the caller's
   section handle in the requestor process, maps it with non-executable protection, validates the full
-  header and all ranges, then atomically installs one attachment in the stream context.
+  header and all ranges, copies the validated layout into nonpaged stream context, then atomically
+  installs one attachment. User mode can mutate the mapped header after validation, so packet code
+  must never reread offsets, strides, counts, or format from shared memory; it uses the trusted copy.
 - `SAR_VWASAPI_IOCTL_DETACH_TRANSPORT` removes the matching attachment, clears the attached flag,
   waits for data-plane rundown outside `ProcessPacket`, unmaps the view, and dereferences the section.
 
@@ -43,3 +45,11 @@ device position. Attach/detach increments `generation`; slots from an older gene
 
 This policy is deliberately deterministic: loss is observable through counters, while kernel audio
 callbacks never wait for a user-mode receiver.
+
+Treat every per-packet field as hostile even after a valid attach. The unsigned producer/consumer
+sequence distance must not exceed `slot_count`; derive the slot index only as `sequence % slot_count`;
+require the slot sequence to equal the expected sequence; require `frame_count <= frames_per_slot`;
+and reject unknown slot flag bits. On any violation, do not touch the computed payload, increment
+`malformed_packets`, resynchronize at a generation boundary, and emit silence. Publish a completed
+slot with release ordering and observe it with acquire ordering. Counters are diagnostic only and
+must never be used to calculate an address.
