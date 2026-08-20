@@ -92,6 +92,7 @@ target_link_libraries(sar_core PRIVATE sar_libsamplerate)
 
 if(WIN32)
   target_sources(sar_core PRIVATE
+    core/platform/windows_asio_callback_transport.cpp
     core/platform/windows_asio_device_provider.cpp
     core/platform/windows_asio_driver_probe.cpp
     core/platform/windows_wasapi_device_provider.cpp
@@ -589,6 +590,12 @@ if(WIN32)
 
   target_link_libraries(sar_windows_asio_device_provider_smoke PRIVATE sar_core)
 
+  add_executable(sar_windows_asio_callback_transport_smoke
+    tests/realtime/windows_asio_callback_transport_smoke.cpp
+  )
+
+  target_link_libraries(sar_windows_asio_callback_transport_smoke PRIVATE sar_core)
+
   add_executable(sar_windows_wasapi_endpoint_notification_smoke
     tests/realtime/windows_wasapi_endpoint_notification_smoke.cpp
   )
@@ -984,6 +991,8 @@ if(WIN32)
   add_test(NAME windows_wasapi_device_smoke COMMAND sar_windows_wasapi_device_smoke)
   add_test(NAME windows_asio_device_provider_smoke
            COMMAND sar_windows_asio_device_provider_smoke)
+  add_test(NAME windows_asio_callback_transport_smoke
+           COMMAND sar_windows_asio_callback_transport_smoke)
   add_test(NAME windows_wasapi_endpoint_notification_smoke
            COMMAND sar_windows_wasapi_endpoint_notification_smoke)
   add_test(NAME windows_wasapi_stream_probe_smoke
