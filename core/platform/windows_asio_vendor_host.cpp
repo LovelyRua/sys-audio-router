@@ -9,18 +9,22 @@
 
 #include <atomic>
 #include <new>
+#include <thread>
 #include <utility>
 
 namespace sar::platform {
 namespace {
 
 std::atomic<WindowsAsioCallbackTransport*> callback_transport{nullptr};
+std::atomic_uint32_t callbacks_in_flight{0};
 std::atomic_flag callback_slot = ATOMIC_FLAG_INIT;
 
 void buffer_switch(long index, ASIOBool) {
+  callbacks_in_flight.fetch_add(1, std::memory_order_acquire);
   if (auto* transport = callback_transport.load(std::memory_order_acquire)) {
     (void)transport->process(static_cast<std::uint32_t>(index));
   }
+  callbacks_in_flight.fetch_sub(1, std::memory_order_release);
 }
 
 ASIOTime* buffer_switch_time_info(ASIOTime* time, long index, ASIOBool direct) {
@@ -142,7 +146,8 @@ WindowsAsioVendorHostResult WindowsAsioVendorHost::teardown() noexcept {
     running_ = false;
   }
   callback_transport.store(nullptr, std::memory_order_release);
-  callback_slot.clear(std::memory_order_release);
+  while (callbacks_in_flight.load(std::memory_order_acquire) != 0)
+    std::this_thread::yield();
   transport_.reset();
   if (buffers_created_) {
     if (!asio_ok(driver_->dispose_buffers()) && first == WindowsAsioVendorHostError::None)
@@ -153,6 +158,7 @@ WindowsAsioVendorHostResult WindowsAsioVendorHost::teardown() noexcept {
     driver_->release();
     released_ = true;
   }
+  callback_slot.clear(std::memory_order_release);
   return {first};
 }
 

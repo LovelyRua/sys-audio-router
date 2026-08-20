@@ -2,8 +2,10 @@
 #include "third_party/asio_sdk_2.3.4/common/asio.h"
 
 #include <cassert>
+#include <atomic>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -28,6 +30,20 @@ class MockDriver final : public sar::platform::WindowsAsioDriverLifecycle {
 bool process(void* context, const sar::realtime::AudioBuffer&,
              sar::realtime::AudioBuffer&) noexcept {
   ++*static_cast<int*>(context); return true;
+}
+
+struct BlockingGraphState {
+  std::atomic_bool entered{false};
+  std::atomic_bool release{false};
+};
+
+bool blocking_process(void* context, const sar::realtime::AudioBuffer&,
+                      sar::realtime::AudioBuffer&) noexcept {
+  auto& state = *static_cast<BlockingGraphState*>(context);
+  state.entered.store(true, std::memory_order_release);
+  while (!state.release.load(std::memory_order_acquire))
+    std::this_thread::yield();
+  return true;
 }
 
 sar::platform::WindowsAsioVendorHostConfig config(int* cycles) {
@@ -63,6 +79,42 @@ void teardown_preserves_order_and_first_error() {
   assert(host->teardown().error == sar::platform::WindowsAsioVendorHostError::StopFailed);
   assert((observed->calls == std::vector<std::string>{"create", "start", "stop", "dispose", "release"}));
 }
+
+void teardown_waits_for_inflight_callback() {
+  BlockingGraphState graph_state;
+  auto mock = std::make_unique<MockDriver>();
+  auto* observed = mock.get();
+  auto host_config = config(nullptr);
+  host_config.graph_process = blocking_process;
+  host_config.graph_context = &graph_state;
+  sar::platform::WindowsAsioVendorHostResult result;
+  auto host = sar::platform::WindowsAsioVendorHost::create(
+      std::move(mock), std::move(host_config), result);
+  assert(host && result.ok());
+
+  std::thread callback([&] { observed->callbacks_->bufferSwitch(0, ASIOFalse); });
+  while (!graph_state.entered.load(std::memory_order_acquire))
+    std::this_thread::yield();
+
+  std::atomic_bool teardown_complete{false};
+  std::thread teardown([&] {
+    assert(host->teardown().ok());
+    teardown_complete.store(true, std::memory_order_release);
+  });
+  for (int attempt = 0; attempt < 1000; ++attempt)
+    std::this_thread::yield();
+  assert(!teardown_complete.load(std::memory_order_acquire));
+
+  graph_state.release.store(true, std::memory_order_release);
+  callback.join();
+  teardown.join();
+  assert(teardown_complete.load(std::memory_order_acquire));
+}
 }  // namespace
 
-int main() { successful_lifecycle(); create_failure_releases_without_dispose(); teardown_preserves_order_and_first_error(); }
+int main() {
+  successful_lifecycle();
+  create_failure_releases_without_dispose();
+  teardown_preserves_order_and_first_error();
+  teardown_waits_for_inflight_callback();
+}
