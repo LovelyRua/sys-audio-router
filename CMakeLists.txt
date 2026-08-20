@@ -740,6 +740,20 @@ if(WIN32)
 
   target_link_libraries(sar_list_asio_devices PRIVATE sar_core)
 
+  add_executable(sar_measure_physical_asio
+    tools/measure_physical_asio.cpp
+    tools/physical_asio_measure_options.cpp
+  )
+
+  target_link_libraries(sar_measure_physical_asio PRIVATE sar_core)
+
+  add_executable(sar_physical_asio_measure_options_smoke
+    tests/realtime/physical_asio_measure_options_smoke.cpp
+    tools/physical_asio_measure_options.cpp
+  )
+
+  target_link_libraries(sar_physical_asio_measure_options_smoke PRIVATE sar_core)
+
   add_executable(sar_measure_wasapi_render_loop
     tools/measure_wasapi_render_loop.cpp
     tools/wasapi_measure_options.cpp
@@ -919,6 +933,17 @@ add_test(NAME wasapi_endpoint_selection_policy_smoke
 add_test(NAME wasapi_recovery_policy_smoke COMMAND sar_wasapi_recovery_policy_smoke)
 add_test(NAME wasapi_realtime_error_smoke COMMAND sar_wasapi_realtime_error_smoke)
 if(WIN32)
+  add_test(NAME physical_asio_measure_options_smoke
+           COMMAND sar_physical_asio_measure_options_smoke)
+  add_test(NAME windows_physical_asio_measure_help
+           COMMAND sar_measure_physical_asio --help)
+  add_test(NAME windows_physical_asio_measure_missing_driver
+           COMMAND sar_measure_physical_asio)
+  set_tests_properties(windows_physical_asio_measure_missing_driver
+                       PROPERTIES WILL_FAIL TRUE)
+  set_tests_properties(windows_physical_asio_measure_help
+                       PROPERTIES PASS_REGULAR_EXPRESSION
+                       "--driver NAME-OR-CLSID")
   add_test(NAME windows_virtual_asio_com_smoke
            COMMAND sar_windows_virtual_asio_com_smoke
                    $<TARGET_FILE:sar_virtual_asio_driver>)
