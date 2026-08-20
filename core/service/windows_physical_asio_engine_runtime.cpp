@@ -5,7 +5,11 @@
 #include "core/graph/node.h"
 
 #include <algorithm>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
+#include <new>
+#include <thread>
 #include <utility>
 
 namespace sar::service {
@@ -25,14 +29,131 @@ bool is_complete_contiguous(const std::vector<std::uint32_t>& selected,
   return true;
 }
 
+class PhysicalAsioControlApartment {
+ public:
+  PhysicalAsioControlApartment(const PhysicalAsioControlApartment&) = delete;
+  PhysicalAsioControlApartment& operator=(
+      const PhysicalAsioControlApartment&) = delete;
+
+  static std::unique_ptr<PhysicalAsioControlApartment> create() noexcept {
+    auto apartment = std::unique_ptr<PhysicalAsioControlApartment>(
+        new (std::nothrow) PhysicalAsioControlApartment());
+    if (!apartment) return {};
+    try {
+      apartment->thread_ = std::thread([self = apartment.get()] {
+        self->run();
+      });
+    } catch (...) {
+      return {};
+    }
+    std::unique_lock lock(apartment->mutex_);
+    apartment->completed_.wait(lock, [&] { return apartment->ready_; });
+    return apartment;
+  }
+
+  ~PhysicalAsioControlApartment() {
+    {
+      std::lock_guard submit_lock(submit_mutex_);
+      std::lock_guard lock(mutex_);
+      stopping_ = true;
+      requested_.notify_one();
+    }
+    if (thread_.joinable()) thread_.join();
+  }
+
+  template <typename Context, typename Callable>
+  void invoke(Context& context, Callable task) noexcept {
+    struct Invocation {
+      Context* context;
+      Callable task;
+    } invocation{&context, std::move(task)};
+    std::lock_guard submit_lock(submit_mutex_);
+    {
+      std::lock_guard lock(mutex_);
+      context_ = &invocation;
+      task_ = [](void* opaque) noexcept {
+        auto& value = *static_cast<Invocation*>(opaque);
+        value.task(*value.context);
+      };
+      pending_ = true;
+    }
+    requested_.notify_one();
+    std::unique_lock lock(mutex_);
+    completed_.wait(lock, [&] { return !pending_; });
+  }
+
+ private:
+  using Task = void (*)(void*) noexcept;
+
+  PhysicalAsioControlApartment() = default;
+
+  void run() noexcept {
+    {
+      std::lock_guard lock(mutex_);
+      ready_ = true;
+    }
+    completed_.notify_all();
+    for (;;) {
+      Task task = nullptr;
+      void* context = nullptr;
+      {
+        std::unique_lock lock(mutex_);
+        requested_.wait(lock, [&] { return pending_ || stopping_; });
+        if (stopping_ && !pending_) return;
+        task = task_;
+        context = context_;
+      }
+      task(context);
+      {
+        std::lock_guard lock(mutex_);
+        pending_ = false;
+        task_ = nullptr;
+        context_ = nullptr;
+      }
+      completed_.notify_all();
+    }
+  }
+
+  std::thread thread_;
+  std::mutex submit_mutex_;
+  std::mutex mutex_;
+  std::condition_variable requested_;
+  std::condition_variable completed_;
+  Task task_ = nullptr;
+  void* context_ = nullptr;
+  bool ready_ = false;
+  bool pending_ = false;
+  bool stopping_ = false;
+};
+
 class PhysicalAsioEngineRuntime final : public EngineAudioRuntime {
  public:
-  PhysicalAsioEngineRuntime(std::unique_ptr<WindowsPhysicalAsioRuntime> runtime,
+  PhysicalAsioEngineRuntime(
+                            std::unique_ptr<PhysicalAsioControlApartment> apartment,
+                            std::unique_ptr<WindowsPhysicalAsioRuntime> runtime,
                             std::uint64_t graph_version) noexcept
-      : runtime_(std::move(runtime)), graph_version_(graph_version) {}
+      : apartment_(std::move(apartment)), runtime_(std::move(runtime)),
+        graph_version_(graph_version) {}
+
+  ~PhysicalAsioEngineRuntime() override {
+    struct Context {
+      std::unique_ptr<WindowsPhysicalAsioRuntime>* runtime;
+    } context{&runtime_};
+    apartment_->invoke(context, [](Context& value) noexcept {
+      value.runtime->reset();
+    });
+  }
 
   EngineAudioRuntimeResult start(std::uint32_t) override {
-    const auto error = runtime_->start();
+    struct Context {
+      WindowsPhysicalAsioRuntime* runtime;
+      WindowsPhysicalAsioRuntimeError error =
+          WindowsPhysicalAsioRuntimeError::InvalidRequest;
+    } context{runtime_.get()};
+    apartment_->invoke(context, [](Context& value) noexcept {
+      value.error = value.runtime->start();
+    });
+    const auto error = context.error;
     if (error == WindowsPhysicalAsioRuntimeError::None) {
       return EngineAudioRuntimeResult::success();
     }
@@ -42,10 +163,17 @@ class PhysicalAsioEngineRuntime final : public EngineAudioRuntime {
     }});
   }
 
-  void stop() noexcept override { static_cast<void>(runtime_->stop()); }
+  void stop() noexcept override {
+    struct Context {
+      WindowsPhysicalAsioRuntime* runtime;
+    } context{runtime_.get()};
+    apartment_->invoke(context, [](Context& value) noexcept {
+      static_cast<void>(value.runtime->stop());
+    });
+  }
 
   bool running() const noexcept override {
-    return runtime_->summary().state == WindowsPhysicalAsioRuntimeState::Running;
+    return summary().state == WindowsPhysicalAsioRuntimeState::Running;
   }
 
   std::uint64_t graph_version() const noexcept override {
@@ -53,10 +181,22 @@ class PhysicalAsioEngineRuntime final : public EngineAudioRuntime {
   }
 
   diagnostics::EngineDiagnostics diagnostics() const override {
-    return runtime_->summary().diagnostics;
+    return summary().diagnostics;
   }
 
  private:
+  WindowsPhysicalAsioRuntimeSummary summary() const noexcept {
+    struct Context {
+      WindowsPhysicalAsioRuntime* runtime;
+      WindowsPhysicalAsioRuntimeSummary summary;
+    } context{runtime_.get()};
+    apartment_->invoke(context, [](Context& value) noexcept {
+      value.summary = value.runtime->summary();
+    });
+    return context.summary;
+  }
+
+  std::unique_ptr<PhysicalAsioControlApartment> apartment_;
   std::unique_ptr<WindowsPhysicalAsioRuntime> runtime_;
   std::uint64_t graph_version_ = 0;
 };
@@ -122,8 +262,24 @@ EngineAudioRuntimeBuildResult open_windows_physical_asio_engine_runtime(
   request.driver = driver;
   request.sample_rate = configuration.physical_asio_sample_rate;
   request.preferred_block_frames = configuration.physical_asio_block_frames;
-  auto opened = WindowsPhysicalAsioRuntime::open(
-      direct_graph, std::move(request), activator, negotiator);
+  auto apartment = PhysicalAsioControlApartment::create();
+  if (!apartment) {
+    return failure("physical_asio_control_apartment_unavailable",
+                   "Physical ASIO control thread could not be created.");
+  }
+  struct OpenContext {
+    std::shared_ptr<graph::Graph> graph;
+    platform::WindowsAsioControlOpenRequest request;
+    platform::WindowsAsioDriverActivator* activator;
+    platform::WindowsAsioDriverNegotiator* negotiator;
+    WindowsPhysicalAsioRuntimeOpenResult opened;
+  } open_context{direct_graph, std::move(request), &activator, &negotiator};
+  apartment->invoke(open_context, [](OpenContext& value) noexcept {
+    value.opened = WindowsPhysicalAsioRuntime::open(
+        std::move(value.graph), std::move(value.request), *value.activator,
+        *value.negotiator);
+  });
+  auto opened = std::move(open_context.opened);
   if (!opened.ok()) {
     return failure(
         std::string("physical_asio_") +
@@ -134,7 +290,8 @@ EngineAudioRuntimeBuildResult open_windows_physical_asio_engine_runtime(
   }
   const auto version = direct_graph->version();
   return EngineAudioRuntimeBuildResult::success(
-      std::make_unique<PhysicalAsioEngineRuntime>(std::move(opened.runtime),
+      std::make_unique<PhysicalAsioEngineRuntime>(std::move(apartment),
+                                                  std::move(opened.runtime),
                                                   version));
 }
 
