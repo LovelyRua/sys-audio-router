@@ -562,6 +562,70 @@ int main(int argc, char **argv) {
   assert(wait_until([&] { return !empty_topology_controller.busy(); }));
   assert(empty_topology_refreshes == 0);
 
+  ControlCommand physical_asio_request;
+  const auto physical_asio_transport = [&](ControlCommand command) {
+    auto reply = accepted(command);
+    if (command.type == ControlCommandType::ConfigureAudioRuntime) {
+      physical_asio_request = command;
+      reply.response.has_audio_runtime_state = true;
+      reply.response.audio_runtime.configured = true;
+      reply.response.audio_runtime.configuration = command.audio_runtime;
+      return reply;
+    }
+    if (command.type == ControlCommandType::QuerySessionState) {
+      reply.response.has_session_state = true;
+      reply.response.has_devices = true;
+      reply.response.devices.push_back({
+          .id = "asio:{11111111-2222-3333-4444-555555555555}",
+          .label = "Studio ASIO",
+          .backend = sar::platform::AudioBackendKind::Asio,
+          .direction = sar::platform::AudioDeviceDirection::Duplex,
+          .formats = {{.sample_rate = 48'000, .channels = 8,
+                       .frames_per_block = 128}},
+      });
+      return reply;
+    }
+    assert(command.type == ControlCommandType::QueryVirtualAsioDevices);
+    return reply;
+  };
+  sar::gui::EngineController physical_asio_controller(
+      physical_asio_transport, false);
+  physical_asio_controller.refresh();
+  assert(wait_until([&] { return !physical_asio_controller.busy(); }));
+  assert(physical_asio_controller.devices().size() == 1);
+  assert(physical_asio_controller.devices().front().toMap()
+             .value(QStringLiteral("isAsio"))
+             .toBool());
+  physical_asio_controller.configurePhysicalAsio(
+      QStringLiteral("{11111111-2222-3333-4444-555555555555}"), 48'000,
+      128, QStringLiteral("0,1,2,3"), QStringLiteral("0,1"));
+  assert(wait_until([&] {
+    return !physical_asio_controller.busy() &&
+           physical_asio_controller.runtimeConfigured();
+  }));
+  assert(physical_asio_request.audio_runtime.mode ==
+         AudioRuntimeMode::PhysicalAsio);
+  assert(physical_asio_request.audio_runtime.physical_asio_input_channels ==
+         std::vector<std::uint32_t>({0, 1, 2, 3}));
+  assert(physical_asio_request.audio_runtime.physical_asio_output_channels ==
+         std::vector<std::uint32_t>({0, 1}));
+  assert(physical_asio_controller.runtimeMode() ==
+         QStringLiteral("physical-asio"));
+  assert(physical_asio_controller.runtimePhysicalAsioSampleRate() == 48'000);
+  assert(physical_asio_controller.runtimePhysicalAsioBlockFrames() == 128);
+  assert(physical_asio_controller.runtimePhysicalAsioInputChannels() ==
+         QStringLiteral("0,1,2,3"));
+  assert(physical_asio_controller.runtimePhysicalAsioOutputChannels() ==
+         QStringLiteral("0,1"));
+  physical_asio_request = {};
+  physical_asio_controller.configurePhysicalAsio(
+      QStringLiteral("{11111111-2222-3333-4444-555555555555}"), 48'000,
+      128, QStringLiteral("0,0"), QStringLiteral("0,1"));
+  assert(physical_asio_request.type !=
+         ControlCommandType::ConfigureAudioRuntime);
+  assert(physical_asio_controller.lastError().contains(
+      QStringLiteral("channel"), Qt::CaseInsensitive));
+
   std::mutex poll_mutex;
   std::vector<ControlCommandType> poll_requests;
   const auto poll_transport = [&](ControlCommand command) {

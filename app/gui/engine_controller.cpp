@@ -7,10 +7,12 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QStringList>
 #include <QUuid>
 #include <QtConcurrentRun>
 
 #include <algorithm>
+#include <optional>
 #include <cstddef>
 #include <span>
 #include <string>
@@ -19,6 +21,42 @@
 
 namespace sar::gui {
 namespace {
+
+QString channel_list_text(const std::vector<std::uint32_t>& channels) {
+  QStringList values;
+  values.reserve(static_cast<qsizetype>(channels.size()));
+  for (const auto channel : channels) {
+    values.push_back(QString::number(channel));
+  }
+  return values.join(QStringLiteral(","));
+}
+
+std::optional<std::vector<std::uint32_t>> parse_channel_list(
+    const QString& text) {
+  std::vector<std::uint32_t> channels;
+  const auto trimmed = text.trimmed();
+  if (trimmed.isEmpty()) {
+    return channels;
+  }
+  const auto parts = trimmed.split(',', Qt::KeepEmptyParts);
+  channels.reserve(static_cast<std::size_t>(parts.size()));
+  for (const auto& part : parts) {
+    bool ok = false;
+    if (part.trimmed().isEmpty()) {
+      return std::nullopt;
+    }
+    const auto value = part.trimmed().toUInt(&ok);
+    if (!ok || value >= control::kMaximumPhysicalAsioChannels) {
+      return std::nullopt;
+    }
+    channels.push_back(value);
+  }
+  std::ranges::sort(channels);
+  if (std::ranges::adjacent_find(channels) != channels.end()) {
+    return std::nullopt;
+  }
+  return channels;
+}
 
 std::vector<std::byte> as_bytes(const std::vector<std::uint8_t>& input) {
   std::vector<std::byte> result(input.size());
@@ -220,6 +258,8 @@ QString EngineController::runtimeMode() const {
       return QStringLiteral("duplex");
     case control::AudioRuntimeMode::WasapiMatrix:
       return QStringLiteral("matrix");
+    case control::AudioRuntimeMode::PhysicalAsio:
+      return QStringLiteral("physical-asio");
     case control::AudioRuntimeMode::None:
       return QStringLiteral("none");
   }
@@ -233,6 +273,21 @@ QString EngineController::runtimeRenderDeviceId() const {
 }
 QVariantList EngineController::runtimeEndpoints() const {
   return runtime_endpoints_;
+}
+QString EngineController::runtimePhysicalAsioDriverClsid() const {
+  return runtime_physical_asio_driver_clsid_;
+}
+int EngineController::runtimePhysicalAsioSampleRate() const noexcept {
+  return runtime_physical_asio_sample_rate_;
+}
+int EngineController::runtimePhysicalAsioBlockFrames() const noexcept {
+  return runtime_physical_asio_block_frames_;
+}
+QString EngineController::runtimePhysicalAsioInputChannels() const {
+  return runtime_physical_asio_input_channels_;
+}
+QString EngineController::runtimePhysicalAsioOutputChannels() const {
+  return runtime_physical_asio_output_channels_;
 }
 bool EngineController::busy() const noexcept { return busy_; }
 int EngineController::sampleRate() const noexcept { return sample_rate_; }
@@ -485,6 +540,33 @@ void EngineController::configureAudioMatrix(const QVariantList& endpoints) {
     setError(text(validation.front().message));
     return;
   }
+  dispatch(std::move(command));
+}
+
+void EngineController::configurePhysicalAsio(
+    const QString& driver_clsid, int sample_rate, int block_frames,
+    const QString& input_channels, const QString& output_channels) {
+  const auto inputs = parse_channel_list(input_channels);
+  const auto outputs = parse_channel_list(output_channels);
+  if (driver_clsid.trimmed().isEmpty() || sample_rate <= 0 ||
+      block_frames <= 0 || !inputs || !outputs ||
+      (inputs->empty() && outputs->empty())) {
+    setError(QStringLiteral(
+        "Choose an ASIO driver and valid sample rate, block size, and channel lists"));
+    return;
+  }
+
+  control::ControlCommand command;
+  command.type = control::ControlCommandType::ConfigureAudioRuntime;
+  command.audio_runtime.mode = control::AudioRuntimeMode::PhysicalAsio;
+  command.audio_runtime.physical_asio_driver_clsid =
+      driver_clsid.trimmed().toStdString();
+  command.audio_runtime.physical_asio_sample_rate =
+      static_cast<std::uint32_t>(sample_rate);
+  command.audio_runtime.physical_asio_block_frames =
+      static_cast<std::uint32_t>(block_frames);
+  command.audio_runtime.physical_asio_input_channels = *inputs;
+  command.audio_runtime.physical_asio_output_channels = *outputs;
   dispatch(std::move(command));
 }
 
@@ -886,6 +968,16 @@ void EngineController::applyReply(const EngineReply& reply,
         text(reply.response.audio_runtime.configuration.capture_device_id);
     runtime_render_device_id_ =
         text(reply.response.audio_runtime.configuration.render_device_id);
+    runtime_physical_asio_driver_clsid_ = text(
+        reply.response.audio_runtime.configuration.physical_asio_driver_clsid);
+    runtime_physical_asio_sample_rate_ = static_cast<int>(
+        reply.response.audio_runtime.configuration.physical_asio_sample_rate);
+    runtime_physical_asio_block_frames_ = static_cast<int>(
+        reply.response.audio_runtime.configuration.physical_asio_block_frames);
+    runtime_physical_asio_input_channels_ = channel_list_text(
+        reply.response.audio_runtime.configuration.physical_asio_input_channels);
+    runtime_physical_asio_output_channels_ = channel_list_text(
+        reply.response.audio_runtime.configuration.physical_asio_output_channels);
     runtime_endpoints_.clear();
     for (const auto& endpoint :
          reply.response.audio_runtime.configuration.endpoints) {
@@ -1037,6 +1129,8 @@ void EngineController::updateSession(const control::ControlResponse& response) {
           {QStringLiteral("isVirtual"), device.is_virtual},
           {QStringLiteral("isWasapi"),
            device.backend == platform::AudioBackendKind::Wasapi},
+          {QStringLiteral("isAsio"),
+           device.backend == platform::AudioBackendKind::Asio},
           {QStringLiteral("direction"), static_cast<int>(device.direction)},
           {QStringLiteral("channels"),
            device.formats.empty()

@@ -78,7 +78,11 @@ foreach(matrix_runtime_marker
     "function removeMatrixEndpoint(index)"
     "function matrixDraftValid()"
     "engine.configureAudioMatrix(window.runtimeMatrixDraft)"
-    "model: [\"WASAPI matrix\", \"WASAPI render\", \"WASAPI duplex\"]")
+    "model: [\"WASAPI matrix\", \"WASAPI render\", \"WASAPI duplex\", \"Physical ASIO\"]"
+    "objectName: \"physicalAsioEditor\""
+    "objectName: \"physicalAsioDriverCombo\""
+    "engine.configurePhysicalAsio("
+    "contentHeight: devicesContent.implicitHeight + 48")
   string(FIND "${qml}" "${matrix_runtime_marker}" marker_position)
   if(marker_position LESS 0)
     message(FATAL_ERROR

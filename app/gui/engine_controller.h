@@ -44,6 +44,11 @@ class EngineController final : public QObject {
   Q_PROPERTY(QString runtimeCaptureDeviceId READ runtimeCaptureDeviceId NOTIFY runtimeChanged)
   Q_PROPERTY(QString runtimeRenderDeviceId READ runtimeRenderDeviceId NOTIFY runtimeChanged)
   Q_PROPERTY(QVariantList runtimeEndpoints READ runtimeEndpoints NOTIFY runtimeChanged)
+  Q_PROPERTY(QString runtimePhysicalAsioDriverClsid READ runtimePhysicalAsioDriverClsid NOTIFY runtimeChanged)
+  Q_PROPERTY(int runtimePhysicalAsioSampleRate READ runtimePhysicalAsioSampleRate NOTIFY runtimeChanged)
+  Q_PROPERTY(int runtimePhysicalAsioBlockFrames READ runtimePhysicalAsioBlockFrames NOTIFY runtimeChanged)
+  Q_PROPERTY(QString runtimePhysicalAsioInputChannels READ runtimePhysicalAsioInputChannels NOTIFY runtimeChanged)
+  Q_PROPERTY(QString runtimePhysicalAsioOutputChannels READ runtimePhysicalAsioOutputChannels NOTIFY runtimeChanged)
   Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
   Q_PROPERTY(int sampleRate READ sampleRate NOTIFY sessionChanged)
   Q_PROPERTY(int blockSize READ blockSize NOTIFY sessionChanged)
@@ -101,6 +106,11 @@ class EngineController final : public QObject {
   [[nodiscard]] QString runtimeCaptureDeviceId() const;
   [[nodiscard]] QString runtimeRenderDeviceId() const;
   [[nodiscard]] QVariantList runtimeEndpoints() const;
+  [[nodiscard]] QString runtimePhysicalAsioDriverClsid() const;
+  [[nodiscard]] int runtimePhysicalAsioSampleRate() const noexcept;
+  [[nodiscard]] int runtimePhysicalAsioBlockFrames() const noexcept;
+  [[nodiscard]] QString runtimePhysicalAsioInputChannels() const;
+  [[nodiscard]] QString runtimePhysicalAsioOutputChannels() const;
   [[nodiscard]] bool busy() const noexcept;
   [[nodiscard]] int sampleRate() const noexcept;
   [[nodiscard]] int blockSize() const noexcept;
@@ -153,6 +163,11 @@ class EngineController final : public QObject {
                                          const QString& capture_device_id,
                                          const QString& render_device_id);
   Q_INVOKABLE void configureAudioMatrix(const QVariantList& endpoints);
+  Q_INVOKABLE void configurePhysicalAsio(const QString& driver_clsid,
+                                         int sample_rate,
+                                         int block_frames,
+                                         const QString& input_channels,
+                                         const QString& output_channels);
   Q_INVOKABLE void configureVirtualAsioDevices(const QVariantList& devices);
   Q_INVOKABLE bool routeEnabled(const QString& input_id,
                                 const QString& output_id) const;
@@ -248,6 +263,11 @@ class EngineController final : public QObject {
   QString runtime_capture_device_id_;
   QString runtime_render_device_id_;
   QVariantList runtime_endpoints_;
+  QString runtime_physical_asio_driver_clsid_;
+  int runtime_physical_asio_sample_rate_ = 0;
+  int runtime_physical_asio_block_frames_ = 0;
+  QString runtime_physical_asio_input_channels_;
+  QString runtime_physical_asio_output_channels_;
   bool engine_service_owned_ = false;
   bool engine_service_start_attempted_ = false;
   bool virtual_asio_restart_armed_ = false;

@@ -37,6 +37,11 @@ ApplicationWindow {
     property string runtimeDraftMode: "render"
     property string runtimeDraftRenderDeviceId: ""
     property string runtimeDraftCaptureDeviceId: ""
+    property string runtimeDraftAsioDriverClsid: ""
+    property string runtimeDraftAsioSampleRate: "48000"
+    property string runtimeDraftAsioBlockFrames: "128"
+    property string runtimeDraftAsioInputChannels: ""
+    property string runtimeDraftAsioOutputChannels: ""
     property var runtimeMatrixDraft: []
     property var virtualAsioDraft: []
     property bool virtualAsioDraftDirty: false
@@ -391,11 +396,19 @@ ApplicationWindow {
 
     function syncRuntimeDraft() {
         var engineMode = engine.runtimeMode === "matrix" ? "matrix"
-                       : engine.runtimeMode === "duplex" ? "duplex" : "render"
+                       : engine.runtimeMode === "duplex" ? "duplex"
+                       : engine.runtimeMode === "physical-asio" ? "physical-asio"
+                       : "render"
         var matchesDraft = engineMode === runtimeDraftMode
                 && (engineMode === "matrix"
                     ? matrixEndpointsEqual(engine.runtimeEndpoints,
                                            runtimeMatrixDraft)
+                    : engineMode === "physical-asio"
+                    ? engine.runtimePhysicalAsioDriverClsid === runtimeDraftAsioDriverClsid
+                      && String(engine.runtimePhysicalAsioSampleRate) === runtimeDraftAsioSampleRate
+                      && String(engine.runtimePhysicalAsioBlockFrames) === runtimeDraftAsioBlockFrames
+                      && engine.runtimePhysicalAsioInputChannels === runtimeDraftAsioInputChannels
+                      && engine.runtimePhysicalAsioOutputChannels === runtimeDraftAsioOutputChannels
                     : engine.runtimeRenderDeviceId === runtimeDraftRenderDeviceId
                       && (engineMode !== "duplex"
                           || engine.runtimeCaptureDeviceId ===
@@ -407,6 +420,33 @@ ApplicationWindow {
         runtimeDraftRenderDeviceId = engine.runtimeRenderDeviceId
         runtimeDraftCaptureDeviceId = engine.runtimeCaptureDeviceId
         runtimeMatrixDraft = engine.runtimeEndpoints.slice()
+        runtimeDraftAsioDriverClsid = engine.runtimePhysicalAsioDriverClsid
+        runtimeDraftAsioSampleRate = engine.runtimePhysicalAsioSampleRate > 0
+                ? String(engine.runtimePhysicalAsioSampleRate) : "48000"
+        runtimeDraftAsioBlockFrames = engine.runtimePhysicalAsioBlockFrames > 0
+                ? String(engine.runtimePhysicalAsioBlockFrames) : "128"
+        runtimeDraftAsioInputChannels = engine.runtimePhysicalAsioInputChannels
+        runtimeDraftAsioOutputChannels = engine.runtimePhysicalAsioOutputChannels
+    }
+
+    function asioClsid(device) {
+        var id = String(device.id)
+        return id.indexOf("asio:") === 0 ? id.substring(5) : id
+    }
+
+    function defaultChannelList(count) {
+        var values = []
+        for (var index = 0; index < count; ++index)
+            values.push(String(index))
+        return values.join(",")
+    }
+
+    function indexForAsioDriver(model, clsid) {
+        for (var index = 0; index < model.length; ++index) {
+            if (asioClsid(model[index]).toLowerCase() === clsid.toLowerCase())
+                return index
+        }
+        return model.length > 0 && clsid.length === 0 ? 0 : -1
     }
 
     function matrixEndpointsEqual(left, right) {
@@ -1921,7 +1961,7 @@ ApplicationWindow {
                             RowLayout {
                                 Layout.fillWidth: true
                                 Text {
-                                    text: "WASAPI runtime"
+                                    text: "Audio runtime"
                                     color: colors.text
                                     font.pixelSize: 13
                                     font.weight: Font.DemiBold
@@ -1945,12 +1985,14 @@ ApplicationWindow {
                                     id: runtimeModeCombo
                                     objectName: "runtimeModeCombo"
                                     Layout.fillWidth: true
-                                    model: ["WASAPI matrix", "WASAPI render", "WASAPI duplex"]
+                                    model: ["WASAPI matrix", "WASAPI render", "WASAPI duplex", "Physical ASIO"]
                                     currentIndex: window.runtimeDraftMode === "matrix" ? 0
-                                                : window.runtimeDraftMode === "duplex" ? 2 : 1
+                                                : window.runtimeDraftMode === "duplex" ? 2
+                                                : window.runtimeDraftMode === "physical-asio" ? 3 : 1
                                     onActivated: function(index) {
                                         window.runtimeDraftMode = index === 0 ? "matrix"
-                                                                : index === 2 ? "duplex" : "render"
+                                                                : index === 2 ? "duplex"
+                                                                : index === 3 ? "physical-asio" : "render"
                                         window.runtimeDraftDirty = true
                                     }
                                 }
@@ -1959,7 +2001,8 @@ ApplicationWindow {
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 8
-                                visible: window.runtimeDraftMode !== "matrix"
+                                visible: window.runtimeDraftMode === "render" ||
+                                         window.runtimeDraftMode === "duplex"
                                 Text { text: "Render"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
                                 ConsoleCombo {
                                     id: renderDeviceCombo
@@ -2122,6 +2165,82 @@ ApplicationWindow {
                                 }
                             }
 
+                            ColumnLayout {
+                                objectName: "physicalAsioEditor"
+                                Layout.fillWidth: true
+                                spacing: 8
+                                visible: window.runtimeDraftMode === "physical-asio"
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text { text: "Driver"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
+                                    ConsoleCombo {
+                                        id: physicalAsioDriverCombo
+                                        objectName: "physicalAsioDriverCombo"
+                                        Layout.fillWidth: true
+                                        textRole: "label"
+                                        emptyText: "No physical ASIO drivers"
+                                        model: engine.devices.filter(function(device) { return device.isAsio })
+                                        currentIndex: window.indexForAsioDriver(model,
+                                                        window.runtimeDraftAsioDriverClsid)
+                                        onActivated: function(index) {
+                                            if (index < 0)
+                                                return
+                                            var device = model[index]
+                                            window.runtimeDraftAsioDriverClsid = window.asioClsid(device)
+                                            var channels = window.defaultChannelList(device.channels)
+                                            window.runtimeDraftAsioInputChannels =
+                                                    device.direction === 1 ? "" : channels
+                                            window.runtimeDraftAsioOutputChannels =
+                                                    device.direction === 0 ? "" : channels
+                                            window.runtimeDraftDirty = true
+                                        }
+                                    }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text { text: "Timing"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
+                                    ConsoleField {
+                                        objectName: "physicalAsioSampleRateField"
+                                        Layout.preferredWidth: 120
+                                        text: window.runtimeDraftAsioSampleRate
+                                        placeholderText: "Sample rate"
+                                        validator: IntValidator { bottom: 8000; top: 768000 }
+                                        onTextEdited: { window.runtimeDraftAsioSampleRate = text; window.runtimeDraftDirty = true }
+                                    }
+                                    ConsoleField {
+                                        objectName: "physicalAsioBlockFramesField"
+                                        Layout.preferredWidth: 120
+                                        text: window.runtimeDraftAsioBlockFrames
+                                        placeholderText: "Block frames"
+                                        validator: IntValidator { bottom: 1; top: 65536 }
+                                        onTextEdited: { window.runtimeDraftAsioBlockFrames = text; window.runtimeDraftDirty = true }
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    Text { text: "Channels"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
+                                    ConsoleField {
+                                        objectName: "physicalAsioInputChannelsField"
+                                        Layout.fillWidth: true
+                                        text: window.runtimeDraftAsioInputChannels
+                                        placeholderText: "Inputs, e.g. 0,1"
+                                        onTextEdited: { window.runtimeDraftAsioInputChannels = text; window.runtimeDraftDirty = true }
+                                    }
+                                    ConsoleField {
+                                        objectName: "physicalAsioOutputChannelsField"
+                                        Layout.fillWidth: true
+                                        text: window.runtimeDraftAsioOutputChannels
+                                        placeholderText: "Outputs, e.g. 0,1"
+                                        onTextEdited: { window.runtimeDraftAsioOutputChannels = text; window.runtimeDraftDirty = true }
+                                    }
+                                }
+                            }
+
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 8
@@ -2139,14 +2258,30 @@ ApplicationWindow {
                                     text: "Apply"
                                     highlighted: true
                                     enabled: engine.connected && !engine.busy &&
-                                             (window.runtimeDraftMode === "matrix"
+                                     (window.runtimeDraftMode === "matrix"
                                                 ? window.matrixDraftValid()
+                                                : window.runtimeDraftMode === "physical-asio"
+                                                ? physicalAsioDriverCombo.currentIndex >= 0 &&
+                                                  Number(window.runtimeDraftAsioSampleRate) > 0 &&
+                                                  Number(window.runtimeDraftAsioBlockFrames) > 0 &&
+                                                  (window.runtimeDraftAsioInputChannels.trim().length > 0 ||
+                                                   window.runtimeDraftAsioOutputChannels.trim().length > 0)
                                                 : renderDeviceCombo.currentIndex >= 0 &&
                                                   (window.runtimeDraftMode === "render" ||
                                                    captureDeviceCombo.currentIndex >= 0))
                                     onClicked: {
                                         if (window.runtimeDraftMode === "matrix") {
                                             engine.configureAudioMatrix(window.runtimeMatrixDraft)
+                                            return
+                                        }
+                                        if (window.runtimeDraftMode === "physical-asio") {
+                                            var asioDevice = physicalAsioDriverCombo.model[
+                                                    physicalAsioDriverCombo.currentIndex]
+                                            engine.configurePhysicalAsio(window.asioClsid(asioDevice),
+                                                Number(window.runtimeDraftAsioSampleRate),
+                                                Number(window.runtimeDraftAsioBlockFrames),
+                                                window.runtimeDraftAsioInputChannels,
+                                                window.runtimeDraftAsioOutputChannels)
                                             return
                                         }
                                         var renderDevice = renderDeviceCombo.model[renderDeviceCombo.currentIndex]
