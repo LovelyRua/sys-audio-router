@@ -185,8 +185,12 @@ void control_lifecycle_stays_on_one_thread() {
   auto record = std::make_shared<ThreadRecord>();
   RecordingActivator activator(record);
   RecordingNegotiator negotiator(record);
+  auto automatic_channels = configuration();
+  automatic_channels.physical_asio_input_channels.clear();
+  automatic_channels.physical_asio_output_channels.clear();
   auto opened = sar::service::open_windows_physical_asio_engine_runtime(
-      configuration(), std::make_shared<sar::graph::Graph>(31, 2, 128, 48000),
+      automatic_channels,
+      std::make_shared<sar::graph::Graph>(31, 2, 128, 48000),
       [record](const std::string&) {
         record->add();
         return sar::platform::WindowsAsioDriverProbeResult::success(probe());
@@ -237,19 +241,6 @@ int main() {
           activator, negotiator);
   assert(has_error(sparse_result,
                    "physical_asio_channel_subset_not_implemented"));
-
-  auto all_channels = configuration();
-  all_channels.physical_asio_input_channels.clear();
-  all_channels.physical_asio_output_channels.clear();
-  auto all_channels_result =
-      sar::service::open_windows_physical_asio_engine_runtime(
-          all_channels, std::make_shared<sar::graph::Graph>(1, 2, 128, 48000),
-          [](const std::string&) {
-            return sar::platform::WindowsAsioDriverProbeResult::success(
-                probe());
-          },
-          activator, negotiator);
-  assert(all_channels_result.ok());
 
   auto asymmetric = probe();
   asymmetric.input_channels = 8;
