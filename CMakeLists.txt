@@ -92,6 +92,8 @@ target_link_libraries(sar_core PRIVATE sar_libsamplerate)
 
 if(WIN32)
   target_sources(sar_core PRIVATE
+    core/platform/windows_asio_device_provider.cpp
+    core/platform/windows_asio_driver_probe.cpp
     core/platform/windows_wasapi_device_provider.cpp
     core/platform/windows_virtual_asio_events.cpp
     core/platform/windows_virtual_asio_object_names.cpp
@@ -581,6 +583,12 @@ if(WIN32)
 
   target_link_libraries(sar_windows_wasapi_device_smoke PRIVATE sar_core)
 
+  add_executable(sar_windows_asio_device_provider_smoke
+    tests/realtime/windows_asio_device_provider_smoke.cpp
+  )
+
+  target_link_libraries(sar_windows_asio_device_provider_smoke PRIVATE sar_core)
+
   add_executable(sar_windows_wasapi_endpoint_notification_smoke
     tests/realtime/windows_wasapi_endpoint_notification_smoke.cpp
   )
@@ -694,6 +702,12 @@ if(WIN32)
   )
 
   target_link_libraries(sar_list_wasapi_devices PRIVATE sar_core)
+
+  add_executable(sar_list_asio_devices
+    tools/list_asio_devices.cpp
+  )
+
+  target_link_libraries(sar_list_asio_devices PRIVATE sar_core)
 
   add_executable(sar_measure_wasapi_render_loop
     tools/measure_wasapi_render_loop.cpp
@@ -968,6 +982,8 @@ if(WIN32)
   set_tests_properties(windows_engine_service_incomplete_duplex_ids
                        PROPERTIES WILL_FAIL TRUE TIMEOUT 5)
   add_test(NAME windows_wasapi_device_smoke COMMAND sar_windows_wasapi_device_smoke)
+  add_test(NAME windows_asio_device_provider_smoke
+           COMMAND sar_windows_asio_device_provider_smoke)
   add_test(NAME windows_wasapi_endpoint_notification_smoke
            COMMAND sar_windows_wasapi_endpoint_notification_smoke)
   add_test(NAME windows_wasapi_stream_probe_smoke
