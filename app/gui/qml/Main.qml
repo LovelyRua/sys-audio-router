@@ -43,6 +43,7 @@ ApplicationWindow {
     property string runtimeDraftAsioInputChannels: ""
     property string runtimeDraftAsioOutputChannels: ""
     property var runtimeMatrixDraft: []
+    property bool legacyPhysicalAsioSession: false
     property var virtualAsioDraft: []
     property bool virtualAsioDraftDirty: false
     property bool virtualAsioAwaitingRefresh: false
@@ -397,20 +398,14 @@ ApplicationWindow {
     function syncRuntimeDraft() {
         var engineMode = engine.runtimeMode === "matrix" ? "matrix"
                        : engine.runtimeMode === "duplex" ? "duplex"
-                       : engine.runtimeMode === "physical-asio" ? "physical-asio"
+                       : engine.runtimeMode === "physical-asio" ? "matrix"
                        : "render"
+        var engineEndpoints = engine.runtimeMode === "physical-asio"
+                ? legacyPhysicalAsioEndpoints() : normalizedMatrixEndpoints(
+                                                      engine.runtimeEndpoints)
         var matchesDraft = engineMode === runtimeDraftMode
                 && (engineMode === "matrix"
-                    ? matrixEndpointsEqual(engine.runtimeEndpoints,
-                                           runtimeMatrixDraft)
-                    : engineMode === "physical-asio"
-                    ? engine.runtimePhysicalAsioDriverClsid === runtimeDraftAsioDriverClsid
-                      && String(engine.runtimePhysicalAsioSampleRate) === runtimeDraftAsioSampleRate
-                      && String(engine.runtimePhysicalAsioBlockFrames) === runtimeDraftAsioBlockFrames
-                      && canonicalChannelList(engine.runtimePhysicalAsioInputChannels) ===
-                         canonicalChannelList(runtimeDraftAsioInputChannels)
-                      && canonicalChannelList(engine.runtimePhysicalAsioOutputChannels) ===
-                         canonicalChannelList(runtimeDraftAsioOutputChannels)
+                    ? matrixEndpointsEqual(engineEndpoints, runtimeMatrixDraft)
                     : engine.runtimeRenderDeviceId === runtimeDraftRenderDeviceId
                       && (engineMode !== "duplex"
                           || engine.runtimeCaptureDeviceId ===
@@ -421,7 +416,8 @@ ApplicationWindow {
         runtimeDraftMode = engineMode
         runtimeDraftRenderDeviceId = engine.runtimeRenderDeviceId
         runtimeDraftCaptureDeviceId = engine.runtimeCaptureDeviceId
-        runtimeMatrixDraft = engine.runtimeEndpoints.slice()
+        legacyPhysicalAsioSession = engine.runtimeMode === "physical-asio"
+        runtimeMatrixDraft = engineEndpoints
         runtimeDraftAsioDriverClsid = engine.runtimePhysicalAsioDriverClsid
         runtimeDraftAsioSampleRate = engine.runtimePhysicalAsioSampleRate > 0
                 ? String(engine.runtimePhysicalAsioSampleRate) : "48000"
@@ -483,16 +479,89 @@ ApplicationWindow {
         return model.length > 0 && clsid.length === 0 ? 0 : -1
     }
 
+    function normalizedMatrixEndpoint(endpoint) {
+        return {
+            endpointId: String(endpoint.endpointId || ""),
+            deviceId: String(endpoint.deviceId || ""),
+            backend: String(endpoint.backend || "wasapi"),
+            deviceGroupId: String(endpoint.deviceGroupId || ""),
+            direction: endpoint.direction === "render" ? "render" : "capture",
+            clockMaster: Boolean(endpoint.clockMaster),
+            firstChannel: Math.max(0, Number(endpoint.firstChannel || 0)),
+            channelCount: Math.max(0, Number(endpoint.channelCount || 0)),
+            sampleRate: Math.max(0, Number(endpoint.sampleRate || 0)),
+            blockFrames: Math.max(0, Number(endpoint.blockFrames || 0))
+        }
+    }
+
+    function normalizedMatrixEndpoints(endpoints) {
+        var result = []
+        for (var index = 0; index < endpoints.length; ++index)
+            result.push(normalizedMatrixEndpoint(endpoints[index]))
+        return result
+    }
+
+    function legacyPhysicalAsioEndpoints() {
+        var result = []
+        var clsid = engine.runtimePhysicalAsioDriverClsid
+        if (clsid.length === 0)
+            return result
+        var deviceId = "asio:" + clsid
+        var device = null
+        for (var index = 0; index < engine.devices.length; ++index) {
+            if (engine.devices[index].isAsio &&
+                    asioClsid(engine.devices[index]).toLowerCase() === clsid.toLowerCase()) {
+                device = engine.devices[index]
+                deviceId = device.id
+                break
+            }
+        }
+        var inputList = canonicalChannelList(engine.runtimePhysicalAsioInputChannels)
+        var outputList = canonicalChannelList(engine.runtimePhysicalAsioOutputChannels)
+        var inputCount = inputList.length > 0 ? inputList.split(",").length
+                                             : device ? device.inputChannels : 0
+        var outputCount = outputList.length > 0 ? outputList.split(",").length
+                                                : device ? device.outputChannels : 0
+        var common = {
+            deviceId: deviceId,
+            backend: "physical-asio",
+            deviceGroupId: "legacy-physical-asio",
+            sampleRate: engine.runtimePhysicalAsioSampleRate,
+            blockFrames: engine.runtimePhysicalAsioBlockFrames
+        }
+        if (inputCount > 0)
+            result.push(normalizedMatrixEndpoint({
+                endpointId: "physical-asio-in", deviceId: common.deviceId,
+                backend: common.backend, deviceGroupId: common.deviceGroupId,
+                direction: "capture", clockMaster: false, firstChannel: 0,
+                channelCount: inputCount, sampleRate: common.sampleRate,
+                blockFrames: common.blockFrames
+            }))
+        if (outputCount > 0)
+            result.push(normalizedMatrixEndpoint({
+                endpointId: "physical-asio-out", deviceId: common.deviceId,
+                backend: common.backend, deviceGroupId: common.deviceGroupId,
+                direction: "render", clockMaster: true, firstChannel: 0,
+                channelCount: outputCount, sampleRate: common.sampleRate,
+                blockFrames: common.blockFrames
+            }))
+        return result
+    }
+
     function matrixEndpointsEqual(left, right) {
         if (left.length !== right.length)
             return false
         for (var index = 0; index < left.length; ++index) {
             if (left[index].endpointId !== right[index].endpointId ||
                     left[index].deviceId !== right[index].deviceId ||
+                    left[index].backend !== right[index].backend ||
+                    left[index].deviceGroupId !== right[index].deviceGroupId ||
                     left[index].direction !== right[index].direction ||
                     left[index].clockMaster !== right[index].clockMaster ||
                     left[index].firstChannel !== right[index].firstChannel ||
-                    left[index].channelCount !== right[index].channelCount)
+                    left[index].channelCount !== right[index].channelCount ||
+                    left[index].sampleRate !== right[index].sampleRate ||
+                    left[index].blockFrames !== right[index].blockFrames)
                 return false
         }
         return true
@@ -504,10 +573,14 @@ ApplicationWindow {
         next[index] = {
             endpointId: key === "endpointId" ? value : current.endpointId,
             deviceId: key === "deviceId" ? value : current.deviceId,
+            backend: key === "backend" ? value : current.backend,
+            deviceGroupId: key === "deviceGroupId" ? value : current.deviceGroupId,
             direction: key === "direction" ? value : current.direction,
             clockMaster: key === "clockMaster" ? value : current.clockMaster,
             firstChannel: key === "firstChannel" ? value : current.firstChannel,
-            channelCount: key === "channelCount" ? value : current.channelCount
+            channelCount: key === "channelCount" ? value : current.channelCount,
+            sampleRate: key === "sampleRate" ? value : current.sampleRate,
+            blockFrames: key === "blockFrames" ? value : current.blockFrames
         }
         if (key === "clockMaster" && value) {
             for (var clearIndex = 0; clearIndex < next.length; ++clearIndex) {
@@ -524,11 +597,42 @@ ApplicationWindow {
         endpoints[index] = {
             endpointId: current.endpointId,
             deviceId: current.deviceId,
+            backend: current.backend,
+            deviceGroupId: current.deviceGroupId,
             direction: current.direction,
             clockMaster: enabled,
             firstChannel: current.firstChannel,
-            channelCount: current.channelCount
+            channelCount: current.channelCount,
+            sampleRate: current.sampleRate,
+            blockFrames: current.blockFrames
         }
+    }
+
+    function setMatrixEndpointGroup(index, key, value) {
+        var source = runtimeMatrixDraft[index]
+        if (source.backend !== "physical-asio" || source.deviceGroupId.length === 0) {
+            setMatrixEndpoint(index, key, value)
+            return
+        }
+        var next = runtimeMatrixDraft.slice()
+        for (var itemIndex = 0; itemIndex < next.length; ++itemIndex) {
+            if (next[itemIndex].deviceGroupId !== source.deviceGroupId)
+                continue
+            var item = next[itemIndex]
+            item = normalizedMatrixEndpoint(item)
+            item[key] = value
+            if (key === "deviceId") {
+                var devices = engine.devices.filter(function(device) {
+                    return device.id === value
+                })
+                if (devices.length > 0)
+                    item.channelCount = item.direction === "capture"
+                            ? devices[0].inputChannels : devices[0].outputChannels
+            }
+            next[itemIndex] = item
+        }
+        runtimeMatrixDraft = next
+        runtimeDraftDirty = true
     }
 
     function addMatrixEndpoint(direction) {
@@ -551,21 +655,71 @@ ApplicationWindow {
         next.push({
             endpointId: endpointId,
             deviceId: candidates[0].id,
+            backend: "wasapi",
+            deviceGroupId: "",
             direction: direction,
             clockMaster: direction === "render" &&
                          !next.some(function(endpoint) {
                              return endpoint.clockMaster
                          }),
             firstChannel: 0,
-            channelCount: Math.max(1, candidates[0].channels)
+            channelCount: Math.max(1, candidates[0].channels),
+            sampleRate: 0,
+            blockFrames: 0
         })
+        runtimeMatrixDraft = next
+        runtimeDraftDirty = true
+    }
+
+    function addAsioMatrixEndpoint() {
+        var candidates = engine.devices.filter(function(device) {
+            return device.isAsio
+        })
+        if (candidates.length === 0)
+            return
+        var ordinal = 1
+        var groupId = "asio-" + ordinal
+        while (runtimeMatrixDraft.some(function(endpoint) {
+            return endpoint.deviceGroupId === groupId
+        })) {
+            ++ordinal
+            groupId = "asio-" + ordinal
+        }
+        var device = candidates[0]
+        var next = runtimeMatrixDraft.slice()
+        if (device.inputChannels > 0)
+            next.push(normalizedMatrixEndpoint({
+                endpointId: groupId + "-in", deviceId: device.id,
+                backend: "physical-asio", deviceGroupId: groupId,
+                direction: "capture", clockMaster: false, firstChannel: 0,
+                channelCount: device.inputChannels,
+                sampleRate: device.sampleRate > 0 ? device.sampleRate : 48000,
+                blockFrames: device.framesPerBlock > 0 ? device.framesPerBlock : 128
+            }))
+        if (device.outputChannels > 0)
+            next.push(normalizedMatrixEndpoint({
+                endpointId: groupId + "-out", deviceId: device.id,
+                backend: "physical-asio", deviceGroupId: groupId,
+                direction: "render",
+                clockMaster: !next.some(function(endpoint) { return endpoint.clockMaster }),
+                firstChannel: 0, channelCount: device.outputChannels,
+                sampleRate: device.sampleRate > 0 ? device.sampleRate : 48000,
+                blockFrames: device.framesPerBlock > 0 ? device.framesPerBlock : 128
+            }))
         runtimeMatrixDraft = next
         runtimeDraftDirty = true
     }
 
     function removeMatrixEndpoint(index) {
         var next = runtimeMatrixDraft.slice()
-        next.splice(index, 1)
+        var endpoint = next[index]
+        if (endpoint.backend === "physical-asio" && endpoint.deviceGroupId.length > 0) {
+            next = next.filter(function(candidate) {
+                return candidate.deviceGroupId !== endpoint.deviceGroupId
+            })
+        } else {
+            next.splice(index, 1)
+        }
         runtimeMatrixDraft = next
         runtimeDraftDirty = true
     }
@@ -580,12 +734,22 @@ ApplicationWindow {
             if (endpoint.endpointId.length === 0 || endpoint.deviceId.length === 0 ||
                     endpoint.channelCount <= 0)
                 return false
+            if (endpoint.backend === "physical-asio" &&
+                    (endpoint.deviceGroupId.length === 0 || endpoint.sampleRate <= 0 ||
+                     endpoint.blockFrames <= 0))
+                return false
             if (endpoint.direction === "render")
                 ++renders
             if (endpoint.clockMaster)
                 ++masters
         }
         return renders > 0 && masters === 1
+    }
+
+    function matrixDraftSchemaReady() {
+        return !runtimeMatrixDraft.some(function(endpoint) {
+            return endpoint.backend === "physical-asio"
+        })
     }
 
     function virtualAsioDevicesEqual(left, right) {
@@ -2023,19 +2187,12 @@ ApplicationWindow {
                                     id: runtimeModeCombo
                                     objectName: "runtimeModeCombo"
                                     Layout.fillWidth: true
-                                    model: ["WASAPI matrix", "WASAPI render", "WASAPI duplex", "Physical ASIO (exclusive preview)"]
+                                    model: ["Matrix", "WASAPI render", "WASAPI duplex"]
                                     currentIndex: window.runtimeDraftMode === "matrix" ? 0
-                                                : window.runtimeDraftMode === "duplex" ? 2
-                                                : window.runtimeDraftMode === "physical-asio" ? 3 : 1
+                                                : window.runtimeDraftMode === "duplex" ? 2 : 1
                                     onActivated: function(index) {
                                         window.runtimeDraftMode = index === 0 ? "matrix"
-                                                                : index === 2 ? "duplex"
-                                                                : index === 3 ? "physical-asio" : "render"
-                                        if (window.runtimeDraftMode === "physical-asio" &&
-                                                window.runtimeDraftAsioDriverClsid.length === 0 &&
-                                                physicalAsioDriverCombo.model.length > 0)
-                                            window.selectAsioDriverDraft(
-                                                physicalAsioDriverCombo.model[0])
+                                                                : index === 2 ? "duplex" : "render"
                                         window.runtimeDraftDirty = true
                                     }
                                 }
@@ -2107,20 +2264,33 @@ ApplicationWindow {
                                         required property var modelData
                                         required property int index
                                         Layout.fillWidth: true
-                                        implicitHeight: endpointRow.implicitHeight + 16
+                                        implicitHeight: endpointCardColumn.implicitHeight + 16
                                         color: colors.canvas
                                         border.color: modelData.clockMaster ? colors.cyan : colors.line
                                         radius: 3
 
-                                        RowLayout {
-                                            id: endpointRow
+                                        ColumnLayout {
+                                            id: endpointCardColumn
                                             anchors.fill: parent
                                             anchors.margins: 8
                                             spacing: 6
 
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 6
+
+                                            Text {
+                                                Layout.preferredWidth: 42
+                                                text: modelData.backend === "physical-asio" ? "ASIO" : "WASAPI"
+                                                color: modelData.backend === "physical-asio" ? colors.warning : colors.cyan
+                                                font.pixelSize: 9
+                                                font.weight: Font.DemiBold
+                                            }
+
                                             ConsoleCombo {
                                                 Layout.preferredWidth: 90
                                                 model: ["Capture", "Render"]
+                                                enabled: modelData.backend !== "physical-asio"
                                                 currentIndex: modelData.direction === "render" ? 1 : 0
                                                 onActivated: function(selectedIndex) {
                                                     var direction = selectedIndex === 1 ? "render" : "capture"
@@ -2142,7 +2312,8 @@ ApplicationWindow {
                                                 textRole: "label"
                                                 emptyText: "No matching device"
                                                 model: engine.devices.filter(function(device) {
-                                                    return device.isWasapi &&
+                                                    return (modelData.backend === "physical-asio"
+                                                            ? device.isAsio : device.isWasapi) &&
                                                         (modelData.direction === "capture"
                                                          ? device.direction === 0 || device.direction === 2
                                                          : device.direction === 1 || device.direction === 2)
@@ -2151,10 +2322,11 @@ ApplicationWindow {
                                                 onActivated: function(selectedIndex) {
                                                     if (selectedIndex < 0)
                                                         return
-                                                    window.setMatrixEndpoint(index, "deviceId",
-                                                                             model[selectedIndex].id)
-                                                    window.setMatrixEndpoint(index, "channelCount",
-                                                                             Math.max(1, model[selectedIndex].channels))
+                                                    window.setMatrixEndpointGroup(index, "deviceId",
+                                                                                  model[selectedIndex].id)
+                                                    if (modelData.backend !== "physical-asio")
+                                                        window.setMatrixEndpoint(index, "channelCount",
+                                                                                 Math.max(1, model[selectedIndex].channels))
                                                 }
                                             }
                                             ConsoleField {
@@ -2178,6 +2350,43 @@ ApplicationWindow {
                                                 onClicked: window.removeMatrixEndpoint(index)
                                             }
                                         }
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            visible: modelData.backend === "physical-asio"
+                                            spacing: 6
+                                            Item { Layout.preferredWidth: 48 }
+                                            Text {
+                                                text: modelData.deviceGroupId
+                                                color: colors.muted
+                                                font.pixelSize: 9
+                                                Layout.preferredWidth: 90
+                                                elide: Text.ElideRight
+                                            }
+                                            Text { text: "Rate"; color: colors.muted; font.pixelSize: 10 }
+                                            ConsoleField {
+                                                Layout.preferredWidth: 90
+                                                text: String(modelData.sampleRate)
+                                                validator: IntValidator { bottom: 8000; top: 768000 }
+                                                onEditingFinished: window.setMatrixEndpointGroup(
+                                                    index, "sampleRate", Math.max(8000, Number(text)))
+                                            }
+                                            Text { text: "Block"; color: colors.muted; font.pixelSize: 10 }
+                                            ConsoleField {
+                                                Layout.preferredWidth: 78
+                                                text: String(modelData.blockFrames)
+                                                validator: IntValidator { bottom: 1; top: 65536 }
+                                                onEditingFinished: window.setMatrixEndpointGroup(
+                                                    index, "blockFrames", Math.max(1, Number(text)))
+                                            }
+                                            Item { Layout.fillWidth: true }
+                                            Text {
+                                                text: "DRAFT"
+                                                color: colors.warning
+                                                font.pixelSize: 9
+                                                font.weight: Font.DemiBold
+                                            }
+                                        }
+                                        }
                                     }
                                 }
 
@@ -2199,6 +2408,14 @@ ApplicationWindow {
                                         })
                                         onClicked: window.addMatrixEndpoint("render")
                                     }
+                                    FlatButton {
+                                        objectName: "addAsioMatrixEndpointButton"
+                                        text: "+ ASIO"
+                                        enabled: engine.devices.some(function(device) {
+                                            return device.isAsio
+                                        })
+                                        onClicked: window.addAsioMatrixEndpoint()
+                                    }
                                     Item { Layout.fillWidth: true }
                                     Text {
                                         text: window.runtimeMatrixDraft.length + " endpoints"
@@ -2208,95 +2425,14 @@ ApplicationWindow {
                                 }
                             }
 
-                            ColumnLayout {
-                                objectName: "physicalAsioEditor"
-                                Layout.fillWidth: true
-                                spacing: 8
-                                visible: window.runtimeDraftMode === "physical-asio"
-
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: "Exclusive preview: this temporarily replaces the WASAPI matrix runtime. Unified ASIO + WASAPI routing is not enabled in this build."
-                                    color: colors.warning
-                                    font.pixelSize: 10
-                                    wrapMode: Text.WordWrap
-                                }
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-                                    Text { text: "Driver"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
-                                    ConsoleCombo {
-                                        id: physicalAsioDriverCombo
-                                        objectName: "physicalAsioDriverCombo"
-                                        Layout.fillWidth: true
-                                        textRole: "label"
-                                        emptyText: "No physical ASIO drivers"
-                                        model: engine.devices.filter(function(device) { return device.isAsio })
-                                        currentIndex: window.indexForAsioDriver(model,
-                                                        window.runtimeDraftAsioDriverClsid)
-                                        onActivated: function(index) {
-                                            if (index < 0)
-                                                return
-                                            window.selectAsioDriverDraft(model[index])
-                                        }
-                                    }
-                                }
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-                                    Text { text: "Timing"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
-                                    ConsoleField {
-                                        objectName: "physicalAsioSampleRateField"
-                                        Layout.preferredWidth: 120
-                                        text: window.runtimeDraftAsioSampleRate
-                                        placeholderText: "Sample rate"
-                                        validator: IntValidator { bottom: 8000; top: 768000 }
-                                        onTextEdited: { window.runtimeDraftAsioSampleRate = text; window.runtimeDraftDirty = true }
-                                    }
-                                    ConsoleField {
-                                        objectName: "physicalAsioBlockFramesField"
-                                        Layout.preferredWidth: 120
-                                        text: window.runtimeDraftAsioBlockFrames
-                                        placeholderText: "Block frames"
-                                        validator: IntValidator { bottom: 1; top: 65536 }
-                                        onTextEdited: { window.runtimeDraftAsioBlockFrames = text; window.runtimeDraftDirty = true }
-                                    }
-                                    Item { Layout.fillWidth: true }
-                                }
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-                                    Text { text: "Channels"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
-                                    ConsoleField {
-                                        objectName: "physicalAsioInputChannelsField"
-                                        Layout.fillWidth: true
-                                        text: window.runtimeDraftAsioInputChannels
-                                        placeholderText: "Inputs (blank = all)"
-                                        onTextEdited: { window.runtimeDraftAsioInputChannels = text; window.runtimeDraftDirty = true }
-                                    }
-                                    ConsoleField {
-                                        objectName: "physicalAsioOutputChannelsField"
-                                        Layout.fillWidth: true
-                                        text: window.runtimeDraftAsioOutputChannels
-                                        placeholderText: "Outputs (blank = all)"
-                                        onTextEdited: { window.runtimeDraftAsioOutputChannels = text; window.runtimeDraftDirty = true }
-                                    }
-                                }
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: "Channel capabilities are read when this driver is applied"
-                                    color: colors.muted
-                                    font.pixelSize: 9
-                                    elide: Text.ElideRight
-                                }
-                            }
-
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 8
                                 Text {
-                                    text: engine.runtimeRunning
+                                    text: window.runtimeDraftMode === "matrix" &&
+                                          !window.matrixDraftSchemaReady()
+                                          ? "ASIO endpoint draft"
+                                          : engine.runtimeRunning
                                           ? "Apply restarts the engine with the selected devices"
                                           : "Select devices, then apply the runtime"
                                     color: colors.muted
@@ -2310,27 +2446,14 @@ ApplicationWindow {
                                     highlighted: true
                                     enabled: engine.connected && !engine.busy &&
                                      (window.runtimeDraftMode === "matrix"
-                                                ? window.matrixDraftValid()
-                                                : window.runtimeDraftMode === "physical-asio"
-                                                ? physicalAsioDriverCombo.currentIndex >= 0 &&
-                                                  Number(window.runtimeDraftAsioSampleRate) > 0 &&
-                                                  Number(window.runtimeDraftAsioBlockFrames) > 0
+                                                ? window.matrixDraftValid() &&
+                                                  window.matrixDraftSchemaReady()
                                                 : renderDeviceCombo.currentIndex >= 0 &&
                                                   (window.runtimeDraftMode === "render" ||
                                                    captureDeviceCombo.currentIndex >= 0))
                                     onClicked: {
                                         if (window.runtimeDraftMode === "matrix") {
                                             engine.configureAudioMatrix(window.runtimeMatrixDraft)
-                                            return
-                                        }
-                                        if (window.runtimeDraftMode === "physical-asio") {
-                                            var asioDevice = physicalAsioDriverCombo.model[
-                                                    physicalAsioDriverCombo.currentIndex]
-                                            engine.configurePhysicalAsio(window.asioClsid(asioDevice),
-                                                Number(window.runtimeDraftAsioSampleRate),
-                                                Number(window.runtimeDraftAsioBlockFrames),
-                                                window.runtimeDraftAsioInputChannels,
-                                                window.runtimeDraftAsioOutputChannels)
                                             return
                                         }
                                         var renderDevice = renderDeviceCombo.model[renderDeviceCombo.currentIndex]

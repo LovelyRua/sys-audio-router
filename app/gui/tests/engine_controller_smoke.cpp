@@ -420,9 +420,11 @@ int main(int argc, char **argv) {
   assert(first_controller_command_id != second_controller_command_id);
 
   ControlCommand matrix_request;
+  int matrix_configure_count = 0;
   const auto matrix_transport = [&](ControlCommand command) {
     auto reply = accepted(command);
     if (command.type == ControlCommandType::ConfigureAudioRuntime) {
+      ++matrix_configure_count;
       matrix_request = command;
       reply.response.has_audio_runtime_state = true;
       reply.response.audio_runtime.configured = true;
@@ -462,6 +464,30 @@ int main(int argc, char **argv) {
   assert(matrix_controller.runtimeEndpoints()[1].toMap()
              .value(QStringLiteral("endpointId")) ==
          QStringLiteral("render-main"));
+  assert(matrix_controller.runtimeEndpoints()[1].toMap()
+             .value(QStringLiteral("backend")) == QStringLiteral("wasapi"));
+  assert(matrix_controller.runtimeEndpoints()[1].toMap()
+             .value(QStringLiteral("deviceGroupId")) == QString{});
+  assert(matrix_controller.runtimeEndpoints()[1].toMap()
+             .value(QStringLiteral("sampleRate")) == 0);
+  assert(matrix_controller.runtimeEndpoints()[1].toMap()
+             .value(QStringLiteral("blockFrames")) == 0);
+
+  matrix_controller.configureAudioMatrix({QVariantMap{
+      {QStringLiteral("endpointId"), QStringLiteral("asio-1-out")},
+      {QStringLiteral("deviceId"), QStringLiteral("asio:{driver}")},
+      {QStringLiteral("backend"), QStringLiteral("physical-asio")},
+      {QStringLiteral("deviceGroupId"), QStringLiteral("asio-1")},
+      {QStringLiteral("direction"), QStringLiteral("render")},
+      {QStringLiteral("clockMaster"), true},
+      {QStringLiteral("firstChannel"), 0},
+      {QStringLiteral("channelCount"), 2},
+      {QStringLiteral("sampleRate"), 48'000},
+      {QStringLiteral("blockFrames"), 128},
+  }});
+  assert(matrix_configure_count == 1);
+  assert(matrix_controller.lastError().contains(
+      QStringLiteral("unified control schema"), Qt::CaseInsensitive));
 
   ControlCommand topology_request;
   std::vector<sar::control::VirtualAsioDeviceDefinition> topology_devices = {{
@@ -602,6 +628,10 @@ int main(int argc, char **argv) {
              .value(QStringLiteral("inputChannels")) == 8);
   assert(physical_asio_controller.devices().front().toMap()
              .value(QStringLiteral("outputChannels")) == 4);
+  assert(physical_asio_controller.devices().front().toMap()
+             .value(QStringLiteral("sampleRate")) == 48'000);
+  assert(physical_asio_controller.devices().front().toMap()
+             .value(QStringLiteral("framesPerBlock")) == 128);
   physical_asio_controller.configurePhysicalAsio(
       QStringLiteral("{11111111-2222-3333-4444-555555555555}"), 48'000,
       128, QStringLiteral("0,1,2,3"), QStringLiteral("0,1"));
