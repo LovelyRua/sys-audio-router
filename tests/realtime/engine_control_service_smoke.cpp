@@ -756,6 +756,52 @@ int main() {
   assert(configure_service->session_document().audio_runtime.endpoints.size() ==
          3);
 
+  const auto matrix_before_physical_preview =
+      configure_service->session().current_preset().matrix;
+  configure.command_id = "configure-physical-preview-preserves-matrix";
+  configure.audio_runtime = {};
+  configure.audio_runtime.mode =
+      sar::control::AudioRuntimeMode::PhysicalAsio;
+  configure.audio_runtime.physical_asio_driver_clsid = "{preview-driver}";
+  configure.audio_runtime.physical_asio_sample_rate = 48000;
+  configure.audio_runtime.physical_asio_block_frames = 128;
+  configure.audio_runtime.physical_asio_input_channels = {0, 1};
+  configure.audio_runtime.physical_asio_output_channels = {0, 1};
+  const auto physical_preview = send(*configure_service, configure);
+  assert(physical_preview.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  const auto& matrix_after_physical_preview =
+      configure_service->session().current_preset().matrix;
+  assert(matrix_after_physical_preview.inputs.size() ==
+         matrix_before_physical_preview.inputs.size());
+  assert(matrix_after_physical_preview.outputs.size() ==
+         matrix_before_physical_preview.outputs.size());
+  assert(matrix_after_physical_preview.routes.size() ==
+         matrix_before_physical_preview.routes.size());
+  for (std::size_t index = 0;
+       index < matrix_before_physical_preview.inputs.size(); ++index) {
+    assert(matrix_after_physical_preview.inputs[index].id ==
+           matrix_before_physical_preview.inputs[index].id);
+    assert(matrix_after_physical_preview.inputs[index].label ==
+           matrix_before_physical_preview.inputs[index].label);
+  }
+  for (std::size_t index = 0;
+       index < matrix_before_physical_preview.outputs.size(); ++index) {
+    assert(matrix_after_physical_preview.outputs[index].id ==
+           matrix_before_physical_preview.outputs[index].id);
+    assert(matrix_after_physical_preview.outputs[index].label ==
+           matrix_before_physical_preview.outputs[index].label);
+  }
+  for (std::size_t index = 0;
+       index < matrix_before_physical_preview.routes.size(); ++index) {
+    const auto& before = matrix_before_physical_preview.routes[index];
+    const auto& after = matrix_after_physical_preview.routes[index];
+    assert(after.input_id == before.input_id);
+    assert(after.output_id == before.output_id);
+    assert(after.gain == before.gain);
+    assert(after.muted == before.muted);
+  }
+
   auto devices_create =
       sar::service::EngineControlService::create(make_preset(), 40);
   assert(devices_create.ok());

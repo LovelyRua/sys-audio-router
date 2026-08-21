@@ -78,7 +78,7 @@ foreach(matrix_runtime_marker
     "function removeMatrixEndpoint(index)"
     "function matrixDraftValid()"
     "engine.configureAudioMatrix(window.runtimeMatrixDraft)"
-    "model: [\"WASAPI matrix\", \"WASAPI render\", \"WASAPI duplex\", \"Physical ASIO\"]"
+    "model: [\"WASAPI matrix\", \"WASAPI render\", \"WASAPI duplex\", \"Physical ASIO (exclusive preview)\"]"
     "objectName: \"physicalAsioEditor\""
     "objectName: \"physicalAsioDriverCombo\""
     "function selectAsioDriverDraft(device)"
@@ -86,6 +86,9 @@ foreach(matrix_runtime_marker
     "defaultChannelList(device.inputChannels)"
     "defaultChannelList(device.outputChannels)"
     "engine.configurePhysicalAsio("
+    "function discardRejectedRuntimeDraft()"
+    "function onFeedbackChanged()"
+    "Exclusive preview: this temporarily replaces the WASAPI matrix runtime."
     "contentHeight: devicesContent.implicitHeight + 48")
   string(FIND "${qml}" "${matrix_runtime_marker}" marker_position)
   if(marker_position LESS 0)

@@ -431,6 +431,13 @@ ApplicationWindow {
         runtimeDraftAsioOutputChannels = engine.runtimePhysicalAsioOutputChannels
     }
 
+    function discardRejectedRuntimeDraft() {
+        if (!runtimeDraftDirty)
+            return
+        runtimeDraftDirty = false
+        syncRuntimeDraft()
+    }
+
     function asioClsid(device) {
         var id = String(device.id)
         return id.indexOf("asio:") === 0 ? id.substring(5) : id
@@ -719,6 +726,10 @@ ApplicationWindow {
             window.meterTarget = engine.peak
         }
         function onRuntimeChanged() { window.syncRuntimeDraft() }
+        function onFeedbackChanged() {
+            if (engine.lastError.length > 0)
+                window.discardRejectedRuntimeDraft()
+        }
         function onVirtualAsioDevicesChanged() {
             if (!window.virtualAsioAwaitingRefresh)
                 window.syncVirtualAsioDraft()
@@ -2012,7 +2023,7 @@ ApplicationWindow {
                                     id: runtimeModeCombo
                                     objectName: "runtimeModeCombo"
                                     Layout.fillWidth: true
-                                    model: ["WASAPI matrix", "WASAPI render", "WASAPI duplex", "Physical ASIO"]
+                                    model: ["WASAPI matrix", "WASAPI render", "WASAPI duplex", "Physical ASIO (exclusive preview)"]
                                     currentIndex: window.runtimeDraftMode === "matrix" ? 0
                                                 : window.runtimeDraftMode === "duplex" ? 2
                                                 : window.runtimeDraftMode === "physical-asio" ? 3 : 1
@@ -2202,6 +2213,14 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 spacing: 8
                                 visible: window.runtimeDraftMode === "physical-asio"
+
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "Exclusive preview: this temporarily replaces the WASAPI matrix runtime. Unified ASIO + WASAPI routing is not enabled in this build."
+                                    color: colors.warning
+                                    font.pixelSize: 10
+                                    wrapMode: Text.WordWrap
+                                }
 
                                 RowLayout {
                                     Layout.fillWidth: true

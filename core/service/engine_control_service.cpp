@@ -161,11 +161,14 @@ EngineAudioRuntimeResult EngineControlService::configure_audio_runtime_locked(
   }
 
   std::optional<control::PreparedPresetUpdate> matrix_update;
+  const bool leaves_matrix_for_legacy_wasapi =
+      audio_runtime_configuration_ &&
+      audio_runtime_configuration_->mode ==
+          control::AudioRuntimeMode::WasapiMatrix &&
+      configuration.mode != control::AudioRuntimeMode::PhysicalAsio;
   const bool changes_matrix_topology =
       configuration.mode == control::AudioRuntimeMode::WasapiMatrix ||
-      (audio_runtime_configuration_ &&
-       audio_runtime_configuration_->mode ==
-           control::AudioRuntimeMode::WasapiMatrix);
+      leaves_matrix_for_legacy_wasapi;
   if (changes_matrix_topology) {
     const auto previous = audio_runtime_configuration_.value_or(
         control::AudioRuntimeConfiguration{});
