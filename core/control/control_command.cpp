@@ -221,8 +221,36 @@ std::vector<PresetError> validate_audio_runtime_configuration(
                         "Matrix endpoint direction is invalid."});
     }
 
-    std::string native_key(render ? "render\n" : "capture\n");
-    native_key += endpoint.device_id;
+    const bool physical_asio =
+        endpoint.backend == AudioRuntimeEndpointBackend::PhysicalAsio;
+    if (endpoint.backend != AudioRuntimeEndpointBackend::Wasapi &&
+        !physical_asio) {
+      errors.push_back({"invalid_audio_runtime_endpoint_backend",
+                        "Matrix endpoint backend is invalid."});
+    } else if (physical_asio) {
+      if (endpoint.device_group_id.empty()) {
+        errors.push_back({"empty_physical_asio_device_group_id",
+                          "Physical ASIO endpoints require a device group ID."});
+      }
+      if (endpoint.sample_rate < 8000 || endpoint.sample_rate > 768000) {
+        errors.push_back({"invalid_physical_asio_endpoint_sample_rate",
+                          "Physical ASIO endpoint sample rate must be between 8000 and 768000 Hz."});
+      }
+      if (endpoint.block_frames == 0 || endpoint.block_frames > 65536) {
+        errors.push_back({"invalid_physical_asio_endpoint_block_frames",
+                          "Physical ASIO endpoint block size must be between 1 and 65536 frames."});
+      }
+    } else if (!endpoint.device_group_id.empty() || endpoint.sample_rate != 0 ||
+               endpoint.block_frames != 0) {
+      errors.push_back({"unexpected_wasapi_endpoint_timing",
+                        "WASAPI endpoints do not accept Physical ASIO group or timing fields."});
+    }
+
+    std::string native_key(
+        physical_asio ? "physical-asio\n" : "wasapi\n");
+    native_key += render ? "render\n" : "capture\n";
+    native_key += physical_asio ? endpoint.device_group_id
+                                : endpoint.device_id;
     if (!native_endpoints.insert(std::move(native_key)).second) {
       errors.push_back({
           "duplicate_audio_runtime_device",

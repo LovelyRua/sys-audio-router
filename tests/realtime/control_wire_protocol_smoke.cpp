@@ -51,6 +51,11 @@ int main() {
       {"render-1", "native-render-1",
        sar::control::AudioRuntimeEndpointDirection::Render, true, 0, 2},
   };
+  command.audio_runtime.endpoints[0].backend =
+      sar::control::AudioRuntimeEndpointBackend::PhysicalAsio;
+  command.audio_runtime.endpoints[0].device_group_id = "studio-asio";
+  command.audio_runtime.endpoints[0].sample_rate = 48000;
+  command.audio_runtime.endpoints[0].block_frames = 128;
   command.virtual_asio_devices = {{
       .device_id = "main",
       .clsid = "{7F16C8A9-4A0C-4D31-9A5B-2C6E7F8D1042}",
@@ -79,6 +84,14 @@ int main() {
          "capture-1");
   assert(decoded_command.command.audio_runtime.endpoints[0].device_id ==
          "native-capture-1");
+  assert(decoded_command.command.audio_runtime.endpoints[0].backend ==
+         sar::control::AudioRuntimeEndpointBackend::PhysicalAsio);
+  assert(decoded_command.command.audio_runtime.endpoints[0].device_group_id ==
+         "studio-asio");
+  assert(decoded_command.command.audio_runtime.endpoints[0].sample_rate ==
+         48000);
+  assert(decoded_command.command.audio_runtime.endpoints[0].block_frames ==
+         128);
   assert(decoded_command.command.audio_runtime.endpoints[1].clock_master);
   assert(decoded_command.command.virtual_asio_devices.size() == 1);
   assert(decoded_command.command.virtual_asio_devices[0].input_channels == 8);
@@ -91,8 +104,9 @@ int main() {
   legacy_command.audio_runtime.render_device_id = "legacy-render";
   legacy_command.virtual_asio_devices.clear();
   auto encoded_v8 = sar::control::encode_control_command(legacy_command).bytes;
-  // v8 has no endpoint count, Physical ASIO payload, or Virtual ASIO count.
-  encoded_v8.resize(encoded_v8.size() - 7 * sizeof(std::uint32_t));
+  // v8 has no endpoint count, Physical ASIO payload, Virtual ASIO count, or
+  // endpoint extension count.
+  encoded_v8.resize(encoded_v8.size() - 8 * sizeof(std::uint32_t));
   write_u16(encoded_v8, 4, 8);
   write_u32(encoded_v8, 8,
             static_cast<std::uint32_t>(encoded_v8.size() -
@@ -102,6 +116,25 @@ int main() {
   assert(decoded_v8.command.audio_runtime.mode ==
          sar::control::AudioRuntimeMode::WasapiDuplex);
   assert(decoded_v8.command.audio_runtime.endpoints.empty());
+
+  auto encoded_v13 = sar::control::encode_control_command(command).bytes;
+  const std::size_t command_extension_bytes =
+      sizeof(std::uint32_t) +
+      command.audio_runtime.endpoints.size() * 4 * sizeof(std::uint32_t) +
+      command.audio_runtime.endpoints[0].device_group_id.size();
+  encoded_v13.resize(encoded_v13.size() - command_extension_bytes);
+  write_u16(encoded_v13, 4, 13);
+  write_u32(encoded_v13, 8,
+            static_cast<std::uint32_t>(encoded_v13.size() -
+                                       sar::control::kControlWireHeaderSize));
+  const auto decoded_v13 = sar::control::decode_control_command(encoded_v13);
+  assert(decoded_v13.ok());
+  assert(decoded_v13.command.audio_runtime.endpoints.size() == 2);
+  assert(decoded_v13.command.audio_runtime.endpoints[0].backend ==
+         sar::control::AudioRuntimeEndpointBackend::Wasapi);
+  assert(decoded_v13.command.audio_runtime.endpoints[0].device_group_id.empty());
+  assert(decoded_v13.command.audio_runtime.endpoints[0].sample_rate == 0);
+  assert(decoded_v13.command.audio_runtime.endpoints[0].block_frames == 0);
 
   auto physical_command = command;
   physical_command.audio_runtime = {};
@@ -278,6 +311,25 @@ int main() {
   assert(decoded_response.response.audio_runtime.configuration.endpoints[1]
              .direction ==
          sar::control::AudioRuntimeEndpointDirection::Render);
+  assert(decoded_response.response.audio_runtime.configuration.endpoints[0]
+             .backend ==
+         sar::control::AudioRuntimeEndpointBackend::PhysicalAsio);
+  assert(decoded_response.response.audio_runtime.configuration.endpoints[0]
+             .device_group_id == "studio-asio");
+
+  auto encoded_response_v13 = encoded_response.bytes;
+  encoded_response_v13.resize(encoded_response_v13.size() -
+                              command_extension_bytes);
+  write_u16(encoded_response_v13, 4, 13);
+  write_u32(encoded_response_v13, 8,
+            static_cast<std::uint32_t>(encoded_response_v13.size() -
+                                       sar::control::kControlWireHeaderSize));
+  const auto decoded_response_v13 =
+      sar::control::decode_control_response(encoded_response_v13);
+  assert(decoded_response_v13.ok());
+  assert(decoded_response_v13.response.audio_runtime.configuration
+             .endpoints[0].backend ==
+         sar::control::AudioRuntimeEndpointBackend::Wasapi);
 
   auto truncated = encoded_command.bytes;
   truncated.pop_back();

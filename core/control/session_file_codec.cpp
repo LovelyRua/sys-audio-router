@@ -227,6 +227,14 @@ SessionFileEncodeResult encode_session_file(const SessionDocument& session) {
     append_integer(bytes, device.output_channels);
     append_integer(bytes, static_cast<std::uint8_t>(device.enabled ? 1 : 0));
   }
+  append_integer(bytes, static_cast<std::uint32_t>(
+                            session.audio_runtime.endpoints.size()));
+  for (const auto& endpoint : session.audio_runtime.endpoints) {
+    append_integer(bytes, static_cast<std::uint8_t>(endpoint.backend));
+    append_string(bytes, endpoint.device_group_id);
+    append_integer(bytes, endpoint.sample_rate);
+    append_integer(bytes, endpoint.block_frames);
+  }
 
   if (bytes.size() > kSessionFileMaxBytes) {
     return SessionFileEncodeResult::failure(
@@ -397,6 +405,27 @@ SessionFileDecodeResult decode_session_file(
   } else {
     session.virtual_asio_devices.push_back(
         default_virtual_asio_device_definition());
+  }
+  if (version >= 5) {
+    std::uint32_t extension_count = 0;
+    if (!reader.integer(extension_count) ||
+        extension_count != session.audio_runtime.endpoints.size()) {
+      return SessionFileDecodeResult::failure(
+          file_error("Session runtime endpoint extensions are invalid."));
+    }
+    for (auto& endpoint : session.audio_runtime.endpoints) {
+      std::uint8_t backend = 0;
+      if (!reader.integer(backend) ||
+          backend > static_cast<std::uint8_t>(
+                        AudioRuntimeEndpointBackend::PhysicalAsio) ||
+          !reader.string(endpoint.device_group_id) ||
+          !reader.integer(endpoint.sample_rate) ||
+          !reader.integer(endpoint.block_frames)) {
+        return SessionFileDecodeResult::failure(
+            file_error("Session runtime endpoint extension is invalid."));
+      }
+      endpoint.backend = static_cast<AudioRuntimeEndpointBackend>(backend);
+    }
   }
   if (reader.remaining() != 0) {
     return SessionFileDecodeResult::failure(
