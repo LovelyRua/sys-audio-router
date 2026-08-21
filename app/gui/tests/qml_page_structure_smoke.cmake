@@ -78,22 +78,37 @@ foreach(matrix_runtime_marker
     "function removeMatrixEndpoint(index)"
     "function matrixDraftValid()"
     "engine.configureAudioMatrix(window.runtimeMatrixDraft)"
-    "model: [\"WASAPI matrix\", \"WASAPI render\", \"WASAPI duplex\", \"Physical ASIO (exclusive preview)\"]"
-    "objectName: \"physicalAsioEditor\""
-    "objectName: \"physicalAsioDriverCombo\""
-    "function selectAsioDriverDraft(device)"
-    "function canonicalChannelList(value)"
-    "defaultChannelList(device.inputChannels)"
-    "defaultChannelList(device.outputChannels)"
-    "engine.configurePhysicalAsio("
+    "model: [\"Matrix\", \"WASAPI render\", \"WASAPI duplex\"]"
+    "property bool legacyPhysicalAsioSession: false"
+    "function normalizedMatrixEndpoint(endpoint)"
+    "function legacyPhysicalAsioEndpoints()"
+    "function addAsioMatrixEndpoint()"
+    "function setMatrixEndpointGroup(index, key, value)"
+    "function matrixDraftSchemaReady()"
+    "objectName: \"addAsioMatrixEndpointButton\""
+    "backend: \"physical-asio\""
+    "deviceGroupId: groupId"
+    "sampleRate: device.sampleRate > 0 ? device.sampleRate : 48000"
+    "blockFrames: device.framesPerBlock > 0 ? device.framesPerBlock : 128"
     "function discardRejectedRuntimeDraft()"
     "function onFeedbackChanged()"
-    "Exclusive preview: this temporarily replaces the WASAPI matrix runtime."
     "contentHeight: devicesContent.implicitHeight + 48")
   string(FIND "${qml}" "${matrix_runtime_marker}" marker_position)
   if(marker_position LESS 0)
     message(FATAL_ERROR
       "Matrix runtime editor QML marker is missing: ${matrix_runtime_marker}")
+  endif()
+endforeach()
+
+foreach(legacy_physical_asio_mode_marker
+    "Physical ASIO (exclusive preview)"
+    "objectName: \"physicalAsioEditor\""
+    "engine.configurePhysicalAsio("
+    "window.runtimeDraftMode === \"physical-asio\"")
+  string(FIND "${qml}" "${legacy_physical_asio_mode_marker}" marker_position)
+  if(NOT marker_position LESS 0)
+    message(FATAL_ERROR
+      "Physical ASIO must be represented as a Matrix endpoint: ${legacy_physical_asio_mode_marker}")
   endif()
 endforeach()
 

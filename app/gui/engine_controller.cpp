@@ -509,6 +509,32 @@ void EngineController::configureAudioRuntime(const QString& mode,
 }
 
 void EngineController::configureAudioMatrix(const QVariantList& endpoints) {
+  for (const auto& value : endpoints) {
+    const auto map = value.toMap();
+    const auto backend = map.value(QStringLiteral("backend"),
+                                   QStringLiteral("wasapi"))
+                             .toString();
+    if (backend != QStringLiteral("wasapi") &&
+        backend != QStringLiteral("physical-asio")) {
+      setError(QStringLiteral("Matrix endpoint backend is not supported"));
+      return;
+    }
+    if (backend == QStringLiteral("physical-asio")) {
+      const auto group_id =
+          map.value(QStringLiteral("deviceGroupId")).toString().trimmed();
+      const auto sample_rate = map.value(QStringLiteral("sampleRate")).toInt();
+      const auto block_frames = map.value(QStringLiteral("blockFrames")).toInt();
+      if (group_id.isEmpty() || sample_rate <= 0 || block_frames <= 0) {
+        setError(QStringLiteral(
+            "Physical ASIO matrix endpoints require a device group, sample rate, and block size"));
+        return;
+      }
+      setError(QStringLiteral(
+          "Physical ASIO matrix endpoint apply requires the unified control schema"));
+      return;
+    }
+  }
+
   control::ControlCommand command;
   command.type = control::ControlCommandType::ConfigureAudioRuntime;
   command.audio_runtime.mode = control::AudioRuntimeMode::WasapiMatrix;
@@ -983,6 +1009,8 @@ void EngineController::applyReply(const EngineReply& reply,
       runtime_endpoints_.push_back(QVariantMap{
           {QStringLiteral("endpointId"), text(endpoint.endpoint_id)},
           {QStringLiteral("deviceId"), text(endpoint.device_id)},
+          {QStringLiteral("backend"), QStringLiteral("wasapi")},
+          {QStringLiteral("deviceGroupId"), QString{}},
           {QStringLiteral("direction"),
            endpoint.direction == control::AudioRuntimeEndpointDirection::Render
                ? QStringLiteral("render")
@@ -990,6 +1018,8 @@ void EngineController::applyReply(const EngineReply& reply,
           {QStringLiteral("clockMaster"), endpoint.clock_master},
           {QStringLiteral("firstChannel"), endpoint.first_channel},
           {QStringLiteral("channelCount"), endpoint.channel_count},
+          {QStringLiteral("sampleRate"), 0},
+          {QStringLiteral("blockFrames"), 0},
       });
     }
     graph_version_ = reply.response.audio_runtime.graph_version;
@@ -1135,6 +1165,14 @@ void EngineController::updateSession(const control::ControlResponse& response) {
            device.formats.empty()
                ? 0
                : static_cast<int>(device.formats.front().channels)},
+          {QStringLiteral("sampleRate"),
+           device.formats.empty()
+               ? 0
+               : static_cast<int>(device.formats.front().sample_rate)},
+          {QStringLiteral("framesPerBlock"),
+           device.formats.empty()
+               ? 0
+               : static_cast<int>(device.formats.front().frames_per_block)},
           {QStringLiteral("inputChannels"),
            static_cast<int>(device.input_channels)},
           {QStringLiteral("outputChannels"),
