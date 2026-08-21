@@ -122,6 +122,32 @@ class FixedNegotiator final : public platform::WindowsAsioDriverNegotiator {
   platform::WindowsAsioNegotiationResult result;
 };
 
+class PatternSource final : public platform::RealtimeAudioSource {
+ public:
+  bool read(realtime::AudioBuffer& destination) noexcept override {
+    for (std::size_t channel_index = 0;
+         channel_index < destination.channels(); ++channel_index) {
+      std::ranges::fill(destination.channel(channel_index),
+                        static_cast<float>(channel_index + 1));
+    }
+    return true;
+  }
+};
+
+class ObservingSink final : public platform::RealtimeAudioSink {
+ public:
+  bool write(const realtime::AudioBuffer& source) noexcept override {
+    writes++;
+    first_channel_sample = source.channel(0)[0];
+    second_channel_sample = source.channel(1)[0];
+    return true;
+  }
+
+  std::uint32_t writes = 0;
+  float first_channel_sample = 0.0F;
+  float second_channel_sample = 0.0F;
+};
+
 platform::WindowsAsioNegotiatedChannel channel(std::uint32_t index,
                                                 bool input) {
   return {index, input, platform::WindowsAsioSampleEncoding::Float32Lsb,
@@ -221,6 +247,37 @@ void graph_shape_mismatch_is_rejected_at_open() {
          service::WindowsPhysicalAsioRuntimeError::GraphConfigurationMismatch);
 }
 
+void matrix_channel_mapping_and_followers_share_the_asio_callback() {
+  auto state = std::make_shared<LifecycleState>();
+  MockActivator activator(state);
+  FixedNegotiator negotiator;
+  configure(negotiator, 1, 1);
+  PatternSource source;
+  ObservingSink sink;
+  service::PhysicalAsioGraphChannelLayout layout;
+  layout.physical_input_offset = 1;
+  layout.physical_output_offset = 2;
+  auto opened = service::WindowsPhysicalAsioRuntime::open(
+      graph_for(4), request(), activator, negotiator, &source, &sink, layout);
+  assert(opened.ok());
+  assert(opened.runtime->start() ==
+         service::WindowsPhysicalAsioRuntimeError::None);
+  assert(sink.writes == 1);
+  assert(sink.first_channel_sample == 1.0F);
+  assert(sink.second_channel_sample == 0.0F);
+
+  const auto output = std::ranges::find_if(
+      state->infos, [](const ASIOBufferInfo& info) {
+        return info.isInput == ASIOFalse;
+      });
+  assert(output != state->infos.end());
+  const auto* samples = static_cast<const float*>(output->buffers[0]);
+  assert(samples != nullptr);
+  assert(samples[0] == 3.0F);
+  assert(opened.runtime->stop() ==
+         service::WindowsPhysicalAsioRuntimeError::None);
+}
+
 }  // namespace
 
 int main() {
@@ -229,6 +286,7 @@ int main() {
   run_shape(2, 2);
   start_failure_is_deterministic();
   graph_shape_mismatch_is_rejected_at_open();
+  matrix_channel_mapping_and_followers_share_the_asio_callback();
   assert(std::string(service::windows_physical_asio_runtime_error_name(
              service::WindowsPhysicalAsioRuntimeError::StopFailed)) ==
          "stop_failed");

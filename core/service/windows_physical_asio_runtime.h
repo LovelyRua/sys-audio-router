@@ -4,8 +4,10 @@
 #include "core/graph/graph.h"
 #include "core/platform/windows_asio_control_open.h"
 #include "core/platform/windows_asio_host_events.h"
+#include "core/platform/realtime_audio_source.h"
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 
@@ -44,6 +46,11 @@ struct WindowsPhysicalAsioRuntimeSummary {
   bool diagnostics_available = false;
 };
 
+struct PhysicalAsioGraphChannelLayout {
+  std::size_t physical_input_offset = 0;
+  std::size_t physical_output_offset = 0;
+};
+
 class WindowsPhysicalAsioRuntime;
 
 struct WindowsPhysicalAsioRuntimeOpenResult {
@@ -69,7 +76,10 @@ class WindowsPhysicalAsioRuntime {
       std::shared_ptr<graph::Graph> graph,
       platform::WindowsAsioControlOpenRequest request,
       platform::WindowsAsioDriverActivator& activator,
-      platform::WindowsAsioDriverNegotiator& negotiator) noexcept;
+      platform::WindowsAsioDriverNegotiator& negotiator,
+      platform::RealtimeAudioSource* external_input = nullptr,
+      platform::RealtimeAudioSink* external_output = nullptr,
+      PhysicalAsioGraphChannelLayout channel_layout = {}) noexcept;
 
   [[nodiscard]] WindowsPhysicalAsioRuntimeError start() noexcept;
   [[nodiscard]] WindowsPhysicalAsioRuntimeError stop() noexcept;
@@ -79,7 +89,10 @@ class WindowsPhysicalAsioRuntime {
 
  private:
   explicit WindowsPhysicalAsioRuntime(
-      std::shared_ptr<graph::Graph> graph) noexcept;
+      std::shared_ptr<graph::Graph> graph,
+      platform::RealtimeAudioSource* external_input,
+      platform::RealtimeAudioSink* external_output,
+      PhysicalAsioGraphChannelLayout channel_layout) noexcept;
   [[nodiscard]] static bool graph_callback(
       void* context, const realtime::AudioBuffer& input,
       realtime::AudioBuffer& output) noexcept;
@@ -88,6 +101,9 @@ class WindowsPhysicalAsioRuntime {
       realtime::AudioBuffer& output) noexcept;
 
   std::shared_ptr<graph::Graph> graph_;
+  platform::RealtimeAudioSource* external_input_ = nullptr;
+  platform::RealtimeAudioSink* external_output_ = nullptr;
+  PhysicalAsioGraphChannelLayout channel_layout_;
   platform::WindowsAsioControlOpenResult control_open_;
   std::unique_ptr<realtime::AudioBuffer> graph_input_;
   std::unique_ptr<realtime::AudioBuffer> graph_output_;

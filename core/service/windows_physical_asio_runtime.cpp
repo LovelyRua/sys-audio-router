@@ -17,8 +17,14 @@ bool compatible_sample_rate(double negotiated, std::uint32_t graph_rate) noexcep
 }  // namespace
 
 WindowsPhysicalAsioRuntime::WindowsPhysicalAsioRuntime(
-    std::shared_ptr<graph::Graph> graph) noexcept
-    : graph_(std::move(graph)) {}
+    std::shared_ptr<graph::Graph> graph,
+    platform::RealtimeAudioSource* external_input,
+    platform::RealtimeAudioSink* external_output,
+    PhysicalAsioGraphChannelLayout channel_layout) noexcept
+    : graph_(std::move(graph)),
+      external_input_(external_input),
+      external_output_(external_output),
+      channel_layout_(channel_layout) {}
 
 WindowsPhysicalAsioRuntime::~WindowsPhysicalAsioRuntime() {
   static_cast<void>(stop());
@@ -29,14 +35,18 @@ WindowsPhysicalAsioRuntimeOpenResult WindowsPhysicalAsioRuntime::open(
     std::shared_ptr<graph::Graph> graph,
     platform::WindowsAsioControlOpenRequest request,
     platform::WindowsAsioDriverActivator& activator,
-    platform::WindowsAsioDriverNegotiator& negotiator) noexcept {
+    platform::WindowsAsioDriverNegotiator& negotiator,
+    platform::RealtimeAudioSource* external_input,
+    platform::RealtimeAudioSink* external_output,
+    PhysicalAsioGraphChannelLayout channel_layout) noexcept {
   if (!graph || request.driver.clsid.empty()) {
     return {{}, WindowsPhysicalAsioRuntimeError::InvalidRequest,
             platform::WindowsAsioControlOpenError::InvalidRequest};
   }
 
   auto runtime = std::unique_ptr<WindowsPhysicalAsioRuntime>(
-      new (std::nothrow) WindowsPhysicalAsioRuntime(std::move(graph)));
+      new (std::nothrow) WindowsPhysicalAsioRuntime(
+          std::move(graph), external_input, external_output, channel_layout));
   if (!runtime) {
     return {{}, WindowsPhysicalAsioRuntimeError::ResourceExhausted,
             platform::WindowsAsioControlOpenError::None};
@@ -54,10 +64,15 @@ WindowsPhysicalAsioRuntimeOpenResult WindowsPhysicalAsioRuntime::open(
   }
 
   const auto& config = runtime->control_open_.config;
-  const auto graph_channels = std::max(config.inputs.size(),
-                                       config.outputs.size());
+  const auto graph_channels = runtime->graph_->channels();
   if (graph_channels == 0 ||
-      graph_channels != runtime->graph_->channels() ||
+      (config.inputs.empty() && config.outputs.empty()) ||
+      channel_layout.physical_input_offset > graph_channels ||
+      config.inputs.size() >
+          graph_channels - channel_layout.physical_input_offset ||
+      channel_layout.physical_output_offset > graph_channels ||
+      config.outputs.size() >
+          graph_channels - channel_layout.physical_output_offset ||
       config.frames_per_block != runtime->graph_->frames() ||
       !compatible_sample_rate(config.sample_rate,
                               runtime->graph_->sample_rate())) {
@@ -175,9 +190,29 @@ bool WindowsPhysicalAsioRuntime::process_graph(
   }
 
   graph_input_->copy_from(input);
+  if (external_input_ != nullptr) {
+    static_cast<void>(external_input_->read(*graph_input_));
+  } else {
+    graph_input_->clear();
+  }
+  for (std::size_t channel = 0; channel < input.channels(); ++channel) {
+    const auto source = input.channel(channel);
+    auto destination = graph_input_->channel(
+        channel_layout_.physical_input_offset + channel);
+    std::copy(source.begin(), source.end(), destination.begin());
+  }
   graph_output_->clear();
   graph_->process(*graph_input_, *graph_output_, diagnostics_);
-  output.copy_from(*graph_output_);
+  if (external_output_ != nullptr) {
+    static_cast<void>(external_output_->write(*graph_output_));
+  }
+  output.clear();
+  for (std::size_t channel = 0; channel < output.channels(); ++channel) {
+    const auto source = graph_output_->channel(
+        channel_layout_.physical_output_offset + channel);
+    auto destination = output.channel(channel);
+    std::copy(source.begin(), source.end(), destination.begin());
+  }
   return true;
 }
 
