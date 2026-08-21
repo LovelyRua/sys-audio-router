@@ -44,6 +44,11 @@ enum class AudioRuntimeEndpointDirection {
   Render,
 };
 
+enum class AudioRuntimeEndpointBackend {
+  Wasapi,
+  PhysicalAsio,
+};
+
 struct AudioRuntimeEndpointConfiguration {
   // This stable ID belongs to graph routes. device_id is a native binding and
   // may change when hardware is unplugged and reconnected.
@@ -54,6 +59,10 @@ struct AudioRuntimeEndpointConfiguration {
   bool clock_master = false;
   std::uint32_t first_channel = 0;
   std::uint32_t channel_count = 0;
+  AudioRuntimeEndpointBackend backend = AudioRuntimeEndpointBackend::Wasapi;
+  std::string device_group_id;
+  std::uint32_t sample_rate = 0;
+  std::uint32_t block_frames = 0;
 };
 
 struct AudioRuntimeConfiguration {
