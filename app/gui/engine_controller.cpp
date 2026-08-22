@@ -529,9 +529,6 @@ void EngineController::configureAudioMatrix(const QVariantList& endpoints) {
             "Physical ASIO matrix endpoints require a device group, sample rate, and block size"));
         return;
       }
-      setError(QStringLiteral(
-          "Physical ASIO matrix endpoint apply requires the unified control schema"));
-      return;
     }
   }
 
@@ -557,6 +554,17 @@ void EngineController::configureAudioMatrix(const QVariantList& endpoints) {
         std::max(0, map.value(QStringLiteral("firstChannel")).toInt()));
     endpoint.channel_count = static_cast<std::uint32_t>(
         std::max(0, map.value(QStringLiteral("channelCount")).toInt()));
+    const auto backend = map.value(QStringLiteral("backend"),
+                                   QStringLiteral("wasapi")).toString();
+    endpoint.backend = backend == QStringLiteral("physical-asio")
+                           ? control::AudioRuntimeEndpointBackend::PhysicalAsio
+                           : control::AudioRuntimeEndpointBackend::Wasapi;
+    endpoint.device_group_id =
+        map.value(QStringLiteral("deviceGroupId")).toString().trimmed().toStdString();
+    endpoint.sample_rate = static_cast<std::uint32_t>(
+        std::max(0, map.value(QStringLiteral("sampleRate")).toInt()));
+    endpoint.block_frames = static_cast<std::uint32_t>(
+        std::max(0, map.value(QStringLiteral("blockFrames")).toInt()));
     command.audio_runtime.endpoints.push_back(std::move(endpoint));
   }
   const auto validation =
@@ -1009,8 +1017,11 @@ void EngineController::applyReply(const EngineReply& reply,
       runtime_endpoints_.push_back(QVariantMap{
           {QStringLiteral("endpointId"), text(endpoint.endpoint_id)},
           {QStringLiteral("deviceId"), text(endpoint.device_id)},
-          {QStringLiteral("backend"), QStringLiteral("wasapi")},
-          {QStringLiteral("deviceGroupId"), QString{}},
+          {QStringLiteral("backend"),
+           endpoint.backend == control::AudioRuntimeEndpointBackend::PhysicalAsio
+               ? QStringLiteral("physical-asio")
+               : QStringLiteral("wasapi")},
+          {QStringLiteral("deviceGroupId"), text(endpoint.device_group_id)},
           {QStringLiteral("direction"),
            endpoint.direction == control::AudioRuntimeEndpointDirection::Render
                ? QStringLiteral("render")
@@ -1018,8 +1029,8 @@ void EngineController::applyReply(const EngineReply& reply,
           {QStringLiteral("clockMaster"), endpoint.clock_master},
           {QStringLiteral("firstChannel"), endpoint.first_channel},
           {QStringLiteral("channelCount"), endpoint.channel_count},
-          {QStringLiteral("sampleRate"), 0},
-          {QStringLiteral("blockFrames"), 0},
+          {QStringLiteral("sampleRate"), endpoint.sample_rate},
+          {QStringLiteral("blockFrames"), endpoint.block_frames},
       });
     }
     graph_version_ = reply.response.audio_runtime.graph_version;

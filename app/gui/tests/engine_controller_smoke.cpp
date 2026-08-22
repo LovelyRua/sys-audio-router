@@ -473,21 +473,38 @@ int main(int argc, char **argv) {
   assert(matrix_controller.runtimeEndpoints()[1].toMap()
              .value(QStringLiteral("blockFrames")) == 0);
 
-  matrix_controller.configureAudioMatrix({QVariantMap{
-      {QStringLiteral("endpointId"), QStringLiteral("asio-1-out")},
-      {QStringLiteral("deviceId"), QStringLiteral("asio:{driver}")},
-      {QStringLiteral("backend"), QStringLiteral("physical-asio")},
-      {QStringLiteral("deviceGroupId"), QStringLiteral("asio-1")},
-      {QStringLiteral("direction"), QStringLiteral("render")},
-      {QStringLiteral("clockMaster"), true},
-      {QStringLiteral("firstChannel"), 0},
-      {QStringLiteral("channelCount"), 2},
-      {QStringLiteral("sampleRate"), 48'000},
-      {QStringLiteral("blockFrames"), 128},
-  }});
-  assert(matrix_configure_count == 1);
-  assert(matrix_controller.lastError().contains(
-      QStringLiteral("unified control schema"), Qt::CaseInsensitive));
+  matrix_controller.configureAudioMatrix({
+      QVariantMap{{QStringLiteral("endpointId"), QStringLiteral("asio-1-in")},
+                  {QStringLiteral("deviceId"), QStringLiteral("asio:{driver}")},
+                  {QStringLiteral("backend"), QStringLiteral("physical-asio")},
+                  {QStringLiteral("deviceGroupId"), QStringLiteral("asio-1")},
+                  {QStringLiteral("direction"), QStringLiteral("capture")},
+                  {QStringLiteral("clockMaster"), false},
+                  {QStringLiteral("firstChannel"), 0},
+                  {QStringLiteral("channelCount"), 2},
+                  {QStringLiteral("sampleRate"), 48'000},
+                  {QStringLiteral("blockFrames"), 128}},
+      QVariantMap{{QStringLiteral("endpointId"), QStringLiteral("asio-1-out")},
+                  {QStringLiteral("deviceId"), QStringLiteral("asio:{driver}")},
+                  {QStringLiteral("backend"), QStringLiteral("physical-asio")},
+                  {QStringLiteral("deviceGroupId"), QStringLiteral("asio-1")},
+                  {QStringLiteral("direction"), QStringLiteral("render")},
+                  {QStringLiteral("clockMaster"), true},
+                  {QStringLiteral("firstChannel"), 0},
+                  {QStringLiteral("channelCount"), 2},
+                  {QStringLiteral("sampleRate"), 48'000},
+                  {QStringLiteral("blockFrames"), 128}},
+  });
+  assert(wait_until([&] { return matrix_configure_count == 2; }));
+  assert(matrix_request.audio_runtime.endpoints.size() == 2);
+  assert(matrix_request.audio_runtime.endpoints[0].backend ==
+         sar::control::AudioRuntimeEndpointBackend::PhysicalAsio);
+  assert(matrix_request.audio_runtime.endpoints[0].device_group_id == "asio-1");
+  assert(matrix_request.audio_runtime.endpoints[0].sample_rate == 48'000);
+  assert(matrix_request.audio_runtime.endpoints[0].block_frames == 128);
+  assert(matrix_controller.runtimeEndpoints()[0].toMap()
+             .value(QStringLiteral("backend")) ==
+         QStringLiteral("physical-asio"));
 
   ControlCommand topology_request;
   std::vector<sar::control::VirtualAsioDeviceDefinition> topology_devices = {{
