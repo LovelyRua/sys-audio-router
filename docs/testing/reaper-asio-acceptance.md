@@ -5,7 +5,7 @@ inside the logged-in Windows desktop. The wrapper defaults to two independent
 REAPER clients; pass `1` explicitly for the legacy single-client gate.
 
 ```bat
-scripts\windows-winrm-reaper-acceptance.cmd 192.168.123.123 codex <password> C:\path\to\Debug "<render-endpoint-id>" engineer-a-two-client 2 60
+scripts\windows-winrm-reaper-acceptance.cmd <host> <user> <password> C:\path\to\Debug "<render-endpoint-id>" engineer-a-two-client 2 60
 ```
 
 Each run creates `.sar-evidence/reaper-<slot>-<timestamp>-<run-id>` locally.
@@ -27,7 +27,7 @@ and the engine at the requested build path:
 
 ```bat
 set SAR_REAPER_RECOVER_UNTRACKED=1
-scripts\windows-winrm-reaper-acceptance.cmd 192.168.123.123 codex <password> C:\path\to\Debug "<render-endpoint-id>" engineer-a-two-client 2
+scripts\windows-winrm-reaper-acceptance.cmd <host> <user> <password> C:\path\to\Debug "<render-endpoint-id>" engineer-a-two-client 2
 ```
 
 The explicit recovery mode is intentionally not the default.

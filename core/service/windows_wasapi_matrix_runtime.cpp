@@ -10,6 +10,7 @@
 #include "core/service/audio_runtime_topology.h"
 #include "core/service/multi_endpoint_audio_runtime.h"
 #include "core/service/windows_wasapi_engine_runtime.h"
+#include "core/service/windows_physical_asio_engine_runtime.h"
 
 #include <algorithm>
 #include <memory>
@@ -232,15 +233,34 @@ EngineAudioRuntimeBuildResult open_windows_wasapi_matrix_runtime(
                    "Matrix clock master has no graph channel binding.");
   }
 
-  const auto master_probe = probe_render(master_endpoint.device_id);
-  if (!master_probe.ok()) {
-    return failure(master_probe.errors());
-  }
-  if (!endpoint_uses_entire_device(master_endpoint, master_probe.probe())) {
-    return failure(
-        "wasapi_matrix_partial_native_channel_range_not_supported",
-        "Alpha matrix runtime currently requires each endpoint channel range "
-        "to cover the complete native device.");
+  const bool physical_master = master_endpoint.backend ==
+      control::AudioRuntimeEndpointBackend::PhysicalAsio;
+  const control::AudioRuntimeEndpointConfiguration* physical_capture = nullptr;
+  if (physical_master) {
+    const auto found = std::ranges::find_if(
+        topology.endpoints, [&](const auto& endpoint) {
+          return endpoint.backend ==
+                     control::AudioRuntimeEndpointBackend::PhysicalAsio &&
+                 endpoint.direction ==
+                     control::AudioRuntimeEndpointDirection::Capture &&
+                 endpoint.device_group_id == master_endpoint.device_group_id;
+        });
+    if (found == topology.endpoints.end()) {
+      return failure("physical_asio_matrix_capture_missing",
+                     "Physical ASIO matrix master requires a matching capture endpoint.");
+    }
+    physical_capture = &*found;
+  } else {
+    const auto master_probe = probe_render(master_endpoint.device_id);
+    if (!master_probe.ok()) {
+      return failure(master_probe.errors());
+    }
+    if (!endpoint_uses_entire_device(master_endpoint, master_probe.probe())) {
+      return failure(
+          "wasapi_matrix_partial_native_channel_range_not_supported",
+          "Alpha matrix runtime currently requires each endpoint channel range "
+          "to cover the complete native device.");
+    }
   }
 
   std::vector<const control::AudioRuntimeEndpointConfiguration*>
@@ -248,6 +268,9 @@ EngineAudioRuntimeBuildResult open_windows_wasapi_matrix_runtime(
   std::vector<const control::AudioRuntimeEndpointConfiguration*>
       render_followers;
   for (const auto& endpoint : topology.endpoints) {
+    if (endpoint.backend != control::AudioRuntimeEndpointBackend::Wasapi) {
+      continue;
+    }
     if (endpoint.direction ==
         control::AudioRuntimeEndpointDirection::Capture) {
       capture_endpoints.push_back(&endpoint);
@@ -407,13 +430,36 @@ EngineAudioRuntimeBuildResult open_windows_wasapi_matrix_runtime(
     master_layout.external_output_channels = graph->channels();
   }
 
-  auto master_opened =
-      master_endpoint.device_id.empty()
-          ? WindowsWasapiEngineRuntime::open_default_render(
-                graph, input_assembler.get(), master_layout, fanout.get())
-          : WindowsWasapiEngineRuntime::open_render(
-                master_endpoint.device_id, graph, input_assembler.get(),
-                master_layout, fanout.get());
+  EngineAudioRuntimeBuildResult master_opened =
+      EngineAudioRuntimeBuildResult::failure({});
+  if (physical_master) {
+    const auto* capture_binding =
+        find_binding(bindings, physical_capture->endpoint_id);
+    if (capture_binding == nullptr) {
+      return failure("physical_asio_matrix_capture_binding_missing",
+                     "Physical ASIO capture endpoint has no graph channel binding.");
+    }
+    PhysicalAsioGraphChannelLayout asio_layout{
+        .physical_input_offset = capture_binding->graph_first_channel,
+        .physical_output_offset = master_binding->graph_first_channel,
+    };
+    master_opened = open_windows_physical_asio_matrix_master(
+        *physical_capture, master_endpoint, graph, input_assembler.get(),
+        fanout.get(), asio_layout);
+  } else {
+    auto wasapi_master =
+        master_endpoint.device_id.empty()
+            ? WindowsWasapiEngineRuntime::open_default_render(
+                  graph, input_assembler.get(), master_layout, fanout.get())
+            : WindowsWasapiEngineRuntime::open_render(
+                  master_endpoint.device_id, graph, input_assembler.get(),
+                  master_layout, fanout.get());
+    if (!wasapi_master.ok()) {
+      return EngineAudioRuntimeBuildResult::failure(wasapi_master.errors());
+    }
+    master_opened = EngineAudioRuntimeBuildResult::success(
+        wasapi_master.take_runtime());
+  }
   if (!master_opened.ok()) {
     return EngineAudioRuntimeBuildResult::failure(master_opened.errors());
   }

@@ -10,6 +10,7 @@
 #include <mutex>
 #include <new>
 #include <optional>
+#include <string_view>
 #include <thread>
 #include <utility>
 
@@ -231,7 +232,11 @@ EngineAudioRuntimeBuildResult open_windows_physical_asio_engine_runtime(
     std::shared_ptr<graph::Graph> graph,
     WindowsPhysicalAsioProbe probe,
     platform::WindowsAsioDriverActivator& activator,
-    platform::WindowsAsioDriverNegotiator& negotiator) {
+    platform::WindowsAsioDriverNegotiator& negotiator,
+    platform::RealtimeAudioSource* external_input,
+    platform::RealtimeAudioSink* external_output,
+    PhysicalAsioGraphChannelLayout channel_layout,
+    bool use_direct_graph) {
   if (configuration.mode != control::AudioRuntimeMode::PhysicalAsio ||
       !graph || !probe) {
     return failure("physical_asio_invalid_request",
@@ -272,9 +277,11 @@ EngineAudioRuntimeBuildResult open_windows_physical_asio_engine_runtime(
         "This alpha requires selecting every driver channel in native order; "
         "sparse Physical ASIO channel mapping is not implemented yet.");
   }
-  auto direct_graph = build_windows_physical_asio_direct_graph(
-      configuration, driver, graph->version());
-  if (!direct_graph) {
+  auto runtime_graph = use_direct_graph
+                           ? build_windows_physical_asio_direct_graph(
+                                 configuration, driver, graph->version())
+                           : graph;
+  if (!runtime_graph) {
     return failure(
         "physical_asio_direct_graph_build_failed",
         "Physical ASIO direct-I/O graph could not be created.");
@@ -290,11 +297,16 @@ EngineAudioRuntimeBuildResult open_windows_physical_asio_engine_runtime(
     platform::WindowsAsioDriverActivator* activator;
     platform::WindowsAsioDriverNegotiator* negotiator;
     WindowsPhysicalAsioRuntimeOpenResult opened;
-  } open_context{direct_graph, std::move(request), &activator, &negotiator};
+    platform::RealtimeAudioSource* external_input;
+    platform::RealtimeAudioSink* external_output;
+    PhysicalAsioGraphChannelLayout channel_layout;
+  } open_context{runtime_graph, std::move(request), &activator, &negotiator,
+                 {}, external_input, external_output, channel_layout};
   apartment->invoke(open_context, [](OpenContext& value) noexcept {
     value.opened = WindowsPhysicalAsioRuntime::open(
         std::move(value.graph), std::move(value.request), *value.activator,
-        *value.negotiator);
+        *value.negotiator, value.external_input, value.external_output,
+        value.channel_layout);
   });
   auto opened = std::move(open_context.opened);
   if (!opened.ok()) {
@@ -305,7 +317,7 @@ EngineAudioRuntimeBuildResult open_windows_physical_asio_engine_runtime(
             platform::windows_asio_control_open_error_name(
                 opened.control_open_error));
   }
-  const auto version = direct_graph->version();
+  const auto version = runtime_graph->version();
   return EngineAudioRuntimeBuildResult::success(
       std::make_unique<PhysicalAsioEngineRuntime>(std::move(apartment),
                                                   std::move(opened.runtime),
@@ -324,6 +336,50 @@ EngineAudioRuntimeBuildResult open_windows_physical_asio_engine_runtime(
   return open_windows_physical_asio_engine_runtime(
       configuration, std::move(graph), platform::probe_windows_asio_driver,
       *activator, *negotiator);
+}
+
+EngineAudioRuntimeBuildResult open_windows_physical_asio_matrix_master(
+    const control::AudioRuntimeEndpointConfiguration& capture_endpoint,
+    const control::AudioRuntimeEndpointConfiguration& render_endpoint,
+    std::shared_ptr<graph::Graph> graph,
+    platform::RealtimeAudioSource* external_input,
+    platform::RealtimeAudioSink* external_output,
+    PhysicalAsioGraphChannelLayout channel_layout) {
+  if (capture_endpoint.backend !=
+          control::AudioRuntimeEndpointBackend::PhysicalAsio ||
+      render_endpoint.backend !=
+          control::AudioRuntimeEndpointBackend::PhysicalAsio ||
+      capture_endpoint.direction !=
+          control::AudioRuntimeEndpointDirection::Capture ||
+      render_endpoint.direction !=
+          control::AudioRuntimeEndpointDirection::Render ||
+      capture_endpoint.device_group_id.empty() ||
+      capture_endpoint.device_group_id != render_endpoint.device_group_id ||
+      capture_endpoint.device_id != render_endpoint.device_id ||
+      capture_endpoint.sample_rate != render_endpoint.sample_rate ||
+      capture_endpoint.block_frames != render_endpoint.block_frames) {
+    return failure("physical_asio_matrix_group_invalid",
+                   "Physical ASIO matrix endpoints must form one matching capture/render group.");
+  }
+  control::AudioRuntimeConfiguration legacy;
+  legacy.mode = control::AudioRuntimeMode::PhysicalAsio;
+  legacy.physical_asio_driver_clsid = render_endpoint.device_id;
+  constexpr std::string_view prefix = "asio:";
+  if (legacy.physical_asio_driver_clsid.starts_with(prefix)) {
+    legacy.physical_asio_driver_clsid.erase(0, prefix.size());
+  }
+  legacy.physical_asio_sample_rate = render_endpoint.sample_rate;
+  legacy.physical_asio_block_frames = render_endpoint.block_frames;
+  auto activator = platform::make_windows_asio_driver_activator();
+  auto negotiator = platform::make_windows_asio_driver_negotiator();
+  if (!activator || !negotiator) {
+    return failure("physical_asio_runtime_resources_unavailable",
+                   "Physical ASIO runtime dependencies could not be created.");
+  }
+  return open_windows_physical_asio_engine_runtime(
+      legacy, std::move(graph), platform::probe_windows_asio_driver,
+      *activator, *negotiator, external_input, external_output,
+      channel_layout, false);
 }
 
 }  // namespace sar::service

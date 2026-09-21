@@ -38,7 +38,7 @@ set SAR_SLOT_RETENTION_DAYS=14
 set SAR_SLOT_RETENTION_COUNT=8
 set SAR_SLOT_CLEANUP_LIMIT=2
 set SAR_SLOT_STALE_ACTIVE_HOURS=24
-scripts\windows-winrm-local-test.cmd 192.168.123.123 codex password engineer-a
+scripts\windows-winrm-local-test.cmd <host> <user> password engineer-a
 ```
 
 Set `SAR_SLOT_CLEANUP=true` to enable deletion. Dry-run alone enables selection

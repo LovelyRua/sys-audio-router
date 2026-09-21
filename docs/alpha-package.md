@@ -74,7 +74,7 @@ installing build tools on the development host:
 ```bat
 scripts\windows-winrm-alpha-package-acceptance.cmd ^
   build-alpha\package-output\SystemAudioRoute-0.1.0-windows-x64.zip ^
-  192.168.123.123 codex password engineer-a
+  <host> <user> password engineer-a
 ```
 
 Remote package acceptance uses slot-specific staging and installation paths,

@@ -34,7 +34,7 @@ From the development machine:
 set SAR_TEST_PASSWORD=<winrm-password>
 set SAR_RECOVERY_TARGET_PLAYBACK_ID=<playback-B-id>
 set SAR_RECOVERY_TARGET_RECORDING_ID=<recording-B-id>
-scripts\windows-winrm-default-endpoint-recovery.cmd 192.168.123.123 codex "" engineer-c
+scripts\windows-winrm-default-endpoint-recovery.cmd <host> <user> "" engineer-c
 ```
 
 The password is transient command input used to create the in-memory WinRM

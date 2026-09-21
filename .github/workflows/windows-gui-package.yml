@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
   pull_request:
   workflow_dispatch:
 
@@ -94,3 +96,37 @@ jobs:
             build-alpha/package-output/*.exe
           if-no-files-found: error
           retention-days: 30
+
+  release:
+    name: Publish GitHub release
+    needs: windows-gui-package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SystemAudioRoute-windows-x64-${{ github.sha }}
+          path: dist
+
+      - name: Verify tag matches package version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          ls dist/SystemAudioRoute-"${version}"-windows-x64.zip              dist/SystemAudioRoute-"${version}"-windows-x64.exe
+
+      - name: Write checksums
+        working-directory: dist
+        run: sha256sum ./*.zip ./*.exe > SHA256SUMS.txt
+
+      - name: Create prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME" dist/*
+          --repo "$GITHUB_REPOSITORY"
+          --prerelease
+          --generate-notes
+          --title "System Audio Route $GITHUB_REF_NAME"

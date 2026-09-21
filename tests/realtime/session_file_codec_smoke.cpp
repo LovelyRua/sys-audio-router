@@ -116,7 +116,16 @@ int main() {
   assert(decoded_v2.session().virtual_asio_devices.size() == 1);
 
   auto legacy_v1 = legacy_v2;
-  const auto legacy_preset_size = read_u32(legacy_v1, 16);
+  auto legacy_preset_size = read_u32(legacy_v1, 16);
+  const auto endpoint_extension_count_offset = 20 + legacy_preset_size - 4;
+  legacy_v1.erase(
+      legacy_v1.begin() +
+          static_cast<std::ptrdiff_t>(endpoint_extension_count_offset),
+      legacy_v1.begin() +
+          static_cast<std::ptrdiff_t>(endpoint_extension_count_offset + 4));
+  legacy_preset_size -= 4;
+  write_u32(legacy_v1, 16, legacy_preset_size);
+  write_u32(legacy_v1, 28, read_u32(legacy_v1, 28) - 4);
   const auto legacy_preset_trailing_field = 20 + legacy_preset_size - 1;
   legacy_v1.erase(
       legacy_v1.begin() +
@@ -153,7 +162,7 @@ int main() {
   assert_decode_fails(trailing);
 
   auto unknown_file_version = encoded.bytes();
-  unknown_file_version[4] = 5;
+  unknown_file_version[4] = 6;
   assert_decode_fails(unknown_file_version);
 
   auto unknown_schema_version = encoded.bytes();
@@ -219,13 +228,22 @@ int main() {
   matrix.audio_runtime = {};
   matrix.audio_runtime.mode = sar::control::AudioRuntimeMode::WasapiMatrix;
   matrix.audio_runtime.endpoints = {
-      {"capture-a", "native-capture-a",
+      {"capture-a", "native-asio",
        sar::control::AudioRuntimeEndpointDirection::Capture, false, 0, 2},
-      {"render-main", "native-render-main",
+      {"render-main", "native-asio",
        sar::control::AudioRuntimeEndpointDirection::Render, true, 0, 2},
       {"render-b", "native-render-b",
        sar::control::AudioRuntimeEndpointDirection::Render, false, 0, 2},
   };
+  // A Physical ASIO group needs a capture and a render endpoint on the same
+  // driver and timing, and its render endpoint drives the matrix clock.
+  for (std::size_t index = 0; index < 2; ++index) {
+    auto& endpoint = matrix.audio_runtime.endpoints[index];
+    endpoint.backend = sar::control::AudioRuntimeEndpointBackend::PhysicalAsio;
+    endpoint.device_group_id = "studio-asio";
+    endpoint.sample_rate = 48000;
+    endpoint.block_frames = 128;
+  }
   const auto encoded_matrix = sar::control::encode_session_file(matrix);
   assert(encoded_matrix.ok());
   const auto decoded_matrix =
@@ -235,6 +253,38 @@ int main() {
   assert(decoded_matrix.session().audio_runtime.endpoints[1].endpoint_id ==
          "render-main");
   assert(decoded_matrix.session().audio_runtime.endpoints[1].clock_master);
+  assert(decoded_matrix.session().audio_runtime.endpoints[0].backend ==
+         sar::control::AudioRuntimeEndpointBackend::PhysicalAsio);
+  assert(decoded_matrix.session().audio_runtime.endpoints[0].device_group_id ==
+         "studio-asio");
+  assert(decoded_matrix.session().audio_runtime.endpoints[0].sample_rate ==
+         48000);
+  assert(decoded_matrix.session().audio_runtime.endpoints[0].block_frames ==
+         128);
+
+  auto legacy_v4 = encoded_matrix.bytes();
+  std::size_t group_id_bytes = 0;
+  for (const auto& endpoint : matrix.audio_runtime.endpoints) {
+    group_id_bytes += endpoint.device_group_id.size();
+  }
+  const std::size_t session_extension_bytes =
+      sizeof(std::uint32_t) +
+      matrix.audio_runtime.endpoints.size() *
+          (3 * sizeof(std::uint32_t) + sizeof(std::uint8_t)) +
+      group_id_bytes;
+  legacy_v4.resize(legacy_v4.size() - session_extension_bytes);
+  legacy_v4[4] = 4;
+  write_u32(legacy_v4, 8,
+            static_cast<std::uint32_t>(legacy_v4.size() - 12));
+  const auto decoded_v4 = sar::control::decode_session_file(legacy_v4);
+  assert(decoded_v4.ok());
+  assert(decoded_v4.session().audio_runtime.endpoints.size() == 3);
+  assert(decoded_v4.session().audio_runtime.endpoints[0].backend ==
+         sar::control::AudioRuntimeEndpointBackend::Wasapi);
+  assert(decoded_v4.session().audio_runtime.endpoints[0]
+             .device_group_id.empty());
+  assert(decoded_v4.session().audio_runtime.endpoints[0].sample_rate == 0);
+  assert(decoded_v4.session().audio_runtime.endpoints[0].block_frames == 0);
 
   auto stopped = session;
   stopped.audio_runtime.mode = sar::control::AudioRuntimeMode::None;

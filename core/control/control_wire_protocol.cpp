@@ -183,6 +183,14 @@ class Reader {
     const auto value = scalar<std::uint32_t>();
     if (ok() && value > kControlWireMaxArrayElements) {
       fail(ControlWireErrorCode::ArrayTooLong);
+      // Callers reserve by this count; never hand back a hostile value.
+      return 0;
+    }
+    // Every element occupies at least one byte, so a larger count cannot be
+    // satisfied by the rest of the message.
+    if (ok() && value > bytes_.size() - offset_) {
+      fail(ControlWireErrorCode::Truncated);
+      return 0;
     }
     return value;
   }
@@ -201,6 +209,8 @@ class Reader {
       fail(ControlWireErrorCode::TrailingBytes);
     }
   }
+
+  void invalidate(ControlWireErrorCode code) { fail(code); }
 
   [[nodiscard]] bool ok() const noexcept {
     return error_.code == ControlWireErrorCode::None;
@@ -496,6 +506,37 @@ VirtualAsioDeviceDefinition decode_virtual_asio_device(Reader& reader) {
   return device;
 }
 
+void encode_runtime_endpoint_extensions(
+    Writer& writer,
+    const std::vector<AudioRuntimeEndpointConfiguration>& endpoints) {
+  writer.count(endpoints.size());
+  for (const auto& endpoint : endpoints) {
+    writer.scalar(static_cast<std::uint32_t>(endpoint.backend));
+    writer.string(endpoint.device_group_id);
+    writer.scalar(endpoint.sample_rate);
+    writer.scalar(endpoint.block_frames);
+  }
+}
+
+void decode_runtime_endpoint_extensions(
+    Reader& reader,
+    std::vector<AudioRuntimeEndpointConfiguration>& endpoints) {
+  const auto count = reader.count();
+  if (!reader.ok()) {
+    return;
+  }
+  if (count != endpoints.size()) {
+    reader.invalidate(ControlWireErrorCode::InvalidValue);
+    return;
+  }
+  for (auto& endpoint : endpoints) {
+    endpoint.backend = reader.enumeration<AudioRuntimeEndpointBackend>(1);
+    endpoint.device_group_id = reader.string();
+    endpoint.sample_rate = reader.scalar<std::uint32_t>();
+    endpoint.block_frames = reader.scalar<std::uint32_t>();
+  }
+}
+
 }  // namespace
 
 ControlWireEncodeResult encode_control_command(const ControlCommand& command) {
@@ -537,6 +578,7 @@ ControlWireEncodeResult encode_control_command(const ControlCommand& command) {
   for (const auto& device : command.virtual_asio_devices) {
     encode_virtual_asio_device(writer, device);
   }
+  encode_runtime_endpoint_extensions(writer, command.audio_runtime.endpoints);
   return writer.finish();
 }
 
@@ -610,6 +652,10 @@ ControlCommandDecodeResult decode_control_command(
       command.virtual_asio_devices.push_back(
           decode_virtual_asio_device(reader));
     }
+  }
+  if (reader.ok() && reader.version() >= 14) {
+    decode_runtime_endpoint_extensions(reader,
+                                       command.audio_runtime.endpoints);
   }
   reader.finish();
   return {std::move(command), reader.error()};
@@ -718,6 +764,8 @@ ControlWireEncodeResult encode_control_response(const ControlResponse& response)
       encode_virtual_asio_device(writer, device);
     }
   }
+  encode_runtime_endpoint_extensions(
+      writer, response.audio_runtime.configuration.endpoints);
   return writer.finish();
 }
 
@@ -861,6 +909,10 @@ ControlResponseDecodeResult decode_control_response(
       response.virtual_asio_devices.push_back(
           decode_virtual_asio_device(reader));
     }
+  }
+  if (reader.ok() && reader.version() >= 14) {
+    decode_runtime_endpoint_extensions(
+        reader, response.audio_runtime.configuration.endpoints);
   }
   reader.finish();
   return {std::move(response), reader.error()};

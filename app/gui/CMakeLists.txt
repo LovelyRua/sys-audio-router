@@ -20,6 +20,10 @@ target_link_libraries(sar_gui PRIVATE
   sar_core
 )
 
+target_compile_definitions(sar_gui PRIVATE SAR_VERSION="${PROJECT_VERSION}")
+sar_add_version_resource(sar_gui
+  "System Audio Route control panel" "SystemAudioRoute.exe" APP)
+
 set_target_properties(sar_gui PROPERTIES
   OUTPUT_NAME "SystemAudioRoute"
 )

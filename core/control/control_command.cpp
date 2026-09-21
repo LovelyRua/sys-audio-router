@@ -203,6 +203,7 @@ std::vector<PresetError> validate_audio_runtime_configuration(
   std::unordered_set<std::string> native_endpoints;
   std::size_t render_count = 0;
   std::size_t clock_master_count = 0;
+  std::unordered_set<std::string> physical_asio_groups;
   for (const auto& endpoint : configuration.endpoints) {
     if (endpoint.endpoint_id.empty()) {
       errors.push_back({"empty_audio_runtime_endpoint_id",
@@ -221,8 +222,37 @@ std::vector<PresetError> validate_audio_runtime_configuration(
                         "Matrix endpoint direction is invalid."});
     }
 
-    std::string native_key(render ? "render\n" : "capture\n");
-    native_key += endpoint.device_id;
+    const bool physical_asio =
+        endpoint.backend == AudioRuntimeEndpointBackend::PhysicalAsio;
+    if (endpoint.backend != AudioRuntimeEndpointBackend::Wasapi &&
+        !physical_asio) {
+      errors.push_back({"invalid_audio_runtime_endpoint_backend",
+                        "Matrix endpoint backend is invalid."});
+    } else if (physical_asio) {
+      physical_asio_groups.insert(endpoint.device_group_id);
+      if (endpoint.device_group_id.empty()) {
+        errors.push_back({"empty_physical_asio_device_group_id",
+                          "Physical ASIO endpoints require a device group ID."});
+      }
+      if (endpoint.sample_rate < 8000 || endpoint.sample_rate > 768000) {
+        errors.push_back({"invalid_physical_asio_endpoint_sample_rate",
+                          "Physical ASIO endpoint sample rate must be between 8000 and 768000 Hz."});
+      }
+      if (endpoint.block_frames == 0 || endpoint.block_frames > 65536) {
+        errors.push_back({"invalid_physical_asio_endpoint_block_frames",
+                          "Physical ASIO endpoint block size must be between 1 and 65536 frames."});
+      }
+    } else if (!endpoint.device_group_id.empty() || endpoint.sample_rate != 0 ||
+               endpoint.block_frames != 0) {
+      errors.push_back({"unexpected_wasapi_endpoint_timing",
+                        "WASAPI endpoints do not accept Physical ASIO group or timing fields."});
+    }
+
+    std::string native_key(
+        physical_asio ? "physical-asio\n" : "wasapi\n");
+    native_key += render ? "render\n" : "capture\n";
+    native_key += physical_asio ? endpoint.device_group_id
+                                : endpoint.device_id;
     if (!native_endpoints.insert(std::move(native_key)).second) {
       errors.push_back({
           "duplicate_audio_runtime_device",
@@ -256,6 +286,38 @@ std::vector<PresetError> validate_audio_runtime_configuration(
   if (clock_master_count != 1) {
     errors.push_back({"invalid_audio_runtime_clock_master_count",
                       "WASAPI matrix mode requires exactly one clock master."});
+  }
+  if (physical_asio_groups.size() > 1) {
+    errors.push_back({"multiple_physical_asio_groups_not_supported",
+                      "This alpha supports one Physical ASIO driver group per matrix."});
+  }
+  for (const auto& endpoint : configuration.endpoints) {
+    if (endpoint.backend != AudioRuntimeEndpointBackend::PhysicalAsio) {
+      continue;
+    }
+    const bool render =
+        endpoint.direction == AudioRuntimeEndpointDirection::Render;
+    if (render && !endpoint.clock_master) {
+      errors.push_back({"physical_asio_render_must_be_clock_master",
+                        "Physical ASIO must drive the matrix clock in this alpha."});
+    }
+    const auto counterpart = std::ranges::find_if(
+        configuration.endpoints, [&](const auto& candidate) {
+          return candidate.backend == AudioRuntimeEndpointBackend::PhysicalAsio &&
+                 candidate.device_group_id == endpoint.device_group_id &&
+                 candidate.direction != endpoint.direction;
+        });
+    if (counterpart == configuration.endpoints.end()) {
+      errors.push_back({"incomplete_physical_asio_endpoint_group",
+                        "Physical ASIO requires matching capture and render endpoints."});
+      continue;
+    }
+    if (counterpart->device_id != endpoint.device_id ||
+        counterpart->sample_rate != endpoint.sample_rate ||
+        counterpart->block_frames != endpoint.block_frames) {
+      errors.push_back({"mismatched_physical_asio_endpoint_group",
+                        "Physical ASIO capture and render endpoints must share one driver and timing configuration."});
+    }
   }
   return errors;
 }

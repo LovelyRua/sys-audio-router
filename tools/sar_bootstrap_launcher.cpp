@@ -113,6 +113,14 @@ std::filesystem::path engine_session_path() {
          L"System Audio Route" / L"engine-session.sarsession";
 }
 
+std::filesystem::path engine_log_path() {
+  const auto session = engine_session_path();
+  if (session.empty()) {
+    return {};
+  }
+  return session.parent_path() / L"logs" / L"engine.log";
+}
+
 bool pipe_ready() noexcept {
   if (WaitNamedPipeW(kControlPipe, 0) != FALSE) {
     return true;
@@ -190,7 +198,10 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     }
 
     PROCESS_INFORMATION launched{};
-    if (!launch_process(engine, L"--session " + quoted(session),
+    const auto log = engine_log_path();
+    if (!launch_process(engine,
+                        L"--session " + quoted(session) + L" --log-file " +
+                            quoted(log),
                         DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
                         launched)) {
       return fail(L"Could not start the System Audio Route engine service.");

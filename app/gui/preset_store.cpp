@@ -121,6 +121,23 @@ bool PresetStore::load(const QString& name,
   return true;
 }
 
+bool PresetStore::remove(const QString& name, QString* error) const {
+  set_error(error, {});
+  if (!validName(name, error)) {
+    return false;
+  }
+  QFile file(pathForName(name));
+  if (!file.exists()) {
+    set_error(error, QStringLiteral("The preset does not exist"));
+    return false;
+  }
+  if (!file.remove()) {
+    set_error(error, file.errorString());
+    return false;
+  }
+  return true;
+}
+
 bool PresetStore::validName(const QString& name, QString* error) {
   set_error(error, {});
   static const QRegularExpression invalid_characters(

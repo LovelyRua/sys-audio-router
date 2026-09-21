@@ -45,6 +45,14 @@ int main() {
   assert(store.save(QStringLiteral("Recovered"), make_preset(), &error));
   assert(error.isEmpty());
 
+  assert(store.remove(QStringLiteral("Recovered"), &error));
+  assert(error.isEmpty());
+  assert(store.names(&error) == QStringList{QStringLiteral("Tracking")});
+  assert(!store.remove(QStringLiteral("Recovered"), &error));
+  assert(!error.isEmpty());
+  assert(!store.remove(QStringLiteral("../escape"), &error));
+  assert(store.save(QStringLiteral("Recovered"), make_preset(), &error));
+
   QFile malformed(temporary_directory.filePath(
       QStringLiteral("Broken.sarpreset")));
   assert(malformed.open(QIODevice::WriteOnly));

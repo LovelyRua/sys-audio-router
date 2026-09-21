@@ -95,7 +95,7 @@ user or `explorer.exe`. Evidence was saved under `.sar-evidence`. Rerun the
 identical command after logging in as the WinRM user:
 
 ```bat
-scripts\windows-winrm-reaper-acceptance.cmd 192.168.123.123 codex <password> C:\Users\codex\src\sys-audio-router-engineer-a\build-engineer-a\Debug "<render-endpoint-id>" stage-final-reaper 2 60
+scripts\windows-winrm-reaper-acceptance.cmd <host> <user> <password> C:\Users\codex\src\sys-audio-router-engineer-a\build-engineer-a\Debug "<render-endpoint-id>" stage-final-reaper 2 60
 ```
 
 Earlier release-duration evidence remains valid: two REAPER producers sustained
