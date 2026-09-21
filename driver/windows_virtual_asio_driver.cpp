@@ -27,6 +27,42 @@ using sar::driver::WindowsVirtualAsioRuntimeConfig;
 std::atomic_ulong module_objects = 0;
 std::atomic_ulong server_locks = 0;
 
+// Opens (or brings forward) the System Audio Route control panel that ships
+// beside this DLL. Returns false when the launcher is missing or cannot start.
+bool launch_control_panel() noexcept {
+  HMODULE module = nullptr;
+  if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                              GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                          reinterpret_cast<LPCWSTR>(&module_objects),
+                          &module)) {
+    return false;
+  }
+  wchar_t path[MAX_PATH] = {};
+  const DWORD length = GetModuleFileNameW(module, path, MAX_PATH);
+  if (length == 0 || length >= MAX_PATH) {
+    return false;
+  }
+  std::wstring directory(path, length);
+  const auto separator = directory.find_last_of(L"\\/");
+  if (separator == std::wstring::npos) {
+    return false;
+  }
+  directory.resize(separator);
+  const std::wstring launcher = directory + L"\\SystemAudioRouteLauncher.exe";
+  std::wstring command_line = L"\"" + launcher + L"\"";
+  STARTUPINFOW startup{};
+  startup.cb = sizeof(startup);
+  PROCESS_INFORMATION process{};
+  if (!CreateProcessW(launcher.c_str(), command_line.data(), nullptr, nullptr,
+                      FALSE, 0, nullptr, directory.c_str(), &startup,
+                      &process)) {
+    return false;
+  }
+  CloseHandle(process.hThread);
+  CloseHandle(process.hProcess);
+  return true;
+}
+
 constexpr long kDefaultInputChannels = 2;
 constexpr long kDefaultOutputChannels = 2;
 constexpr long kMinimumBufferFrames = 64;
@@ -532,7 +568,7 @@ class VirtualAsioDriver final : public IASIO {
   }
 
   ASIOError controlPanel() override {
-    return ASE_NotPresent;
+    return launch_control_panel() ? ASE_OK : ASE_NotPresent;
   }
 
   ASIOError future(long selector, void*) override {

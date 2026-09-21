@@ -22,6 +22,7 @@
 #endif
 
 #include <Windows.h>
+#include <DbgHelp.h>
 #include <sddl.h>
 
 #include <algorithm>
@@ -30,6 +31,7 @@
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <cwchar>
 #include <filesystem>
@@ -39,6 +41,7 @@
 #include <mutex>
 #include <span>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -327,8 +330,9 @@ std::uint64_t hash_pipe_name(const std::wstring& pipe_name) noexcept {
   return hash;
 }
 
-bool make_engine_lock_name(const std::wstring& pipe_name,
-                           std::wstring& name) noexcept {
+bool make_engine_object_name(const wchar_t* prefix,
+                             const std::wstring& pipe_name,
+                             std::wstring& name) noexcept {
   std::wstring sid;
   if (!current_user_sid(sid)) {
     return false;
@@ -338,7 +342,188 @@ bool make_engine_lock_name(const std::wstring& pipe_name,
                     static_cast<unsigned long long>(hash_pipe_name(pipe_name))) != 16) {
     return false;
   }
-  name = L"Global\\SystemAudioRoute.EngineService." + sid + L"." + suffix;
+  name = std::wstring(prefix) + sid + L"." + suffix;
+  return true;
+}
+
+bool make_engine_lock_name(const std::wstring& pipe_name,
+                           std::wstring& name) noexcept {
+  return make_engine_object_name(L"Global\\SystemAudioRoute.EngineService.",
+                                 pipe_name, name);
+}
+
+bool make_engine_stop_event_name(const std::wstring& pipe_name,
+                                 std::wstring& name) noexcept {
+  return make_engine_object_name(L"Global\\SystemAudioRoute.EngineStop.",
+                                 pipe_name, name);
+}
+
+class EngineStopEvent final {
+ public:
+  explicit EngineStopEvent(const std::wstring& name) noexcept
+      : handle_(CreateEventW(nullptr, TRUE, FALSE, name.c_str())) {}
+  EngineStopEvent(const EngineStopEvent&) = delete;
+  EngineStopEvent& operator=(const EngineStopEvent&) = delete;
+  ~EngineStopEvent() {
+    if (handle_ != nullptr) {
+      CloseHandle(handle_);
+    }
+  }
+
+  [[nodiscard]] bool valid() const noexcept { return handle_ != nullptr; }
+  [[nodiscard]] bool signaled() const noexcept {
+    return handle_ != nullptr &&
+           WaitForSingleObject(handle_, 0) == WAIT_OBJECT_0;
+  }
+
+ private:
+  HANDLE handle_ = nullptr;
+};
+
+// Asks the running engine for this pipe to shut down and waits for it to exit.
+// Exit codes: 0 stopped, 3 no engine running, 4 engine did not stop in time.
+int request_engine_stop(const std::wstring& pipe_name,
+                        std::chrono::milliseconds timeout) {
+  std::wstring lock_name;
+  std::wstring stop_name;
+  if (!make_engine_lock_name(pipe_name, lock_name) ||
+      !make_engine_stop_event_name(pipe_name, stop_name)) {
+    std::cerr << "engine_service_lock_name_failed: Could not create the "
+                 "per-user engine object names.\n";
+    return 1;
+  }
+  const auto lock_alive = [&lock_name] {
+    const HANDLE probe = OpenMutexW(SYNCHRONIZE, FALSE, lock_name.c_str());
+    if (probe == nullptr) {
+      return false;
+    }
+    CloseHandle(probe);
+    return true;
+  };
+  if (!lock_alive()) {
+    return 3;
+  }
+  const HANDLE stop_event =
+      OpenEventW(EVENT_MODIFY_STATE, FALSE, stop_name.c_str());
+  if (stop_event == nullptr) {
+    std::cerr << "engine_stop_unavailable: The running engine does not expose "
+                 "a stop request (win32="
+              << GetLastError() << ").\n";
+    return 4;
+  }
+  const bool signaled = SetEvent(stop_event) != FALSE;
+  CloseHandle(stop_event);
+  if (!signaled) {
+    return 4;
+  }
+  const auto deadline = std::chrono::steady_clock::now() + timeout;
+  while (std::chrono::steady_clock::now() < deadline) {
+    if (!lock_alive()) {
+      return 0;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+  std::cerr << "engine_stop_timeout: The engine did not exit in time.\n";
+  return 4;
+}
+
+constexpr std::uintmax_t kMaxLogBytes = 4U * 1024U * 1024U;
+constexpr std::size_t kMaxCrashDumps = 5;
+
+wchar_t g_crash_dump_directory[MAX_PATH] = {};
+
+LONG WINAPI write_crash_dump(EXCEPTION_POINTERS* exception) noexcept {
+  static std::atomic_flag entered;
+  if (entered.test_and_set() || g_crash_dump_directory[0] == L'\0') {
+    return EXCEPTION_CONTINUE_SEARCH;
+  }
+  SYSTEMTIME now{};
+  GetLocalTime(&now);
+  wchar_t path[MAX_PATH + 64] = {};
+  if (std::swprintf(path, MAX_PATH + 64,
+                    L"%ls\\engine-%04u%02u%02u-%02u%02u%02u-%lu.dmp",
+                    g_crash_dump_directory, now.wYear, now.wMonth, now.wDay,
+                    now.wHour, now.wMinute, now.wSecond,
+                    GetCurrentProcessId()) <= 0) {
+    return EXCEPTION_CONTINUE_SEARCH;
+  }
+  const HANDLE file = CreateFileW(path, GENERIC_WRITE, 0, nullptr,
+                                  CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL,
+                                  nullptr);
+  if (file == INVALID_HANDLE_VALUE) {
+    return EXCEPTION_CONTINUE_SEARCH;
+  }
+  MINIDUMP_EXCEPTION_INFORMATION info{};
+  info.ThreadId = GetCurrentThreadId();
+  info.ExceptionPointers = exception;
+  info.ClientPointers = FALSE;
+  MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), file,
+                    MiniDumpNormal, &info, nullptr, nullptr);
+  CloseHandle(file);
+  return EXCEPTION_CONTINUE_SEARCH;
+}
+
+void prune_crash_dumps(const std::filesystem::path& directory) {
+  std::error_code error;
+  std::vector<std::pair<std::filesystem::file_time_type, std::filesystem::path>>
+      dumps;
+  for (std::filesystem::directory_iterator it(directory, error), end;
+       !error && it != end; it.increment(error)) {
+    if (it->path().extension() == L".dmp") {
+      std::error_code time_error;
+      dumps.emplace_back(it->last_write_time(time_error), it->path());
+    }
+  }
+  if (dumps.size() <= kMaxCrashDumps) {
+    return;
+  }
+  std::sort(dumps.begin(), dumps.end(),
+            [](const auto& left, const auto& right) {
+              return left.first > right.first;
+            });
+  for (std::size_t index = kMaxCrashDumps; index < dumps.size(); ++index) {
+    std::filesystem::remove(dumps[index].second, error);
+  }
+}
+
+// The engine normally runs without a console, so without this every
+// diagnostic line is lost. Output goes to a size-capped log file and a
+// minidump handler writes beside it.
+bool enable_engine_logging(const std::filesystem::path& log_path) {
+  std::error_code error;
+  std::filesystem::create_directories(log_path.parent_path(), error);
+  if (error) {
+    return false;
+  }
+  const auto size = std::filesystem::file_size(log_path, error);
+  if (!error && size > kMaxLogBytes) {
+    auto rotated = log_path;
+    rotated += L".1";
+    std::filesystem::remove(rotated, error);
+    std::filesystem::rename(log_path, rotated, error);
+  }
+  FILE* stream = nullptr;
+  if (_wfreopen_s(&stream, log_path.c_str(), L"a", stdout) != 0 ||
+      _wfreopen_s(&stream, log_path.c_str(), L"a", stderr) != 0) {
+    return false;
+  }
+  std::setvbuf(stdout, nullptr, _IONBF, 0);
+  std::setvbuf(stderr, nullptr, _IONBF, 0);
+
+  const auto dump_directory = log_path.parent_path() / L"crashdumps";
+  std::filesystem::create_directories(dump_directory, error);
+  if (!error && dump_directory.native().size() < MAX_PATH) {
+    prune_crash_dumps(dump_directory);
+    wcsncpy_s(g_crash_dump_directory, MAX_PATH, dump_directory.c_str(),
+              _TRUNCATE);
+    SetUnhandledExceptionFilter(write_crash_dump);
+  }
+  SYSTEMTIME now{};
+  GetLocalTime(&now);
+  std::cout << "engine_service_log_opened version=" SAR_VERSION " pid="
+            << GetCurrentProcessId() << " time=" << now.wYear << '-'
+            << now.wMonth << '-' << now.wDay << ' ' << now.wHour << ':'
+            << now.wMinute << ':' << now.wSecond << '\n';
   return true;
 }
 
@@ -675,6 +860,8 @@ int main(int argc, char** argv) {
   std::string render_device_id;
   std::wstring session_path;
   bool has_session_path = false;
+  std::wstring log_path;
+  bool stop_command = false;
   std::size_t requested_asio_channels = 2;
   bool asio_channels_explicit = false;
   for (int index = 1; index < argc; ++index) {
@@ -699,6 +886,13 @@ int main(int argc, char** argv) {
         std::cerr << "--session requires a valid UTF-8 Windows path.\n";
         return 2;
       }
+    } else if (argument == "--log-file" && index + 1 < argc) {
+      if (!utf8_to_wide(argv[++index], log_path)) {
+        std::cerr << "--log-file requires a valid UTF-8 Windows path.\n";
+        return 2;
+      }
+    } else if (argument == "--stop") {
+      stop_command = true;
     } else if (argument == "--asio-channels" && index + 1 < argc) {
       const std::string value = argv[++index];
       std::size_t parsed = 0;
@@ -715,7 +909,8 @@ int main(int argc, char** argv) {
       asio_channels_explicit = true;
     } else {
       std::cerr << "Usage: sar_engine_service [--pipe NAME] [--once] "
-                   "[--session FILE] [--asio-channels COUNT] "
+                   "[--session FILE] [--log-file FILE] [--stop] "
+                   "[--asio-channels COUNT] "
                    "[--wasapi-render|--wasapi-duplex "
                    "[--capture-id ID --render-id ID]]\n";
       return 2;
@@ -741,6 +936,14 @@ int main(int argc, char** argv) {
     return 2;
   }
 
+  if (stop_command) {
+    return request_engine_stop(pipe_config.pipe_name,
+                               std::chrono::milliseconds(8000));
+  }
+  if (!log_path.empty() && !enable_engine_logging(log_path)) {
+    std::cerr << "session_warning code=log_file_unavailable\n";
+  }
+
   std::wstring engine_lock_name;
   if (!make_engine_lock_name(pipe_config.pipe_name, engine_lock_name)) {
     std::cerr << "engine_service_lock_name_failed: Could not create the "
@@ -759,6 +962,15 @@ int main(int argc, char** argv) {
                 << error << ").\n";
     }
     return 1;
+  }
+
+  std::wstring stop_event_name;
+  std::unique_ptr<EngineStopEvent> stop_event;
+  if (make_engine_stop_event_name(pipe_config.pipe_name, stop_event_name)) {
+    stop_event = std::make_unique<EngineStopEvent>(stop_event_name);
+    if (!stop_event->valid()) {
+      std::cerr << "session_warning code=stop_event_unavailable\n";
+    }
   }
 
   auto desired_session = default_session(requested_asio_channels);
@@ -1228,6 +1440,10 @@ int main(int argc, char** argv) {
             << " asio_instances=" << asio_brokers.size() << '\n';
   while (!stop_requested.load()) {
     if (once && pipe_server.stats().completed_requests >= 1) {
+      break;
+    }
+    if (stop_event && stop_event->signaled()) {
+      stop_requested.store(true);
       break;
     }
     for (auto& host : asio_hosts) {

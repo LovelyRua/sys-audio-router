@@ -53,6 +53,45 @@ if (!(Test-Path -LiteralPath $markerPath -PathType Leaf)) {
   throw "Refusing to remove a directory without the System Audio Route Alpha marker."
 }
 
+function Stop-InstalledEngine {
+  param([string]$InstallPath)
+  $installedEngine = Join-Path $InstallPath "bin\sar_engine_service.exe"
+  $running = @(Get-Process -Name "sar_engine_service" `
+      -ErrorAction SilentlyContinue |
+      Where-Object {
+        try {
+          Test-PathBelowDirectory `
+              -CandidatePath $_.Path `
+              -DirectoryPath $InstallPath
+        } catch {
+          $false
+        }
+      })
+  if ($running.Count -eq 0 -or
+      !(Test-Path -LiteralPath $installedEngine -PathType Leaf)) {
+    return
+  }
+  # One engine runs per user, so a match below this directory is that engine.
+  & $installedEngine --stop | Out-Null
+  for ($attempt = 0; $attempt -lt 20; ++$attempt) {
+    if (@(Get-Process -Name "sar_engine_service" `
+            -ErrorAction SilentlyContinue |
+        Where-Object {
+          try {
+            Test-PathBelowDirectory `
+                -CandidatePath $_.Path `
+                -DirectoryPath $InstallPath
+          } catch {
+            $false
+          }
+        }).Count -eq 0) {
+      return
+    }
+    Start-Sleep -Milliseconds 250
+  }
+}
+
+Stop-InstalledEngine -InstallPath $installPath
 foreach ($processName in @("sar_engine_service", "SystemAudioRoute")) {
   $running = @(Get-Process -Name $processName -ErrorAction SilentlyContinue |
       Where-Object {

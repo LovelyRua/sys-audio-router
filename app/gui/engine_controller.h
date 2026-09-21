@@ -6,7 +6,6 @@
 
 #include <QFutureWatcher>
 #include <QObject>
-#include <QProcess>
 #include <QStringList>
 #include <QTimer>
 #include <QVariantList>
@@ -88,6 +87,10 @@ class EngineController final : public QObject {
   Q_PROPERTY(QString activePresetName READ activePresetName NOTIFY presetsChanged)
   Q_PROPERTY(bool canUndo READ canUndo NOTIFY historyChanged)
   Q_PROPERTY(bool canRedo READ canRedo NOTIFY historyChanged)
+  Q_PROPERTY(bool startAtLogin READ startAtLogin WRITE setStartAtLogin NOTIFY startAtLoginChanged)
+  Q_PROPERTY(QString closeBehavior READ closeBehavior WRITE setCloseBehavior NOTIFY closeBehaviorChanged)
+  Q_PROPERTY(QString appVersion READ appVersion CONSTANT)
+  Q_PROPERTY(QString logDirectory READ logDirectory CONSTANT)
 
  public:
   explicit EngineController(QObject* parent = nullptr);
@@ -115,6 +118,12 @@ class EngineController final : public QObject {
   [[nodiscard]] int sampleRate() const noexcept;
   [[nodiscard]] int blockSize() const noexcept;
   [[nodiscard]] qulonglong graphVersion() const noexcept;
+  [[nodiscard]] bool startAtLogin() const;
+  void setStartAtLogin(bool enabled);
+  [[nodiscard]] QString closeBehavior() const;
+  void setCloseBehavior(const QString& behavior);
+  [[nodiscard]] QString appVersion() const;
+  [[nodiscard]] QString logDirectory() const;
   [[nodiscard]] qulonglong xrunCount() const noexcept;
   [[nodiscard]] qulonglong droppedBlocks() const noexcept;
   [[nodiscard]] qulonglong virtualAsioProducerUnderflows() const noexcept;
@@ -156,6 +165,7 @@ class EngineController final : public QObject {
   Q_INVOKABLE void refreshPresets();
   Q_INVOKABLE void savePreset(const QString& name);
   Q_INVOKABLE void loadPreset(const QString& name);
+  Q_INVOKABLE void deletePreset(const QString& name);
   Q_INVOKABLE void clearFeedback();
   Q_INVOKABLE void startRuntime();
   Q_INVOKABLE void stopRuntime();
@@ -181,6 +191,8 @@ class EngineController final : public QObject {
   Q_INVOKABLE void setRouteGain(const QString& input_id,
                                 const QString& output_id,
                                 double gain);
+  Q_INVOKABLE void quitEngine();
+  Q_INVOKABLE void openLogDirectory() const;
   Q_INVOKABLE void undo();
   Q_INVOKABLE void redo();
 
@@ -196,6 +208,8 @@ class EngineController final : public QObject {
   void feedbackChanged();
   void presetsChanged();
   void historyChanged();
+  void startAtLoginChanged();
+  void closeBehaviorChanged();
 
  private:
   enum class PendingPresetAction {
@@ -239,7 +253,7 @@ class EngineController final : public QObject {
   void updatePresetView(const control::PresetDocument& preset);
   Q_SLOT void schedulePoll();
   void ensureEngineService();
-  void stopEngineService();
+  void migrateLegacySession() const;
   void setError(QString error);
   void setStatus(QString status);
   void dispatchHistoryLoad(const HistoryEntry& entry, HistoryAction action);
@@ -249,7 +263,6 @@ class EngineController final : public QObject {
   QFutureWatcher<EngineReply> watcher_;
   EngineTransport transport_;
   QTimer poll_timer_;
-  QProcess engine_service_;
   PresetStore preset_store_;
   std::deque<QueuedCommand> queued_commands_;
   std::optional<QueuedCommand> active_command_;
@@ -268,7 +281,6 @@ class EngineController final : public QObject {
   int runtime_physical_asio_block_frames_ = 0;
   QString runtime_physical_asio_input_channels_;
   QString runtime_physical_asio_output_channels_;
-  bool engine_service_owned_ = false;
   bool engine_service_start_attempted_ = false;
   bool virtual_asio_restart_armed_ = false;
   bool service_management_enabled_ = true;

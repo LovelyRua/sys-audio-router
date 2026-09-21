@@ -11,6 +11,8 @@
 #endif
 #include <Windows.h>
 
+#include <cwchar>
+
 namespace {
 
 class GuiInstanceGuard final {
@@ -38,6 +40,31 @@ class GuiInstanceGuard final {
   bool primary_ = false;
 };
 
+BOOL CALLBACK activate_matching_window(HWND window, LPARAM found) {
+  wchar_t title[64] = {};
+  wchar_t class_name[64] = {};
+  if (!IsWindowVisible(window) ||
+      GetWindowTextW(window, title, 64) == 0 ||
+      GetClassNameW(window, class_name, 64) == 0) {
+    return TRUE;
+  }
+  if (wcscmp(title, L"System Audio Route") != 0 ||
+      wcsncmp(class_name, L"Qt", 2) != 0) {
+    return TRUE;
+  }
+  ShowWindow(window, IsIconic(window) ? SW_RESTORE : SW_SHOW);
+  SetForegroundWindow(window);
+  *reinterpret_cast<bool*>(found) = true;
+  return FALSE;
+}
+
+// A second launch brings the running control panel forward instead of
+// silently doing nothing.
+void activate_existing_window() noexcept {
+  bool found = false;
+  EnumWindows(activate_matching_window, reinterpret_cast<LPARAM>(&found));
+}
+
 }  // namespace
 #endif
 
@@ -48,6 +75,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   if (!instance.primary()) {
+    activate_existing_window();
     return 0;
   }
 #endif
@@ -55,6 +83,7 @@ int main(int argc, char* argv[]) {
   QGuiApplication application(argc, argv);
   QGuiApplication::setApplicationName(QStringLiteral("System Audio Route"));
   QGuiApplication::setOrganizationName(QStringLiteral("System Audio Route"));
+  QGuiApplication::setApplicationVersion(QStringLiteral(SAR_VERSION));
   QQuickStyle::setStyle(QStringLiteral("Basic"));
 
   sar::gui::EngineController engine_controller;

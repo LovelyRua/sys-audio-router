@@ -28,6 +28,22 @@ ApplicationWindow {
         readonly property color danger: "#ef6b72"
     }
 
+    property bool forceClose: false
+    property string pendingPresetName: ""
+
+    onClosing: function(close) {
+        if (forceClose || !engine.connected)
+            return
+        if (engine.closeBehavior === "quit") {
+            engine.quitEngine()
+            return
+        }
+        if (engine.closeBehavior === "keep")
+            return
+        close.accepted = false
+        closeDialog.open()
+    }
+
     property string currentView: "matrix"
     property string selectedInputId: ""
     property string selectedInputLabel: "No input selected"
@@ -93,6 +109,82 @@ ApplicationWindow {
                                             window.meterHold * 0.985)
             }
         }
+    }
+
+    function copyToClipboard(value) {
+        clipboardHelper.text = value
+        clipboardHelper.selectAll()
+        clipboardHelper.copy()
+    }
+
+    function requestSavePreset(name) {
+        var trimmed = name.trim()
+        if (trimmed.length === 0 || !engine.connected || engine.busy)
+            return
+        if (trimmed !== engine.activePresetName &&
+                engine.presetNames.indexOf(trimmed) >= 0) {
+            pendingPresetName = trimmed
+            overwriteDialog.open()
+            return
+        }
+        engine.savePreset(trimmed)
+    }
+
+    function diagnosticsState() {
+        if (!engine.connected)
+            return "offline"
+        if (!engine.runtimeRunning)
+            return "stopped"
+        if (engine.wasapiRuntimeHealth === "Faulted" ||
+                engine.wasapiFailedRecoveries > 0)
+            return "fault"
+        if (engine.xrunCount > 0 || engine.droppedBlocks > 0 ||
+                engine.virtualAsioProducerUnderflows > 0 ||
+                engine.virtualAsioProducerOverflows > 0 ||
+                engine.wasapiRuntimeHealth === "Degraded" ||
+                engine.wasapiRenderFifoUnderflowFrames > 0 ||
+                engine.wasapiWaitTimeoutCycles > 0)
+            return "attention"
+        return "healthy"
+    }
+
+    function diagnosticsHeadline() {
+        var state = diagnosticsState()
+        if (state === "offline")
+            return "Engine offline"
+        if (state === "stopped")
+            return "Audio runtime stopped"
+        if (state === "fault")
+            return "Audio fault"
+        if (state === "attention")
+            return "Glitches detected"
+        return "All clear"
+    }
+
+    function diagnosticsDetail() {
+        var state = diagnosticsState()
+        if (state === "offline")
+            return "The control panel cannot reach the audio engine. It is restarted automatically; if this persists, open the logs folder from the error bar."
+        if (state === "stopped")
+            return "Start the engine from the top bar to begin routing. The counters below are from the last run."
+        if (state === "fault")
+            return "The audio runtime reported a failure (" +
+                    engine.wasapiRuntimeReasonCode +
+                    "). Check that the selected devices are connected, then restart the engine."
+        if (state === "attention")
+            return "Some audio blocks were dropped or under-ran since the runtime started. Try a larger buffer size or close other audio-heavy applications. The counters below show where it happened."
+        return "No dropouts detected since the runtime started."
+    }
+
+    function diagnosticsTone() {
+        var state = diagnosticsState()
+        if (state === "offline" || state === "fault")
+            return colors.danger
+        if (state === "attention")
+            return colors.warning
+        if (state === "healthy")
+            return colors.healthy
+        return colors.muted
     }
 
     function routeKey(inputId, outputId) {
@@ -964,13 +1056,16 @@ ApplicationWindow {
             radius: 4
             color: control.down ? colors.hover
                                 : control.hovered ? colors.raised : "transparent"
-            border.color: control.highlighted ? colors.cyan : colors.line
+            border.width: control.visualFocus ? 2 : 1
+            border.color: control.visualFocus || control.highlighted
+                          ? colors.cyan : colors.line
         }
     }
 
     component IconButton: Button {
         id: control
         required property string tooltipText
+        Accessible.name: tooltipText
         implicitWidth: 34
         implicitHeight: 34
         padding: 0
@@ -987,7 +1082,8 @@ ApplicationWindow {
             radius: 4
             color: control.down ? colors.hover
                                 : control.hovered ? colors.raised : "transparent"
-            border.color: colors.line
+            border.width: control.visualFocus ? 2 : 1
+            border.color: control.visualFocus ? colors.cyan : colors.line
         }
         ToolTip.visible: hovered
         ToolTip.delay: 450
@@ -996,6 +1092,7 @@ ApplicationWindow {
 
     component ConsoleField: TextField {
         id: control
+        Accessible.name: placeholderText
         implicitHeight: 34
         leftPadding: 10
         rightPadding: 10
@@ -1087,6 +1184,176 @@ ApplicationWindow {
         }
     }
 
+    component CheckToggle: AbstractButton {
+        id: control
+        checkable: true
+        implicitHeight: 26
+        implicitWidth: toggleContent.implicitWidth + 8
+        padding: 4
+        contentItem: Row {
+            id: toggleContent
+            spacing: 6
+            Rectangle {
+                width: 12
+                height: 12
+                anchors.verticalCenter: parent.verticalCenter
+                radius: 2
+                color: control.checked ? colors.cyan : "transparent"
+                border.width: control.visualFocus ? 2 : 1
+                border.color: control.visualFocus || control.checked
+                              ? colors.cyan : colors.muted
+            }
+            Text {
+                text: control.text
+                color: colors.muted
+                font.pixelSize: 11
+                anchors.verticalCenter: parent.verticalCenter
+            }
+        }
+        background: Rectangle {
+            radius: 3
+            color: control.hovered ? colors.raised : "transparent"
+        }
+    }
+
+    component ConfirmDialog: Dialog {
+        id: dialog
+        property string heading
+        property string body
+        property string confirmText: "OK"
+        signal confirmed()
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(440, window.width - 48)
+        padding: 20
+        closePolicy: Popup.CloseOnEscape
+        background: Rectangle {
+            color: colors.surface
+            border.color: colors.line
+            radius: 6
+        }
+        contentItem: ColumnLayout {
+            spacing: 14
+            Text {
+                text: dialog.heading
+                color: colors.text
+                font.pixelSize: 16
+                font.weight: Font.DemiBold
+            }
+            Text {
+                text: dialog.body
+                color: colors.muted
+                font.pixelSize: 12
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Item { Layout.fillWidth: true }
+                FlatButton { text: "Cancel"; onClicked: dialog.close() }
+                FlatButton {
+                    text: dialog.confirmText
+                    highlighted: true
+                    onClicked: {
+                        dialog.close()
+                        dialog.confirmed()
+                    }
+                }
+            }
+        }
+    }
+
+    TextEdit {
+        id: clipboardHelper
+        visible: false
+    }
+
+    ConfirmDialog {
+        id: overwriteDialog
+        objectName: "overwritePresetDialog"
+        heading: "Replace preset?"
+        body: "A preset named \"" + window.pendingPresetName +
+              "\" already exists. Saving will replace it."
+        confirmText: "Replace"
+        onConfirmed: engine.savePreset(window.pendingPresetName)
+    }
+
+    ConfirmDialog {
+        id: deleteDialog
+        objectName: "deletePresetDialog"
+        heading: "Delete preset?"
+        body: "The preset \"" + window.pendingPresetName +
+              "\" will be permanently deleted. The current routing is not changed."
+        confirmText: "Delete"
+        onConfirmed: engine.deletePreset(window.pendingPresetName)
+    }
+
+    Dialog {
+        id: closeDialog
+        objectName: "closeDialog"
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(480, window.width - 48)
+        padding: 20
+        closePolicy: Popup.CloseOnEscape
+        background: Rectangle {
+            color: colors.surface
+            border.color: colors.line
+            radius: 6
+        }
+        contentItem: ColumnLayout {
+            spacing: 14
+            Text {
+                text: "Close System Audio Route?"
+                color: colors.text
+                font.pixelSize: 16
+                font.weight: Font.DemiBold
+            }
+            Text {
+                text: "The audio engine can keep routing in the background so your DAWs stay connected. Choose Stop engine to shut it down completely."
+                color: colors.muted
+                font.pixelSize: 12
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+            CheckToggle {
+                id: rememberCloseChoice
+                text: "Remember my choice"
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Item { Layout.fillWidth: true }
+                FlatButton { text: "Cancel"; onClicked: closeDialog.close() }
+                FlatButton {
+                    objectName: "stopEngineAndExitButton"
+                    text: "Stop engine"
+                    onClicked: {
+                        if (rememberCloseChoice.checked)
+                            engine.closeBehavior = "quit"
+                        engine.quitEngine()
+                        window.forceClose = true
+                        closeDialog.close()
+                        window.close()
+                    }
+                }
+                FlatButton {
+                    objectName: "keepRunningButton"
+                    text: "Keep running"
+                    highlighted: true
+                    onClicked: {
+                        if (rememberCloseChoice.checked)
+                            engine.closeBehavior = "keep"
+                        window.forceClose = true
+                        closeDialog.close()
+                        window.close()
+                    }
+                }
+            }
+        }
+    }
+
     component NavButton: Button {
         id: control
         required property string viewId
@@ -1103,6 +1370,8 @@ ApplicationWindow {
         }
         background: Rectangle {
             radius: 3
+            border.width: control.visualFocus ? 2 : 0
+            border.color: colors.cyan
             color: currentView === control.viewId ? colors.raised
                                                   : control.hovered ? "#1b2023" : "transparent"
             Rectangle {
@@ -1206,7 +1475,7 @@ ApplicationWindow {
         readonly property string message: engine.lastError.length > 0
                                           ? engine.lastError
                                           : engine.statusMessage
-        height: message.length > 0 ? 38 : 0
+        height: message.length > 0 ? 46 : 0
         visible: height > 0
         color: engine.lastError.length > 0 ? "#321d20" : "#153028"
         border.color: engine.lastError.length > 0 ? colors.danger : colors.healthy
@@ -1227,8 +1496,20 @@ ApplicationWindow {
                 text: parent.parent.message
                 color: colors.text
                 font.pixelSize: 12
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
                 elide: Text.ElideRight
                 Layout.fillWidth: true
+            }
+            FlatButton {
+                visible: engine.lastError.length > 0
+                text: "Copy"
+                onClicked: window.copyToClipboard(engine.lastError)
+            }
+            FlatButton {
+                visible: engine.lastError.length > 0
+                text: "Open logs"
+                onClicked: engine.openLogDirectory()
             }
             FlatButton {
                 text: "Dismiss"
@@ -1292,16 +1573,15 @@ ApplicationWindow {
                     text: engine.activePresetName
                     maximumLength: 80
                     selectByMouse: true
-                    onAccepted: {
-                        if (engine.connected && text.trim().length > 0 && !engine.busy)
-                            engine.savePreset(text)
-                    }
+                    onAccepted: window.requestSavePreset(text)
                 }
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 6
                     FlatButton {
                         text: "Load"
+                        leftPadding: 6
+                        rightPadding: 6
                         Layout.fillWidth: true
                         enabled: engine.connected &&
                                  presetBrowser.currentIndex >= 0 &&
@@ -1315,7 +1595,23 @@ ApplicationWindow {
                         enabled: engine.connected &&
                                  presetName.text.trim().length > 0 &&
                                  !engine.busy
-                        onClicked: engine.savePreset(presetName.text)
+                        leftPadding: 6
+                        rightPadding: 6
+                        onClicked: window.requestSavePreset(presetName.text)
+                    }
+                    FlatButton {
+                        objectName: "deletePresetButton"
+                        text: "Delete"
+                        leftPadding: 6
+                        rightPadding: 6
+                        Layout.fillWidth: true
+                        enabled: engine.connected &&
+                                 presetBrowser.currentIndex >= 0 &&
+                                 !engine.busy
+                        onClicked: {
+                            window.pendingPresetName = presetBrowser.currentText
+                            deleteDialog.open()
+                        }
                     }
                 }
 
@@ -1326,6 +1622,31 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     Layout.margins: 8
                     spacing: 5
+                    CheckToggle {
+                        objectName: "startAtLoginCheckBox"
+                        text: "Start engine at login"
+                        checked: engine.startAtLogin
+                        onClicked: engine.startAtLogin = checked
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        FlatButton {
+                            objectName: "openLogsButton"
+                            text: "Logs"
+                            implicitHeight: 26
+                            leftPadding: 8
+                            rightPadding: 8
+                            font.pixelSize: 11
+                            onClicked: engine.openLogDirectory()
+                        }
+                        Text {
+                            objectName: "versionLabel"
+                            text: engine.appVersion.length > 0 ? "v" + engine.appVersion : ""
+                            color: colors.muted
+                            font.pixelSize: 10
+                        }
+                    }
                     Text {
                         text: "GRAPH " + engine.graphVersion
                         color: colors.muted
@@ -2681,6 +3002,36 @@ ApplicationWindow {
                     Text { text: "Diagnostics"; color: colors.text; font.pixelSize: 18; font.weight: Font.DemiBold }
                     Text { text: "Live engine counters"; color: colors.muted; font.pixelSize: 12 }
                     Rectangle { Layout.fillWidth: true; height: 1; color: colors.line }
+                    Rectangle {
+                        objectName: "diagnosticsSummary"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: summaryColumn.implicitHeight + 28
+                        color: colors.surface
+                        border.color: window.diagnosticsTone()
+                        Accessible.name: window.diagnosticsHeadline() + ". " +
+                                         window.diagnosticsDetail()
+                        ColumnLayout {
+                            id: summaryColumn
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 14
+                            spacing: 4
+                            Text {
+                                text: window.diagnosticsHeadline()
+                                color: window.diagnosticsTone()
+                                font.pixelSize: 16
+                                font.weight: Font.DemiBold
+                            }
+                            Text {
+                                text: window.diagnosticsDetail()
+                                color: colors.muted
+                                font.pixelSize: 12
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+                        }
+                    }
                     GridLayout {
                         columns: diagnosticsScroll.availableWidth > 900 ? 4 : 2
                         columnSpacing: 1

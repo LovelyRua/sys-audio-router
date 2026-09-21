@@ -20,6 +20,9 @@ class PresetStore final {
                           control::PresetDocument* preset,
                           QString* error = nullptr) const;
 
+  [[nodiscard]] bool remove(const QString& name,
+                            QString* error = nullptr) const;
+
   [[nodiscard]] static bool validName(const QString& name,
                                       QString* error = nullptr);
 

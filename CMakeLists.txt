@@ -4,6 +4,33 @@ project(SystemAudioRoute VERSION 0.1.0 LANGUAGES C CXX)
 
 include(GNUInstallDirs)
 
+if(WIN32)
+  enable_language(RC)
+endif()
+
+# Embeds a VERSIONINFO block (and optionally the application icon) so Windows
+# and DAWs show a proper product name, version, and file description.
+function(sar_add_version_resource target description original_filename kind)
+  set(SAR_RC_DESCRIPTION "${description}")
+  set(SAR_RC_FILENAME "${original_filename}")
+  set(SAR_RC_NAME "${target}")
+  string(REPLACE "." "," SAR_RC_VERSION_COMMA "${PROJECT_VERSION}.0")
+  if(kind STREQUAL "DLL")
+    set(SAR_RC_FILETYPE "VFT_DLL")
+    set(SAR_RC_ICON_LINE "")
+  else()
+    set(SAR_RC_FILETYPE "VFT_APP")
+    set(SAR_RC_ICON_LINE
+        "1 ICON \"${PROJECT_SOURCE_DIR}/packaging/windows/system-audio-route.ico\"")
+  endif()
+  configure_file(
+    ${PROJECT_SOURCE_DIR}/packaging/windows/sar_resource.rc.in
+    ${CMAKE_CURRENT_BINARY_DIR}/${target}_version.rc
+    @ONLY)
+  target_sources(${target} PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}/${target}_version.rc)
+endfunction()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -411,12 +438,18 @@ if(WIN32)
     OUTPUT_NAME "SystemAudioRouteVirtualASIO"
     PREFIX ""
   )
+  sar_add_version_resource(sar_virtual_asio_driver
+    "System Audio Route Virtual ASIO driver"
+    "SystemAudioRouteVirtualASIO.dll" DLL)
 
   add_executable(sar_virtual_asio_register
     tools/sar_virtual_asio_register.cpp
   )
   target_link_libraries(sar_virtual_asio_register
     PRIVATE sar_virtual_asio_registration rstrtmgr)
+  sar_add_version_resource(sar_virtual_asio_register
+    "System Audio Route Virtual ASIO registration utility"
+    "sar_virtual_asio_register.exe" APP)
 
   add_executable(sar_virtual_asio_host_probe
     tools/sar_virtual_asio_host_probe.cpp
@@ -445,9 +478,13 @@ if(WIN32)
   add_executable(sar_engine_service
     tools/sar_engine_service.cpp
   )
+  sar_add_version_resource(sar_engine_service
+    "System Audio Route engine service" "sar_engine_service.exe" APP)
 
   target_link_libraries(sar_engine_service
-    PRIVATE sar_core sar_virtual_asio_registration)
+    PRIVATE sar_core sar_virtual_asio_registration dbghelp)
+  target_compile_definitions(sar_engine_service
+    PRIVATE SAR_VERSION="${PROJECT_VERSION}")
 
   add_executable(sar_windows_virtual_asio_topology_control_smoke
     tests/realtime/windows_virtual_asio_topology_control_smoke.cpp
@@ -455,9 +492,17 @@ if(WIN32)
   target_link_libraries(sar_windows_virtual_asio_topology_control_smoke
     PRIVATE sar_core advapi32)
 
+  add_executable(sar_windows_engine_service_lifecycle_smoke
+    tests/realtime/windows_engine_service_lifecycle_smoke.cpp
+  )
+  target_link_libraries(sar_windows_engine_service_lifecycle_smoke
+    PRIVATE sar_core advapi32)
+
   add_executable(sar_bootstrap_launcher WIN32
     tools/sar_bootstrap_launcher.cpp
   )
+  sar_add_version_resource(sar_bootstrap_launcher
+    "System Audio Route launcher" "SystemAudioRouteLauncher.exe" APP)
   target_compile_features(sar_bootstrap_launcher PRIVATE cxx_std_20)
   target_link_libraries(sar_bootstrap_launcher PRIVATE user32)
   set_target_properties(sar_bootstrap_launcher PROPERTIES
@@ -467,6 +512,8 @@ if(WIN32)
   add_executable(sar_control_cli
     tools/sar_control_cli.cpp
   )
+  sar_add_version_resource(sar_control_cli
+    "System Audio Route control command line" "sar_control_cli.exe" APP)
 
   target_link_libraries(sar_control_cli PRIVATE sar_core)
 
@@ -968,6 +1015,11 @@ if(WIN32)
   add_test(NAME windows_virtual_asio_topology_control_smoke
            COMMAND sar_windows_virtual_asio_topology_control_smoke
                    $<TARGET_FILE:sar_engine_service>)
+  add_test(NAME windows_engine_service_lifecycle_smoke
+           COMMAND sar_windows_engine_service_lifecycle_smoke
+                   $<TARGET_FILE:sar_engine_service>)
+  set_tests_properties(windows_engine_service_lifecycle_smoke
+                       PROPERTIES TIMEOUT 60)
   add_test(NAME windows_virtual_asio_registration_help
            COMMAND sar_virtual_asio_register --help)
   add_test(NAME windows_virtual_asio_driver_unlocked
@@ -1289,6 +1341,15 @@ if(WIN32 AND SAR_BUILD_GUI)
     DESTINATION .
   )
   install(FILES
+    third_party/libsamplerate/COPYING
+    DESTINATION licenses/libsamplerate
+  )
+  install(FILES
+    third_party/asio_sdk_2.3.4/README.md
+    third_party/asio_sdk_2.3.4/common/LICENSE.txt
+    DESTINATION licenses/asio-sdk
+  )
+  install(FILES
     packaging/windows/install-alpha.ps1
     packaging/windows/uninstall-alpha.ps1
     DESTINATION .
@@ -1345,6 +1406,13 @@ if(WIN32 AND SAR_BUILD_GUI)
     SetErrorLevel 1
     Abort
     sar_asio_driver_unlocked:
+    IfFileExists "$INSTDIR\bin\sar_engine_service.exe" 0 sar_pre_no_engine
+    nsExec::ExecToLog '"$INSTDIR\bin\sar_engine_service.exe" --stop'
+    Pop $0
+    sar_pre_no_engine:
+    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /IM SystemAudioRoute.exe'
+    Pop $0
+    Sleep 1500
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM SystemAudioRoute.exe'
     Pop $0
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM sar_engine_service.exe'
@@ -1367,10 +1435,18 @@ if(WIN32 AND SAR_BUILD_GUI)
     sar_asio_registration_ok:
   ]])
   set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS [[
+    IfFileExists "$INSTDIR\bin\sar_engine_service.exe" 0 sar_un_no_engine
+    nsExec::ExecToLog '"$INSTDIR\bin\sar_engine_service.exe" --stop'
+    Pop $0
+    sar_un_no_engine:
+    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /IM SystemAudioRoute.exe'
+    Pop $0
+    Sleep 1500
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM SystemAudioRoute.exe'
     Pop $0
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM sar_engine_service.exe'
     Pop $0
+    DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "SystemAudioRouteEngine"
     ExecWait '"$INSTDIR\bin\sar_virtual_asio_register.exe" --unregister-owned "$INSTDIR\bin\SystemAudioRouteVirtualASIO.dll" --user --x64' $0
     StrCmp $0 "0" sar_skip_asio_unregistration
     DetailPrint "Virtual ASIO unregistration failed with exit code $0."

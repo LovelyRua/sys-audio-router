@@ -177,3 +177,22 @@ if(NOT gain_requires_route_toggle LESS 0)
 endif()
 
 message(STATUS "QML page structure smoke passed")
+
+foreach(lifecycle_marker
+    "onClosing: function(close)"
+    "objectName: \"closeDialog\""
+    "objectName: \"keepRunningButton\""
+    "objectName: \"stopEngineAndExitButton\""
+    "function requestSavePreset(name)"
+    "objectName: \"overwritePresetDialog\""
+    "objectName: \"deletePresetDialog\""
+    "objectName: \"startAtLoginCheckBox\""
+    "objectName: \"openLogsButton\""
+    "objectName: \"diagnosticsSummary\""
+    "function diagnosticsState()"
+    "window.copyToClipboard(engine.lastError)")
+  string(FIND "${qml}" "${lifecycle_marker}" marker_position)
+  if(marker_position LESS 0)
+    message(FATAL_ERROR "Lifecycle QML marker is missing: ${lifecycle_marker}")
+  endif()
+endforeach()

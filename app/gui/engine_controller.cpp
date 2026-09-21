@@ -5,9 +5,14 @@
 
 #include <QStandardPaths>
 #include <QCoreApplication>
+#include <QDesktopServices>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QProcess>
+#include <QSettings>
 #include <QStringList>
+#include <QUrl>
 #include <QUuid>
 #include <QtConcurrentRun>
 
@@ -137,6 +142,53 @@ EngineReply transact(control::ControlCommand command) {
   return reply;
 }
 
+constexpr auto kRunKeyPath =
+    "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+constexpr auto kRunValueName = "SystemAudioRouteEngine";
+constexpr auto kCloseBehaviorKey = "closeBehavior";
+
+// Shared with sar_bootstrap_launcher so both start the engine on the same
+// session file and log.
+QString engine_data_directory() {
+  const auto roaming = qEnvironmentVariable("APPDATA");
+  if (roaming.isEmpty()) {
+    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+  }
+  return QDir::cleanPath(roaming) + QStringLiteral("/System Audio Route");
+}
+
+QString engine_session_path() {
+  return QDir(engine_data_directory())
+      .filePath(QStringLiteral("engine-session.sarsession"));
+}
+
+QString engine_log_directory() {
+  return QDir(engine_data_directory()).filePath(QStringLiteral("logs"));
+}
+
+QString engine_executable_path() {
+  return QDir(QCoreApplication::applicationDirPath())
+      .filePath(QStringLiteral("sar_engine_service.exe"));
+}
+
+QStringList engine_arguments() {
+  return {QStringLiteral("--session"),
+          QDir::toNativeSeparators(engine_session_path()),
+          QStringLiteral("--log-file"),
+          QDir::toNativeSeparators(QDir(engine_log_directory())
+                                       .filePath(QStringLiteral("engine.log")))};
+}
+
+QString quoted_command_line(const QString& executable,
+                            const QStringList& arguments) {
+  QString command = QStringLiteral("\"") +
+                    QDir::toNativeSeparators(executable) + QStringLiteral("\"");
+  for (const auto& argument : arguments) {
+    command += QStringLiteral(" \"") + argument + QStringLiteral("\"");
+  }
+  return command;
+}
+
 QVariantMap endpoint(const graph::RouteEndpointDescriptor& value) {
   return {{QStringLiteral("id"), text(value.id)},
           {QStringLiteral("label"), text(value.label)}};
@@ -172,53 +224,6 @@ EngineController::EngineController(EngineTransport transport,
     startNextCommand();
     updateBusyState();
   });
-  connect(&engine_service_, &QProcess::started, this, [this] {
-    if (shutting_down_) {
-      return;
-    }
-    engine_service_owned_ = true;
-    virtual_asio_restart_armed_ = false;
-    setStatus(QStringLiteral("Engine service started"));
-    QTimer::singleShot(100, this, &EngineController::refresh);
-  });
-  connect(&engine_service_, &QProcess::errorOccurred, this,
-          [this](QProcess::ProcessError error) {
-            if (shutting_down_) {
-              return;
-            }
-            if (error == QProcess::FailedToStart) {
-              engine_service_owned_ = false;
-              engine_service_start_attempted_ = false;
-              setError(QStringLiteral("Could not start the engine service: %1")
-                           .arg(engine_service_.errorString()));
-            }
-          });
-  connect(&engine_service_, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
-          this, [this](int exit_code, QProcess::ExitStatus exit_status) {
-            const bool was_owned = engine_service_owned_;
-            engine_service_owned_ = false;
-            engine_service_start_attempted_ = false;
-            const bool planned_restart =
-                virtual_asio_restart_armed_ &&
-                exit_status == QProcess::NormalExit && exit_code == 0;
-            if (planned_restart) {
-              setStatus(QStringLiteral("Virtual ASIO topology applied; restarting engine"));
-              QTimer::singleShot(100, this, [this] {
-                if (!shutting_down_) {
-                  ensureEngineService();
-                }
-              });
-              return;
-            }
-            if (!shutting_down_ && was_owned) {
-              const auto reason = exit_status == QProcess::CrashExit
-                                      ? QStringLiteral("crashed")
-                                      : QStringLiteral("exited");
-              setError(QStringLiteral("Engine service %1 (code %2)")
-                           .arg(reason)
-                           .arg(exit_code));
-            }
-          });
   // Diagnostics feed the meter at control rate; slower queries stay throttled
   // independently in schedulePoll().
   poll_timer_.setInterval(50);
@@ -236,7 +241,6 @@ EngineController::EngineController(EngineTransport transport,
 EngineController::~EngineController() {
   poll_timer_.stop();
   shutting_down_ = true;
-  stopEngineService();
 }
 
 bool EngineController::connected() const noexcept { return connected_; }
@@ -454,6 +458,21 @@ void EngineController::loadPreset(const QString& name) {
   command.preset = std::move(preset);
   enqueue({std::move(command), PendingPresetAction::Load, normalized, false,
            HistoryAction::Reset});
+}
+
+void EngineController::deletePreset(const QString& name) {
+  const auto normalized = name.trimmed();
+  QString error;
+  if (!preset_store_.remove(normalized, &error)) {
+    setError(std::move(error));
+    return;
+  }
+  if (active_preset_name_ == normalized) {
+    active_preset_name_.clear();
+  }
+  refreshPresets();
+  emit presetsChanged();
+  setStatus(QStringLiteral("Deleted preset \"%1\"").arg(normalized));
 }
 
 void EngineController::clearFeedback() {
@@ -958,6 +977,22 @@ void EngineController::applyReply(const EngineReply& reply,
       clearFeedback();
     }
   }
+  const bool planned_engine_restart = virtual_asio_restart_armed_ &&
+                                       !reply.delivery_uncertain &&
+                                       !reply.transport_ok &&
+                                       service_management_enabled_;
+  if (planned_engine_restart) {
+    virtual_asio_restart_armed_ = false;
+    engine_service_start_attempted_ = true;
+    setStatus(QStringLiteral("Virtual ASIO topology applied; restarting engine"));
+    QTimer::singleShot(500, this, [this] {
+      engine_service_start_attempted_ = false;
+      if (!shutting_down_ && service_management_enabled_) {
+        ensureEngineService();
+      }
+    });
+    return;
+  }
   if (!reply.error.isEmpty()) {
     setError(reply.error);
   }
@@ -1286,44 +1321,116 @@ void EngineController::schedulePoll() {
 }
 
 void EngineController::ensureEngineService() {
-  if (engine_service_start_attempted_ ||
-      engine_service_.state() != QProcess::NotRunning) {
+  if (engine_service_start_attempted_) {
     return;
   }
   engine_service_start_attempted_ = true;
-  const auto executable = QDir(QCoreApplication::applicationDirPath())
-                              .filePath(QStringLiteral("sar_engine_service.exe"));
+  // Retry window: a failed or still-shutting-down engine must not wedge the
+  // GUI, and a healthy one is detected through the control pipe.
+  QTimer::singleShot(3000, this,
+                     [this] { engine_service_start_attempted_ = false; });
+
+  const auto executable = engine_executable_path();
   if (!QFileInfo::exists(executable)) {
-    engine_service_start_attempted_ = false;
     setError(QStringLiteral("The engine service executable is missing from this installation"));
     return;
   }
-  const auto data_path = QStandardPaths::writableLocation(
-      QStandardPaths::AppDataLocation);
-  if (data_path.isEmpty() || !QDir().mkpath(data_path)) {
-    engine_service_start_attempted_ = false;
+  const auto data_path = engine_data_directory();
+  if (data_path.isEmpty() || !QDir().mkpath(data_path) ||
+      !QDir().mkpath(engine_log_directory())) {
     setError(QStringLiteral("Could not create the engine service data directory"));
     return;
   }
-  engine_service_.setProgram(executable);
-  engine_service_.setArguments({QStringLiteral("--session"),
-                                QDir(data_path).filePath(
-                                    QStringLiteral("engine-session.sarsession"))});
-  engine_service_.setProcessChannelMode(QProcess::MergedChannels);
+  migrateLegacySession();
   setStatus(QStringLiteral("Starting engine service"));
-  engine_service_.start();
-}
-
-void EngineController::stopEngineService() {
-  if (engine_service_.state() == QProcess::NotRunning) {
+  // The engine outlives this window: it keeps routing audio and serving DAWs
+  // until the user explicitly stops it.
+  if (!QProcess::startDetached(executable, engine_arguments(),
+                               QCoreApplication::applicationDirPath())) {
+    setError(QStringLiteral("Could not start the engine service"));
     return;
   }
-  engine_service_.terminate();
-  if (!engine_service_.waitForFinished(1500)) {
-    engine_service_.kill();
-    engine_service_.waitForFinished(1500);
+  QTimer::singleShot(200, this, &EngineController::refresh);
+}
+
+void EngineController::migrateLegacySession() const {
+  // Earlier GUI builds kept the session below <APPDATA>/<org>/<app>.
+  const auto target = engine_session_path();
+  const auto legacy =
+      QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
+          .filePath(QStringLiteral("engine-session.sarsession"));
+  if (!QFileInfo::exists(target) && QFileInfo::exists(legacy)) {
+    QFile::copy(legacy, target);
   }
-  engine_service_owned_ = false;
+}
+
+void EngineController::quitEngine() {
+  service_management_enabled_ = false;
+  poll_timer_.stop();
+  const auto executable = engine_executable_path();
+  if (!QFileInfo::exists(executable)) {
+    return;
+  }
+  QProcess stop;
+  stop.setProgram(executable);
+  stop.setArguments({QStringLiteral("--stop")});
+  stop.start();
+  if (!stop.waitForFinished(10000)) {
+    stop.kill();
+    setError(QStringLiteral("The engine did not stop in time"));
+  }
+}
+
+void EngineController::openLogDirectory() const {
+  const auto directory = engine_log_directory();
+  QDir().mkpath(directory);
+  QDesktopServices::openUrl(QUrl::fromLocalFile(directory));
+}
+
+QString EngineController::logDirectory() const {
+  return QDir::toNativeSeparators(engine_log_directory());
+}
+
+QString EngineController::appVersion() const {
+  return QCoreApplication::applicationVersion();
+}
+
+bool EngineController::startAtLogin() const {
+  QSettings run(QString::fromLatin1(kRunKeyPath), QSettings::NativeFormat);
+  return run.contains(QString::fromLatin1(kRunValueName));
+}
+
+void EngineController::setStartAtLogin(bool enabled) {
+  QSettings run(QString::fromLatin1(kRunKeyPath), QSettings::NativeFormat);
+  const auto name = QString::fromLatin1(kRunValueName);
+  if (enabled) {
+    run.setValue(name, quoted_command_line(engine_executable_path(),
+                                           engine_arguments()));
+  } else {
+    run.remove(name);
+  }
+  run.sync();
+  if (run.status() != QSettings::NoError) {
+    setError(QStringLiteral("Could not update the start-at-login setting"));
+  }
+  emit startAtLoginChanged();
+}
+
+QString EngineController::closeBehavior() const {
+  const auto value =
+      QSettings().value(QString::fromLatin1(kCloseBehaviorKey)).toString();
+  return value == QStringLiteral("keep") || value == QStringLiteral("quit")
+             ? value
+             : QStringLiteral("ask");
+}
+
+void EngineController::setCloseBehavior(const QString& behavior) {
+  const auto normalized = behavior == QStringLiteral("keep") ||
+                                  behavior == QStringLiteral("quit")
+                              ? behavior
+                              : QStringLiteral("ask");
+  QSettings().setValue(QString::fromLatin1(kCloseBehaviorKey), normalized);
+  emit closeBehaviorChanged();
 }
 
 }  // namespace sar::gui
