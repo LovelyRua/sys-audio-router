@@ -101,6 +101,39 @@ HANDLE start_process(const std::wstring& command_line) {
   return process.hProcess;
 }
 
+// Runs the engine with stdout/stderr captured to a file, for failure reports.
+std::string capture_engine_output(const std::wstring& command_line,
+                                  const std::wstring& output_path,
+                                  DWORD timeout_ms) {
+  SECURITY_ATTRIBUTES inherit{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+  const HANDLE output = CreateFileW(output_path.c_str(), GENERIC_WRITE,
+                                    FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                    &inherit, CREATE_ALWAYS,
+                                    FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (output == INVALID_HANDLE_VALUE) return {};
+  std::vector<wchar_t> mutable_command(command_line.begin(), command_line.end());
+  mutable_command.push_back(L'\0');
+  STARTUPINFOW startup{.cb = sizeof(STARTUPINFOW)};
+  startup.dwFlags = STARTF_USESTDHANDLES;
+  startup.hStdOutput = output;
+  startup.hStdError = output;
+  PROCESS_INFORMATION process{};
+  if (CreateProcessW(nullptr, mutable_command.data(), nullptr, nullptr, TRUE,
+                     CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process)) {
+    CloseHandle(process.hThread);
+    if (WaitForSingleObject(process.hProcess, timeout_ms) != WAIT_OBJECT_0) {
+      TerminateProcess(process.hProcess, 1);
+    }
+    DWORD code = 0;
+    GetExitCodeProcess(process.hProcess, &code);
+    CloseHandle(process.hProcess);
+    CloseHandle(output);
+    return read_text(output_path) + "(exit code " + std::to_string(code) + ")";
+  }
+  CloseHandle(output);
+  return "CreateProcess failed";
+}
+
 DWORD run_to_exit(const std::wstring& command_line, DWORD timeout_ms) {
   const HANDLE process = start_process(command_line);
   const auto waited = WaitForSingleObject(process, timeout_ms);
@@ -153,6 +186,14 @@ int wmain(int argc, wchar_t** argv) {
                  exited ? 1 : 0, static_cast<unsigned long>(early_exit));
     std::fprintf(stderr, "--- engine log ---\n%s\n---\n",
                  read_text(log_path).c_str());
+    const auto direct_dir = directory / L"direct";
+    std::filesystem::create_directories(direct_dir);
+    std::fprintf(
+        stderr, "--- engine without --log-file ---\n%s\n---\n",
+        capture_engine_output(engine + L" --pipe " + pipe +
+                                  L"-direct --session \"" + session_path + L"\"",
+                              (direct_dir / L"out.txt").wstring(), 4000)
+            .c_str());
     std::abort();
   }
 

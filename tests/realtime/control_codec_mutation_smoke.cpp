@@ -6,6 +6,9 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <exception>
 #include <functional>
 #include <vector>
 
@@ -98,17 +101,31 @@ std::vector<std::uint8_t> mutate(const std::vector<std::uint8_t>& original,
 }
 
 // Returns how many mutated inputs the decoder rejected.
-std::size_t fuzz(const std::vector<std::uint8_t>& valid,
+std::size_t fuzz(const char* name,
+                 const std::vector<std::uint8_t>& valid,
                  std::uint64_t seed,
                  std::size_t iterations,
                  const std::function<bool(const std::vector<std::uint8_t>&)>&
                      decode_ok) {
+  std::fprintf(stderr, "fuzzing %s\n", name);
   assert(decode_ok(valid));
   Xorshift random(seed);
   std::size_t rejected = 0;
   for (std::size_t iteration = 0; iteration < iterations; ++iteration) {
-    if (!decode_ok(mutate(valid, random))) {
-      ++rejected;
+    const auto input = mutate(valid, random);
+    try {
+      if (!decode_ok(input)) {
+        ++rejected;
+      }
+    } catch (const std::exception& error) {
+      std::fprintf(stderr, "%s: iteration %zu threw: %s\n", name,
+                   iteration, error.what());
+      std::fprintf(stderr, "input (%zu bytes):", input.size());
+      for (std::size_t index = 0; index < input.size() && index < 96; ++index) {
+        std::fprintf(stderr, " %02x", input[index]);
+      }
+      std::fprintf(stderr, "\n");
+      std::abort();
     }
   }
   return rejected;
@@ -144,7 +161,7 @@ int main() {
   }};
   const auto command_bytes = sar::control::encode_control_command(command);
   assert(command_bytes.ok());
-  assert(fuzz(command_bytes.bytes, 0x5AF1U, kIterations,
+  assert(fuzz("command", command_bytes.bytes, 0x5AF1U, kIterations,
               [](const std::vector<std::uint8_t>& bytes) {
                 const auto decoded = sar::control::decode_control_command(bytes);
                 if (decoded.ok()) {
@@ -159,14 +176,14 @@ int main() {
   response.virtual_asio_devices = command.virtual_asio_devices;
   const auto response_bytes = sar::control::encode_control_response(response);
   assert(response_bytes.ok());
-  assert(fuzz(response_bytes.bytes, 0xC0DEU, kIterations,
+  assert(fuzz("response", response_bytes.bytes, 0xC0DEU, kIterations,
               [](const std::vector<std::uint8_t>& bytes) {
                 return sar::control::decode_control_response(bytes).ok();
               }) > 0);
 
   const auto preset_bytes = sar::control::encode_preset_file(make_preset());
   assert(preset_bytes.ok());
-  assert(fuzz(preset_bytes.bytes(), 0xBEEFU, kIterations,
+  assert(fuzz("preset", preset_bytes.bytes(), 0xBEEFU, kIterations,
               [](const std::vector<std::uint8_t>& bytes) {
                 return sar::control::decode_preset_file(bytes).ok();
               }) > 0);
@@ -197,7 +214,7 @@ int main() {
   });
   const auto session_bytes = sar::control::encode_session_file(session);
   assert(session_bytes.ok());
-  assert(fuzz(session_bytes.bytes(), 0xFACEU, kIterations,
+  assert(fuzz("session", session_bytes.bytes(), 0xFACEU, kIterations,
               [](const std::vector<std::uint8_t>& bytes) {
                 return sar::control::decode_session_file(bytes).ok();
               }) > 0);

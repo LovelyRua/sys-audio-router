@@ -32,6 +32,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <cwchar>
 #include <filesystem>
@@ -432,6 +433,20 @@ constexpr std::size_t kMaxCrashDumps = 5;
 
 wchar_t g_crash_dump_directory[MAX_PATH] = {};
 
+// The CRT fast-fails on invalid parameters with no message. Leave a line in
+// the log first so the failure is attributable.
+void engine_invalid_parameter(const wchar_t*,
+                              const wchar_t*,
+                              const wchar_t*,
+                              unsigned,
+                              std::uintptr_t) {
+  static std::atomic_flag entered;
+  if (!entered.test_and_set()) {
+    std::fputs("engine_fatal code=crt_invalid_parameter\n", stderr);
+  }
+  std::abort();
+}
+
 LONG WINAPI write_crash_dump(EXCEPTION_POINTERS* exception) noexcept {
   static std::atomic_flag entered;
   if (entered.test_and_set() || g_crash_dump_directory[0] == L'\0') {
@@ -509,6 +524,7 @@ bool enable_engine_logging(const std::filesystem::path& log_path) {
   }
   std::setvbuf(stdout, nullptr, _IONBF, 0);
   std::setvbuf(stderr, nullptr, _IONBF, 0);
+  _set_invalid_parameter_handler(engine_invalid_parameter);
 
   const auto dump_directory = log_path.parent_path() / L"crashdumps";
   std::filesystem::create_directories(dump_directory, error);
