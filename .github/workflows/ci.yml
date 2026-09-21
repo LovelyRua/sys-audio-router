@@ -26,3 +26,39 @@ jobs:
         shell: pwsh
         timeout-minutes: 10
         run: scripts/windows-script-self-tests.ps1
+
+  windows-asan:
+    name: Windows AddressSanitizer (advisory)
+    runs-on: windows-latest
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Load MSVC build environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure with AddressSanitizer
+        run: >-
+          cmake -S . -B build-asan -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_FLAGS=/fsanitize=address
+          -DCMAKE_CXX_FLAGS=/fsanitize=address
+
+      - name: Build portable smoke tests
+        run: >-
+          cmake --build build-asan --target
+          sar_control_wire_protocol_smoke
+          sar_control_codec_mutation_smoke
+          sar_preset_file_codec_smoke
+          sar_session_file_codec_smoke
+          sar_virtual_asio_broker_protocol_smoke
+          sar_planar_audio_fifo_smoke
+
+      - name: Run smoke tests
+        run: >-
+          ctest --test-dir build-asan --output-on-failure
+          -R "control_wire_protocol_smoke|control_codec_mutation_smoke|preset_file_codec_smoke|session_file_codec_smoke|virtual_asio_broker_protocol_smoke|planar_audio_fifo_smoke"

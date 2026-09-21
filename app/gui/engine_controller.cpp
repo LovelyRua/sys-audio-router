@@ -5,14 +5,12 @@
 
 #include <QStandardPaths>
 #include <QCoreApplication>
-#include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
 #include <QSettings>
 #include <QStringList>
-#include <QUrl>
 #include <QUuid>
 #include <QtConcurrentRun>
 
@@ -1384,7 +1382,8 @@ void EngineController::quitEngine() {
 void EngineController::openLogDirectory() const {
   const auto directory = engine_log_directory();
   QDir().mkpath(directory);
-  QDesktopServices::openUrl(QUrl::fromLocalFile(directory));
+  QProcess::startDetached(QStringLiteral("explorer.exe"),
+                          {QDir::toNativeSeparators(directory)});
 }
 
 QString EngineController::logDirectory() const {

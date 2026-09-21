@@ -8,6 +8,8 @@
 #include <cassert>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <string>
 #include <thread>
@@ -143,7 +145,16 @@ int wmain(int argc, wchar_t** argv) {
   const HANDLE process = start_process(
       engine + common + L" --session \"" + session_path + L"\" --log-file \"" +
       log_path + L"\"");
-  assert(wait_for_pipe(pipe));
+  if (!wait_for_pipe(pipe)) {
+    DWORD early_exit = 0;
+    const bool exited = WaitForSingleObject(process, 0) == WAIT_OBJECT_0 &&
+                        GetExitCodeProcess(process, &early_exit);
+    std::fprintf(stderr, "engine pipe never appeared; exited=%d code=%lu\n",
+                 exited ? 1 : 0, static_cast<unsigned long>(early_exit));
+    std::fprintf(stderr, "--- engine log ---\n%s\n---\n",
+                 read_text(log_path).c_str());
+    std::abort();
+  }
 
   const auto opened = read_text(log_path);
   assert(opened.find("engine_service_log_opened") != std::string::npos);

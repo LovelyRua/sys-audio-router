@@ -321,6 +321,12 @@ add_executable(sar_control_wire_protocol_smoke
 
 target_link_libraries(sar_control_wire_protocol_smoke PRIVATE sar_core)
 
+add_executable(sar_control_codec_mutation_smoke
+  tests/realtime/control_codec_mutation_smoke.cpp
+)
+
+target_link_libraries(sar_control_codec_mutation_smoke PRIVATE sar_core)
+
 add_executable(sar_virtual_asio_broker_protocol_smoke
   tests/realtime/virtual_asio_broker_protocol_smoke.cpp
 )
@@ -970,6 +976,8 @@ add_test(NAME realtime_audio_input_assembler_smoke
 add_test(NAME control_response_smoke COMMAND sar_control_response_smoke)
 add_test(NAME control_session_smoke COMMAND sar_control_session_smoke)
 add_test(NAME control_wire_protocol_smoke COMMAND sar_control_wire_protocol_smoke)
+add_test(NAME control_codec_mutation_smoke COMMAND sar_control_codec_mutation_smoke)
+set_tests_properties(control_codec_mutation_smoke PROPERTIES TIMEOUT 60)
 add_test(NAME virtual_asio_broker_protocol_smoke
   COMMAND sar_virtual_asio_broker_protocol_smoke)
 add_test(NAME engine_control_service_smoke COMMAND sar_engine_control_service_smoke)

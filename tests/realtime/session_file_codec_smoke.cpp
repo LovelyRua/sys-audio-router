@@ -228,18 +228,22 @@ int main() {
   matrix.audio_runtime = {};
   matrix.audio_runtime.mode = sar::control::AudioRuntimeMode::WasapiMatrix;
   matrix.audio_runtime.endpoints = {
-      {"capture-a", "native-capture-a",
+      {"capture-a", "native-asio",
        sar::control::AudioRuntimeEndpointDirection::Capture, false, 0, 2},
-      {"render-main", "native-render-main",
+      {"render-main", "native-asio",
        sar::control::AudioRuntimeEndpointDirection::Render, true, 0, 2},
       {"render-b", "native-render-b",
        sar::control::AudioRuntimeEndpointDirection::Render, false, 0, 2},
   };
-  matrix.audio_runtime.endpoints[0].backend =
-      sar::control::AudioRuntimeEndpointBackend::PhysicalAsio;
-  matrix.audio_runtime.endpoints[0].device_group_id = "studio-asio";
-  matrix.audio_runtime.endpoints[0].sample_rate = 48000;
-  matrix.audio_runtime.endpoints[0].block_frames = 128;
+  // A Physical ASIO group needs a capture and a render endpoint on the same
+  // driver and timing, and its render endpoint drives the matrix clock.
+  for (std::size_t index = 0; index < 2; ++index) {
+    auto& endpoint = matrix.audio_runtime.endpoints[index];
+    endpoint.backend = sar::control::AudioRuntimeEndpointBackend::PhysicalAsio;
+    endpoint.device_group_id = "studio-asio";
+    endpoint.sample_rate = 48000;
+    endpoint.block_frames = 128;
+  }
   const auto encoded_matrix = sar::control::encode_session_file(matrix);
   assert(encoded_matrix.ok());
   const auto decoded_matrix =
@@ -259,11 +263,15 @@ int main() {
          128);
 
   auto legacy_v4 = encoded_matrix.bytes();
+  std::size_t group_id_bytes = 0;
+  for (const auto& endpoint : matrix.audio_runtime.endpoints) {
+    group_id_bytes += endpoint.device_group_id.size();
+  }
   const std::size_t session_extension_bytes =
       sizeof(std::uint32_t) +
       matrix.audio_runtime.endpoints.size() *
           (3 * sizeof(std::uint32_t) + sizeof(std::uint8_t)) +
-      matrix.audio_runtime.endpoints[0].device_group_id.size();
+      group_id_bytes;
   legacy_v4.resize(legacy_v4.size() - session_extension_bytes);
   legacy_v4[4] = 4;
   write_u32(legacy_v4, 8,

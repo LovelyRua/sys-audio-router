@@ -762,3 +762,33 @@ Use a unique slot per engineer for concurrent runs, such as `engineer-a` or
 - Sample conversion does not yet cover unusual byte orders or non-PCM encoded
   formats.
 - Drift, underrun, overrun, and end-to-end latency diagnostics are still early.
+
+## Process Lifecycle, Logging, And Packaging
+
+The engine (`sar_engine_service`) is a per-user background process that owns
+the audio runtime, the Virtual ASIO broker, and the session file. It is started
+detached by `sar_bootstrap_launcher`, by the control panel when it finds the
+control pipe absent, or at sign-in through the
+`HKCU\...\Run\SystemAudioRouteEngine` entry that the control panel can enable.
+All three use the same arguments: `--session %APPDATA%\System Audio Route\
+engine-session.sarsession` and `--log-file %APPDATA%\System Audio Route\logs\
+engine.log`. The engine outlives the control panel; closing the window offers
+"Keep running" or "Stop engine".
+
+`sar_engine_service --stop` is the graceful stop path. It opens the per-user
+`Global\SystemAudioRoute.EngineStop.<sid>.<pipe-hash>` event, signals it, and
+waits (up to eight seconds) for the per-user engine mutex to disappear. Exit
+codes: 0 stopped, 3 no engine running, 4 the engine did not stop in time. The
+installers, the uninstallers, and the control panel's "Stop engine" action call
+it before any forced termination.
+
+With `--log-file`, stdout and stderr are redirected to the log (rotated once at
+4 MB to `engine.log.1`) and an unhandled-exception filter writes a minidump to
+`logs\crashdumps` (newest five kept). Without the flag the engine prints to its
+console as before, which is what the test suite uses.
+
+Every shipped executable and the Virtual ASIO driver embed VERSIONINFO from
+`packaging/windows/sar_resource.rc.in`; executables also embed the icon. The
+ASIO `controlPanel()` entry point launches `SystemAudioRouteLauncher.exe` from
+the driver's own directory. The package includes `licenses/` with the
+libsamplerate and ASIO SDK license texts.
