@@ -1512,6 +1512,11 @@ ApplicationWindow {
                 onClicked: engine.openLogDirectory()
             }
             FlatButton {
+                visible: engine.lastError.length > 0
+                text: "Export"
+                onClicked: engine.exportDiagnostics()
+            }
+            FlatButton {
                 text: "Dismiss"
                 onClicked: engine.clearFeedback()
             }
@@ -1639,6 +1644,15 @@ ApplicationWindow {
                             rightPadding: 8
                             font.pixelSize: 11
                             onClicked: engine.openLogDirectory()
+                        }
+                        FlatButton {
+                            objectName: "exportDiagnosticsButton"
+                            text: "Export"
+                            implicitHeight: 26
+                            leftPadding: 8
+                            rightPadding: 8
+                            font.pixelSize: 11
+                            onClicked: engine.exportDiagnostics()
                         }
                         Text {
                             objectName: "versionLabel"

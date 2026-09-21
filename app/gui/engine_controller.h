@@ -193,6 +193,7 @@ class EngineController final : public QObject {
                                 double gain);
   Q_INVOKABLE void quitEngine();
   Q_INVOKABLE void openLogDirectory() const;
+  Q_INVOKABLE void exportDiagnostics();
   Q_INVOKABLE void undo();
   Q_INVOKABLE void redo();
 

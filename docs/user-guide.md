@@ -51,6 +51,9 @@ the driver. The DAW's **ASIO Control Panel** button opens SAR.
   **Logs** in the left panel.
 - **Glitches detected** in Diagnostics: try a larger buffer size and close
   other audio-heavy applications.
+- **Export** (left panel or error bar) bundles the logs, the session file,
+  recent crash dumps, and a short system summary into a zip on your Desktop.
+  Attach it to bug reports.
 - Logs live in `%APPDATA%\System Audio Route\logs\engine.log` (rotated at 4 MB).
   If the engine crashes, a minidump is written to
   `%APPDATA%\System Audio Route\logs\crashdumps`; attach it to your bug report.

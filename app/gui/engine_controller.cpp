@@ -5,12 +5,15 @@
 
 #include <QStandardPaths>
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
 #include <QSettings>
 #include <QStringList>
+#include <QSysInfo>
+#include <QTextStream>
 #include <QUuid>
 #include <QtConcurrentRun>
 
@@ -1384,6 +1387,78 @@ void EngineController::openLogDirectory() const {
   QDir().mkpath(directory);
   QProcess::startDetached(QStringLiteral("explorer.exe"),
                           {QDir::toNativeSeparators(directory)});
+}
+
+void EngineController::exportDiagnostics() {
+  const auto stamp =
+      QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
+  const QDir staging(QDir(QStandardPaths::writableLocation(
+                              QStandardPaths::TempLocation))
+                         .filePath(QStringLiteral("sar-diagnostics-") + stamp));
+  if (!QDir().mkpath(staging.path())) {
+    setError(QStringLiteral("Could not create a temporary diagnostics folder"));
+    return;
+  }
+
+  QFile summary(staging.filePath(QStringLiteral("summary.txt")));
+  if (summary.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    QTextStream out(&summary);
+    out << "System Audio Route " << appVersion() << "\n"
+        << "Windows: " << QSysInfo::prettyProductName() << " ("
+        << QSysInfo::kernelVersion() << ")\n"
+        << "Engine connected: " << (connected_ ? "yes" : "no") << "\n"
+        << "Runtime: " << runtimeMode() << ", running="
+        << (runtime_running_ ? "yes" : "no") << "\n"
+        << "Graph version: " << graph_version_ << "\n"
+        << "Xruns: " << xrun_count_ << ", dropped blocks: " << dropped_blocks_
+        << "\n"
+        << "Last error: " << last_error_ << "\n";
+  }
+
+  const QDir data(engine_data_directory());
+  const QDir logs(engine_log_directory());
+  for (const auto& name : {QStringLiteral("engine.log"),
+                           QStringLiteral("engine.log.1")}) {
+    QFile::copy(logs.filePath(name), staging.filePath(name));
+  }
+  QFile::copy(data.filePath(QStringLiteral("engine-session.sarsession")),
+              staging.filePath(QStringLiteral("engine-session.sarsession")));
+  const auto dumps = QDir(logs.filePath(QStringLiteral("crashdumps")))
+                         .entryInfoList({QStringLiteral("*.dmp")}, QDir::Files,
+                                        QDir::Time);
+  for (qsizetype index = 0; index < dumps.size() && index < 3; ++index) {
+    QFile::copy(dumps[index].absoluteFilePath(),
+                staging.filePath(dumps[index].fileName()));
+  }
+
+  const auto desktop =
+      QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+  const auto destination = QDir::toNativeSeparators(
+      QDir(desktop.isEmpty() ? QDir::homePath() : desktop)
+          .filePath(QStringLiteral("SystemAudioRoute-diagnostics-") + stamp +
+                    QStringLiteral(".zip")));
+  // bsdtar ships with Windows 10 1803+ and writes zip archives.
+  QProcess archive;
+  archive.setWorkingDirectory(staging.path());
+  archive.setProgram(QDir(qEnvironmentVariable("SystemRoot",
+                                               QStringLiteral("C:/Windows")))
+                         .filePath(QStringLiteral("System32/tar.exe")));
+  archive.setArguments({QStringLiteral("-a"), QStringLiteral("-c"),
+                        QStringLiteral("-f"), destination,
+                        QStringLiteral(".")});
+  archive.start();
+  const bool archived = archive.waitForFinished(30000) &&
+                        archive.exitStatus() == QProcess::NormalExit &&
+                        archive.exitCode() == 0;
+  QDir(staging).removeRecursively();
+  if (!archived) {
+    archive.kill();
+    setError(QStringLiteral("Could not create the diagnostics archive"));
+    return;
+  }
+  QProcess::startDetached(QStringLiteral("explorer.exe"),
+                          {QStringLiteral("/select,") + destination});
+  setStatus(QStringLiteral("Diagnostics saved to %1").arg(destination));
 }
 
 QString EngineController::logDirectory() const {

@@ -19,6 +19,6 @@ labels: bug
 
 ## Diagnostics
 
-Attach `%APPDATA%\System Audio Route\logs\engine.log` and, if the engine
-crashed, the newest file from `logs\crashdumps`. Note what the **Diagnostics**
-page summary said.
+Click **Export** in the left panel and attach the zip it creates on your
+Desktop (logs, session, recent crash dumps). Note what the **Diagnostics** page
+summary said.

@@ -188,6 +188,7 @@ foreach(lifecycle_marker
     "objectName: \"deletePresetDialog\""
     "objectName: \"startAtLoginCheckBox\""
     "objectName: \"openLogsButton\""
+    "objectName: \"exportDiagnosticsButton\""
     "objectName: \"diagnosticsSummary\""
     "function diagnosticsState()"
     "window.copyToClipboard(engine.lastError)")

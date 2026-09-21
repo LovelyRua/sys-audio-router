@@ -26,7 +26,7 @@ a certificate, hardware, a driver test machine).
 | --- | --- | --- |
 | LIFE-1 | One engine lifecycle | Done: the engine always runs detached and outlives the control panel; closing the window asks to keep or stop it |
 | LIFE-2 | Start at login | Done: per-user Run entry launches the engine headless and restores the session. A tray icon is still Open |
-| OBS-1 | Logs and crash dumps | Done: rotating `engine.log`, minidumps under `logs\crashdumps`, "Logs" button and error-bar shortcut. A one-click diagnostics bundle is still Open |
+| OBS-1 | Logs and crash dumps | Done: rotating `engine.log`, minidumps under `logs\crashdumps`, "Logs" button and error-bar shortcut. The Export button bundles logs, session, dumps, and a system summary into a zip |
 | INST-1 | Graceful update/uninstall | Done: installers call `sar_engine_service --stop`, ask the GUI to close, and only then force-kill |
 | INST-2 | ASIO registration scope (per-user vs all users, cross-account UAC) | Open |
 | INST-3 | Per-user control pipe name | Open |
