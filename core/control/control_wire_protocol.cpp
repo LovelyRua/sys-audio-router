@@ -183,6 +183,14 @@ class Reader {
     const auto value = scalar<std::uint32_t>();
     if (ok() && value > kControlWireMaxArrayElements) {
       fail(ControlWireErrorCode::ArrayTooLong);
+      // Callers reserve by this count; never hand back a hostile value.
+      return 0;
+    }
+    // Every element occupies at least one byte, so a larger count cannot be
+    // satisfied by the rest of the message.
+    if (ok() && value > bytes_.size() - offset_) {
+      fail(ControlWireErrorCode::Truncated);
+      return 0;
     }
     return value;
   }

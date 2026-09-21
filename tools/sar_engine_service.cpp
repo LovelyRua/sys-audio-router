@@ -41,6 +41,7 @@
 #include <memory>
 #include <mutex>
 #include <span>
+#include <streambuf>
 #include <string>
 #include <system_error>
 #include <thread>
@@ -442,10 +443,41 @@ void engine_invalid_parameter(const wchar_t*,
                               std::uintptr_t) {
   static std::atomic_flag entered;
   if (!entered.test_and_set()) {
-    std::fputs("engine_fatal code=crt_invalid_parameter\n", stderr);
+    std::cerr << "engine_fatal code=crt_invalid_parameter\n";
   }
   std::abort();
 }
+
+// Appends every write straight to a file handle. It bypasses the CRT stdio
+// streams, which are invalid in a process started without a console, and it
+// serializes writers from the pipe server, brokers, and main thread.
+class FileLogBuffer final : public std::streambuf {
+ public:
+  explicit FileLogBuffer(HANDLE file) noexcept : file_(file) {}
+
+ protected:
+  int_type overflow(int_type character) override {
+    if (!traits_type::eq_int_type(character, traits_type::eof())) {
+      const char value = traits_type::to_char_type(character);
+      write(&value, 1);
+    }
+    return traits_type::not_eof(character);
+  }
+  std::streamsize xsputn(const char* data, std::streamsize size) override {
+    write(data, size);
+    return size;
+  }
+
+ private:
+  void write(const char* data, std::streamsize size) {
+    std::lock_guard lock(mutex_);
+    DWORD written = 0;
+    WriteFile(file_, data, static_cast<DWORD>(size), &written, nullptr);
+  }
+
+  HANDLE file_;
+  std::mutex mutex_;
+};
 
 LONG WINAPI write_crash_dump(EXCEPTION_POINTERS* exception) noexcept {
   static std::atomic_flag entered;
@@ -517,13 +549,17 @@ bool enable_engine_logging(const std::filesystem::path& log_path) {
     std::filesystem::remove(rotated, error);
     std::filesystem::rename(log_path, rotated, error);
   }
-  FILE* stream = nullptr;
-  if (_wfreopen_s(&stream, log_path.c_str(), L"a", stdout) != 0 ||
-      _wfreopen_s(&stream, log_path.c_str(), L"a", stderr) != 0) {
+  const HANDLE file = CreateFileW(
+      log_path.c_str(), FILE_APPEND_DATA,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+      OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (file == INVALID_HANDLE_VALUE) {
     return false;
   }
-  std::setvbuf(stdout, nullptr, _IONBF, 0);
-  std::setvbuf(stderr, nullptr, _IONBF, 0);
+  // Lives for the whole process, like the redirected streams.
+  static FileLogBuffer log_buffer(file);
+  std::cout.rdbuf(&log_buffer);
+  std::cerr.rdbuf(&log_buffer);
   _set_invalid_parameter_handler(engine_invalid_parameter);
 
   const auto dump_directory = log_path.parent_path() / L"crashdumps";
