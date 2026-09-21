@@ -16,7 +16,7 @@ Run the experiment from the development machine:
 
 ```bat
 set SAR_TEST_PASSWORD=<winrm-password>
-scripts\windows-winrm-recovery-interactive.cmd 192.168.123.123 codex "" engineer-c 30000
+scripts\windows-winrm-recovery-interactive.cmd <host> <user> "" engineer-c 30000
 ```
 
 Optional positional arguments after the duration are capture endpoint ID,

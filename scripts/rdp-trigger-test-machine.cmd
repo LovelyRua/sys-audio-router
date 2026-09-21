@@ -3,7 +3,7 @@ setlocal EnableExtensions EnableDelayedExpansion
 
 set "HOST=192.168.123.123"
 set "USER=codex"
-set "PASSWORD="
+set "PASSWORD=%SAR_TEST_PASSWORD%"
 
 if not "%~1"=="" set "HOST=%~1"
 if not "%~2"=="" set "USER=%~2"

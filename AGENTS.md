@@ -40,7 +40,8 @@ Use a unique slot for concurrent test runs, for example `engineer-a`,
 `engineer-b`, or `engineer-c`. The slot isolates the remote checkout, build
 directory, and bootstrap file.
 
-The current Windows smoke suite has 124 CTest targets. If a change touches
+Run `ctest --test-dir build -N` for the current list of CTest targets (well over
+one hundred; do not hard-code the count in docs). If a change touches
 realtime, WASAPI, thread lifecycle, sample conversion, graph execution, or
 diagnostics, run the Windows test script before pushing or merging.
 
@@ -90,7 +91,24 @@ diagnostics, run the Windows test script before pushing or merging.
 - If you touch architecture direction, update `docs/architecture/current-system.md`
   or `docs/roadmap.md`.
 
-## Highest Priority Work
+## Product Readiness
+
+The engine is a background process that outlives the control panel. Keep these
+behaviours intact when touching lifecycle code:
+
+- `sar_engine_service --stop` is the only graceful stop path (installers,
+  the GUI "Stop engine" action). Do not add `taskkill /F` as a first step.
+- The engine writes `%APPDATA%\System Audio Route\logs\engine.log` and
+  minidumps under `logs\crashdumps` when started with `--log-file`. Never
+  print diagnostics only to a console.
+- The GUI and `sar_bootstrap_launcher` must start the engine with the same
+  session file and log path.
+- Track product-level gaps in `docs/product-readiness.md`.
+
+## Highest Priority Work (historical)
+
+These were the priorities during the realtime prototype phase and are kept for
+context. Current priorities live in `docs/product-readiness.md`.
 
 1. Build the first real WASAPI render/capture loop around
    `WindowsWasapiRealtimeWorker`.

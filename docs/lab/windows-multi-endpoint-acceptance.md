@@ -44,7 +44,7 @@ range from the caller.
 From the development machine:
 
 ```bat
-scripts\windows-winrm-multi-endpoint-acceptance.cmd 192.168.123.123 codex <password> C:\path\to\build\Release engineer-a
+scripts\windows-winrm-multi-endpoint-acceptance.cmd <host> <user> <password> C:\path\to\build\Release engineer-a
 ```
 
 Append capture A, capture B, and render endpoint IDs after the slot to pin the

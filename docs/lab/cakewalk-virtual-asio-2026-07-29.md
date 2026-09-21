@@ -57,7 +57,7 @@ run:
 
 ```bat
 scripts\windows-winrm-cross-daw-acceptance.cmd ^
-  192.168.123.123 codex <password> ^
+  <host> <user> <password> ^
   <remote-build-path> Cakewalk ^
   "C:\Program Files\REAPER (x64)\reaper.exe" ^
   cross-daw 30

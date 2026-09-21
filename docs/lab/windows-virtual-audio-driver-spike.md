@@ -158,8 +158,8 @@ Use the checked-in runtime probe to inspect the current state without changing
 the machine:
 
 ```bat
-scripts\windows-winrm-driver-spike.cmd 192.168.123.123 codex <password> Sysvad Status
-scripts\windows-winrm-driver-spike.cmd 192.168.123.123 codex <password> Acx Status
+scripts\windows-winrm-driver-spike.cmd <host> <user> <password> Sysvad Status
+scripts\windows-winrm-driver-spike.cmd <host> <user> <password> Acx Status
 ```
 
 The first runtime attempt exposed two independent blockers:

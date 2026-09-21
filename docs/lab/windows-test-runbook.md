@@ -17,7 +17,7 @@ If WinRM is not reachable yet, use RDP or the ESXi web console once to run the b
 From the development machine, this may trigger the bootstrap through RDP without manual desktop interaction:
 
 ```bat
-scripts\rdp-trigger-test-machine.cmd 192.168.123.123 codex <password>
+scripts\rdp-trigger-test-machine.cmd <host> <user> <password>
 ```
 
 If the remote Windows host accepts the RDP initial program setting, it will:
@@ -44,15 +44,15 @@ Do not commit credentials to this repository.
 Once WinRM is enabled, run the test machine non-interactively from the development machine:
 
 ```bat
-scripts\windows-winrm-test.cmd 192.168.123.123 codex <password>
+scripts\windows-winrm-test.cmd <host> <user> <password>
 ```
 
 For concurrent work, pass a unique slot as the fourth argument:
 
 ```bat
-scripts\windows-winrm-test.cmd 192.168.123.123 codex <password> engineer-a
-scripts\windows-winrm-test.cmd 192.168.123.123 codex <password> engineer-b
-scripts\windows-winrm-test.cmd 192.168.123.123 codex <password> engineer-c
+scripts\windows-winrm-test.cmd <host> <user> <password> engineer-a
+scripts\windows-winrm-test.cmd <host> <user> <password> engineer-b
+scripts\windows-winrm-test.cmd <host> <user> <password> engineer-c
 ```
 
 Each slot uses an isolated remote checkout and build directory:
@@ -109,8 +109,8 @@ To upload the current local `HEAD`, build only the WASAPI measurement tools, and
 run a render, duplex, or combined measurement:
 
 ```bat
-scripts\windows-winrm-local-measure.cmd 192.168.123.123 codex <password> engineer-a render 1000 10 false true
-scripts\windows-winrm-local-measure.cmd 192.168.123.123 codex <password> engineer-a both 5000 10 true false
+scripts\windows-winrm-local-measure.cmd <host> <user> <password> engineer-a render 1000 10 false true
+scripts\windows-winrm-local-measure.cmd <host> <user> <password> engineer-a both 5000 10 true false
 ```
 
 For a pinned duplex soak, set both endpoint IDs and use a wait timeout with at
@@ -124,7 +124,7 @@ set "SAR_MEASURE_CAPTURE_ID=<capture-endpoint-id>"
 set "SAR_MEASURE_RENDER_ID=<render-endpoint-id>"
 set "SAR_MEASURE_MAX_RECOVERY_SILENCE_FRAMES=2594"
 set "SAR_MEASURE_MIN_FRAME_COVERAGE_BPS=9999"
-scripts\windows-winrm-local-measure.cmd 192.168.123.123 codex <password> engineer-a-soak
+scripts\windows-winrm-local-measure.cmd <host> <user> <password> engineer-a-soak
 ```
 
 The two endpoint IDs must be supplied together. Every invocation creates a
@@ -145,7 +145,7 @@ After building a reusable WinRM slot, run the render-only service-restart gate:
 
 ```bat
 set SAR_TEST_PASSWORD=<password>
-scripts\windows-winrm-audio-service-recovery.cmd 192.168.123.123 codex "" engineer-a
+scripts\windows-winrm-audio-service-recovery.cmd <host> <user> "" engineer-a
 ```
 
 The helper starts `sar_measure_wasapi_recovery`, restarts `Audiosrv` three
@@ -176,9 +176,9 @@ REAPER must already be configured to use `System Audio Route Virtual ASIO` at
 remote build and a pinned render endpoint:
 
 ```bat
-scripts\windows-winrm-reaper-acceptance.cmd 192.168.123.123 codex <password> C:\path\to\Debug "<render-endpoint-id>" engineer-a
-scripts\windows-winrm-reaper-acceptance.cmd 192.168.123.123 codex <password> C:\path\to\Debug "<render-endpoint-id>" engineer-a-two-client 2
-scripts\windows-winrm-reaper-acceptance.cmd 192.168.123.123 codex <password> C:\path\to\Debug "<render-endpoint-id>" engineer-a-two-client-soak 2 3600
+scripts\windows-winrm-reaper-acceptance.cmd <host> <user> <password> C:\path\to\Debug "<render-endpoint-id>" engineer-a
+scripts\windows-winrm-reaper-acceptance.cmd <host> <user> <password> C:\path\to\Debug "<render-endpoint-id>" engineer-a-two-client 2
+scripts\windows-winrm-reaper-acceptance.cmd <host> <user> <password> C:\path\to\Debug "<render-endpoint-id>" engineer-a-two-client-soak 2 3600
 ```
 
 The helper refuses to take over an existing REAPER or engine process. It
@@ -246,7 +246,7 @@ diagnostics before and after an observation window, a persisted session, and
 post-restart diagnostics:
 
 ```bat
-scripts\windows-winrm-multi-endpoint-acceptance.cmd 192.168.123.123 codex <password> C:\path\to\build\Release engineer-a
+scripts\windows-winrm-multi-endpoint-acceptance.cmd <host> <user> <password> C:\path\to\build\Release engineer-a
 ```
 
 Use explicit endpoint IDs for a stable hardware lane, or omit them for automatic

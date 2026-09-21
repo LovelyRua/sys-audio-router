@@ -46,3 +46,10 @@ Record installed versions here when testing begins:
 | FL Studio | TBD | |
 | OBS | TBD | |
 | Discord | TBD | |
+
+## Credentials
+
+Never pass the test-machine password as a command-line argument: it is visible
+in shell history and the process list. Set `SAR_TEST_PASSWORD` in the current
+shell instead; the WinRM wrapper scripts read it when no password argument is
+given.

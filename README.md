@@ -27,7 +27,11 @@ the first production backend.
 - NSIS installer and portable ZIP with deployed Qt/QML and MSVC runtimes.
 - Transactional install, update, uninstall, and ASIO registration ownership.
 - Realtime counters for xruns, dropped blocks, FIFO state, callback time,
-  endpoint clocks, recovery, discontinuities, and underflow/overflow conditions.
+  endpoint clocks, recovery, discontinuities, and underflow/overflow conditions,
+  summarized as a plain-language status on the Diagnostics page.
+- A background engine that keeps routing after the control panel closes, with an
+  explicit "Stop engine" choice, optional start at login, a rotating engine log,
+  and crash minidumps (see the [User Guide](docs/user-guide.md)).
 
 The tested signal paths include:
 
@@ -39,18 +43,24 @@ multiple WASAPI capture/render endpoints -> one clocked matrix
 
 ## Current Limits
 
-- Physical ASIO is an **exclusive technical preview**. It currently replaces
-  the WASAPI runtime and uses a direct pass-through graph; it is not yet a port
-  inside the unified routing matrix.
+- Physical ASIO is a **preview**. Its integration into the unified routing
+  matrix is being staged and has only been exercised on limited hardware.
 - Physical ASIO currently requires the complete native channel set in order.
-- Virtual WDM/WASAPI endpoint creation is still under development.
-- Driver binaries are unsigned alpha artifacts.
+- Virtual WDM/WASAPI endpoint creation is still under development, so ordinary
+  applications (browsers, OBS, Discord) cannot yet send audio to SAR without a
+  third-party virtual cable.
+- The Virtual ASIO driver only accepts the engine's sample rate; a DAW project
+  at a different rate cannot open the device until the engine is reconfigured.
+- The driver is registered for the current Windows user only and is x64 only:
+  32-bit DAWs cannot see it.
+- Installer, application, and driver binaries are unsigned alpha artifacts, so
+  Windows SmartScreen will warn on first run.
 - Hardware and DAW compatibility coverage is still limited; do not assume that
   one successful interface represents every vendor driver.
 
 Failed Physical ASIO configuration is transactional and does not delete the
-saved WASAPI matrix. The next runtime milestone is to make one Physical ASIO
-driver the graph clock master while WASAPI endpoints run as rate-matched
+saved WASAPI matrix. The runtime milestone in progress is making one Physical
+ASIO driver the graph clock master while WASAPI endpoints run as rate-matched
 followers.
 
 ## Install The Alpha
@@ -68,7 +78,8 @@ standard path is the `.exe` installer:
 
 The portable ZIP includes `install-alpha.cmd` for an isolated current-user
 installation. Full packaging and acceptance details are in
-[Windows Alpha Packages](docs/alpha-package.md).
+[Windows Alpha Packages](docs/alpha-package.md). Day-to-day use, logs, and
+troubleshooting are covered in the [User Guide](docs/user-guide.md).
 
 ## Build And Test
 
@@ -97,7 +108,8 @@ scripts\windows-alpha-package.cmd
 Packages are written to `build-alpha\package-output`. GitHub Actions also builds
 and acceptance-tests both formats on every push to `main`.
 
-For the shared Windows test machine, always use a unique slot:
+For the shared Windows test machine, always use a unique slot and pass the
+password through `SAR_TEST_PASSWORD` rather than on the command line:
 
 ```bat
 scripts\windows-winrm-test.cmd <host> <user> <password> engineer-a
@@ -147,8 +159,10 @@ Important directories:
 5. Run longer hardware, hot-plug, install/update, and multi-DAW acceptance gates.
 
 See [Current System Architecture](docs/architecture/current-system.md),
-[Roadmap](docs/roadmap.md), and [Development](docs/development.md) for detailed
-engineering state and validation procedures.
+[Roadmap](docs/roadmap.md), [Product Readiness](docs/product-readiness.md), and
+[Development](docs/development.md) for detailed engineering state and
+validation procedures. Contributions are welcome; see
+[CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
 
 ## Project Principles
 

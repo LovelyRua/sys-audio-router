@@ -1,18 +1,21 @@
-## Workstream
+## Summary
 
-- [ ] Engineer A: Windows backend and integration
-- [ ] Engineer B: portable engine and control plane
-- [ ] Engineer C: diagnostics and lab tooling
-
-## Scope
-
-Owned paths changed:
-
-Cross-workstream handoff or explicitly delegated shared files:
+What changed and why.
 
 ## Verification
 
 - [ ] `git diff --check`
-- [ ] Relevant smoke tests
-- [ ] WinRM slot used when Windows behavior changed: `engineer-___`
-- [ ] `git diff --name-only origin/main...HEAD` stays inside this workstream
+- [ ] Relevant smoke tests (`ctest -R <name>`), listed here:
+- [ ] Windows validation run for realtime / WASAPI / driver changes (slot `engineer-___` or CI link):
+- [ ] Hardware or DAW evidence attached for hardware-dependent claims
+
+## Product impact
+
+- [ ] User-visible behaviour changed and `docs/user-guide.md` updated
+- [ ] Lifecycle, logging, or installer behaviour changed and `AGENTS.md` "Product Readiness" still holds
+
+## Ownership
+
+Owned paths changed (see `docs/development/team-workstreams.md`):
+
+Cross-workstream handoff or explicitly delegated shared files:

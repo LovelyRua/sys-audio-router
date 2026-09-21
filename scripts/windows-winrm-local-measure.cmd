@@ -3,7 +3,7 @@ setlocal EnableExtensions
 
 set "HOST=192.168.123.123"
 set "USER=codex"
-set "PASSWORD="
+set "PASSWORD=%SAR_TEST_PASSWORD%"
 set "SLOT=%SAR_TEST_SLOT%"
 set "MODE=%SAR_MEASURE_MODE%"
 set "DURATION_MS=%SAR_MEASURE_DURATION_MS%"
