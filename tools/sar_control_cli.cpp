@@ -1,5 +1,6 @@
 #include "core/control/control_wire_protocol.h"
 #include "core/control/preset_file_codec.h"
+#include "core/platform/windows_current_user_sid.h"
 #include "core/service/windows_named_pipe_control.h"
 
 #ifndef NOMINMAX
@@ -271,6 +272,9 @@ const char* runtime_mode_name(sar::control::AudioRuntimeMode mode) {
 
 int main(int argc, char** argv) {
   sar::service::NamedPipeControlConfig pipe_config;
+  // Matches the engine's own default when it wasn't started with --pipe, so
+  // the CLI reaches the calling user's engine and not another user's.
+  pipe_config.pipe_name = sar::platform::default_control_pipe_name();
   int index = 1;
   if (index + 1 < argc && std::string{argv[index]} == "--pipe") {
     const std::string name = argv[index + 1];

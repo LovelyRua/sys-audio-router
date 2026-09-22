@@ -4,6 +4,8 @@
 
 #include <Windows.h>
 
+#include "core/platform/windows_current_user_sid.h"
+
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -14,7 +16,10 @@
 
 namespace {
 
-constexpr wchar_t kControlPipe[] = L"\\\\.\\pipe\\sys-audio-route-control";
+std::wstring control_pipe_path() {
+  return L"\\\\.\\pipe\\" + sar::platform::default_control_pipe_name();
+}
+
 constexpr wchar_t kLauncherMutex[] =
     L"Local\\SystemAudioRoute.Launcher.{A53F02CB-86B7-4B63-A3EE-8C742498E60D}";
 
@@ -122,7 +127,7 @@ std::filesystem::path engine_log_path() {
 }
 
 bool pipe_ready() noexcept {
-  if (WaitNamedPipeW(kControlPipe, 0) != FALSE) {
+  if (WaitNamedPipeW(control_pipe_path().c_str(), 0) != FALSE) {
     return true;
   }
   const auto error = GetLastError();

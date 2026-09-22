@@ -130,6 +130,7 @@ if(WIN32)
     core/platform/windows_wasapi_device_provider.cpp
     core/platform/windows_virtual_asio_events.cpp
     core/platform/windows_virtual_asio_object_names.cpp
+    core/platform/windows_current_user_sid.cpp
     core/platform/windows_virtual_asio_security.cpp
     core/platform/windows_virtual_asio_shared_queue.cpp
     core/platform/windows_virtual_asio_shared_memory.cpp
@@ -506,11 +507,12 @@ if(WIN32)
 
   add_executable(sar_bootstrap_launcher WIN32
     tools/sar_bootstrap_launcher.cpp
+    core/platform/windows_current_user_sid.cpp
   )
   sar_add_version_resource(sar_bootstrap_launcher
     "System Audio Route launcher" "SystemAudioRouteLauncher.exe" APP)
   target_compile_features(sar_bootstrap_launcher PRIVATE cxx_std_20)
-  target_link_libraries(sar_bootstrap_launcher PRIVATE user32)
+  target_link_libraries(sar_bootstrap_launcher PRIVATE advapi32 user32)
   set_target_properties(sar_bootstrap_launcher PROPERTIES
     OUTPUT_NAME "SystemAudioRouteLauncher"
   )
@@ -547,6 +549,12 @@ if(WIN32)
   )
   target_link_libraries(sar_windows_virtual_asio_registration_smoke
     PRIVATE sar_virtual_asio_registration)
+
+  add_executable(sar_windows_current_user_sid_smoke
+    tests/realtime/windows_current_user_sid_smoke.cpp
+  )
+
+  target_link_libraries(sar_windows_current_user_sid_smoke PRIVATE sar_core)
 
   add_executable(sar_windows_virtual_asio_object_names_smoke
     tests/realtime/windows_virtual_asio_object_names_smoke.cpp
@@ -1042,6 +1050,8 @@ if(WIN32)
                    --clsid {83D4C47A-9834-41F4-A5EE-62BFB8F28D8A})
   set_tests_properties(windows_virtual_asio_registration_partial_instance
                        PROPERTIES WILL_FAIL TRUE)
+  add_test(NAME windows_current_user_sid_smoke
+           COMMAND sar_windows_current_user_sid_smoke)
   add_test(NAME windows_virtual_asio_object_names_smoke
            COMMAND sar_windows_virtual_asio_object_names_smoke)
   add_test(NAME windows_virtual_asio_events_smoke

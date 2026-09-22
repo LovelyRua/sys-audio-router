@@ -29,7 +29,7 @@ a certificate, hardware, a driver test machine).
 | OBS-1 | Logs and crash dumps | Done: rotating `engine.log`, minidumps under `logs\crashdumps`, "Logs" button and error-bar shortcut. The Export button bundles logs, session, dumps, and a system summary into a zip |
 | INST-1 | Graceful update/uninstall | Done: installers call `sar_engine_service --stop`, ask the GUI to close, and only then force-kill |
 | INST-2 | ASIO registration scope (per-user vs all users, cross-account UAC) | Open |
-| INST-3 | Per-user control pipe name | Open |
+| INST-3 | Per-user control pipe name | Done: the default pipe name is now `sys-audio-route-control-<SID>` (`core/platform/windows_current_user_sid.cpp`), computed independently by the engine, the control CLI, the bootstrap launcher, and the GUI so two Windows users never contend for one pipe. An explicit `--pipe NAME` still overrides it for tests and lab tooling |
 | DRV-1 | Sample-rate negotiation with the DAW | Open: engine-side rate change or conversion needed |
 | DRV-2 | Real latency reporting from `getLatencies` | Open: needs a measured round-trip latency model |
 | DRV-3 | ASIO Control Panel button opens the app | Done |
