@@ -334,6 +334,13 @@ add_executable(sar_virtual_asio_broker_protocol_smoke
 
 target_link_libraries(sar_virtual_asio_broker_protocol_smoke PRIVATE sar_core)
 
+add_executable(sar_virtual_asio_broker_protocol_mutation_smoke
+  tests/realtime/virtual_asio_broker_protocol_mutation_smoke.cpp
+)
+
+target_link_libraries(sar_virtual_asio_broker_protocol_mutation_smoke
+  PRIVATE sar_core)
+
 add_executable(sar_engine_control_service_smoke
   tests/realtime/engine_control_service_smoke.cpp
 )
@@ -990,6 +997,10 @@ add_test(NAME control_codec_mutation_smoke COMMAND sar_control_codec_mutation_sm
 set_tests_properties(control_codec_mutation_smoke PROPERTIES TIMEOUT 60)
 add_test(NAME virtual_asio_broker_protocol_smoke
   COMMAND sar_virtual_asio_broker_protocol_smoke)
+add_test(NAME virtual_asio_broker_protocol_mutation_smoke
+  COMMAND sar_virtual_asio_broker_protocol_mutation_smoke)
+set_tests_properties(virtual_asio_broker_protocol_mutation_smoke
+                     PROPERTIES TIMEOUT 60)
 add_test(NAME engine_control_service_smoke COMMAND sar_engine_control_service_smoke)
 add_test(NAME mock_asio_transport_smoke COMMAND sar_mock_asio_transport_smoke)
 add_test(NAME virtual_asio_client_registry_smoke
