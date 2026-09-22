@@ -20,8 +20,12 @@
         <translation>%1 个 ASIO  /  丢弃 %2</translation>
     </message>
     <message>
-        <source>%1 Hz</source>
-        <translation>%1 Hz</translation>
+        <source>%1 HZ</source>
+        <translation>%1 HZ</translation>
+    </message>
+    <message>
+        <source>%1 SMP</source>
+        <translation>%1 SMP</translation>
     </message>
     <message>
         <source>%1 dB</source>
@@ -52,10 +56,6 @@
         <translation>%1 ppm</translation>
     </message>
     <message>
-        <source>%1 samples</source>
-        <translation>%1 采样点</translation>
-    </message>
-    <message>
         <source>%1 us</source>
         <translation>%1 微秒</translation>
     </message>
@@ -76,12 +76,12 @@
         <translation>+ 播放</translation>
     </message>
     <message>
-        <source>-- Hz</source>
-        <translation>-- Hz</translation>
+        <source>-- HZ</source>
+        <translation>-- HZ</translation>
     </message>
     <message>
-        <source>-- samples</source>
-        <translation>-- 采样点</translation>
+        <source>-- SMP</source>
+        <translation>-- SMP</translation>
     </message>
     <message>
         <source>-inf</source>
