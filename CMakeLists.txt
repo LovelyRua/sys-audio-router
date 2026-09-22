@@ -166,6 +166,67 @@ if(SAR_BUILD_GUI)
   add_subdirectory(app/gui)
 endif()
 
+# A second, from-scratch control panel built on Steinberg's VSTGUI toolkit
+# (the same technology Nuendo/Cubase use) instead of Qt Quick, matching the
+# hardware-console visual language. This is a parallel effort, not a
+# replacement yet: it currently covers only the header bar (see
+# app/gui_vstgui and docs/product-readiness.md for what is not ported). Kept
+# as its own option so it never affects the Qt build above.
+option(SAR_BUILD_GUI_VSTGUI "Build the VSTGUI-based control panel prototype" OFF)
+
+if(SAR_BUILD_GUI_VSTGUI)
+  if(NOT WIN32)
+    message(FATAL_ERROR "The VSTGUI control panel currently requires Windows")
+  endif()
+
+  include(FetchContent)
+  set(VSTGUI_STANDALONE ON CACHE BOOL "" FORCE)
+  set(VSTGUI_STANDALONE_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(VSTGUI_TOOLS OFF CACHE BOOL "" FORCE)
+  set(VSTGUI_UISCRIPTING OFF CACHE BOOL "" FORCE)
+  set(VSTGUI_DISABLE_UNITTESTS ON CACHE BOOL "" FORCE)
+  FetchContent_Declare(
+    vstgui
+    GIT_REPOSITORY https://github.com/steinbergmedia/vstgui.git
+    GIT_TAG vstgui4_9
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR vstgui
+  )
+  FetchContent_MakeAvailable(vstgui)
+
+  add_executable(sar_gui_vstgui WIN32
+    app/gui_vstgui/main.cpp
+    app/gui_vstgui/main_window.cpp
+    app/gui_vstgui/main_window.h
+    app/gui_vstgui/engine_client.cpp
+    app/gui_vstgui/engine_client.h
+    app/gui_vstgui/lcd_readout_view.cpp
+    app/gui_vstgui/lcd_readout_view.h
+    app/gui_vstgui/palette.h
+  )
+  target_include_directories(sar_gui_vstgui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_compile_features(sar_gui_vstgui PRIVATE cxx_std_20)
+  target_compile_definitions(sar_gui_vstgui PRIVATE SAR_VERSION="${PROJECT_VERSION}")
+  target_link_libraries(sar_gui_vstgui PRIVATE
+    sar_core
+    vstgui
+    vstgui_uidescription
+    vstgui_standalone
+  )
+  sar_add_version_resource(sar_gui_vstgui
+    "System Audio Route control panel (VSTGUI prototype)"
+    "SystemAudioRouteVstgui.exe" APP)
+  set_target_properties(sar_gui_vstgui PROPERTIES
+    OUTPUT_NAME "SystemAudioRouteVstgui"
+    # VSTGUI's own standalone examples force this same linker flag (see
+    # vstgui_add_executable() in standalone/cmake/modules): the Win32
+    # standalone backend defines wWinMain() inside the vstgui_standalone
+    # static library, and /INCLUDE guarantees the linker pulls that object
+    # in as the entry point rather than relying on implicit resolution.
+    LINK_FLAGS "/INCLUDE:wWinMain"
+  )
+endif()
+
 add_executable(sar_realtime_smoke
   tests/realtime/realtime_smoke.cpp
 )
