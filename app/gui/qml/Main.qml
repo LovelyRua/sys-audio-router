@@ -16,19 +16,29 @@ ApplicationWindow {
     title: "System Audio Route"
     color: colors.canvas
 
+    // Hardware-console palette: neutral (not blue-tinted) charcoal panels with
+    // a desaturated steel-blue accent, in the spirit of Steinberg's Nuendo/
+    // Cubase consoles. Property names stay the ones used throughout this file
+    // (cyan, healthy, warning, danger); only their values changed, so this
+    // block is the single place a future palette pass needs to touch.
     QtObject {
         id: colors
-        readonly property color canvas: "#101315"
-        readonly property color surface: "#171b1e"
-        readonly property color raised: "#20262a"
-        readonly property color hover: "#293136"
-        readonly property color line: "#323a3f"
-        readonly property color text: "#edf1f2"
-        readonly property color muted: "#98a3a8"
-        readonly property color healthy: "#55d6a5"
-        readonly property color cyan: "#5ab8d8"
-        readonly property color warning: "#e5b65a"
-        readonly property color danger: "#ef6b72"
+        readonly property color canvas: "#19191b"
+        readonly property color surface: "#202023"
+        readonly property color raised: "#26262a"
+        readonly property color hover: "#2c2c30"
+        readonly property color line: "#3a3a3e"
+        readonly property color lineSoft: "#2f2f33"
+        readonly property color text: "#d9d9db"
+        readonly property color muted: "#87878c"
+        readonly property color healthy: "#5a9d6e"
+        readonly property color cyan: "#6fa0c9"
+        readonly property color warning: "#d1ab3e"
+        readonly property color danger: "#c9524a"
+        // Amber LCD-style readouts (header transport counters).
+        readonly property color lcdBg: "#0a0a0a"
+        readonly property color lcd: "#e8a53d"
+        readonly property color lcdDim: "#7a5a28"
     }
 
     property bool forceClose: false
@@ -1434,9 +1444,35 @@ ApplicationWindow {
         onClicked: currentView = viewId
     }
 
+    // A small inset "hardware LCD" readout, used for the transport-style
+    // counters in the header (sample rate, block size, xrun count).
+    component LcdReadout: Rectangle {
+        id: control
+        property string value: ""
+        property color tint: colors.lcd
+        implicitWidth: readoutText.implicitWidth + 20
+        implicitHeight: 26
+        radius: 2
+        color: colors.lcdBg
+        border.width: 1
+        border.color: "#000000"
+        Text {
+            id: readoutText
+            anchors.centerIn: parent
+            text: control.value
+            color: control.tint
+            font.family: "Consolas"
+            font.pixelSize: 12
+            font.letterSpacing: 1
+        }
+    }
+
     header: Rectangle {
         height: 58
-        color: colors.surface
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: Qt.lighter(colors.surface, 1.12) }
+            GradientStop { position: 1.0; color: colors.surface }
+        }
         border.color: colors.line
 
         RowLayout {
@@ -1480,23 +1516,17 @@ ApplicationWindow {
 
             Item { Layout.fillWidth: true }
 
-            Text {
-                text: engine.sampleRate > 0 ? qsTr("%1 Hz").arg(engine.sampleRate) : qsTr("-- Hz")
-                color: colors.muted
-                font.pixelSize: 12
+            LcdReadout {
+                value: engine.sampleRate > 0 ? qsTr("%1 HZ").arg(engine.sampleRate) : qsTr("-- HZ")
                 visible: window.width >= 980
             }
-            Text {
-                text: engine.blockSize > 0 ? qsTr("%1 samples").arg(engine.blockSize) : qsTr("-- samples")
-                color: colors.muted
-                font.pixelSize: 12
+            LcdReadout {
+                value: engine.blockSize > 0 ? qsTr("%1 SMP").arg(engine.blockSize) : qsTr("-- SMP")
                 visible: window.width >= 1060
             }
-            Text {
-                text: qsTr("XRUN %1").arg(engine.xrunCount)
-                color: engine.xrunCount > 0 ? colors.warning : colors.muted
-                font.pixelSize: 12
-                font.weight: Font.DemiBold
+            LcdReadout {
+                value: qsTr("XRUN %1").arg(engine.xrunCount)
+                tint: engine.xrunCount > 0 ? colors.warning : colors.lcdDim
             }
 
             FlatButton {
