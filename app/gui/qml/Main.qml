@@ -50,9 +50,9 @@ ApplicationWindow {
 
     property string currentView: "matrix"
     property string selectedInputId: ""
-    property string selectedInputLabel: "No input selected"
+    property string selectedInputLabel: qsTr("No input selected")
     property string selectedOutputId: ""
-    property string selectedOutputLabel: "No output selected"
+    property string selectedOutputLabel: qsTr("No output selected")
     property bool runtimeDraftDirty: false
     property string runtimeDraftMode: "render"
     property string runtimeDraftRenderDeviceId: ""
@@ -286,10 +286,10 @@ ApplicationWindow {
     function endpointGroupTitle(endpoint, index, count, source) {
         var family = endpointFamily(endpoint, index, count)
         if (family === "wasapi")
-            return source ? "WASAPI CAPTURE" : "WASAPI RENDER"
+            return source ? qsTr("WASAPI CAPTURE") : qsTr("WASAPI RENDER")
         if (family === "asio")
-            return source ? "ASIO / DAW OUT" : "ASIO / DAW IN"
-        return source ? "OTHER SOURCES" : "OTHER DESTINATIONS"
+            return source ? qsTr("ASIO / DAW OUT") : qsTr("ASIO / DAW IN")
+        return source ? qsTr("OTHER SOURCES") : qsTr("OTHER DESTINATIONS")
     }
 
     function endpointGroupColor(endpoint, index, count) {
@@ -320,9 +320,9 @@ ApplicationWindow {
 
     function clearRouteSelection() {
         selectedInputId = ""
-        selectedInputLabel = "No input selected"
+        selectedInputLabel = qsTr("No input selected")
         selectedOutputId = ""
-        selectedOutputLabel = "No output selected"
+        selectedOutputLabel = qsTr("No output selected")
     }
 
     function validateRouteSelection() {
@@ -1501,10 +1501,10 @@ ApplicationWindow {
 
             FlatButton {
                 objectName: "runtimeActionButton"
-                text: !engine.runtimeConfigured ? "Configure audio"
+                text: !engine.runtimeConfigured ? qsTr("Configure audio")
                       : window.width < 1100
-                        ? (engine.runtimeRunning ? "Stop" : "Start")
-                        : (engine.runtimeRunning ? "Stop engine" : "Start engine")
+                        ? (engine.runtimeRunning ? qsTr("Stop") : qsTr("Start"))
+                        : (engine.runtimeRunning ? qsTr("Stop engine") : qsTr("Start engine"))
                 highlighted: !engine.runtimeRunning
                 enabled: engine.connected && !engine.busy
                 onClicked: {
@@ -1535,7 +1535,7 @@ ApplicationWindow {
             anchors.rightMargin: 10
             spacing: 10
             Text {
-                text: engine.lastError.length > 0 ? "ACTION FAILED" : "PRESET"
+                text: engine.lastError.length > 0 ? qsTr("ACTION FAILED") : qsTr("PRESET")
                 color: engine.lastError.length > 0 ? colors.danger : colors.healthy
                 font.pixelSize: 10
                 font.weight: Font.Bold
@@ -1805,7 +1805,7 @@ ApplicationWindow {
                                 }
                                 Text {
                                     visible: !engine.connected || engine.busy
-                                    text: !engine.connected ? "OFFLINE" : "APPLYING"
+                                    text: !engine.connected ? qsTr("OFFLINE") : qsTr("APPLYING")
                                     color: !engine.connected ? colors.danger : colors.warning
                                     font.pixelSize: 10
                                     font.weight: Font.DemiBold
@@ -1885,8 +1885,8 @@ ApplicationWindow {
                             Text {
                                 anchors.centerIn: parent
                                 visible: matrixInputs.length === 0 || matrixOutputs.length === 0
-                                text: engine.connected ? "No routable endpoints in this preset"
-                                                       : "Waiting for the engine"
+                                text: engine.connected ? qsTr("No routable endpoints in this preset")
+                                                       : qsTr("Waiting for the engine")
                                 color: colors.muted
                                 font.pixelSize: 13
                             }
@@ -2083,12 +2083,12 @@ ApplicationWindow {
                                                              endpoint, groupRow,
                                                              matrixOutputs.length)
                                             var centerY = (visibleGroupTop + visibleGroupBottom) / 2
-                                            context.fillText(family === "wasapi" ? "WASAPI"
-                                                             : family === "asio" ? "ASIO" : "OTHER",
+                                            context.fillText(family === "wasapi" ? qsTr("WASAPI")
+                                                             : family === "asio" ? qsTr("ASIO") : qsTr("OTHER"),
                                                              matrixViewport.groupLabelWidth / 2,
                                                              centerY - 6)
-                                            context.fillText(family === "wasapi" ? "RENDER"
-                                                             : family === "asio" ? "DAW IN" : "DEST",
+                                            context.fillText(family === "wasapi" ? qsTr("RENDER")
+                                                             : family === "asio" ? qsTr("DAW IN") : qsTr("DEST"),
                                                              matrixViewport.groupLabelWidth / 2,
                                                              centerY + 7)
                                         }
@@ -2371,7 +2371,7 @@ ApplicationWindow {
                                     Text {
                                         id: matrixStateText
                                         anchors.centerIn: parent
-                                        text: !engine.connected ? "Matrix unavailable" : "Applying change..."
+                                        text: !engine.connected ? qsTr("Matrix unavailable") : qsTr("Applying change...")
                                         color: !engine.connected ? colors.danger : colors.warning
                                         font.pixelSize: 10
                                         font.weight: Font.DemiBold
@@ -2705,7 +2705,7 @@ ApplicationWindow {
 
                                             Text {
                                                 Layout.preferredWidth: 42
-                                                text: modelData.backend === "physical-asio" ? "ASIO" : "WASAPI"
+                                                text: modelData.backend === "physical-asio" ? qsTr("ASIO") : qsTr("WASAPI")
                                                 color: modelData.backend === "physical-asio" ? colors.warning : colors.cyan
                                                 font.pixelSize: 9
                                                 font.weight: Font.DemiBold
@@ -2855,10 +2855,10 @@ ApplicationWindow {
                                 Text {
                                     text: window.runtimeDraftMode === "matrix" &&
                                           !window.matrixDraftSchemaReady()
-                                          ? "ASIO endpoint draft"
+                                          ? qsTr("ASIO endpoint draft")
                                           : engine.runtimeRunning
-                                          ? "Apply restarts the engine with the selected devices"
-                                          : "Select devices, then apply the runtime"
+                                          ? qsTr("Apply restarts the engine with the selected devices")
+                                          : qsTr("Select devices, then apply the runtime")
                                     color: colors.muted
                                     font.pixelSize: 10
                                     elide: Text.ElideRight
@@ -2980,7 +2980,7 @@ ApplicationWindow {
                                             }
                                             Text {
                                                 text: modelData.deviceId.length > 0
-                                                      ? modelData.deviceId : "Identity assigned on Apply"
+                                                      ? modelData.deviceId : qsTr("Identity assigned on Apply")
                                                 color: colors.muted
                                                 font.pixelSize: 9
                                                 elide: Text.ElideMiddle
@@ -3078,7 +3078,7 @@ ApplicationWindow {
                                         Text { text: modelData.label; color: colors.text; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
                                         Text { text: modelData.id; color: colors.muted; font.pixelSize: 10; elide: Text.ElideMiddle; Layout.fillWidth: true }
                                     }
-                                    Text { text: modelData.isVirtual ? "VIRTUAL" : "HARDWARE"; color: modelData.isVirtual ? colors.cyan : colors.muted; font.pixelSize: 9; font.weight: Font.DemiBold }
+                                    Text { text: modelData.isVirtual ? qsTr("VIRTUAL") : qsTr("HARDWARE"); color: modelData.isVirtual ? colors.cyan : colors.muted; font.pixelSize: 9; font.weight: Font.DemiBold }
                                 }
                             }
                         }
