@@ -102,7 +102,8 @@ EngineReply transact(control::ControlCommand command) {
   reply.request_type = command.type;
   const auto encoded = control::encode_control_command(command);
   if (!encoded.ok()) {
-    reply.error = QStringLiteral("Could not encode the control request");
+    reply.error = QCoreApplication::translate("EngineController",
+                                              "Could not encode the control request");
     return reply;
   }
 
@@ -147,6 +148,7 @@ constexpr auto kRunKeyPath =
     "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 constexpr auto kRunValueName = "SystemAudioRouteEngine";
 constexpr auto kCloseBehaviorKey = "closeBehavior";
+constexpr auto kLanguageKey = "language";
 
 // Shared with sar_bootstrap_launcher so both start the engine on the same
 // session file and log.
@@ -432,7 +434,7 @@ void EngineController::savePreset(const QString& name) {
     return;
   }
   if (busy_) {
-    setError(QStringLiteral("Wait for the current engine command to finish"));
+    setError(tr("Wait for the current engine command to finish"));
     return;
   }
   clearFeedback();
@@ -444,7 +446,7 @@ void EngineController::savePreset(const QString& name) {
 void EngineController::loadPreset(const QString& name) {
   const auto normalized = name.trimmed();
   if (busy_) {
-    setError(QStringLiteral("Wait for the current engine command to finish"));
+    setError(tr("Wait for the current engine command to finish"));
     return;
   }
   control::PresetDocument preset;
@@ -473,7 +475,7 @@ void EngineController::deletePreset(const QString& name) {
   }
   refreshPresets();
   emit presetsChanged();
-  setStatus(QStringLiteral("Deleted preset \"%1\"").arg(normalized));
+  setStatus(tr("Deleted preset \"%1\"").arg(normalized));
 }
 
 void EngineController::clearFeedback() {
@@ -506,14 +508,14 @@ void EngineController::configureAudioRuntime(const QString& mode,
   } else if (mode == QStringLiteral("duplex")) {
     runtime_mode = control::AudioRuntimeMode::WasapiDuplex;
   } else {
-    setError(QStringLiteral("Choose a WASAPI runtime mode"));
+    setError(tr("Choose a WASAPI runtime mode"));
     return;
   }
 
   if (render_device_id.trimmed().isEmpty() ||
       (runtime_mode == control::AudioRuntimeMode::WasapiDuplex &&
        capture_device_id.trimmed().isEmpty())) {
-    setError(QStringLiteral("Select the required audio devices"));
+    setError(tr("Select the required audio devices"));
     return;
   }
 
@@ -536,7 +538,7 @@ void EngineController::configureAudioMatrix(const QVariantList& endpoints) {
                              .toString();
     if (backend != QStringLiteral("wasapi") &&
         backend != QStringLiteral("physical-asio")) {
-      setError(QStringLiteral("Matrix endpoint backend is not supported"));
+      setError(tr("Matrix endpoint backend is not supported"));
       return;
     }
     if (backend == QStringLiteral("physical-asio")) {
@@ -545,7 +547,7 @@ void EngineController::configureAudioMatrix(const QVariantList& endpoints) {
       const auto sample_rate = map.value(QStringLiteral("sampleRate")).toInt();
       const auto block_frames = map.value(QStringLiteral("blockFrames")).toInt();
       if (group_id.isEmpty() || sample_rate <= 0 || block_frames <= 0) {
-        setError(QStringLiteral(
+        setError(tr(
             "Physical ASIO matrix endpoints require a device group, sample rate, and block size"));
         return;
       }
@@ -604,7 +606,7 @@ void EngineController::configurePhysicalAsio(
   const auto outputs = parse_channel_list(output_channels);
   if (driver_clsid.trimmed().isEmpty() || sample_rate <= 0 ||
       block_frames <= 0 || !inputs || !outputs) {
-    setError(QStringLiteral(
+    setError(tr(
         "Choose an ASIO driver and valid sample rate, block size, and channel lists; leave both lists empty to use all channels"));
     return;
   }
@@ -628,7 +630,7 @@ void EngineController::configureVirtualAsioDevices(
   if (devices.isEmpty() ||
       devices.size() >
           static_cast<qsizetype>(control::kMaximumVirtualAsioDevices)) {
-    setError(QStringLiteral(
+    setError(tr(
         "Configure between 1 and 16 Virtual ASIO devices"));
     return;
   }
@@ -672,12 +674,12 @@ void EngineController::configureVirtualAsioDevices(
         std::max(0, map.value(QStringLiteral("outputChannels")).toInt()));
     device.enabled = map.value(QStringLiteral("enabled"), true).toBool();
     if (device.registry_name.empty()) {
-      setError(QStringLiteral("Every Virtual ASIO device needs a name"));
+      setError(tr("Every Virtual ASIO device needs a name"));
       return;
     }
     if (device.input_channels == 0 || device.input_channels > 64 ||
         device.output_channels == 0 || device.output_channels > 64) {
-      setError(QStringLiteral("Virtual ASIO channel counts must be between 1 and 64"));
+      setError(tr("Virtual ASIO channel counts must be between 1 and 64"));
       return;
     }
     if (device.enabled) {
@@ -688,7 +690,7 @@ void EngineController::configureVirtualAsioDevices(
   }
   if (enabled_input_channels == 0 ||
       enabled_input_channels != enabled_output_channels) {
-    setError(QStringLiteral(
+    setError(tr(
         "Enabled Virtual ASIO input and output channel totals must match"));
     return;
   }
@@ -721,7 +723,7 @@ void EngineController::setRoute(const QString& input_id,
                                 const QString& output_id,
                                 bool enabled) {
   if (busy_) {
-    setError(QStringLiteral("Wait for the current engine command to finish"));
+    setError(tr("Wait for the current engine command to finish"));
     return;
   }
   control::ControlCommand command;
@@ -769,7 +771,7 @@ void EngineController::setRoute(const QString& input_id,
 void EngineController::removeRoute(const QString& input_id,
                                    const QString& output_id) {
   if (busy_) {
-    setError(QStringLiteral("Wait for the current engine command to finish"));
+    setError(tr("Wait for the current engine command to finish"));
     return;
   }
   control::ControlCommand command;
@@ -985,7 +987,7 @@ void EngineController::applyReply(const EngineReply& reply,
   if (planned_engine_restart) {
     virtual_asio_restart_armed_ = false;
     engine_service_start_attempted_ = true;
-    setStatus(QStringLiteral("Virtual ASIO topology applied; restarting engine"));
+    setStatus(tr("Virtual ASIO topology applied; restarting engine"));
     QTimer::singleShot(500, this, [this] {
       engine_service_start_attempted_ = false;
       if (!shutting_down_ && service_management_enabled_) {
@@ -1026,7 +1028,7 @@ void EngineController::applyReply(const EngineReply& reply,
   }
   if (reply.request_type ==
       control::ControlCommandType::ConfigureVirtualAsioDevices) {
-    setStatus(QStringLiteral("Virtual ASIO topology applied; restarting engine"));
+    setStatus(tr("Virtual ASIO topology applied; restarting engine"));
     emit virtualAsioTopologyApplied();
   }
   if (reply.response.has_audio_runtime_state) {
@@ -1152,7 +1154,7 @@ void EngineController::applyReply(const EngineReply& reply,
   if (command.preset_action == PendingPresetAction::Save) {
     QString error;
     if (!reply.response.has_preset) {
-      setError(QStringLiteral("The engine did not return a preset document"));
+      setError(tr("The engine did not return a preset document"));
     } else if (!preset_store_.save(command.preset_name,
                                    reply.response.preset, &error)) {
       setError(std::move(error));
@@ -1160,13 +1162,13 @@ void EngineController::applyReply(const EngineReply& reply,
       active_preset_name_ = command.preset_name;
       refreshPresets();
       emit presetsChanged();
-      setStatus(QStringLiteral("Saved preset \"%1\"")
+      setStatus(tr("Saved preset \"%1\"")
                     .arg(active_preset_name_));
     }
   } else if (command.preset_action == PendingPresetAction::Load) {
     active_preset_name_ = command.preset_name;
     emit presetsChanged();
-    setStatus(QStringLiteral("Loaded preset \"%1\"")
+    setStatus(tr("Loaded preset \"%1\"")
                   .arg(active_preset_name_));
   }
   if (reply.request_type == control::ControlCommandType::ConnectRoute ||
@@ -1333,22 +1335,22 @@ void EngineController::ensureEngineService() {
 
   const auto executable = engine_executable_path();
   if (!QFileInfo::exists(executable)) {
-    setError(QStringLiteral("The engine service executable is missing from this installation"));
+    setError(tr("The engine service executable is missing from this installation"));
     return;
   }
   const auto data_path = engine_data_directory();
   if (data_path.isEmpty() || !QDir().mkpath(data_path) ||
       !QDir().mkpath(engine_log_directory())) {
-    setError(QStringLiteral("Could not create the engine service data directory"));
+    setError(tr("Could not create the engine service data directory"));
     return;
   }
   migrateLegacySession();
-  setStatus(QStringLiteral("Starting engine service"));
+  setStatus(tr("Starting engine service"));
   // The engine outlives this window: it keeps routing audio and serving DAWs
   // until the user explicitly stops it.
   if (!QProcess::startDetached(executable, engine_arguments(),
                                QCoreApplication::applicationDirPath())) {
-    setError(QStringLiteral("Could not start the engine service"));
+    setError(tr("Could not start the engine service"));
     return;
   }
   QTimer::singleShot(200, this, &EngineController::refresh);
@@ -1378,7 +1380,7 @@ void EngineController::quitEngine() {
   stop.start();
   if (!stop.waitForFinished(10000)) {
     stop.kill();
-    setError(QStringLiteral("The engine did not stop in time"));
+    setError(tr("The engine did not stop in time"));
   }
 }
 
@@ -1396,7 +1398,7 @@ void EngineController::exportDiagnostics() {
                               QStandardPaths::TempLocation))
                          .filePath(QStringLiteral("sar-diagnostics-") + stamp));
   if (!QDir().mkpath(staging.path())) {
-    setError(QStringLiteral("Could not create a temporary diagnostics folder"));
+    setError(tr("Could not create a temporary diagnostics folder"));
     return;
   }
 
@@ -1453,12 +1455,12 @@ void EngineController::exportDiagnostics() {
   QDir(staging).removeRecursively();
   if (!archived) {
     archive.kill();
-    setError(QStringLiteral("Could not create the diagnostics archive"));
+    setError(tr("Could not create the diagnostics archive"));
     return;
   }
   QProcess::startDetached(QStringLiteral("explorer.exe"),
                           {QStringLiteral("/select,") + destination});
-  setStatus(QStringLiteral("Diagnostics saved to %1").arg(destination));
+  setStatus(tr("Diagnostics saved to %1").arg(destination));
 }
 
 QString EngineController::logDirectory() const {
@@ -1485,7 +1487,7 @@ void EngineController::setStartAtLogin(bool enabled) {
   }
   run.sync();
   if (run.status() != QSettings::NoError) {
-    setError(QStringLiteral("Could not update the start-at-login setting"));
+    setError(tr("Could not update the start-at-login setting"));
   }
   emit startAtLoginChanged();
 }
@@ -1505,6 +1507,23 @@ void EngineController::setCloseBehavior(const QString& behavior) {
                               : QStringLiteral("ask");
   QSettings().setValue(QString::fromLatin1(kCloseBehaviorKey), normalized);
   emit closeBehaviorChanged();
+}
+
+QString EngineController::language() const {
+  const auto value =
+      QSettings().value(QString::fromLatin1(kLanguageKey)).toString();
+  return value == QStringLiteral("en") || value == QStringLiteral("zh_CN")
+             ? value
+             : QStringLiteral("system");
+}
+
+void EngineController::setLanguage(const QString& language) {
+  const auto normalized = language == QStringLiteral("en") ||
+                                  language == QStringLiteral("zh_CN")
+                              ? language
+                              : QStringLiteral("system");
+  QSettings().setValue(QString::fromLatin1(kLanguageKey), normalized);
+  emit languageChanged();
 }
 
 }  // namespace sar::gui

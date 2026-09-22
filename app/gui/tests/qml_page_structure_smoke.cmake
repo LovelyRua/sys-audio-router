@@ -78,7 +78,7 @@ foreach(matrix_runtime_marker
     "function removeMatrixEndpoint(index)"
     "function matrixDraftValid()"
     "engine.configureAudioMatrix(window.runtimeMatrixDraft)"
-    "model: [\"Matrix\", \"WASAPI render\", \"WASAPI duplex\"]"
+    "model: [qsTr(\"Matrix\"), qsTr(\"WASAPI render\"), qsTr(\"WASAPI duplex\")]"
     "property bool legacyPhysicalAsioSession: false"
     "function normalizedMatrixEndpoint(endpoint)"
     "function legacyPhysicalAsioEndpoints()"
@@ -191,7 +191,10 @@ foreach(lifecycle_marker
     "objectName: \"exportDiagnosticsButton\""
     "objectName: \"diagnosticsSummary\""
     "function diagnosticsState()"
-    "window.copyToClipboard(engine.lastError)")
+    "window.copyToClipboard(engine.lastError)"
+    "objectName: \"languageCombo\""
+    "engine.language = model[index].code"
+    "property bool languageChangedThisSession: false")
   string(FIND "${qml}" "${lifecycle_marker}" marker_position)
   if(marker_position LESS 0)
     message(FATAL_ERROR "Lifecycle QML marker is missing: ${lifecycle_marker}")

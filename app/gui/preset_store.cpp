@@ -2,6 +2,7 @@
 
 #include "core/control/preset_file_codec.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -41,7 +42,8 @@ QStringList PresetStore::names(QString* error) const {
     return {};
   }
   if (!directory.isReadable()) {
-    set_error(error, QStringLiteral("Preset directory is not readable"));
+    set_error(error, QCoreApplication::translate(
+                        "PresetStore", "Preset directory is not readable"));
     return {};
   }
 
@@ -71,7 +73,8 @@ bool PresetStore::save(const QString& name,
     return false;
   }
   if (!QDir().mkpath(directory_)) {
-    set_error(error, QStringLiteral("Could not create the preset directory"));
+    set_error(error, QCoreApplication::translate(
+                        "PresetStore", "Could not create the preset directory"));
     return false;
   }
 
@@ -96,7 +99,8 @@ bool PresetStore::load(const QString& name,
                        QString* error) const {
   set_error(error, {});
   if (preset == nullptr) {
-    set_error(error, QStringLiteral("Preset destination is missing"));
+    set_error(error, QCoreApplication::translate(
+                        "PresetStore", "Preset destination is missing"));
     return false;
   }
   if (!validName(name, error)) {
@@ -128,7 +132,8 @@ bool PresetStore::remove(const QString& name, QString* error) const {
   }
   QFile file(pathForName(name));
   if (!file.exists()) {
-    set_error(error, QStringLiteral("The preset does not exist"));
+    set_error(error, QCoreApplication::translate(
+                        "PresetStore", "The preset does not exist"));
     return false;
   }
   if (!file.remove()) {
@@ -152,7 +157,9 @@ bool PresetStore::validName(const QString& name, QString* error) {
       invalid_characters.match(name).hasMatch() ||
       reserved_name.match(name).hasMatch()) {
     set_error(error,
-              QStringLiteral("Use a short preset name without path characters"));
+              QCoreApplication::translate(
+                  "PresetStore",
+                  "Use a short preset name without path characters"));
     return false;
   }
   return true;

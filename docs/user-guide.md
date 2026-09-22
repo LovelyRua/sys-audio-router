@@ -23,6 +23,12 @@ skip the question next time.
 To have the engine start when you sign in, enable **Start engine at login** in
 the left panel. It starts headless and restores your last session.
 
+## Language
+
+Pick **English**, **简体中文**, or **System language** from the **Language**
+selector in the left panel. The change takes effect the next time you start
+System Audio Route.
+
 ## First run
 
 1. Open **Audio devices** and choose your capture and render endpoints.

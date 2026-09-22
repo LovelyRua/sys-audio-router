@@ -24,6 +24,18 @@ target_compile_definitions(sar_gui PRIVATE SAR_VERSION="${PROJECT_VERSION}")
 sar_add_version_resource(sar_gui
   "System Audio Route control panel" "SystemAudioRoute.exe" APP)
 
+# Compiles i18n/Sar_zh_CN.ts to a .qm at build time and embeds it as a Qt
+# resource under :/i18n, loaded by main.cpp. Regenerate the .ts source list
+# (not the translations) after adding qsTr()/tr() calls with the
+# update_translations_sar_gui target; that target is not part of the normal
+# build.
+qt_add_translations(
+  TARGETS sar_gui
+  TS_FILE_BASE "Sar"
+  TS_FILES i18n/Sar_zh_CN.ts
+  RESOURCE_PREFIX "/i18n"
+)
+
 set_target_properties(sar_gui PROPERTIES
   OUTPUT_NAME "SystemAudioRoute"
 )
