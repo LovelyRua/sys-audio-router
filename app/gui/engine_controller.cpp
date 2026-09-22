@@ -1,6 +1,7 @@
 #include "app/gui/engine_controller.h"
 
 #include "core/control/control_wire_protocol.h"
+#include "core/platform/windows_current_user_sid.h"
 #include "core/service/windows_named_pipe_control.h"
 
 #include <QStandardPaths>
@@ -108,6 +109,9 @@ EngineReply transact(control::ControlCommand command) {
   }
 
   service::NamedPipeControlConfig config;
+  // Matches sar_engine_service's own default pipe name so the control panel
+  // reaches this Windows user's engine and never another user's.
+  config.pipe_name = platform::default_control_pipe_name();
   const auto transaction = service::transact_named_pipe_control(
       config, as_bytes(encoded.bytes), transaction_timeout_ms(command.type));
   if (!transaction.ok()) {

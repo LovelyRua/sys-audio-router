@@ -9,6 +9,7 @@
 #include "core/service/virtual_asio_matrix_profile.h"
 #include "core/service/virtual_asio_instance_layout.h"
 #include "core/platform/realtime_audio_channel_slice_sink.h"
+#include "core/platform/windows_current_user_sid.h"
 #include "core/platform/realtime_audio_fanout_sink.h"
 #include "core/platform/realtime_audio_input_assembler.h"
 #include "core/platform/virtual_asio_capture_bus.h"
@@ -23,7 +24,6 @@
 
 #include <Windows.h>
 #include <DbgHelp.h>
-#include <sddl.h>
 
 #include <algorithm>
 #include <atomic>
@@ -295,34 +295,6 @@ class EngineProcessLock final {
   bool already_running_ = false;
 };
 
-bool current_user_sid(std::wstring& value) noexcept {
-  HANDLE token = nullptr;
-  if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
-    return false;
-  }
-  DWORD required = 0;
-  static_cast<void>(GetTokenInformation(token, TokenUser, nullptr, 0, &required));
-  if (required == 0 || GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
-    CloseHandle(token);
-    return false;
-  }
-  std::vector<std::byte> storage(required);
-  const bool read = GetTokenInformation(token, TokenUser, storage.data(), required,
-                                        &required) != FALSE;
-  CloseHandle(token);
-  if (!read) {
-    return false;
-  }
-  const auto* user = reinterpret_cast<const TOKEN_USER*>(storage.data());
-  LPWSTR text = nullptr;
-  if (!ConvertSidToStringSidW(user->User.Sid, &text) || text == nullptr) {
-    return false;
-  }
-  value.assign(text);
-  LocalFree(text);
-  return true;
-}
-
 std::uint64_t hash_pipe_name(const std::wstring& pipe_name) noexcept {
   std::uint64_t hash = 1469598103934665603ULL;
   for (const auto character : pipe_name) {
@@ -336,7 +308,7 @@ bool make_engine_object_name(const wchar_t* prefix,
                              const std::wstring& pipe_name,
                              std::wstring& name) noexcept {
   std::wstring sid;
-  if (!current_user_sid(sid)) {
+  if (!sar::platform::current_user_sid_string(sid)) {
     return false;
   }
   wchar_t suffix[17] = {};
@@ -916,6 +888,7 @@ int main(int argc, char** argv) {
   bool stop_command = false;
   std::size_t requested_asio_channels = 2;
   bool asio_channels_explicit = false;
+  bool pipe_explicit = false;
   for (int index = 1; index < argc; ++index) {
     const std::string argument = argv[index];
     if (argument == "--once") {
@@ -932,6 +905,7 @@ int main(int argc, char** argv) {
       const std::string name = argv[++index];
       pipe_config.pipe_name.assign(name.begin(), name.end());
       pipe_display_name = name;
+      pipe_explicit = true;
     } else if (argument == "--session" && index + 1 < argc) {
       has_session_path = true;
       if (!utf8_to_wide(argv[++index], session_path)) {
@@ -967,6 +941,15 @@ int main(int argc, char** argv) {
                    "[--capture-id ID --render-id ID]]\n";
       return 2;
     }
+  }
+  if (!pipe_explicit) {
+    // Two different Windows users on the same machine must never contend
+    // for one engine's control pipe; scope the default to the current user.
+    pipe_config.pipe_name = sar::platform::default_control_pipe_name();
+    // The name is a constant ASCII prefix plus a Windows SID string, which
+    // is always ASCII, so a plain per-character narrowing copy is exact.
+    pipe_display_name.assign(pipe_config.pipe_name.begin(),
+                             pipe_config.pipe_name.end());
   }
   if (wasapi_render && wasapi_duplex) {
     std::cerr << "Choose either --wasapi-render or --wasapi-duplex.\n";

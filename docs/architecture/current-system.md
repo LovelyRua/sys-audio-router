@@ -782,6 +782,14 @@ codes: 0 stopped, 3 no engine running, 4 the engine did not stop in time. The
 installers, the uninstallers, and the control panel's "Stop engine" action call
 it before any forced termination.
 
+The control pipe itself defaults to `sys-audio-route-control-<sid>`
+(`core/platform/windows_current_user_sid.cpp`), so two different Windows users
+signed in on the same machine never contend for one engine's pipe. The engine,
+`sar_control_cli`, `sar_bootstrap_launcher`, and the GUI each compute this
+default independently rather than one telling the other, since they can start
+in either order; an explicit `--pipe NAME` overrides it, which is what every
+test and lab script uses for isolation.
+
 With `--log-file`, stdout and stderr are redirected to the log (rotated once at
 4 MB to `engine.log.1`) and an unhandled-exception filter writes a minidump to
 `logs\crashdumps` (newest five kept). Without the flag the engine prints to its
