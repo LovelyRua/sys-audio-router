@@ -1,9 +1,13 @@
 #include "app/gui/engine_controller.h"
 
 #include <QGuiApplication>
+#include <QLibraryInfo>
+#include <QLocale>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QSettings>
+#include <QTranslator>
 
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
@@ -85,6 +89,26 @@ int main(int argc, char* argv[]) {
   QGuiApplication::setOrganizationName(QStringLiteral("System Audio Route"));
   QGuiApplication::setApplicationVersion(QStringLiteral(SAR_VERSION));
   QQuickStyle::setStyle(QStringLiteral("Basic"));
+
+  // "system", "en", or "zh_CN"; see EngineController::language(). Applied at
+  // startup only -- changing it takes effect on the next launch.
+  const auto configured_language =
+      QSettings().value(QStringLiteral("language"), QStringLiteral("system"))
+          .toString();
+  const auto ui_locale = configured_language == QStringLiteral("system")
+                             ? QLocale::system()
+                             : QLocale(configured_language);
+
+  QTranslator qt_translator;
+  if (qt_translator.load(ui_locale, QStringLiteral("qtbase"), QStringLiteral("_"),
+                         QLibraryInfo::path(QLibraryInfo::TranslationsPath))) {
+    QCoreApplication::installTranslator(&qt_translator);
+  }
+  QTranslator app_translator;
+  if (app_translator.load(ui_locale, QStringLiteral("Sar"), QStringLiteral("_"),
+                          QStringLiteral(":/i18n"))) {
+    QCoreApplication::installTranslator(&app_translator);
+  }
 
   sar::gui::EngineController engine_controller;
   QQmlApplicationEngine engine;

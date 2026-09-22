@@ -160,7 +160,7 @@ if(SAR_BUILD_GUI)
   if(NOT WIN32)
     message(FATAL_ERROR "The alpha GUI control client currently requires Windows")
   endif()
-  find_package(Qt6 6.8 REQUIRED COMPONENTS Concurrent Quick QuickControls2)
+  find_package(Qt6 6.8 REQUIRED COMPONENTS Concurrent LinguistTools Quick QuickControls2)
   qt_standard_project_setup(REQUIRES 6.8)
   add_subdirectory(app/gui)
 endif()
@@ -1337,7 +1337,6 @@ if(WIN32 AND SAR_BUILD_GUI)
     qt_generate_deploy_qml_app_script(
       TARGET sar_gui
       OUTPUT_SCRIPT sar_gui_deploy_script
-      NO_TRANSLATIONS
       NO_UNSUPPORTED_PLATFORM_ERROR
     )
     install(SCRIPT ${sar_gui_deploy_script})

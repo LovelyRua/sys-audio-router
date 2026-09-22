@@ -10,6 +10,9 @@ ApplicationWindow {
     minimumWidth: 900
     minimumHeight: 640
     visible: true
+    // The window title is the product name and stays constant across
+    // locales: main.cpp's activate_existing_window matches this exact string
+    // to find and raise the window on a second launch.
     title: "System Audio Route"
     color: colors.canvas
 
@@ -29,6 +32,7 @@ ApplicationWindow {
     }
 
     property bool forceClose: false
+    property bool languageChangedThisSession: false
     property string pendingPresetName: ""
 
     onClosing: function(close) {
@@ -151,29 +155,73 @@ ApplicationWindow {
     function diagnosticsHeadline() {
         var state = diagnosticsState()
         if (state === "offline")
-            return "Engine offline"
+            return qsTr("Engine offline")
         if (state === "stopped")
-            return "Audio runtime stopped"
+            return qsTr("Audio runtime stopped")
         if (state === "fault")
-            return "Audio fault"
+            return qsTr("Audio fault")
         if (state === "attention")
-            return "Glitches detected"
-        return "All clear"
+            return qsTr("Glitches detected")
+        return qsTr("All clear")
     }
 
     function diagnosticsDetail() {
         var state = diagnosticsState()
         if (state === "offline")
-            return "The control panel cannot reach the audio engine. It is restarted automatically; if this persists, open the logs folder from the error bar."
+            return qsTr("The control panel cannot reach the audio engine. It is restarted automatically; if this persists, open the logs folder from the error bar.")
         if (state === "stopped")
-            return "Start the engine from the top bar to begin routing. The counters below are from the last run."
+            return qsTr("Start the engine from the top bar to begin routing. The counters below are from the last run.")
         if (state === "fault")
-            return "The audio runtime reported a failure (" +
-                    engine.wasapiRuntimeReasonCode +
-                    "). Check that the selected devices are connected, then restart the engine."
+            return qsTr("The audio runtime reported a failure (%1). Check that the selected devices are connected, then restart the engine.")
+                    .arg(engine.wasapiRuntimeReasonCode)
         if (state === "attention")
-            return "Some audio blocks were dropped or under-ran since the runtime started. Try a larger buffer size or close other audio-heavy applications. The counters below show where it happened."
-        return "No dropouts detected since the runtime started."
+            return qsTr("Some audio blocks were dropped or under-ran since the runtime started. Try a larger buffer size or close other audio-heavy applications. The counters below show where it happened.")
+        return qsTr("No dropouts detected since the runtime started.")
+    }
+
+    function runtimeHealthLabel(token) {
+        switch (token) {
+        case "Stopped": return qsTr("Stopped")
+        case "Healthy": return qsTr("Healthy")
+        case "Degraded": return qsTr("Degraded")
+        case "Faulted": return qsTr("Faulted")
+        case "Unavailable": return qsTr("Unavailable")
+        case "Unknown": return qsTr("Unknown")
+        default: return token
+        }
+    }
+
+    function recoveryStateLabel(token) {
+        switch (token) {
+        case "Stopped": return qsTr("Stopped")
+        case "Opening": return qsTr("Opening")
+        case "Running": return qsTr("Running")
+        case "Quiescing": return qsTr("Quiescing")
+        case "Backoff": return qsTr("Backoff")
+        case "Faulted": return qsTr("Faulted")
+        case "Unavailable": return qsTr("Unavailable")
+        case "Unknown": return qsTr("Unknown")
+        default: return token
+        }
+    }
+
+    function endpointRoleLabel(token) {
+        switch (token) {
+        case "MASTER": return qsTr("MASTER")
+        case "FOLLOWER": return qsTr("FOLLOWER")
+        default: return token
+        }
+    }
+
+    function runtimeModeLabel(token) {
+        switch (token) {
+        case "render": return qsTr("RENDER")
+        case "duplex": return qsTr("DUPLEX")
+        case "matrix": return qsTr("MATRIX")
+        case "physical-asio": return qsTr("PHYSICAL-ASIO")
+        case "none": return qsTr("NONE")
+        default: return token.toUpperCase()
+        }
     }
 
     function diagnosticsTone() {
@@ -924,9 +972,9 @@ ApplicationWindow {
 
     function virtualAsioDraftError() {
         if (virtualAsioDraft.length === 0)
-            return "At least one Virtual ASIO device is required"
+            return qsTr("At least one Virtual ASIO device is required")
         if (virtualAsioDraft.length > 16)
-            return "A maximum of 16 Virtual ASIO devices is supported"
+            return qsTr("A maximum of 16 Virtual ASIO devices is supported")
         var seen = ({})
         var enabledInputs = 0
         var enabledOutputs = 0
@@ -935,10 +983,10 @@ ApplicationWindow {
             var name = String(device.registryName).trim()
             if (name.length === 0 || name.indexOf("\\") >= 0 ||
                     name.indexOf("/") >= 0)
-                return "Every device needs a valid ASIO name"
+                return qsTr("Every device needs a valid ASIO name")
             if (device.inputChannels < 1 || device.inputChannels > 64 ||
                     device.outputChannels < 1 || device.outputChannels > 64)
-                return "Channel counts must be between 1 and 64"
+                return qsTr("Channel counts must be between 1 and 64")
             var identities = [device.deviceId, device.clsid,
                               device.registryName, device.brokerToken]
             for (var identityIndex = 0; identityIndex < identities.length;
@@ -947,7 +995,7 @@ ApplicationWindow {
                 if (identity.length === 0)
                     continue
                 if (seen[identity] !== undefined)
-                    return "Device identities and names must be unique"
+                    return qsTr("Device identities and names must be unique")
                 seen[identity] = true
             }
             if (device.enabled) {
@@ -956,9 +1004,9 @@ ApplicationWindow {
             }
         }
         if (enabledInputs === 0)
-            return "Enable at least one Virtual ASIO device"
+            return qsTr("Enable at least one Virtual ASIO device")
         if (enabledInputs !== enabledOutputs)
-            return "Enabled input and output channel totals must match"
+            return qsTr("Enabled input and output channel totals must match")
         return ""
     }
 
@@ -1110,7 +1158,7 @@ ApplicationWindow {
 
     component ConsoleCombo: ComboBox {
         id: control
-        property string emptyText: "No options"
+        property string emptyText: qsTr("No options")
         function optionText(value) {
             if (value === undefined || value === null)
                 return ""
@@ -1220,7 +1268,7 @@ ApplicationWindow {
         id: dialog
         property string heading
         property string body
-        property string confirmText: "OK"
+        property string confirmText: qsTr("OK")
         signal confirmed()
         modal: true
         anchors.centerIn: Overlay.overlay
@@ -1251,7 +1299,7 @@ ApplicationWindow {
                 Layout.fillWidth: true
                 spacing: 8
                 Item { Layout.fillWidth: true }
-                FlatButton { text: "Cancel"; onClicked: dialog.close() }
+                FlatButton { text: qsTr("Cancel"); onClicked: dialog.close() }
                 FlatButton {
                     text: dialog.confirmText
                     highlighted: true
@@ -1272,20 +1320,20 @@ ApplicationWindow {
     ConfirmDialog {
         id: overwriteDialog
         objectName: "overwritePresetDialog"
-        heading: "Replace preset?"
-        body: "A preset named \"" + window.pendingPresetName +
-              "\" already exists. Saving will replace it."
-        confirmText: "Replace"
+        heading: qsTr("Replace preset?")
+        body: qsTr("A preset named \"%1\" already exists. Saving will replace it.")
+              .arg(window.pendingPresetName)
+        confirmText: qsTr("Replace")
         onConfirmed: engine.savePreset(window.pendingPresetName)
     }
 
     ConfirmDialog {
         id: deleteDialog
         objectName: "deletePresetDialog"
-        heading: "Delete preset?"
-        body: "The preset \"" + window.pendingPresetName +
-              "\" will be permanently deleted. The current routing is not changed."
-        confirmText: "Delete"
+        heading: qsTr("Delete preset?")
+        body: qsTr("The preset \"%1\" will be permanently deleted. The current routing is not changed.")
+              .arg(window.pendingPresetName)
+        confirmText: qsTr("Delete")
         onConfirmed: engine.deletePreset(window.pendingPresetName)
     }
 
@@ -1305,13 +1353,13 @@ ApplicationWindow {
         contentItem: ColumnLayout {
             spacing: 14
             Text {
-                text: "Close System Audio Route?"
+                text: qsTr("Close System Audio Route?")
                 color: colors.text
                 font.pixelSize: 16
                 font.weight: Font.DemiBold
             }
             Text {
-                text: "The audio engine can keep routing in the background so your DAWs stay connected. Choose Stop engine to shut it down completely."
+                text: qsTr("The audio engine can keep routing in the background so your DAWs stay connected. Choose Stop engine to shut it down completely.")
                 color: colors.muted
                 font.pixelSize: 12
                 wrapMode: Text.WordWrap
@@ -1319,16 +1367,16 @@ ApplicationWindow {
             }
             CheckToggle {
                 id: rememberCloseChoice
-                text: "Remember my choice"
+                text: qsTr("Remember my choice")
             }
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
                 Item { Layout.fillWidth: true }
-                FlatButton { text: "Cancel"; onClicked: closeDialog.close() }
+                FlatButton { text: qsTr("Cancel"); onClicked: closeDialog.close() }
                 FlatButton {
                     objectName: "stopEngineAndExitButton"
-                    text: "Stop engine"
+                    text: qsTr("Stop engine")
                     onClicked: {
                         if (rememberCloseChoice.checked)
                             engine.closeBehavior = "quit"
@@ -1340,7 +1388,7 @@ ApplicationWindow {
                 }
                 FlatButton {
                     objectName: "keepRunningButton"
-                    text: "Keep running"
+                    text: qsTr("Keep running")
                     highlighted: true
                     onClicked: {
                         if (rememberCloseChoice.checked)
@@ -1398,7 +1446,7 @@ ApplicationWindow {
             spacing: window.width < 1100 ? 10 : 18
 
             Text {
-                text: "SYSTEM AUDIO ROUTE"
+                text: qsTr("SYSTEM AUDIO ROUTE")
                 color: colors.text
                 font.pixelSize: window.width < 1100 ? 13 : 15
                 font.weight: Font.Bold
@@ -1416,7 +1464,7 @@ ApplicationWindow {
                     color: engine.connected ? colors.healthy : colors.danger
                 }
                 Text {
-                    text: engine.connectionLabel
+                    text: engine.connected ? qsTr("Engine online") : qsTr("Engine offline")
                     color: colors.text
                     font.pixelSize: 12
                 }
@@ -1433,19 +1481,19 @@ ApplicationWindow {
             Item { Layout.fillWidth: true }
 
             Text {
-                text: engine.sampleRate > 0 ? engine.sampleRate + " Hz" : "-- Hz"
+                text: engine.sampleRate > 0 ? qsTr("%1 Hz").arg(engine.sampleRate) : qsTr("-- Hz")
                 color: colors.muted
                 font.pixelSize: 12
                 visible: window.width >= 980
             }
             Text {
-                text: engine.blockSize > 0 ? engine.blockSize + " samples" : "-- samples"
+                text: engine.blockSize > 0 ? qsTr("%1 samples").arg(engine.blockSize) : qsTr("-- samples")
                 color: colors.muted
                 font.pixelSize: 12
                 visible: window.width >= 1060
             }
             Text {
-                text: "XRUN " + engine.xrunCount
+                text: qsTr("XRUN %1").arg(engine.xrunCount)
                 color: engine.xrunCount > 0 ? colors.warning : colors.muted
                 font.pixelSize: 12
                 font.weight: Font.DemiBold
@@ -1503,21 +1551,21 @@ ApplicationWindow {
             }
             FlatButton {
                 visible: engine.lastError.length > 0
-                text: "Copy"
+                text: qsTr("Copy")
                 onClicked: window.copyToClipboard(engine.lastError)
             }
             FlatButton {
                 visible: engine.lastError.length > 0
-                text: "Open logs"
+                text: qsTr("Open logs")
                 onClicked: engine.openLogDirectory()
             }
             FlatButton {
                 visible: engine.lastError.length > 0
-                text: "Export"
+                text: qsTr("Export")
                 onClicked: engine.exportDiagnostics()
             }
             FlatButton {
-                text: "Dismiss"
+                text: qsTr("Dismiss")
                 onClicked: engine.clearFeedback()
             }
         }
@@ -1539,7 +1587,7 @@ ApplicationWindow {
                 spacing: 3
 
                 Text {
-                    text: "WORKSPACE"
+                    text: qsTr("WORKSPACE")
                     color: colors.muted
                     font.pixelSize: 10
                     font.weight: Font.DemiBold
@@ -1547,12 +1595,12 @@ ApplicationWindow {
                     topPadding: 10
                     bottomPadding: 6
                 }
-                NavButton { text: "Routing matrix"; viewId: "matrix"; Layout.fillWidth: true }
-                NavButton { text: "Audio devices"; viewId: "devices"; Layout.fillWidth: true }
-                NavButton { text: "Diagnostics"; viewId: "diagnostics"; Layout.fillWidth: true }
+                NavButton { text: qsTr("Routing matrix"); viewId: "matrix"; Layout.fillWidth: true }
+                NavButton { text: qsTr("Audio devices"); viewId: "devices"; Layout.fillWidth: true }
+                NavButton { text: qsTr("Diagnostics"); viewId: "diagnostics"; Layout.fillWidth: true }
 
                 Text {
-                    text: "PRESETS"
+                    text: qsTr("PRESETS")
                     color: colors.muted
                     font.pixelSize: 10
                     font.weight: Font.DemiBold
@@ -1564,7 +1612,7 @@ ApplicationWindow {
                     id: presetBrowser
                     Layout.fillWidth: true
                     model: engine.presetNames
-                    emptyText: "No saved presets"
+                    emptyText: qsTr("No saved presets")
                     currentIndex: engine.activePresetName.length > 0
                                   ? engine.presetNames.indexOf(engine.activePresetName)
                                   : -1
@@ -1574,7 +1622,7 @@ ApplicationWindow {
                 ConsoleField {
                     id: presetName
                     Layout.fillWidth: true
-                    placeholderText: "Preset name"
+                    placeholderText: qsTr("Preset name")
                     text: engine.activePresetName
                     maximumLength: 80
                     selectByMouse: true
@@ -1584,7 +1632,7 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     spacing: 6
                     FlatButton {
-                        text: "Load"
+                        text: qsTr("Load")
                         leftPadding: 6
                         rightPadding: 6
                         Layout.fillWidth: true
@@ -1594,7 +1642,7 @@ ApplicationWindow {
                         onClicked: engine.loadPreset(presetBrowser.currentText)
                     }
                     FlatButton {
-                        text: "Save"
+                        text: qsTr("Save")
                         highlighted: true
                         Layout.fillWidth: true
                         enabled: engine.connected &&
@@ -1606,7 +1654,7 @@ ApplicationWindow {
                     }
                     FlatButton {
                         objectName: "deletePresetButton"
-                        text: "Delete"
+                        text: qsTr("Delete")
                         leftPadding: 6
                         rightPadding: 6
                         Layout.fillWidth: true
@@ -1629,16 +1677,56 @@ ApplicationWindow {
                     spacing: 5
                     CheckToggle {
                         objectName: "startAtLoginCheckBox"
-                        text: "Start engine at login"
+                        text: qsTr("Start engine at login")
                         checked: engine.startAtLogin
                         onClicked: engine.startAtLogin = checked
                     }
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 6
+                        Text {
+                            text: qsTr("Language")
+                            color: colors.muted
+                            font.pixelSize: 11
+                        }
+                        ConsoleCombo {
+                            id: languageCombo
+                            objectName: "languageCombo"
+                            Layout.fillWidth: true
+                            implicitHeight: 26
+                            textRole: "label"
+                            model: [
+                                { code: "system", label: qsTr("System language") },
+                                { code: "en", label: "English" },
+                                { code: "zh_CN", label: "简体中文" }
+                            ]
+                            currentIndex: {
+                                for (var index = 0; index < model.length; ++index) {
+                                    if (model[index].code === engine.language)
+                                        return index
+                                }
+                                return 0
+                            }
+                            onActivated: function(index) {
+                                engine.language = model[index].code
+                                window.languageChangedThisSession = true
+                            }
+                        }
+                    }
+                    Text {
+                        visible: window.languageChangedThisSession
+                        text: qsTr("Restart System Audio Route to apply the new language.")
+                        color: colors.warning
+                        font.pixelSize: 10
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
                         FlatButton {
                             objectName: "openLogsButton"
-                            text: "Logs"
+                            text: qsTr("Logs")
                             implicitHeight: 26
                             leftPadding: 8
                             rightPadding: 8
@@ -1647,7 +1735,7 @@ ApplicationWindow {
                         }
                         FlatButton {
                             objectName: "exportDiagnosticsButton"
-                            text: "Export"
+                            text: qsTr("Export")
                             implicitHeight: 26
                             leftPadding: 8
                             rightPadding: 8
@@ -1662,13 +1750,13 @@ ApplicationWindow {
                         }
                     }
                     Text {
-                        text: "GRAPH " + engine.graphVersion
+                        text: qsTr("GRAPH %1").arg(engine.graphVersion)
                         color: colors.muted
                         font.pixelSize: 10
                     }
                     Text {
-                        text: engine.activeClients + " ASIO  /  " +
-                              engine.droppedBlocks + " dropped"
+                        text: qsTr("%1 ASIO  /  %2 dropped")
+                              .arg(engine.activeClients).arg(engine.droppedBlocks)
                         color: engine.droppedBlocks > 0 ? colors.danger : colors.muted
                         font.pixelSize: 11
                     }
@@ -1704,14 +1792,14 @@ ApplicationWindow {
                                 anchors.leftMargin: 18
                                 anchors.rightMargin: 12
                                 Text {
-                                    text: "Routing matrix"
+                                    text: qsTr("Routing matrix")
                                     color: colors.text
                                     font.pixelSize: 16
                                     font.weight: Font.DemiBold
                                 }
                                 Text {
-                                    text: matrixInputs.length + " inputs  /  " +
-                                          matrixOutputs.length + " outputs"
+                                    text: qsTr("%1 inputs  /  %2 outputs")
+                                          .arg(matrixInputs.length).arg(matrixOutputs.length)
                                     color: colors.muted
                                     font.pixelSize: 11
                                 }
@@ -1726,7 +1814,7 @@ ApplicationWindow {
                                 AbstractButton {
                                     id: inactiveIoToggle
                                     objectName: "showInactiveIoCheckBox"
-                                    text: "Show inactive I/O"
+                                    text: qsTr("Show inactive I/O")
                                     checked: showInactiveIo
                                     checkable: true
                                     implicitHeight: 26
@@ -1772,18 +1860,18 @@ ApplicationWindow {
                                 }
                                 IconButton {
                                     text: "↶"
-                                    tooltipText: "Undo route edit (Ctrl+Z)"
+                                    tooltipText: qsTr("Undo route edit (Ctrl+Z)")
                                     enabled: engine.canUndo && !engine.busy
                                     onClicked: engine.undo()
                                 }
                                 IconButton {
                                     text: "↷"
-                                    tooltipText: "Redo route edit (Ctrl+Y or Ctrl+Shift+Z)"
+                                    tooltipText: qsTr("Redo route edit (Ctrl+Y or Ctrl+Shift+Z)")
                                     enabled: engine.canRedo && !engine.busy
                                     onClicked: engine.redo()
                                 }
                                 FlatButton {
-                                    text: "Refresh"
+                                    text: qsTr("Refresh")
                                     enabled: !engine.busy
                                     onClicked: engine.refresh()
                                 }
@@ -1860,7 +1948,7 @@ ApplicationWindow {
                                     border.color: colors.line
                                     Text {
                                         anchors.centerIn: parent
-                                        text: "DESTINATION  /  SOURCE"
+                                        text: qsTr("DESTINATION  /  SOURCE")
                                         color: colors.muted
                                         font.pixelSize: 9
                                         font.weight: Font.DemiBold
@@ -2307,7 +2395,7 @@ ApplicationWindow {
                         spacing: window.width < 1150 ? 11 : 14
 
                         Text {
-                            text: "ROUTE INSPECTOR"
+                            text: qsTr("ROUTE INSPECTOR")
                             color: colors.muted
                             font.pixelSize: 10
                             font.weight: Font.DemiBold
@@ -2321,7 +2409,7 @@ ApplicationWindow {
                             Layout.fillWidth: true
                         }
                         Text {
-                            text: "to  " + selectedOutputLabel
+                            text: qsTr("to  %1").arg(selectedOutputLabel)
                             color: colors.muted
                             font.pixelSize: 12
                             elide: Text.ElideRight
@@ -2332,7 +2420,7 @@ ApplicationWindow {
                         Switch {
                             id: routeSwitch
                             objectName: "routeEnabledSwitch"
-                            text: "Route enabled"
+                            text: qsTr("Route enabled")
                             enabled: selectedInputId.length > 0 &&
                                      window.endpointActive(selectedInputId) &&
                                      window.endpointActive(selectedOutputId) &&
@@ -2361,17 +2449,17 @@ ApplicationWindow {
                         FlatButton {
                             objectName: "removeSelectedRouteButton"
                             Layout.fillWidth: true
-                            text: "Remove route"
+                            text: qsTr("Remove route")
                             enabled: selectedInputId.length > 0 &&
                                      window.routeExists(selectedInputId,
                                                         selectedOutputId) &&
                                      engine.connected && !engine.busy
                             onClicked: window.removeSelectedRoute()
                             ToolTip.visible: hovered
-                            ToolTip.text: "Delete this crosspoint (Shift+click in matrix)"
+                            ToolTip.text: qsTr("Delete this crosspoint (Shift+click in matrix)")
                         }
 
-                        Text { text: "Gain"; color: colors.muted; font.pixelSize: 11 }
+                        Text { text: qsTr("Gain"); color: colors.muted; font.pixelSize: 11 }
                         RowLayout {
                             Layout.fillWidth: true
                             Slider {
@@ -2408,9 +2496,10 @@ ApplicationWindow {
                             }
                             Text {
                                 text: gainSlider.value <= -60
-                                      ? "-inf"
-                                      : (gainSlider.value > 0 ? "+" : "") +
-                                        gainSlider.value.toFixed(1) + " dB"
+                                      ? qsTr("-inf")
+                                      : qsTr("%1 dB").arg(
+                                            (gainSlider.value > 0 ? "+" : "") +
+                                            gainSlider.value.toFixed(1))
                                 color: colors.text
                                 font.family: "Consolas"
                                 font.pixelSize: 11
@@ -2419,7 +2508,7 @@ ApplicationWindow {
                         }
 
                         Rectangle { Layout.fillWidth: true; height: 1; color: colors.line }
-                        Text { text: "ASIO BUS LEVEL"; color: colors.muted; font.pixelSize: 10 }
+                        Text { text: qsTr("ASIO BUS LEVEL"); color: colors.muted; font.pixelSize: 10 }
                         Rectangle {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 16
@@ -2451,8 +2540,8 @@ ApplicationWindow {
                         }
                         Text {
                             text: window.meterLevel > 0.001
-                                  ? (20 * Math.log(window.meterLevel) / Math.LN10).toFixed(1) + " dBFS"
-                                                  : "-inf dBFS"
+                                  ? qsTr("%1 dBFS").arg((20 * Math.log(window.meterLevel) / Math.LN10).toFixed(1))
+                                                  : qsTr("-inf dBFS")
                             color: colors.text
                             font.family: "Consolas"
                             font.pixelSize: 11
@@ -2479,8 +2568,8 @@ ApplicationWindow {
                     y: 24
                     width: Math.max(0, devicesScroll.availableWidth - 48)
                     spacing: 14
-                    Text { text: "Audio devices"; color: colors.text; font.pixelSize: 18; font.weight: Font.DemiBold }
-                    Text { text: engine.devices.length + " endpoints reported by the engine"; color: colors.muted; font.pixelSize: 12 }
+                    Text { text: qsTr("Audio devices"); color: colors.text; font.pixelSize: 18; font.weight: Font.DemiBold }
+                    Text { text: qsTr("%1 endpoints reported by the engine").arg(engine.devices.length); color: colors.muted; font.pixelSize: 12 }
                     Rectangle { Layout.fillWidth: true; height: 1; color: colors.line }
                     Rectangle {
                         Layout.fillWidth: true
@@ -2498,7 +2587,7 @@ ApplicationWindow {
                             RowLayout {
                                 Layout.fillWidth: true
                                 Text {
-                                    text: "Audio runtime"
+                                    text: qsTr("Audio runtime")
                                     color: colors.text
                                     font.pixelSize: 13
                                     font.weight: Font.DemiBold
@@ -2506,8 +2595,8 @@ ApplicationWindow {
                                 Item { Layout.fillWidth: true }
                                 Text {
                                     text: engine.runtimeConfigured ?
-                                              engine.runtimeMode.toUpperCase() :
-                                          "NOT CONFIGURED"
+                                              window.runtimeModeLabel(engine.runtimeMode) :
+                                          qsTr("NOT CONFIGURED")
                                     color: engine.runtimeConfigured ? colors.healthy : colors.warning
                                     font.pixelSize: 10
                                     font.weight: Font.DemiBold
@@ -2517,12 +2606,12 @@ ApplicationWindow {
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 8
-                                Text { text: "Mode"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
+                                Text { text: qsTr("Mode"); color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
                                 ConsoleCombo {
                                     id: runtimeModeCombo
                                     objectName: "runtimeModeCombo"
                                     Layout.fillWidth: true
-                                    model: ["Matrix", "WASAPI render", "WASAPI duplex"]
+                                    model: [qsTr("Matrix"), qsTr("WASAPI render"), qsTr("WASAPI duplex")]
                                     currentIndex: window.runtimeDraftMode === "matrix" ? 0
                                                 : window.runtimeDraftMode === "duplex" ? 2 : 1
                                     onActivated: function(index) {
@@ -2538,13 +2627,13 @@ ApplicationWindow {
                                 spacing: 8
                                 visible: window.runtimeDraftMode === "render" ||
                                          window.runtimeDraftMode === "duplex"
-                                Text { text: "Render"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
+                                Text { text: qsTr("Render"); color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
                                 ConsoleCombo {
                                     id: renderDeviceCombo
                                     objectName: "renderDeviceCombo"
                                     Layout.fillWidth: true
                                     textRole: "label"
-                                    emptyText: "No render devices"
+                                    emptyText: qsTr("No render devices")
                                     model: engine.devices.filter(function (device) {
                                         return device.isWasapi &&
                                                (device.direction === 1 || device.direction === 2)
@@ -2565,13 +2654,13 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 spacing: 8
                                 visible: window.runtimeDraftMode === "duplex"
-                                Text { text: "Capture"; color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
+                                Text { text: qsTr("Capture"); color: colors.muted; font.pixelSize: 11; Layout.preferredWidth: 72 }
                                 ConsoleCombo {
                                     id: captureDeviceCombo
                                     objectName: "captureDeviceCombo"
                                     Layout.fillWidth: true
                                     textRole: "label"
-                                    emptyText: "No capture devices"
+                                    emptyText: qsTr("No capture devices")
                                     model: engine.devices.filter(function (device) {
                                         return device.isWasapi &&
                                                (device.direction === 0 || device.direction === 2)
@@ -2624,7 +2713,7 @@ ApplicationWindow {
 
                                             ConsoleCombo {
                                                 Layout.preferredWidth: 90
-                                                model: ["Capture", "Render"]
+                                                model: [qsTr("Capture"), qsTr("Render")]
                                                 enabled: modelData.backend !== "physical-asio"
                                                 currentIndex: modelData.direction === "render" ? 1 : 0
                                                 onActivated: function(selectedIndex) {
@@ -2637,7 +2726,7 @@ ApplicationWindow {
                                             ConsoleField {
                                                 Layout.preferredWidth: 125
                                                 text: modelData.endpointId
-                                                placeholderText: "Endpoint ID"
+                                                placeholderText: qsTr("Endpoint ID")
                                                 onEditingFinished: window.setMatrixEndpoint(
                                                     index, "endpointId", text.trim())
                                             }
@@ -2645,7 +2734,7 @@ ApplicationWindow {
                                                 id: matrixDeviceCombo
                                                 Layout.fillWidth: true
                                                 textRole: "label"
-                                                emptyText: "No matching device"
+                                                emptyText: qsTr("No matching device")
                                                 model: engine.devices.filter(function(device) {
                                                     return (modelData.backend === "physical-asio"
                                                             ? device.isAsio : device.isWasapi) &&
@@ -2674,14 +2763,14 @@ ApplicationWindow {
                                             }
                                             FlatButton {
                                                 Layout.preferredWidth: 72
-                                                text: modelData.clockMaster ? "MASTER" : "CLOCK"
+                                                text: modelData.clockMaster ? qsTr("MASTER") : qsTr("CLOCK")
                                                 highlighted: modelData.clockMaster
                                                 enabled: modelData.direction === "render"
                                                 onClicked: window.setMatrixEndpoint(index, "clockMaster", true)
                                             }
                                             IconButton {
                                                 text: "X"
-                                                tooltipText: "Remove endpoint"
+                                                tooltipText: qsTr("Remove endpoint")
                                                 onClicked: window.removeMatrixEndpoint(index)
                                             }
                                         }
@@ -2697,7 +2786,7 @@ ApplicationWindow {
                                                 Layout.preferredWidth: 90
                                                 elide: Text.ElideRight
                                             }
-                                            Text { text: "Rate"; color: colors.muted; font.pixelSize: 10 }
+                                            Text { text: qsTr("Rate"); color: colors.muted; font.pixelSize: 10 }
                                             ConsoleField {
                                                 Layout.preferredWidth: 90
                                                 text: String(modelData.sampleRate)
@@ -2705,7 +2794,7 @@ ApplicationWindow {
                                                 onEditingFinished: window.setMatrixEndpointGroup(
                                                     index, "sampleRate", Math.max(8000, Number(text)))
                                             }
-                                            Text { text: "Block"; color: colors.muted; font.pixelSize: 10 }
+                                            Text { text: qsTr("Block"); color: colors.muted; font.pixelSize: 10 }
                                             ConsoleField {
                                                 Layout.preferredWidth: 78
                                                 text: String(modelData.blockFrames)
@@ -2715,7 +2804,7 @@ ApplicationWindow {
                                             }
                                             Item { Layout.fillWidth: true }
                                             Text {
-                                                text: "DRAFT"
+                                                text: qsTr("DRAFT")
                                                 color: colors.warning
                                                 font.pixelSize: 9
                                                 font.weight: Font.DemiBold
@@ -2728,7 +2817,7 @@ ApplicationWindow {
                                 RowLayout {
                                     Layout.fillWidth: true
                                     FlatButton {
-                                        text: "+ Capture"
+                                        text: qsTr("+ Capture")
                                         enabled: engine.devices.some(function(device) {
                                             return device.isWasapi &&
                                                    (device.direction === 0 || device.direction === 2)
@@ -2736,7 +2825,7 @@ ApplicationWindow {
                                         onClicked: window.addMatrixEndpoint("capture")
                                     }
                                     FlatButton {
-                                        text: "+ Render"
+                                        text: qsTr("+ Render")
                                         enabled: engine.devices.some(function(device) {
                                             return device.isWasapi &&
                                                    (device.direction === 1 || device.direction === 2)
@@ -2745,7 +2834,7 @@ ApplicationWindow {
                                     }
                                     FlatButton {
                                         objectName: "addAsioMatrixEndpointButton"
-                                        text: "+ ASIO"
+                                        text: qsTr("+ ASIO")
                                         enabled: engine.devices.some(function(device) {
                                             return device.isAsio
                                         })
@@ -2753,7 +2842,7 @@ ApplicationWindow {
                                     }
                                     Item { Layout.fillWidth: true }
                                     Text {
-                                        text: window.runtimeMatrixDraft.length + " endpoints"
+                                        text: qsTr("%1 endpoints").arg(window.runtimeMatrixDraft.length)
                                         color: colors.muted
                                         font.pixelSize: 10
                                     }
@@ -2777,7 +2866,7 @@ ApplicationWindow {
                                 }
                                 FlatButton {
                                     objectName: "applyRuntimeButton"
-                                    text: "Apply"
+                                    text: qsTr("Apply")
                                     highlighted: true
                                     enabled: engine.connected && !engine.busy &&
                                      (window.runtimeDraftMode === "matrix"
@@ -2820,20 +2909,20 @@ ApplicationWindow {
                             RowLayout {
                                 Layout.fillWidth: true
                                 Text {
-                                    text: "Virtual ASIO devices"
+                                    text: qsTr("Virtual ASIO devices")
                                     color: colors.text
                                     font.pixelSize: 13
                                     font.weight: Font.DemiBold
                                 }
                                 Text {
-                                    text: window.virtualAsioDraft.length + " / 16"
+                                    text: qsTr("%1 / 16").arg(window.virtualAsioDraft.length)
                                     color: colors.muted
                                     font.pixelSize: 10
                                 }
                                 Item { Layout.fillWidth: true }
                                 FlatButton {
                                     objectName: "addVirtualAsioDeviceButton"
-                                    text: "+ Add"
+                                    text: qsTr("+ Add")
                                     enabled: engine.connected && !engine.busy &&
                                              window.virtualAsioDraft.length < 16
                                     onClicked: window.addVirtualAsioDevice()
@@ -2844,9 +2933,9 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 spacing: 8
                                 Item { Layout.preferredWidth: 42 }
-                                Text { text: "ASIO NAME"; color: colors.muted; font.pixelSize: 9; Layout.fillWidth: true }
-                                Text { text: "INPUTS"; color: colors.muted; font.pixelSize: 9; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 62 }
-                                Text { text: "OUTPUTS"; color: colors.muted; font.pixelSize: 9; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 62 }
+                                Text { text: qsTr("ASIO NAME"); color: colors.muted; font.pixelSize: 9; Layout.fillWidth: true }
+                                Text { text: qsTr("INPUTS"); color: colors.muted; font.pixelSize: 9; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 62 }
+                                Text { text: qsTr("OUTPUTS"); color: colors.muted; font.pixelSize: 9; horizontalAlignment: Text.AlignHCenter; Layout.preferredWidth: 62 }
                                 Item { Layout.preferredWidth: 34 }
                             }
 
@@ -2875,7 +2964,7 @@ ApplicationWindow {
                                             onClicked: window.setVirtualAsioDevice(
                                                 index, "enabled", checked)
                                             ToolTip.visible: hovered
-                                            ToolTip.text: checked ? "Enabled" : "Disabled"
+                                            ToolTip.text: checked ? qsTr("Enabled") : qsTr("Disabled")
                                         }
                                         ColumnLayout {
                                             Layout.fillWidth: true
@@ -2884,7 +2973,7 @@ ApplicationWindow {
                                                 objectName: "virtualAsioNameField"
                                                 Layout.fillWidth: true
                                                 text: modelData.registryName
-                                                placeholderText: "ASIO device name"
+                                                placeholderText: qsTr("ASIO device name")
                                                 enabled: engine.connected && !engine.busy
                                                 onEditingFinished: window.setVirtualAsioDevice(
                                                     index, "registryName", text.trim())
@@ -2929,7 +3018,7 @@ ApplicationWindow {
                                         IconButton {
                                             objectName: "removeVirtualAsioDeviceButton"
                                             text: "X"
-                                            tooltipText: "Remove Virtual ASIO device"
+                                            tooltipText: qsTr("Remove Virtual ASIO device")
                                             enabled: engine.connected && !engine.busy &&
                                                      window.virtualAsioDraft.length > 1
                                             onClicked: window.removeVirtualAsioDevice(index)
@@ -2945,7 +3034,7 @@ ApplicationWindow {
                                 Text {
                                     text: window.virtualAsioDraftError().length > 0
                                           ? window.virtualAsioDraftError()
-                                          : "Applying this topology restarts the engine service"
+                                          : qsTr("Applying this topology restarts the engine service")
                                     color: window.virtualAsioDraftError().length > 0
                                            ? colors.warning : colors.muted
                                     font.pixelSize: 10
@@ -2954,7 +3043,7 @@ ApplicationWindow {
                                 }
                                 FlatButton {
                                     objectName: "applyVirtualAsioDevicesButton"
-                                    text: "Apply"
+                                    text: qsTr("Apply")
                                     highlighted: true
                                     enabled: engine.connected && !engine.busy &&
                                              window.virtualAsioDraftDirty &&
@@ -3013,8 +3102,8 @@ ApplicationWindow {
                     y: 24
                     width: Math.max(0, diagnosticsScroll.availableWidth - 48)
                     spacing: 14
-                    Text { text: "Diagnostics"; color: colors.text; font.pixelSize: 18; font.weight: Font.DemiBold }
-                    Text { text: "Live engine counters"; color: colors.muted; font.pixelSize: 12 }
+                    Text { text: qsTr("Diagnostics"); color: colors.text; font.pixelSize: 18; font.weight: Font.DemiBold }
+                    Text { text: qsTr("Live engine counters"); color: colors.muted; font.pixelSize: 12 }
                     Rectangle { Layout.fillWidth: true; height: 1; color: colors.line }
                     Rectangle {
                         objectName: "diagnosticsSummary"
@@ -3054,12 +3143,12 @@ ApplicationWindow {
 
                         Repeater {
                             model: [
-                                { label: "XRUNS", value: engine.xrunCount, tone: engine.xrunCount > 0 ? colors.warning : colors.healthy },
-                                { label: "DROPPED BLOCKS", value: engine.droppedBlocks, tone: engine.droppedBlocks > 0 ? colors.danger : colors.healthy },
-                                { label: "PRODUCER UNDERFLOWS", value: engine.virtualAsioProducerUnderflows, tone: engine.virtualAsioProducerUnderflows > 0 ? colors.warning : colors.healthy },
-                                { label: "PRODUCER OVERFLOWS", value: engine.virtualAsioProducerOverflows, tone: engine.virtualAsioProducerOverflows > 0 ? colors.danger : colors.healthy },
-                                { label: "ASIO CLIENTS", value: engine.activeClients, tone: colors.cyan },
-                                { label: "CALLBACK PEAK", value: engine.callbackPeakUs.toFixed(1) + " us", tone: colors.text }
+                                { label: qsTr("XRUNS"), value: engine.xrunCount, tone: engine.xrunCount > 0 ? colors.warning : colors.healthy },
+                                { label: qsTr("DROPPED BLOCKS"), value: engine.droppedBlocks, tone: engine.droppedBlocks > 0 ? colors.danger : colors.healthy },
+                                { label: qsTr("PRODUCER UNDERFLOWS"), value: engine.virtualAsioProducerUnderflows, tone: engine.virtualAsioProducerUnderflows > 0 ? colors.warning : colors.healthy },
+                                { label: qsTr("PRODUCER OVERFLOWS"), value: engine.virtualAsioProducerOverflows, tone: engine.virtualAsioProducerOverflows > 0 ? colors.danger : colors.healthy },
+                                { label: qsTr("ASIO CLIENTS"), value: engine.activeClients, tone: colors.cyan },
+                                { label: qsTr("CALLBACK PEAK"), value: qsTr("%1 us").arg(engine.callbackPeakUs.toFixed(1)), tone: colors.text }
                             ]
                             delegate: Rectangle {
                                 required property var modelData
@@ -3078,7 +3167,7 @@ ApplicationWindow {
                     }
                     Text {
                         visible: engine.endpointDiagnostics.length > 0
-                        text: "Endpoint clocks"
+                        text: qsTr("Endpoint clocks")
                         color: colors.text
                         font.pixelSize: 12
                         font.weight: Font.DemiBold
@@ -3098,12 +3187,12 @@ ApplicationWindow {
                                 anchors.leftMargin: 12
                                 anchors.rightMargin: 12
                                 spacing: 12
-                                Text { text: "ENDPOINT"; color: colors.muted; font.pixelSize: 9; font.weight: Font.DemiBold; Layout.fillWidth: true }
-                                Text { text: "ROLE"; color: colors.muted; font.pixelSize: 9; Layout.preferredWidth: 76 }
-                                Text { text: "HEALTH"; color: colors.muted; font.pixelSize: 9; Layout.preferredWidth: 90 }
-                                Text { text: "QUEUE"; color: colors.muted; font.pixelSize: 9; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 84 }
-                                Text { text: "CLOCK"; color: colors.muted; font.pixelSize: 9; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 92 }
-                                Text { text: "XRUN"; color: colors.muted; font.pixelSize: 9; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 60 }
+                                Text { text: qsTr("ENDPOINT"); color: colors.muted; font.pixelSize: 9; font.weight: Font.DemiBold; Layout.fillWidth: true }
+                                Text { text: qsTr("ROLE"); color: colors.muted; font.pixelSize: 9; Layout.preferredWidth: 76 }
+                                Text { text: qsTr("HEALTH"); color: colors.muted; font.pixelSize: 9; Layout.preferredWidth: 90 }
+                                Text { text: qsTr("QUEUE"); color: colors.muted; font.pixelSize: 9; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 84 }
+                                Text { text: qsTr("CLOCK"); color: colors.muted; font.pixelSize: 9; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 92 }
+                                Text { text: qsTr("XRUN"); color: colors.muted; font.pixelSize: 9; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 60 }
                             }
                         }
                         Repeater {
@@ -3124,9 +3213,9 @@ ApplicationWindow {
                                         Text { text: modelData.endpointId; color: colors.text; font.pixelSize: 11; elide: Text.ElideMiddle; Layout.fillWidth: true }
                                         Text { visible: modelData.reason.length > 0; text: modelData.reason; color: colors.muted; font.pixelSize: 9; elide: Text.ElideRight; Layout.fillWidth: true }
                                     }
-                                    Text { text: modelData.role; color: modelData.role === "MASTER" ? colors.cyan : colors.muted; font.pixelSize: 9; font.weight: Font.DemiBold; Layout.preferredWidth: 76 }
+                                    Text { text: window.endpointRoleLabel(modelData.role); color: modelData.role === "MASTER" ? colors.cyan : colors.muted; font.pixelSize: 9; font.weight: Font.DemiBold; Layout.preferredWidth: 76 }
                                     Text {
-                                        text: modelData.health
+                                        text: window.runtimeHealthLabel(modelData.health)
                                         color: modelData.health === "Healthy" ? colors.healthy
                                               : modelData.health === "Faulted" ? colors.danger
                                               : modelData.health === "Degraded" ? colors.warning
@@ -3134,15 +3223,15 @@ ApplicationWindow {
                                         font.pixelSize: 10
                                         Layout.preferredWidth: 90
                                     }
-                                    Text { text: modelData.queueFillAvailable ? modelData.queueFillFrames + " f" : "-"; color: colors.text; font.pixelSize: 10; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 84 }
-                                    Text { text: modelData.correctionAvailable ? Number(modelData.correctionPpm).toFixed(1) + " ppm" : "MASTER"; color: Math.abs(modelData.correctionPpm) >= 450 ? colors.warning : colors.text; font.pixelSize: 10; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 92 }
+                                    Text { text: modelData.queueFillAvailable ? qsTr("%1 f").arg(modelData.queueFillFrames) : "-"; color: colors.text; font.pixelSize: 10; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 84 }
+                                    Text { text: modelData.correctionAvailable ? qsTr("%1 ppm").arg(Number(modelData.correctionPpm).toFixed(1)) : qsTr("MASTER"); color: Math.abs(modelData.correctionPpm) >= 450 ? colors.warning : colors.text; font.pixelSize: 10; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 92 }
                                     Text { text: modelData.xruns; color: modelData.xruns > 0 ? colors.danger : colors.healthy; font.pixelSize: 11; horizontalAlignment: Text.AlignRight; Layout.preferredWidth: 60 }
                                 }
                             }
                         }
                     }
                     Text {
-                        text: "WASAPI recovery"
+                        text: qsTr("WASAPI recovery")
                         color: colors.text
                         font.pixelSize: 12
                         font.weight: Font.DemiBold
@@ -3157,8 +3246,8 @@ ApplicationWindow {
                         Repeater {
                             model: [
                                 {
-                                    label: "HEALTH",
-                                    value: engine.wasapiRecoveryAvailable ? engine.wasapiRuntimeHealth : "Unavailable",
+                                    label: qsTr("HEALTH"),
+                                    value: window.runtimeHealthLabel(engine.wasapiRecoveryAvailable ? engine.wasapiRuntimeHealth : "Unavailable"),
                                     detail: engine.wasapiRecoveryAvailable && engine.wasapiRuntimeReasonCode.length > 0
                                             ? engine.wasapiRuntimeReasonCode : "",
                                     tone: !engine.wasapiRecoveryAvailable ? colors.muted
@@ -3168,8 +3257,8 @@ ApplicationWindow {
                                           : colors.muted
                                 },
                                 {
-                                    label: "STATE",
-                                    value: engine.wasapiRecoveryAvailable ? engine.wasapiRecoveryState : "Unavailable",
+                                    label: qsTr("STATE"),
+                                    value: window.recoveryStateLabel(engine.wasapiRecoveryAvailable ? engine.wasapiRecoveryState : "Unavailable"),
                                     detail: "",
                                     tone: !engine.wasapiRecoveryAvailable ? colors.muted
                                           : engine.wasapiRecoveryState === "Running" ? colors.healthy
@@ -3177,17 +3266,17 @@ ApplicationWindow {
                                           : engine.wasapiRecoveryState === "Faulted" ? colors.danger
                                           : colors.warning
                                 },
-                                { label: "WAIT TIMEOUTS", value: engine.wasapiWaitTimeoutCycles, detail: "cycles", tone: engine.wasapiWaitTimeoutCycles > 0 ? colors.danger : colors.healthy },
-                                { label: "DISCONTINUITIES", value: engine.wasapiCaptureDiscontinuityCycles, detail: "capture cycles", tone: engine.wasapiCaptureDiscontinuityCycles > 0 ? colors.warning : colors.healthy },
-                                { label: "RENDER UNDERFLOW", value: engine.wasapiRenderFifoUnderflowFrames, detail: "frames", tone: engine.wasapiRenderFifoUnderflowFrames > 0 ? colors.warning : colors.healthy },
-                                { label: "RECOVERY SILENCE", value: engine.wasapiMaximumRenderRecoverySilenceFrames, detail: "max frames", tone: engine.wasapiMaximumRenderRecoverySilenceFrames > 0 ? colors.warning : colors.healthy },
-                                { label: "RATE CLAMP", value: engine.wasapiMaximumConsecutiveCaptureRateClampedFrames, detail: "max frames", tone: engine.wasapiMaximumConsecutiveCaptureRateClampedFrames > 0 ? colors.warning : colors.healthy },
-                                { label: "RECOVERED", value: engine.wasapiSuccessfulRecoveries + " / " + engine.wasapiRecoveryEpisodes, detail: "success / total", tone: colors.healthy },
-                                { label: "FAILED", value: engine.wasapiFailedRecoveries, detail: "recoveries", tone: engine.wasapiFailedRecoveries > 0 ? colors.danger : colors.healthy },
-                                { label: "LAST / MAX", value: engine.wasapiLastRecoveryMs + " / " + engine.wasapiMaximumRecoveryMs + " ms", detail: "recovery time", tone: colors.text },
-                                { label: "ENDPOINT REOPENS", value: engine.wasapiEndpointReopens, detail: "notifications", tone: colors.cyan },
-                                { label: "RESET FAILURES", value: engine.wasapiEndpointResetFailures, detail: "notifications", tone: engine.wasapiEndpointResetFailures > 0 ? colors.danger : colors.healthy },
-                                { label: "REOPEN REQUEST", value: engine.wasapiEndpointReopenPending ? "Pending" : "Idle", detail: "", tone: engine.wasapiEndpointReopenPending ? colors.warning : colors.muted }
+                                { label: qsTr("WAIT TIMEOUTS"), value: engine.wasapiWaitTimeoutCycles, detail: qsTr("cycles"), tone: engine.wasapiWaitTimeoutCycles > 0 ? colors.danger : colors.healthy },
+                                { label: qsTr("DISCONTINUITIES"), value: engine.wasapiCaptureDiscontinuityCycles, detail: qsTr("capture cycles"), tone: engine.wasapiCaptureDiscontinuityCycles > 0 ? colors.warning : colors.healthy },
+                                { label: qsTr("RENDER UNDERFLOW"), value: engine.wasapiRenderFifoUnderflowFrames, detail: qsTr("frames"), tone: engine.wasapiRenderFifoUnderflowFrames > 0 ? colors.warning : colors.healthy },
+                                { label: qsTr("RECOVERY SILENCE"), value: engine.wasapiMaximumRenderRecoverySilenceFrames, detail: qsTr("max frames"), tone: engine.wasapiMaximumRenderRecoverySilenceFrames > 0 ? colors.warning : colors.healthy },
+                                { label: qsTr("RATE CLAMP"), value: engine.wasapiMaximumConsecutiveCaptureRateClampedFrames, detail: qsTr("max frames"), tone: engine.wasapiMaximumConsecutiveCaptureRateClampedFrames > 0 ? colors.warning : colors.healthy },
+                                { label: qsTr("RECOVERED"), value: qsTr("%1 / %2").arg(engine.wasapiSuccessfulRecoveries).arg(engine.wasapiRecoveryEpisodes), detail: qsTr("success / total"), tone: colors.healthy },
+                                { label: qsTr("FAILED"), value: engine.wasapiFailedRecoveries, detail: qsTr("recoveries"), tone: engine.wasapiFailedRecoveries > 0 ? colors.danger : colors.healthy },
+                                { label: qsTr("LAST / MAX"), value: qsTr("%1 / %2 ms").arg(engine.wasapiLastRecoveryMs).arg(engine.wasapiMaximumRecoveryMs), detail: qsTr("recovery time"), tone: colors.text },
+                                { label: qsTr("ENDPOINT REOPENS"), value: engine.wasapiEndpointReopens, detail: qsTr("notifications"), tone: colors.cyan },
+                                { label: qsTr("RESET FAILURES"), value: engine.wasapiEndpointResetFailures, detail: qsTr("notifications"), tone: engine.wasapiEndpointResetFailures > 0 ? colors.danger : colors.healthy },
+                                { label: qsTr("REOPEN REQUEST"), value: engine.wasapiEndpointReopenPending ? qsTr("Pending") : qsTr("Idle"), detail: "", tone: engine.wasapiEndpointReopenPending ? colors.warning : colors.muted }
                             ]
                             delegate: Rectangle {
                                 required property var modelData

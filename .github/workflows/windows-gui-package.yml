@@ -28,7 +28,7 @@ jobs:
           host: windows
           target: desktop
           arch: win64_msvc2022_64
-          archives: qtbase qtdeclarative
+          archives: qtbase qtdeclarative qttools qttranslations
           cache: true
 
       - name: Load MSVC build environment

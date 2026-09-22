@@ -89,6 +89,7 @@ class EngineController final : public QObject {
   Q_PROPERTY(bool canRedo READ canRedo NOTIFY historyChanged)
   Q_PROPERTY(bool startAtLogin READ startAtLogin WRITE setStartAtLogin NOTIFY startAtLoginChanged)
   Q_PROPERTY(QString closeBehavior READ closeBehavior WRITE setCloseBehavior NOTIFY closeBehaviorChanged)
+  Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged)
   Q_PROPERTY(QString appVersion READ appVersion CONSTANT)
   Q_PROPERTY(QString logDirectory READ logDirectory CONSTANT)
 
@@ -122,6 +123,8 @@ class EngineController final : public QObject {
   void setStartAtLogin(bool enabled);
   [[nodiscard]] QString closeBehavior() const;
   void setCloseBehavior(const QString& behavior);
+  [[nodiscard]] QString language() const;
+  void setLanguage(const QString& language);
   [[nodiscard]] QString appVersion() const;
   [[nodiscard]] QString logDirectory() const;
   [[nodiscard]] qulonglong xrunCount() const noexcept;
@@ -211,6 +214,7 @@ class EngineController final : public QObject {
   void historyChanged();
   void startAtLoginChanged();
   void closeBehaviorChanged();
+  void languageChanged();
 
  private:
   enum class PendingPresetAction {

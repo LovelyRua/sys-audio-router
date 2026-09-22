@@ -31,6 +31,14 @@ acceptance-tests the installer for every pull request.
 - Use `SAR_TEST_PASSWORD` for the WinRM lab scripts; never commit credentials.
 - Match the existing commit style: an imperative summary line, one logical
   change per commit.
+- New GUI display text must be wrapped in `qsTr()` (QML) or `tr()` /
+  `QCoreApplication::translate("EngineController"/"PresetStore", ...)` (C++),
+  and `app/gui/i18n/Sar_zh_CN.ts` needs a matching `<message>` entry (source
+  string plus translation) or the string silently falls back to English for
+  Chinese users. Values compared against by other code (e.g.
+  `engine.wasapiRuntimeHealth`, `engine.runtimeMode`) must stay untranslated
+  tokens; translate them for display only, in QML, the way
+  `runtimeHealthLabel()`/`runtimeModeLabel()` in `Main.qml` do.
 
 ## Pull requests
 

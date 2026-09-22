@@ -40,7 +40,7 @@ a certificate, hardware, a driver test machine).
 
 | ID | Item | Status |
 | --- | --- | --- |
-| UX-1 | Localization | Open: strings are not yet wrapped in `qsTr` |
+| UX-1 | Localization | Done: all display strings in `Main.qml` and the GUI's own C++ (`EngineController`, `PresetStore`) use `qsTr()`/`tr()`; ships English and Simplified Chinese (`app/gui/i18n/Sar_zh_CN.ts`), selectable in the sidebar, applied on next launch. Deep engine-side validation error strings (`core/control`) stay English — scoped out, tracked separately |
 | UX-2 | Keyboard focus and accessible names | Partly done: focus rings and accessible names on shared controls; matrix cell keyboard navigation is Open |
 | UX-3 | Plain-language diagnostics | Done: a summary card states Healthy / Glitches / Fault with advice |
 | UX-4 | Error presentation | Done: two-line wrapped error bar with Copy and Open logs |
