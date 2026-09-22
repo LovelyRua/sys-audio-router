@@ -100,6 +100,26 @@
         <translation>名为“%1”的预设已存在，保存将替换它。</translation>
     </message>
     <message>
+        <source>ACTION FAILED</source>
+        <translation>操作失败</translation>
+    </message>
+    <message>
+        <source>APPLYING</source>
+        <translation>应用中</translation>
+    </message>
+    <message>
+        <source>ASIO</source>
+        <translation>ASIO</translation>
+    </message>
+    <message>
+        <source>ASIO / DAW IN</source>
+        <translation>ASIO / DAW 输入</translation>
+    </message>
+    <message>
+        <source>ASIO / DAW OUT</source>
+        <translation>ASIO / DAW 输出</translation>
+    </message>
+    <message>
         <source>ASIO BUS LEVEL</source>
         <translation>ASIO 总线电平</translation>
     </message>
@@ -116,12 +136,24 @@
         <translation>ASIO 设备名称</translation>
     </message>
     <message>
+        <source>ASIO endpoint draft</source>
+        <translation>ASIO 端点草稿</translation>
+    </message>
+    <message>
         <source>All clear</source>
         <translation>一切正常</translation>
     </message>
     <message>
         <source>Apply</source>
         <translation>应用</translation>
+    </message>
+    <message>
+        <source>Apply restarts the engine with the selected devices</source>
+        <translation>应用将使用所选设备重启引擎</translation>
+    </message>
+    <message>
+        <source>Applying change...</source>
+        <translation>正在应用更改…</translation>
     </message>
     <message>
         <source>Applying this topology restarts the engine service</source>
@@ -180,8 +212,20 @@
         <translation>关闭 System Audio Route？</translation>
     </message>
     <message>
+        <source>Configure audio</source>
+        <translation>配置音频</translation>
+    </message>
+    <message>
         <source>Copy</source>
         <translation>复制</translation>
+    </message>
+    <message>
+        <source>DAW IN</source>
+        <translation>DAW 输入</translation>
+    </message>
+    <message>
+        <source>DEST</source>
+        <translation>目标</translation>
     </message>
     <message>
         <source>DESTINATION  /  SOURCE</source>
@@ -304,6 +348,10 @@
         <translation>检测到爆音</translation>
     </message>
     <message>
+        <source>HARDWARE</source>
+        <translation>硬件</translation>
+    </message>
+    <message>
         <source>HEALTH</source>
         <translation>健康状态</translation>
     </message>
@@ -314,6 +362,10 @@
     <message>
         <source>INPUTS</source>
         <translation>输入</translation>
+    </message>
+    <message>
+        <source>Identity assigned on Apply</source>
+        <translation>应用后分配标识</translation>
     </message>
     <message>
         <source>Idle</source>
@@ -356,6 +408,10 @@
         <translation>矩阵</translation>
     </message>
     <message>
+        <source>Matrix unavailable</source>
+        <translation>矩阵不可用</translation>
+    </message>
+    <message>
         <source>Mode</source>
         <translation>模式</translation>
     </message>
@@ -376,6 +432,10 @@
         <translation>自运行时启动以来未检测到断音。</translation>
     </message>
     <message>
+        <source>No input selected</source>
+        <translation>未选择输入</translation>
+    </message>
+    <message>
         <source>No matching device</source>
         <translation>没有匹配的设备</translation>
     </message>
@@ -384,16 +444,40 @@
         <translation>没有可选项</translation>
     </message>
     <message>
+        <source>No output selected</source>
+        <translation>未选择输出</translation>
+    </message>
+    <message>
         <source>No render devices</source>
         <translation>没有播放设备</translation>
+    </message>
+    <message>
+        <source>No routable endpoints in this preset</source>
+        <translation>此预设中没有可路由的端点</translation>
     </message>
     <message>
         <source>No saved presets</source>
         <translation>没有已保存的预设</translation>
     </message>
     <message>
+        <source>OFFLINE</source>
+        <translation>离线</translation>
+    </message>
+    <message>
         <source>OK</source>
         <translation>确定</translation>
+    </message>
+    <message>
+        <source>OTHER</source>
+        <translation>其他</translation>
+    </message>
+    <message>
+        <source>OTHER DESTINATIONS</source>
+        <translation>其他目标</translation>
+    </message>
+    <message>
+        <source>OTHER SOURCES</source>
+        <translation>其他来源</translation>
     </message>
     <message>
         <source>OUTPUTS</source>
@@ -410,6 +494,10 @@
     <message>
         <source>PHYSICAL-ASIO</source>
         <translation>物理 ASIO</translation>
+    </message>
+    <message>
+        <source>PRESET</source>
+        <translation>预设</translation>
     </message>
     <message>
         <source>PRESETS</source>
@@ -544,6 +632,10 @@
         <translation>保存</translation>
     </message>
     <message>
+        <source>Select devices, then apply the runtime</source>
+        <translation>选择设备，然后应用运行时</translation>
+    </message>
+    <message>
         <source>Show inactive I/O</source>
         <translation>显示未激活的 I/O</translation>
     </message>
@@ -552,12 +644,24 @@
         <translation>自运行时启动以来，部分音频块被丢弃或发生欠载。请尝试增大缓冲区大小，或关闭其他占用较高的音频应用。下方的计数器显示了具体发生的位置。</translation>
     </message>
     <message>
+        <source>Start</source>
+        <translation>启动</translation>
+    </message>
+    <message>
+        <source>Start engine</source>
+        <translation>启动引擎</translation>
+    </message>
+    <message>
         <source>Start engine at login</source>
         <translation>登录时启动引擎</translation>
     </message>
     <message>
         <source>Start the engine from the top bar to begin routing. The counters below are from the last run.</source>
         <translation>在顶部栏点击启动引擎以开始路由。下方计数器显示的是上一次运行的数据。</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>停止</translation>
     </message>
     <message>
         <source>Stop engine</source>
@@ -600,12 +704,28 @@
         <translation>未知</translation>
     </message>
     <message>
+        <source>VIRTUAL</source>
+        <translation>虚拟</translation>
+    </message>
+    <message>
         <source>Virtual ASIO devices</source>
         <translation>虚拟 ASIO 设备</translation>
     </message>
     <message>
         <source>WAIT TIMEOUTS</source>
         <translation>等待超时次数</translation>
+    </message>
+    <message>
+        <source>WASAPI</source>
+        <translation>WASAPI</translation>
+    </message>
+    <message>
+        <source>WASAPI CAPTURE</source>
+        <translation>WASAPI 采集</translation>
+    </message>
+    <message>
+        <source>WASAPI RENDER</source>
+        <translation>WASAPI 播放</translation>
     </message>
     <message>
         <source>WASAPI duplex</source>
@@ -622,6 +742,10 @@
     <message>
         <source>WORKSPACE</source>
         <translation>工作区</translation>
+    </message>
+    <message>
+        <source>Waiting for the engine</source>
+        <translation>正在等待引擎</translation>
     </message>
     <message>
         <source>XRUN</source>
