@@ -57,7 +57,7 @@ a certificate, hardware, a driver test machine).
 | ID | Item | Status |
 | --- | --- | --- |
 | CI-1 | Warnings-as-errors, static analysis | Open |
-| CI-2 | Mutation/fuzz coverage of decoders | Done for the control wire protocol, session, and preset codecs (`control_codec_mutation_smoke`) |
+| CI-2 | Mutation/fuzz coverage of decoders | Done for the control wire protocol, session, and preset codecs (`control_codec_mutation_smoke`) and the Virtual ASIO broker protocol (`virtual_asio_broker_protocol_mutation_smoke`) — the DLL-facing surface a DAW process talks to. The shared-memory/ring-buffer layouts (`virtual_wasapi_transport_layout`, `virtual_asio_shared_memory_layout`) already had dedicated adversarial smokes before this review |
 | CI-3 | Sanitizer job | See the advisory ASan job in `.github/workflows/ci.yml` |
 | SEC-1 | No credentials in docs or arguments | Done for docs and the WinRM wrappers that take a password (`SAR_TEST_PASSWORD`) |
 | SEC-2 | Control-client authorization | Open |

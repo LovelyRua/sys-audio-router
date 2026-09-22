@@ -56,9 +56,10 @@ jobs:
           sar_preset_file_codec_smoke
           sar_session_file_codec_smoke
           sar_virtual_asio_broker_protocol_smoke
+          sar_virtual_asio_broker_protocol_mutation_smoke
           sar_planar_audio_fifo_smoke
 
       - name: Run smoke tests
         run: >-
           ctest --test-dir build-asan --output-on-failure
-          -R "control_wire_protocol_smoke|control_codec_mutation_smoke|preset_file_codec_smoke|session_file_codec_smoke|virtual_asio_broker_protocol_smoke|planar_audio_fifo_smoke"
+          -R "control_wire_protocol_smoke|control_codec_mutation_smoke|preset_file_codec_smoke|session_file_codec_smoke|virtual_asio_broker_protocol_smoke|virtual_asio_broker_protocol_mutation_smoke|planar_audio_fifo_smoke"
