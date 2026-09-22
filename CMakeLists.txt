@@ -511,6 +511,8 @@ if(WIN32)
   )
   sar_add_version_resource(sar_bootstrap_launcher
     "System Audio Route launcher" "SystemAudioRouteLauncher.exe" APP)
+  target_include_directories(sar_bootstrap_launcher
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_compile_features(sar_bootstrap_launcher PRIVATE cxx_std_20)
   target_link_libraries(sar_bootstrap_launcher PRIVATE advapi32 user32)
   set_target_properties(sar_bootstrap_launcher PROPERTIES
