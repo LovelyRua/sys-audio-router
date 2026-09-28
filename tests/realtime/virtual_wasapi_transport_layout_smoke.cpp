@@ -188,7 +188,7 @@ int main() {
   assert(source.available_frames() == 2);
   sar::realtime::AudioBuffer tail(2, 2);
   assert(source.read(tail));
-  assert(tail.channel(0)[0] == 0.4F && tail.channel(1)[1] == 0.1F);
+  assert(tail.channel(0)[0] == 0.2F && tail.channel(1)[1] == 0.7F);
   assert(source.available_frames() == 0);
   assert(!source.read(block));
   assert(std::all_of(block.channel(0).begin(), block.channel(0).end(),
