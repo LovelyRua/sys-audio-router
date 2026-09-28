@@ -89,7 +89,7 @@ class VirtualWasapiRingAudioSource final : public RealtimeAudioQueuedSource {
 
   [[nodiscard]] std::size_t available_frames() const noexcept override {
     return pending_frames_.load(std::memory_order_relaxed) +
-           ring_.queued_slots() * ring_.frames_per_slot();
+           ring_.queued_frames();
   }
 
   [[nodiscard]] RealtimeAudioSourceDiagnostics diagnostics() const noexcept override {
