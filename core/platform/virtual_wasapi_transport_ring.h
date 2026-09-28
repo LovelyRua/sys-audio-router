@@ -157,6 +157,19 @@ class VirtualWasapiTransportRing {
     const auto queued = producer - consumer;
     return static_cast<std::size_t>(queued > header_->slot_count ? header_->slot_count : queued);
   }
+  std::size_t queued_frames() const noexcept {
+    const auto consumer = std::atomic_ref(state_->consumer_sequence).load(std::memory_order_relaxed);
+    const auto producer = std::atomic_ref(state_->producer_sequence).load(std::memory_order_acquire);
+    if (producer <= consumer || producer - consumer > header_->slot_count) return 0;
+    std::size_t frames = 0;
+    for (auto sequence = consumer; sequence < producer; ++sequence) {
+      const auto* slot = slot_at(sequence);
+      if (slot->sequence == sequence + 1 && slot->frame_count <= header_->frames_per_slot) {
+        frames += slot->frame_count;
+      }
+    }
+    return frames;
+  }
 
  private:
   VirtualWasapiTransportRing(std::byte* memory,

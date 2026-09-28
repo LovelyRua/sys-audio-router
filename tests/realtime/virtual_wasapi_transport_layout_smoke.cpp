@@ -148,6 +148,15 @@ int main() {
   assert(received == first);
   assert(consumer->pop(received, result) == VirtualWasapiPacketStatus::Empty);
 
+  packet.frames = 2;
+  assert(producer->push(std::span<const std::byte>(first.data(), 16), packet) ==
+         VirtualWasapiPacketStatus::Completed);
+  assert(consumer->queued_slots() == 1);
+  assert(consumer->queued_frames() == 2);
+  assert(consumer->pop(received, result) == VirtualWasapiPacketStatus::Completed);
+  assert(result.frames == 2);
+  packet.frames = 4;
+
   packet.flags = SAR_VWASAPI_SLOT_FLAG_SILENT;
   assert(producer->push({}, packet) == VirtualWasapiPacketStatus::Completed);
   received.fill(std::byte{0x55});
@@ -159,8 +168,8 @@ int main() {
   packet.flags = 0;
   assert(producer->push({}, packet) == VirtualWasapiPacketStatus::InvalidPacket);
   assert(producer->counters().malformed_packets == 1);
-  assert(producer->counters().produced_frames == 16);
-  assert(consumer->counters().consumed_frames == 16);
+  assert(producer->counters().produced_frames == 18);
+  assert(consumer->counters().consumed_frames == 18);
 
   assert(VirtualWasapiTransportRing::initialize(memory.data(), memory.size(),
                                                 small_layout.header));
@@ -213,6 +222,13 @@ int main() {
   assert(source.read(block));
   assert(block.channel(0)[0] == 0.0F);
   assert(source.diagnostics().non_finite_samples == 1);
+
+  packet.frames = 2;
+  assert(writer->push(std::span<const std::byte>(first.data(), 16), packet) ==
+         VirtualWasapiPacketStatus::Completed);
+  assert(source.available_frames() == 2);
+  assert(source.read(tail));
+  assert(source.available_frames() == 0);
 
   return 0;
 }
