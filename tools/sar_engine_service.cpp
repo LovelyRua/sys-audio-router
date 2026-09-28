@@ -16,6 +16,7 @@
 #include "core/platform/realtime_audio_rate_matching_source.h"
 #include "core/platform/windows_asio_device_provider.h"
 #include "core/platform/windows_wasapi_device_provider.h"
+#include "core/platform/windows_virtual_wasapi_render_source.h"
 #include "driver/windows_virtual_asio_registration.h"
 
 #ifndef NOMINMAX
@@ -804,8 +805,10 @@ sar::service::EngineAudioRuntimeBuildResult convert_runtime_result(
 sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator(
     sar::platform::RealtimeAudioSource* external_render_input,
     sar::platform::RealtimeAudioSink* external_capture_output,
-    sar::platform::WasapiGraphChannelLayout channel_layout) {
-  return [external_render_input, external_capture_output, channel_layout](
+    sar::platform::WasapiGraphChannelLayout channel_layout,
+    std::vector<sar::service::WindowsVirtualWasapiMatrixInput> virtual_inputs) {
+  return [external_render_input, external_capture_output, channel_layout,
+          virtual_inputs = std::move(virtual_inputs)](
              const sar::control::AudioRuntimeConfiguration& configuration,
              std::shared_ptr<sar::graph::Graph> graph,
              const sar::control::PresetRouteMatrix& matrix) {
@@ -858,7 +861,7 @@ sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator(
       matrix_layout.external_output_channels = asio->channels;
       return sar::service::open_windows_wasapi_matrix_runtime(
           configuration, matrix, std::move(graph), external_render_input,
-          external_capture_output, matrix_layout);
+          external_capture_output, matrix_layout, virtual_inputs);
     }
     if (configuration.mode ==
         sar::control::AudioRuntimeMode::PhysicalAsio) {
@@ -889,6 +892,7 @@ int main(int argc, char** argv) {
   std::size_t requested_asio_channels = 2;
   bool asio_channels_explicit = false;
   bool pipe_explicit = false;
+  std::vector<std::wstring> virtual_wasapi_lab_maps;
   for (int index = 1; index < argc; ++index) {
     const std::string argument = argv[index];
     if (argument == "--once") {
@@ -919,6 +923,13 @@ int main(int argc, char** argv) {
       }
     } else if (argument == "--stop") {
       stop_command = true;
+    } else if (argument == "--virtual-wasapi-lab-map" && index + 1 < argc) {
+      std::wstring name;
+      if (!utf8_to_wide(argv[++index], name)) {
+        std::cerr << "--virtual-wasapi-lab-map requires a UTF-8 mapping name.\n";
+        return 2;
+      }
+      virtual_wasapi_lab_maps.push_back(std::move(name));
     } else if (argument == "--asio-channels" && index + 1 < argc) {
       const std::string value = argv[++index];
       std::size_t parsed = 0;
@@ -937,6 +948,7 @@ int main(int argc, char** argv) {
       std::cerr << "Usage: sar_engine_service [--pipe NAME] [--once] "
                    "[--session FILE] [--log-file FILE] [--stop] "
                    "[--asio-channels COUNT] "
+                   "[--virtual-wasapi-lab-map NAME] "
                    "[--wasapi-render|--wasapi-duplex "
                    "[--capture-id ID --render-id ID]]\n";
       return 2;
@@ -953,6 +965,12 @@ int main(int argc, char** argv) {
   }
   if (wasapi_render && wasapi_duplex) {
     std::cerr << "Choose either --wasapi-render or --wasapi-duplex.\n";
+    return 2;
+  }
+  if (!virtual_wasapi_lab_maps.empty() &&
+      (stop_command || wasapi_render || wasapi_duplex)) {
+    std::cerr << "Virtual WASAPI lab mappings require matrix mode and cannot "
+                 "be used with --stop.\n";
     return 2;
   }
   const bool has_capture_id = !capture_device_id.empty();
@@ -1068,6 +1086,39 @@ int main(int argc, char** argv) {
     session_profile_resized = true;
   }
 
+  std::vector<sar::service::WindowsVirtualWasapiMatrixInput> virtual_inputs;
+  for (std::size_t index = 0; index < virtual_wasapi_lab_maps.size(); ++index) {
+    const auto& name = virtual_wasapi_lab_maps[index];
+    if (std::find(virtual_wasapi_lab_maps.begin(),
+                  virtual_wasapi_lab_maps.begin() + index, name) !=
+        virtual_wasapi_lab_maps.begin() + index) {
+      std::cerr << "virtual_wasapi_lab_duplicate_mapping: Names must be unique.\n";
+      return 2;
+    }
+    auto opened = sar::platform::WindowsVirtualWasapiRenderSource::open(name);
+    if (!opened.ok()) {
+      std::cerr << "virtual_wasapi_lab_mapping_unavailable: "
+                << opened.error_code << " (win32=" << opened.native_error
+                << ").\n";
+      return 1;
+    }
+    const auto first_channel = desired_session.preset.matrix.inputs.size();
+    const auto channels = opened.mapping->channels();
+    virtual_inputs.push_back({name, first_channel});
+    for (std::uint32_t channel = 0; channel < channels; ++channel) {
+      const auto number = std::to_string(channel + 1);
+      desired_session.preset.matrix.inputs.push_back({
+          "virtual-wasapi-lab-" + std::to_string(index + 1) + ".ch" + number,
+          "Virtual WASAPI Lab " + std::to_string(index + 1) + " Ch " + number,
+      });
+    }
+  }
+  if (!virtual_inputs.empty()) {
+    session_writes_allowed = false;
+    std::cerr << "session_warning code=virtual_wasapi_lab_session_ephemeral "
+                 "action=disable_session_writes\n";
+  }
+
   const auto asio_profile = sar::service::virtual_asio_matrix_profile(
       desired_session.preset.matrix);
   if (!asio_profile.has_value()) {
@@ -1158,7 +1209,8 @@ int main(int argc, char** argv) {
           &asio_output_fanout,
           unified_channel_layout(desired_session.preset.matrix.inputs.size(),
                                  desired_session.preset.matrix.outputs.size(),
-                                 *asio_profile)));
+                                 *asio_profile),
+          std::move(virtual_inputs)));
   if (has_session_path &&
       desired_session.audio_runtime.mode !=
           sar::control::AudioRuntimeMode::None) {

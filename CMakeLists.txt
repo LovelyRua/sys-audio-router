@@ -1143,6 +1143,11 @@ if(WIN32)
            COMMAND sar_engine_service --wasapi-duplex --capture-id capture-only)
   set_tests_properties(windows_engine_service_incomplete_duplex_ids
                        PROPERTIES WILL_FAIL TRUE TIMEOUT 5)
+  add_test(NAME windows_engine_service_virtual_wasapi_lab_mode_conflict
+           COMMAND sar_engine_service --virtual-wasapi-lab-map lab
+                   --wasapi-render)
+  set_tests_properties(windows_engine_service_virtual_wasapi_lab_mode_conflict
+                       PROPERTIES WILL_FAIL TRUE TIMEOUT 5)
   add_test(NAME windows_wasapi_device_smoke COMMAND sar_windows_wasapi_device_smoke)
   add_test(NAME windows_asio_device_provider_smoke
            COMMAND sar_windows_asio_device_provider_smoke)
