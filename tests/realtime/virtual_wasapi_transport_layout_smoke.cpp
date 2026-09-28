@@ -1,3 +1,8 @@
+// CI builds smoke tests in Release; keep their assertions executable.
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+
 #include "core/platform/virtual_wasapi_transport_layout.h"
 #include "core/platform/virtual_wasapi_transport_ring.h"
 
