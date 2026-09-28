@@ -5,12 +5,14 @@
 
 #include "core/platform/virtual_wasapi_transport_layout.h"
 #include "core/platform/virtual_wasapi_transport_ring.h"
+#include "core/platform/virtual_wasapi_ring_audio_source.h"
 
 #include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 
 int main() {
@@ -159,6 +161,58 @@ int main() {
   assert(producer->counters().malformed_packets == 1);
   assert(producer->counters().produced_frames == 16);
   assert(consumer->counters().consumed_frames == 16);
+
+  assert(VirtualWasapiTransportRing::initialize(memory.data(), memory.size(),
+                                                small_layout.header));
+  auto writer = VirtualWasapiTransportRing::attach(
+      memory.data(), memory.size(), SAR_VWASAPI_DIRECTION_RENDER);
+  auto reader = VirtualWasapiTransportRing::attach(
+      memory.data(), memory.size(), SAR_VWASAPI_DIRECTION_RENDER);
+  assert(writer && reader);
+  sar::platform::VirtualWasapiRingAudioSource source(*reader);
+  sar::realtime::AudioBuffer block(2, 6);
+  const float first_samples[8] = {0.1F, 0.2F, 0.3F, 0.4F,
+                                  0.5F, 0.6F, 0.7F, 0.8F};
+  const float second_samples[8] = {0.9F, 1.0F, 0.4F, 0.3F,
+                                   0.2F, 0.1F, 0.8F, 0.7F};
+  std::memcpy(first.data(), first_samples, first.size());
+  std::memcpy(second.data(), second_samples, second.size());
+  packet = {4, 0, 0, 0};
+  assert(writer->push(first, packet) == VirtualWasapiPacketStatus::Completed);
+  assert(writer->push(second, packet) == VirtualWasapiPacketStatus::Completed);
+  assert(source.available_frames() == 8);
+  assert(source.read(block));
+  assert(block.channel(0)[0] == 0.1F && block.channel(1)[0] == 0.2F);
+  assert(block.channel(0)[3] == 0.7F && block.channel(1)[3] == 0.8F);
+  assert(block.channel(0)[4] == 0.9F && block.channel(1)[4] == 1.0F);
+  assert(source.available_frames() == 2);
+  sar::realtime::AudioBuffer tail(2, 2);
+  assert(source.read(tail));
+  assert(tail.channel(0)[0] == 0.4F && tail.channel(1)[1] == 0.1F);
+  assert(source.available_frames() == 0);
+  assert(!source.read(block));
+  assert(std::all_of(block.channel(0).begin(), block.channel(0).end(),
+                     [](float value) { return value == 0.0F; }));
+
+  assert(writer->push(first, packet) == VirtualWasapiPacketStatus::Completed);
+  auto* corrupt = reinterpret_cast<SarVirtualWasapiSlotState*>(
+      memory.data() + small_layout.header.slot_table_offset);
+  corrupt->frame_count = 0;
+  assert(!source.read(block));
+  assert(writer->counters().malformed_packets == 1);
+  assert(writer->push(second, packet) == VirtualWasapiPacketStatus::Completed);
+  assert(source.read(block));
+  assert(block.channel(0)[0] == 0.9F);
+  assert(block.channel(0)[4] == 0.0F);
+  assert(source.diagnostics().dropped_blocks == 1);
+
+  const float invalid_samples[8] = {std::numeric_limits<float>::quiet_NaN(),
+                                    0.2F, 0.3F, 0.4F, 0.5F, 0.6F, 0.7F, 0.8F};
+  std::memcpy(first.data(), invalid_samples, first.size());
+  assert(writer->push(first, packet) == VirtualWasapiPacketStatus::Completed);
+  assert(source.read(block));
+  assert(block.channel(0)[0] == 0.0F);
+  assert(source.diagnostics().non_finite_samples == 1);
 
   return 0;
 }

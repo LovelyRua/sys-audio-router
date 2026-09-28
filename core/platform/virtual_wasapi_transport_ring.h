@@ -107,12 +107,16 @@ class VirtualWasapiTransportRing {
       return VirtualWasapiPacketStatus::InvalidPacket;
     }
     const auto* slot = slot_at(consumer);
-    const auto packet_bytes = static_cast<std::size_t>(slot->frame_count) * bytes_per_frame();
     if (slot->sequence != consumer + 1 || slot->frame_count == 0 ||
         slot->frame_count > header_->frames_per_slot ||
         (slot->flags & ~(SAR_VWASAPI_SLOT_FLAG_SILENT |
-                         SAR_VWASAPI_SLOT_FLAG_DISCONTINUITY)) != 0 ||
-        audio.size() < packet_bytes) {
+                         SAR_VWASAPI_SLOT_FLAG_DISCONTINUITY)) != 0) {
+      std::atomic_ref(state_->malformed_packets).fetch_add(1, std::memory_order_relaxed);
+      std::atomic_ref(state_->consumer_sequence).store(consumer + 1, std::memory_order_release);
+      return VirtualWasapiPacketStatus::InvalidPacket;
+    }
+    const auto packet_bytes = static_cast<std::size_t>(slot->frame_count) * bytes_per_frame();
+    if (audio.size() < packet_bytes) {
       std::atomic_ref(state_->malformed_packets).fetch_add(1, std::memory_order_relaxed);
       return VirtualWasapiPacketStatus::InvalidPacket;
     }
@@ -138,6 +142,20 @@ class VirtualWasapiTransportRing {
         std::atomic_ref(state_->silence_frames).load(std::memory_order_relaxed),
         std::atomic_ref(state_->malformed_packets).load(std::memory_order_relaxed),
     };
+  }
+
+  std::uint32_t direction() const noexcept { return header_->direction; }
+  std::uint32_t sample_format() const noexcept { return header_->sample_format; }
+  std::uint32_t bits_per_sample() const noexcept { return header_->bits_per_sample; }
+  std::uint32_t channel_count() const noexcept { return header_->channel_count; }
+  std::uint32_t frames_per_slot() const noexcept { return header_->frames_per_slot; }
+  std::uint32_t slot_count() const noexcept { return header_->slot_count; }
+  std::size_t queued_slots() const noexcept {
+    const auto producer = std::atomic_ref(state_->producer_sequence).load(std::memory_order_acquire);
+    const auto consumer = std::atomic_ref(state_->consumer_sequence).load(std::memory_order_acquire);
+    if (producer <= consumer) return 0;
+    const auto queued = producer - consumer;
+    return static_cast<std::size_t>(queued > header_->slot_count ? header_->slot_count : queued);
   }
 
  private:
