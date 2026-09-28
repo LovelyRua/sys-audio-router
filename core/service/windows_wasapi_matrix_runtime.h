@@ -19,20 +19,26 @@ struct WindowsWasapiMatrixEndpointResourceDiagnostics {
   double correction_ppm = 0.0;
 };
 
+struct WindowsVirtualWasapiMatrixInput {
+  std::wstring mapping_name;
+  std::size_t graph_first_channel = 0;
+};
+
 void merge_windows_wasapi_matrix_endpoint_diagnostics(
     std::vector<EngineAudioEndpointDiagnostics>& endpoints,
     const std::vector<WindowsWasapiMatrixEndpointResourceDiagnostics>&
         resources) noexcept;
 
-// Builds one render-clock master plus independently rate-matched render and
-// capture followers. Every physical endpoint owns its device clock; only the
-// render master advances the product graph.
+// Builds one render-clock master plus independently rate-matched inputs and
+// followers. Virtual inputs are explicit pre-existing graph channel ranges;
+// the control configuration does not expose them yet.
 [[nodiscard]] EngineAudioRuntimeBuildResult open_windows_wasapi_matrix_runtime(
     const control::AudioRuntimeConfiguration& configuration,
     const control::PresetRouteMatrix& matrix,
     std::shared_ptr<graph::Graph> graph,
     platform::RealtimeAudioSource* external_input = nullptr,
     platform::RealtimeAudioSink* external_output = nullptr,
-    platform::WasapiGraphChannelLayout base_layout = {});
+    platform::WasapiGraphChannelLayout base_layout = {},
+    const std::vector<WindowsVirtualWasapiMatrixInput>& virtual_inputs = {});
 
 }  // namespace sar::service
