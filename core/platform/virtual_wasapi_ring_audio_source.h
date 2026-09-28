@@ -33,6 +33,8 @@ class VirtualWasapiRingAudioSource final : public RealtimeAudioQueuedSource {
   VirtualWasapiRingAudioSource(const VirtualWasapiRingAudioSource&) = delete;
   VirtualWasapiRingAudioSource& operator=(const VirtualWasapiRingAudioSource&) = delete;
 
+  [[nodiscard]] std::uint32_t channels() const noexcept { return ring_.channel_count(); }
+
   [[nodiscard]] bool read(realtime::AudioBuffer& destination) noexcept override {
     destination.clear();
     if (destination.channels() != ring_.channel_count()) {

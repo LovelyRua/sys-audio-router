@@ -134,6 +134,7 @@ if(WIN32)
     core/platform/windows_virtual_asio_security.cpp
     core/platform/windows_virtual_asio_shared_queue.cpp
     core/platform/windows_virtual_asio_shared_memory.cpp
+    core/platform/windows_virtual_wasapi_render_source.cpp
     core/platform/windows_wasapi_duplex_loop.cpp
     core/platform/windows_wasapi_duplex_supervisor.cpp
     core/platform/windows_wasapi_endpoint_notification.cpp
@@ -588,6 +589,11 @@ if(WIN32)
   )
 
   target_link_libraries(sar_windows_virtual_asio_shared_memory_smoke PRIVATE sar_core)
+
+  add_executable(sar_windows_virtual_wasapi_render_source_smoke
+    tests/realtime/windows_virtual_wasapi_render_source_smoke.cpp
+  )
+  target_link_libraries(sar_windows_virtual_wasapi_render_source_smoke PRIVATE sar_core)
 
   add_executable(sar_windows_virtual_asio_shared_queue_smoke
     tests/realtime/windows_virtual_asio_shared_queue_smoke.cpp
@@ -1073,6 +1079,8 @@ if(WIN32)
            COMMAND sar_windows_virtual_asio_security_smoke)
   add_test(NAME windows_virtual_asio_shared_memory_smoke
            COMMAND sar_windows_virtual_asio_shared_memory_smoke)
+  add_test(NAME windows_virtual_wasapi_render_source_smoke
+           COMMAND sar_windows_virtual_wasapi_render_source_smoke)
   add_test(NAME windows_virtual_asio_shared_queue_smoke
            COMMAND sar_windows_virtual_asio_shared_queue_smoke)
   add_test(NAME windows_virtual_asio_shared_queue_adversarial_smoke
