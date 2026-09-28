@@ -530,6 +530,11 @@ if(WIN32)
   add_executable(sar_control_cli
     tools/sar_control_cli.cpp
   )
+
+  add_executable(sar_virtual_wasapi_lab_producer
+    tools/sar_virtual_wasapi_lab_producer.cpp
+  )
+  target_link_libraries(sar_virtual_wasapi_lab_producer PRIVATE sar_core)
   sar_add_version_resource(sar_control_cli
     "System Audio Route control command line" "sar_control_cli.exe" APP)
 
@@ -1148,6 +1153,11 @@ if(WIN32)
                    --wasapi-render)
   set_tests_properties(windows_engine_service_virtual_wasapi_lab_mode_conflict
                        PROPERTIES WILL_FAIL TRUE TIMEOUT 5)
+  add_test(NAME windows_virtual_wasapi_lab_producer_smoke
+           COMMAND sar_virtual_wasapi_lab_producer
+                   --name Local\\SAR.VirtualWASAPI.v1.ci-smoke --seconds 1)
+  set_tests_properties(windows_virtual_wasapi_lab_producer_smoke
+                       PROPERTIES TIMEOUT 5)
   add_test(NAME windows_wasapi_device_smoke COMMAND sar_windows_wasapi_device_smoke)
   add_test(NAME windows_asio_device_provider_smoke
            COMMAND sar_windows_asio_device_provider_smoke)
@@ -1366,6 +1376,8 @@ if(WIN32 AND SAR_BUILD_GUI)
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_BINDIR}
   )
+  install(TARGETS sar_virtual_wasapi_lab_producer
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}/lab)
   if(SAR_BUILD_GUI)
     install(TARGETS sar_gui
       RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
