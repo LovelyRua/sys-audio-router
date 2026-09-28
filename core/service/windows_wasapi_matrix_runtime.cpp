@@ -6,6 +6,7 @@
 #include "core/platform/realtime_audio_input_assembler.h"
 #include "core/platform/realtime_audio_rate_matching_source.h"
 #include "core/platform/windows_wasapi_stream.h"
+#include "core/platform/windows_virtual_wasapi_render_source.h"
 #include "core/service/audio_runtime_matrix_binding.h"
 #include "core/service/audio_runtime_topology.h"
 #include "core/service/multi_endpoint_audio_runtime.h"
@@ -30,16 +31,23 @@ struct EndpointFollowerResources {
   std::shared_ptr<graph::Graph> graph;
 };
 
+struct VirtualWasapiInputResources {
+  std::unique_ptr<platform::WindowsVirtualWasapiRenderSource> mapping;
+  std::unique_ptr<platform::RealtimeAudioRateMatchingSource> rate_matcher;
+};
+
 class WindowsWasapiMatrixRuntime final : public EngineAudioRuntime {
  public:
   WindowsWasapiMatrixRuntime(
       std::vector<std::unique_ptr<EndpointFollowerResources>> resources,
+      std::vector<std::unique_ptr<VirtualWasapiInputResources>> virtual_inputs,
       std::unique_ptr<platform::RealtimeAudioInputAssembler> input_assembler,
       std::unique_ptr<platform::RealtimeAudioChannelSliceSink>
           external_output_slice,
       std::unique_ptr<platform::RealtimeAudioFanoutSink> fanout,
       std::unique_ptr<MultiEndpointAudioRuntime> runtime)
       : resources_(std::move(resources)),
+        virtual_inputs_(std::move(virtual_inputs)),
         input_assembler_(std::move(input_assembler)),
         external_output_slice_(std::move(external_output_slice)),
         fanout_(std::move(fanout)),
@@ -108,6 +116,7 @@ class WindowsWasapiMatrixRuntime final : public EngineAudioRuntime {
 
  private:
   std::vector<std::unique_ptr<EndpointFollowerResources>> resources_;
+  std::vector<std::unique_ptr<VirtualWasapiInputResources>> virtual_inputs_;
   std::unique_ptr<platform::RealtimeAudioInputAssembler> input_assembler_;
   std::unique_ptr<platform::RealtimeAudioChannelSliceSink>
       external_output_slice_;
@@ -208,7 +217,8 @@ EngineAudioRuntimeBuildResult open_windows_wasapi_matrix_runtime(
     std::shared_ptr<graph::Graph> graph,
     platform::RealtimeAudioSource* external_input,
     platform::RealtimeAudioSink* external_output,
-    platform::WasapiGraphChannelLayout base_layout) {
+    platform::WasapiGraphChannelLayout base_layout,
+    const std::vector<WindowsVirtualWasapiMatrixInput>& virtual_inputs) {
   if (!graph) {
     return failure("null_runtime_graph",
                    "WASAPI matrix runtime requires a graph.");
@@ -390,6 +400,47 @@ EngineAudioRuntimeBuildResult open_windows_wasapi_matrix_runtime(
     input_bindings.push_back({external_input, base_layout.external_input_offset,
                               base_layout.external_input_channels});
   }
+  std::vector<std::unique_ptr<VirtualWasapiInputResources>> virtual_resources;
+  virtual_resources.reserve(virtual_inputs.size());
+  for (const auto& spec : virtual_inputs) {
+    auto opened = platform::WindowsVirtualWasapiRenderSource::open(
+        spec.mapping_name);
+    if (!opened.ok()) {
+      return failure(opened.error_code,
+                     "Could not open virtual WASAPI render mapping.");
+    }
+    auto owned = std::make_unique<VirtualWasapiInputResources>();
+    owned->mapping = std::move(opened.mapping);
+    const auto channels = owned->mapping->channels();
+    if (spec.graph_first_channel > graph->channels() ||
+        channels > graph->channels() - spec.graph_first_channel) {
+      return failure("virtual_wasapi_matrix_input_out_of_range",
+                     "Virtual WASAPI input exceeds the graph input range.");
+    }
+    owned->rate_matcher =
+        std::make_unique<platform::RealtimeAudioRateMatchingSource>(
+            owned->mapping->source(), channels, graph->frames(),
+            owned->mapping->sample_rate(), graph->sample_rate());
+    input_bindings.push_back({owned->rate_matcher.get(),
+                              spec.graph_first_channel, channels});
+    virtual_resources.push_back(std::move(owned));
+  }
+  std::vector<bool> occupied(graph->channels(), false);
+  for (const auto& binding : input_bindings) {
+    if (binding.destination_first_channel > occupied.size() ||
+        binding.channel_count > occupied.size() - binding.destination_first_channel) {
+      return failure("audio_runtime_input_binding_out_of_range",
+                     "A matrix input exceeds the graph input range.");
+    }
+    for (std::size_t channel = 0; channel < binding.channel_count; ++channel) {
+      const auto index = binding.destination_first_channel + channel;
+      if (occupied[index]) {
+        return failure("audio_runtime_input_binding_overlap",
+                       "Matrix input ranges must not overlap.");
+      }
+      occupied[index] = true;
+    }
+  }
   auto input_assembler = input_bindings.empty()
                              ? std::unique_ptr<
                                    platform::RealtimeAudioInputAssembler>{}
@@ -469,7 +520,8 @@ EngineAudioRuntimeBuildResult open_windows_wasapi_matrix_runtime(
                          master_opened.take_runtime()},
       std::move(follower_runtimes));
   auto runtime = std::make_unique<WindowsWasapiMatrixRuntime>(
-      std::move(resources), std::move(input_assembler),
+      std::move(resources), std::move(virtual_resources),
+      std::move(input_assembler),
       std::move(external_output_slice), std::move(fanout),
       std::move(coordinator));
   return EngineAudioRuntimeBuildResult::success(std::move(runtime));
