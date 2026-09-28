@@ -131,7 +131,7 @@ int main() {
   packet.device_position = 15;
   assert(producer->push(second, packet) == VirtualWasapiPacketStatus::Completed);
   assert(producer->push(first, packet) == VirtualWasapiPacketStatus::Full);
-  assert(producer->state().dropped_frames == 4);
+  assert(producer->counters().dropped_frames == 4);
   assert(consumer->pop(received, result) == VirtualWasapiPacketStatus::Completed);
   assert(received == first && result.device_position == 11 && result.qpc_position == 22);
   assert(producer->push(first, packet) == VirtualWasapiPacketStatus::Completed);
@@ -148,12 +148,12 @@ int main() {
   assert(std::all_of(received.begin(), received.end(),
                      [](std::byte value) { return value == std::byte{0}; }));
   assert(result.flags == SAR_VWASAPI_SLOT_FLAG_SILENT);
-  assert(consumer->state().silence_frames == 4);
+  assert(consumer->counters().silence_frames == 4);
   packet.flags = 0;
   assert(producer->push({}, packet) == VirtualWasapiPacketStatus::InvalidPacket);
-  assert(producer->state().malformed_packets == 1);
-  assert(producer->state().produced_frames == 16);
-  assert(consumer->state().consumed_frames == 16);
+  assert(producer->counters().malformed_packets == 1);
+  assert(producer->counters().produced_frames == 16);
+  assert(consumer->counters().consumed_frames == 16);
 
   return 0;
 }

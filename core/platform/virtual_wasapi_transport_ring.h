@@ -25,6 +25,14 @@ struct VirtualWasapiPacket {
   std::uint64_t qpc_position = 0;
 };
 
+struct VirtualWasapiRingCounters {
+  std::uint64_t produced_frames = 0;
+  std::uint64_t consumed_frames = 0;
+  std::uint64_t dropped_frames = 0;
+  std::uint64_t silence_frames = 0;
+  std::uint64_t malformed_packets = 0;
+};
+
 // One producer and one consumer per mapping. Both endpoints must use the same
 // generation; attach/detach and mapping initialization belong to the control plane.
 class VirtualWasapiTransportRing {
@@ -122,7 +130,15 @@ class VirtualWasapiTransportRing {
     return VirtualWasapiPacketStatus::Completed;
   }
 
-  const SarVirtualWasapiRingState& state() const noexcept { return *state_; }
+  VirtualWasapiRingCounters counters() const noexcept {
+    return {
+        std::atomic_ref(state_->produced_frames).load(std::memory_order_relaxed),
+        std::atomic_ref(state_->consumed_frames).load(std::memory_order_relaxed),
+        std::atomic_ref(state_->dropped_frames).load(std::memory_order_relaxed),
+        std::atomic_ref(state_->silence_frames).load(std::memory_order_relaxed),
+        std::atomic_ref(state_->malformed_packets).load(std::memory_order_relaxed),
+    };
+  }
 
  private:
   VirtualWasapiTransportRing(std::byte* memory,
