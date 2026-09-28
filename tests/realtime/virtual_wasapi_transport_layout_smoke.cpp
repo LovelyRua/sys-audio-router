@@ -1,6 +1,10 @@
 #include "core/platform/virtual_wasapi_transport_layout.h"
+#include "core/platform/virtual_wasapi_transport_ring.h"
 
+#include <algorithm>
+#include <array>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 
@@ -93,6 +97,63 @@ int main() {
   assert(validate_virtual_wasapi_transport_layout(
              &capture.header, capture.header.total_size, SAR_VWASAPI_DIRECTION_CAPTURE) ==
          VirtualWasapiLayoutError::None);
+
+  using sar::platform::VirtualWasapiPacket;
+  using sar::platform::VirtualWasapiPacketStatus;
+  using sar::platform::VirtualWasapiTransportRing;
+  VirtualWasapiTransportConfig small_config;
+  small_config.slot_count = 2;
+  small_config.frames_per_slot = 4;
+  const auto small_layout = calculate_virtual_wasapi_transport_layout(small_config);
+  assert(small_layout.ok());
+  alignas(SAR_VWASAPI_TRANSPORT_ALIGNMENT) std::array<std::byte, 1024> memory{};
+  assert(small_layout.header.total_size <= memory.size());
+  assert(!VirtualWasapiTransportRing::initialize(memory.data() + 1, memory.size() - 1,
+                                                  small_layout.header));
+  assert(VirtualWasapiTransportRing::initialize(memory.data(), memory.size(),
+                                                small_layout.header));
+  assert(!VirtualWasapiTransportRing::attach(
+      memory.data(), memory.size(), SAR_VWASAPI_DIRECTION_CAPTURE));
+  auto producer = VirtualWasapiTransportRing::attach(
+      memory.data(), memory.size(), SAR_VWASAPI_DIRECTION_RENDER);
+  auto consumer = VirtualWasapiTransportRing::attach(
+      memory.data(), memory.size(), SAR_VWASAPI_DIRECTION_RENDER);
+  assert(producer && consumer);
+
+  std::array<std::byte, 32> first{};
+  std::array<std::byte, 32> second{};
+  std::array<std::byte, 32> received{};
+  first.fill(std::byte{0x25});
+  second.fill(std::byte{0x74});
+  VirtualWasapiPacket packet{4, 0, 11, 22};
+  VirtualWasapiPacket result{};
+  assert(producer->push(first, packet) == VirtualWasapiPacketStatus::Completed);
+  packet.device_position = 15;
+  assert(producer->push(second, packet) == VirtualWasapiPacketStatus::Completed);
+  assert(producer->push(first, packet) == VirtualWasapiPacketStatus::Full);
+  assert(producer->state().dropped_frames == 4);
+  assert(consumer->pop(received, result) == VirtualWasapiPacketStatus::Completed);
+  assert(received == first && result.device_position == 11 && result.qpc_position == 22);
+  assert(producer->push(first, packet) == VirtualWasapiPacketStatus::Completed);
+  assert(consumer->pop(received, result) == VirtualWasapiPacketStatus::Completed);
+  assert(received == second && result.device_position == 15);
+  assert(consumer->pop(received, result) == VirtualWasapiPacketStatus::Completed);
+  assert(received == first);
+  assert(consumer->pop(received, result) == VirtualWasapiPacketStatus::Empty);
+
+  packet.flags = SAR_VWASAPI_SLOT_FLAG_SILENT;
+  assert(producer->push({}, packet) == VirtualWasapiPacketStatus::Completed);
+  received.fill(std::byte{0x55});
+  assert(consumer->pop(received, result) == VirtualWasapiPacketStatus::Completed);
+  assert(std::all_of(received.begin(), received.end(),
+                     [](std::byte value) { return value == std::byte{0}; }));
+  assert(result.flags == SAR_VWASAPI_SLOT_FLAG_SILENT);
+  assert(consumer->state().silence_frames == 4);
+  packet.flags = 0;
+  assert(producer->push({}, packet) == VirtualWasapiPacketStatus::InvalidPacket);
+  assert(producer->state().malformed_packets == 1);
+  assert(producer->state().produced_frames == 16);
+  assert(consumer->state().consumed_frames == 16);
 
   return 0;
 }
