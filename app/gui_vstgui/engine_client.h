@@ -26,14 +26,14 @@ struct EngineState {
 // (core/platform/windows_current_user_sid.h). Every method here blocks on
 // pipe I/O and must be called off the UI thread; callers marshal the
 // resulting EngineState back to the UI thread themselves (see
-// Async::schedule in main_window.cpp) so this class stays free of any UI
+// HeaderController in main_window.cpp) so this class stays free of any UI
 // toolkit dependency.
 class EngineClient final {
  public:
-  EngineClient();
+  explicit EngineClient(std::wstring pipe_name = {});
 
-  // Sends QueryAudioRuntime and, if the runtime is configured, QueryDiagnostics
-  // to refresh the counters. Never throws; a transport failure is reported
+  // Queries runtime, session, and diagnostics to refresh the counters.
+  // A transport failure is reported
   // through EngineState::transportOk instead.
   [[nodiscard]] EngineState poll();
 

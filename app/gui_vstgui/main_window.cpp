@@ -5,6 +5,7 @@
 #include "app/gui_vstgui/palette.h"
 
 #include "vstgui/lib/cfont.h"
+#include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/controls/cbuttons.h"
 #include "vstgui/lib/controls/ctextlabel.h"
@@ -12,6 +13,8 @@
 #include "vstgui/standalone/include/iapplication.h"
 
 #include <cstdio>
+#include <chrono>
+#include <future>
 #include <memory>
 
 using namespace VSTGUI;
@@ -54,11 +57,8 @@ std::string format_uint(const char* format, std::uint64_t value) {
   return buffer;
 }
 
-// Mediates between EngineClient (blocking pipe I/O, run synchronously on the
-// UI thread's poll timer for this first slice -- see the note in
-// docs/product-readiness.md about moving this to a background queue) and the
-// header's views. Owned by a shared_ptr captured in the timer and button
-// callbacks so it outlives both for the app's lifetime.
+// Only completed snapshots cross back to the UI thread. At most one pipe
+// transaction batch is in flight, including start/stop commands.
 class HeaderController final : public IControlListener {
  public:
   void attachViews(SharedPointer<StatusDotView> dot, SharedPointer<CTextLabel> statusText,
@@ -72,30 +72,73 @@ class HeaderController final : public IControlListener {
     button_ = std::move(button);
   }
 
+  void attachErrorView(SharedPointer<CTextLabel> view) {
+    errorText_ = std::move(view);
+  }
+
   void refresh() {
-    if (busy_) {
+    if (pending_.valid()) {
+      if (pending_.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+        return;
+      try {
+        auto state = pending_.get();
+        if (!state.lastError.empty()) error_ = state.lastError;
+        state.lastError = error_;
+        apply(state);
+      } catch (...) {
+        EngineState state;
+        state.lastError = "Engine request failed";
+        apply(state);
+      }
+      if (queuedCommand_ != 0) submit(0);
+      nextPoll_ = std::chrono::steady_clock::now() +
+                  std::chrono::milliseconds(kPollIntervalMs);
       return;
     }
-    apply(client_.poll());
+    if (std::chrono::steady_clock::now() >= nextPoll_) submit(0);
   }
 
   void valueChanged(CControl* control) override {
-    if (control != button_.get() || control->getValue() <= 0.5f || busy_) {
+    if (control != button_.get() || control->getValue() <= 0.5f) {
       return;
     }
-    busy_ = true;
-    apply(last_.runtimeRunning ? client_.stop() : client_.start());
-    busy_ = false;
+    queuedCommand_ = last_.runtimeRunning ? 2 : 1;
+    error_.clear();
+    button_->setMouseEnabled(false);
+    if (!pending_.valid()) submit(0);
   }
 
  private:
+  void submit(int command) {
+    if (queuedCommand_ != 0) {
+      command = queuedCommand_;
+      queuedCommand_ = 0;
+    }
+    try {
+      pending_ = std::async(std::launch::async, [client = client_, command] {
+        return command == 1 ? client->start()
+             : command == 2 ? client->stop() : client->poll();
+      });
+    } catch (...) {
+      auto state = last_;
+      state.lastError = "Could not start the engine request worker";
+      apply(state);
+      nextPoll_ = std::chrono::steady_clock::now() +
+                  std::chrono::milliseconds(kPollIntervalMs);
+    }
+  }
+
   void apply(const EngineState& state) {
     last_ = state;
     if (dot_) {
       dot_->setColor(state.transportOk ? palette::kHealthy : palette::kDanger);
     }
     if (statusText_) {
-      statusText_->setText(state.transportOk ? "Engine online" : "Engine offline");
+      statusText_->setText(!state.lastError.empty() ? "Action failed"
+                          : state.transportOk ? "Engine online" : "Engine offline");
+    }
+    if (errorText_) {
+      errorText_->setText(state.lastError.c_str());
     }
     if (hzReadout_) {
       hzReadout_->setText(state.sampleRate > 0
@@ -115,13 +158,18 @@ class HeaderController final : public IControlListener {
       button_->setTitle(!state.runtimeConfigured ? "Configure audio"
                         : state.runtimeRunning   ? "Stop engine"
                                                   : "Start engine");
-      button_->setMouseEnabled(state.transportOk && state.runtimeConfigured);
+      button_->setMouseEnabled(state.transportOk && state.runtimeConfigured &&
+                               queuedCommand_ == 0);
     }
   }
 
-  EngineClient client_;
+  std::shared_ptr<EngineClient> client_ = std::make_shared<EngineClient>();
+  std::future<EngineState> pending_;
+  std::chrono::steady_clock::time_point nextPoll_{};
+  int queuedCommand_ = 0;
+  std::string error_;
+  SharedPointer<CTextLabel> errorText_;
   EngineState last_;
-  bool busy_ = false;
   SharedPointer<StatusDotView> dot_;
   SharedPointer<CTextLabel> statusText_;
   SharedPointer<LcdReadoutView> hzReadout_;
@@ -217,9 +265,13 @@ WindowPtr createMainWindow() {
                                "ported to this GUI yet.",
                                palette::kMuted, false);
   body->addView(placeholder);
+  auto errorText = makeLabel(CRect(24, 52, kWindowWidth - 24, 84), "",
+                            palette::kDanger, false);
+  body->addView(errorText);
   frame->addView(body);
 
   auto controller = std::make_shared<HeaderController>();
+  controller->attachErrorView(errorText);
   controller->attachViews(dot, statusText, hzReadout, smpReadout, xrunReadout,
                           startStopButton);
   startStopButton->setListener(controller.get());
@@ -228,7 +280,7 @@ WindowPtr createMainWindow() {
   // holds the last strong reference to the controller for the process's
   // lifetime, matching CVSTGUITimer's own fire-and-forget ownership model.
   new CVSTGUITimer([controller](CVSTGUITimer*) { controller->refresh(); },
-                   kPollIntervalMs, true);
+                   30, true);
   controller->refresh();
 
   window->setContentView(frame);

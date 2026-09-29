@@ -204,7 +204,10 @@ if(SAR_BUILD_GUI_VSTGUI)
     app/gui_vstgui/lcd_readout_view.h
     app/gui_vstgui/palette.h
   )
-  target_include_directories(sar_gui_vstgui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_include_directories(sar_gui_vstgui PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${vstgui_SOURCE_DIR}
+  )
   target_compile_features(sar_gui_vstgui PRIVATE cxx_std_20)
   target_compile_definitions(sar_gui_vstgui PRIVATE SAR_VERSION="${PROJECT_VERSION}")
   target_link_libraries(sar_gui_vstgui PRIVATE
@@ -625,6 +628,12 @@ if(WIN32)
   )
 
   target_link_libraries(sar_windows_current_user_sid_smoke PRIVATE sar_core)
+
+  add_executable(sar_vstgui_engine_client_smoke
+    tests/realtime/vstgui_engine_client_smoke.cpp
+    app/gui_vstgui/engine_client.cpp
+  )
+  target_link_libraries(sar_vstgui_engine_client_smoke PRIVATE sar_core)
 
   add_executable(sar_windows_virtual_asio_object_names_smoke
     tests/realtime/windows_virtual_asio_object_names_smoke.cpp
@@ -1126,6 +1135,7 @@ if(WIN32)
                        PROPERTIES WILL_FAIL TRUE)
   add_test(NAME windows_current_user_sid_smoke
            COMMAND sar_windows_current_user_sid_smoke)
+  add_test(NAME vstgui_engine_client_smoke COMMAND sar_vstgui_engine_client_smoke)
   add_test(NAME windows_virtual_asio_object_names_smoke
            COMMAND sar_windows_virtual_asio_object_names_smoke)
   add_test(NAME windows_virtual_asio_events_smoke

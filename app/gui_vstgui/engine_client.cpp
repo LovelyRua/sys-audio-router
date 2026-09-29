@@ -58,13 +58,20 @@ std::optional<control::ControlResponse> transact(
     return std::nullopt;
   }
   state.transportOk = true;
+  if (decoded.response.status == control::ControlResponseStatus::Rejected) {
+    state.lastError = decoded.response.errors.empty()
+                          ? "The engine rejected the command"
+                          : decoded.response.errors.front().message;
+    return std::nullopt;
+  }
   return decoded.response;
 }
 
 }  // namespace
 
-EngineClient::EngineClient()
-    : pipe_name_(sar::platform::default_control_pipe_name()),
+EngineClient::EngineClient(std::wstring pipe_name)
+    : pipe_name_(pipe_name.empty() ? sar::platform::default_control_pipe_name()
+                                   : std::move(pipe_name)),
       command_prefix_("gui-vstgui-" + std::to_string(GetCurrentProcessId()) + "-") {}
 
 std::string EngineClient::next_command_id() {
@@ -93,6 +100,7 @@ EngineState EngineClient::poll() {
   session_query.command_id = next_command_id();
   session_query.type = control::ControlCommandType::QuerySessionState;
   const auto session_response = transact(config, std::move(session_query), state);
+  if (!session_response) return state;
   if (session_response && session_response->has_active_graph) {
     state.sampleRate = session_response->active_graph.sample_rate;
     state.blockFrames =
@@ -117,8 +125,10 @@ EngineState EngineClient::start() {
   control::ControlCommand command;
   command.command_id = next_command_id();
   command.type = control::ControlCommandType::StartAudioRuntime;
-  transact(config, std::move(command), state);
-  return poll();
+  const auto response = transact(config, std::move(command), state);
+  auto current = poll();
+  if (!response) current.lastError = state.lastError;
+  return current;
 }
 
 EngineState EngineClient::stop() {
@@ -128,8 +138,10 @@ EngineState EngineClient::stop() {
   control::ControlCommand command;
   command.command_id = next_command_id();
   command.type = control::ControlCommandType::StopAudioRuntime;
-  transact(config, std::move(command), state);
-  return poll();
+  const auto response = transact(config, std::move(command), state);
+  auto current = poll();
+  if (!response) current.lastError = state.lastError;
+  return current;
 }
 
 }  // namespace sar::gui_vstgui
