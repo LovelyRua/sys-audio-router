@@ -16,6 +16,7 @@
 #include "core/platform/realtime_audio_rate_matching_source.h"
 #include "core/platform/windows_asio_device_provider.h"
 #include "core/platform/windows_wasapi_device_provider.h"
+#include "core/platform/windows_wasapi_stream_probe.h"
 #include "core/platform/windows_virtual_wasapi_render_source.h"
 #include "driver/windows_virtual_asio_registration.h"
 
@@ -893,6 +894,7 @@ int main(int argc, char** argv) {
   bool asio_channels_explicit = false;
   bool pipe_explicit = false;
   std::vector<std::wstring> virtual_wasapi_lab_maps;
+  std::string virtual_wasapi_lab_render_id;
   for (int index = 1; index < argc; ++index) {
     const std::string argument = argv[index];
     if (argument == "--once") {
@@ -930,6 +932,8 @@ int main(int argc, char** argv) {
         return 2;
       }
       virtual_wasapi_lab_maps.push_back(std::move(name));
+    } else if (argument == "--virtual-wasapi-lab-render-id" && index + 1 < argc) {
+      virtual_wasapi_lab_render_id = argv[++index];
     } else if (argument == "--asio-channels" && index + 1 < argc) {
       const std::string value = argv[++index];
       std::size_t parsed = 0;
@@ -949,6 +953,7 @@ int main(int argc, char** argv) {
                    "[--session FILE] [--log-file FILE] [--stop] "
                    "[--asio-channels COUNT] "
                    "[--virtual-wasapi-lab-map NAME] "
+                   "[--virtual-wasapi-lab-render-id DEVICE_ID] "
                    "[--wasapi-render|--wasapi-duplex "
                    "[--capture-id ID --render-id ID]]\n";
       return 2;
@@ -971,6 +976,11 @@ int main(int argc, char** argv) {
       (stop_command || wasapi_render || wasapi_duplex)) {
     std::cerr << "Virtual WASAPI lab mappings require matrix mode and cannot "
                  "be used with --stop.\n";
+    return 2;
+  }
+  if (!virtual_wasapi_lab_render_id.empty() &&
+      (virtual_wasapi_lab_maps.size() != 1 || has_session_path || once)) {
+    std::cerr << "Lab render requires exactly one mapping, no session, and a persistent service.\n";
     return 2;
   }
   const bool has_capture_id = !capture_device_id.empty();
@@ -1104,6 +1114,10 @@ int main(int argc, char** argv) {
     }
     const auto first_channel = desired_session.preset.matrix.inputs.size();
     const auto channels = opened.mapping->channels();
+    if (!virtual_wasapi_lab_render_id.empty() && channels < 2) {
+      std::cerr << "virtual_wasapi_lab_render_requires_stereo_mapping\n";
+      return 2;
+    }
     virtual_inputs.push_back({name, first_channel});
     for (std::uint32_t channel = 0; channel < channels; ++channel) {
       const auto number = std::to_string(channel + 1);
@@ -1117,6 +1131,48 @@ int main(int argc, char** argv) {
     session_writes_allowed = false;
     std::cerr << "session_warning code=virtual_wasapi_lab_session_ephemeral "
                  "action=disable_session_writes\n";
+  }
+  sar::control::AudioRuntimeConfiguration lab_runtime;
+  if (!virtual_wasapi_lab_render_id.empty()) {
+    const auto probe = sar::platform::probe_wasapi_stream(
+        virtual_wasapi_lab_render_id,
+        sar::platform::WasapiStreamDirection::Render);
+    if (!probe.ok()) {
+      for (const auto& error : probe.errors()) {
+        std::cerr << "virtual_wasapi_lab_render_probe_failed: " << error.code
+                  << ": " << error.message << '\n';
+      }
+      return 1;
+    }
+    const auto channels = probe.probe().mix_format.channels;
+    desired_session.preset.matrix.outputs.clear();
+    desired_session.preset.matrix.routes.clear();
+    for (std::uint32_t channel = 0; channel < channels; ++channel) {
+      const auto output = "lab-render.ch" + std::to_string(channel + 1);
+      desired_session.preset.matrix.outputs.push_back(
+          {output, "Lab Render Ch " + std::to_string(channel + 1)});
+      if (channel < 2) {
+        desired_session.preset.matrix.routes.push_back(
+            {"virtual-wasapi-lab-1.ch" + std::to_string(channel + 1),
+             output, 1.0F, false});
+      }
+    }
+    for (std::size_t channel = 0; channel < requested_asio_channels; ++channel) {
+      const auto suffix = requested_asio_channels == 2
+                              ? (channel == 0 ? std::string{"l"} : std::string{"r"})
+                              : std::to_string(channel + 1);
+      desired_session.preset.matrix.outputs.push_back(
+          {"asio-input-" + suffix, "ASIO DAW In " + std::to_string(channel + 1)});
+    }
+    lab_runtime.mode = sar::control::AudioRuntimeMode::WasapiMatrix;
+    lab_runtime.endpoints.push_back({
+        .endpoint_id = "lab-render",
+        .device_id = virtual_wasapi_lab_render_id,
+        .direction = sar::control::AudioRuntimeEndpointDirection::Render,
+        .clock_master = true,
+        .first_channel = 0,
+        .channel_count = channels,
+    });
   }
 
   const auto asio_profile = sar::service::virtual_asio_matrix_profile(
@@ -1211,6 +1267,22 @@ int main(int argc, char** argv) {
                                  desired_session.preset.matrix.outputs.size(),
                                  *asio_profile),
           std::move(virtual_inputs)));
+  if (!virtual_wasapi_lab_render_id.empty()) {
+    const auto configured = service->configure_audio_runtime(lab_runtime);
+    if (!configured.ok()) {
+      for (const auto& error : configured.errors()) {
+        std::cerr << error.code << ": " << error.message << '\n';
+      }
+      return 1;
+    }
+    const auto started = service->start_audio_runtime();
+    if (!started.ok()) {
+      for (const auto& error : started.errors()) {
+        std::cerr << error.code << ": " << error.message << '\n';
+      }
+      return 1;
+    }
+  }
   if (has_session_path &&
       desired_session.audio_runtime.mode !=
           sar::control::AudioRuntimeMode::None) {
