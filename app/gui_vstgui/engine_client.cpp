@@ -166,4 +166,38 @@ EngineState EngineClient::setRoute(std::string input_id, std::string output_id,
   return current;
 }
 
+EngineState EngineClient::setRouteGain(std::string input_id, std::string output_id,
+                                       float gain) {
+  EngineState state;
+  sar::service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  control::ControlCommand command;
+  command.command_id = next_command_id();
+  command.type = control::ControlCommandType::SetGain;
+  command.input_id = std::move(input_id);
+  command.output_id = std::move(output_id);
+  command.gain = gain;
+  const auto response = transact(config, std::move(command), state);
+  auto current = poll();
+  if (!response) current.lastError = state.lastError;
+  return current;
+}
+
+EngineState EngineClient::setRouteMuted(std::string input_id, std::string output_id,
+                                        bool muted) {
+  EngineState state;
+  sar::service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  control::ControlCommand command;
+  command.command_id = next_command_id();
+  command.type = control::ControlCommandType::SetMute;
+  command.input_id = std::move(input_id);
+  command.output_id = std::move(output_id);
+  command.mute = muted;
+  const auto response = transact(config, std::move(command), state);
+  auto current = poll();
+  if (!response) current.lastError = state.lastError;
+  return current;
+}
+
 }  // namespace sar::gui_vstgui

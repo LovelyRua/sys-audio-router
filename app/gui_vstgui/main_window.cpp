@@ -8,11 +8,13 @@
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/controls/cbuttons.h"
+#include "vstgui/lib/controls/cslider.h"
 #include "vstgui/lib/controls/ctextlabel.h"
 #include "vstgui/lib/cvstguitimer.h"
 #include "vstgui/standalone/include/iapplication.h"
 
 #include <cstdio>
+#include <cmath>
 #include <chrono>
 #include <future>
 #include <memory>
@@ -31,7 +33,7 @@ constexpr CCoord kWindowHeight = 640;
 constexpr CCoord kHeaderHeight = 54;
 constexpr std::uint32_t kPollIntervalMs = 750;
 constexpr std::size_t kVisibleRows = 8;
-constexpr std::size_t kVisibleColumns = 7;
+constexpr std::size_t kVisibleColumns = 5;
 
 // A small filled circle: the header's connection indicator.
 class StatusDotView final : public CView {
@@ -54,6 +56,28 @@ class StatusDotView final : public CView {
 
  private:
   CColor color_;
+};
+
+class MatrixCellButton final : public CTextButton {
+ public:
+  using CTextButton::CTextButton;
+
+  CMouseEventResult onMouseDown(CPoint& where, const CButtonState& buttons) override {
+    if (buttons & kRButton) {
+      selectOnly_ = true;
+      setValue(1.0F);
+      valueChanged();
+      setValue(0.0F);
+      selectOnly_ = false;
+      return kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+    }
+    return CTextButton::onMouseDown(where, buttons);
+  }
+
+  bool selectOnly() const noexcept { return selectOnly_; }
+
+ private:
+  bool selectOnly_ = false;
 };
 
 std::string format_uint(const char* format, std::uint64_t value) {
@@ -83,7 +107,7 @@ class HeaderController final : public IControlListener {
 
   void attachMatrix(std::vector<SharedPointer<CTextLabel>> inputs,
                     std::vector<SharedPointer<CTextLabel>> outputs,
-                    std::vector<SharedPointer<CTextButton>> cells,
+                    std::vector<SharedPointer<MatrixCellButton>> cells,
                     SharedPointer<CTextLabel> summary,
                     SharedPointer<CTextButton> previousRows,
                     SharedPointer<CTextButton> nextRows,
@@ -97,6 +121,24 @@ class HeaderController final : public IControlListener {
     for (auto& cell : cells_) cell->setListener(this);
     for (auto& button : navigation_) button->setListener(this);
     renderMatrix();
+  }
+
+  void attachInspector(SharedPointer<CTextLabel> source,
+                       SharedPointer<CTextLabel> destination,
+                       SharedPointer<CTextLabel> gainText,
+                       SharedPointer<CHorizontalSlider> gain,
+                       SharedPointer<CTextButton> mute,
+                       SharedPointer<CTextButton> reset) {
+    selectedSource_ = std::move(source);
+    selectedDestination_ = std::move(destination);
+    gainText_ = std::move(gainText);
+    gainSlider_ = std::move(gain);
+    muteButton_ = std::move(mute);
+    resetButton_ = std::move(reset);
+    gainSlider_->setListener(this);
+    muteButton_->setListener(this);
+    resetButton_->setListener(this);
+    renderInspector();
   }
 
   void refresh() {
@@ -122,6 +164,34 @@ class HeaderController final : public IControlListener {
   }
 
   void valueChanged(CControl* control) override {
+    if (control == gainSlider_.get()) {
+      const auto route = selectedRoute();
+      if (!route || !gainSlider_->isEditing()) return;
+      const float db = -60.0F + gainSlider_->getValueNormalized() * 72.0F;
+      const float gain = db <= -60.0F ? 0.0F : std::pow(10.0F, db / 20.0F);
+      gainText_->setText(formatGain(gain).c_str());
+      routeCommand_ = RouteCommand{RouteAction::Gain, selectedInputId_,
+                                   selectedOutputId_, gain, false};
+      if (!pending_.valid()) submit();
+      return;
+    }
+    if (control == muteButton_.get() && control->getValue() > 0.5F) {
+      const auto route = selectedRoute();
+      if (!route) return;
+      routeCommand_ = RouteCommand{RouteAction::Mute, selectedInputId_,
+                                   selectedOutputId_, 0.0F, !route->muted};
+      if (!pending_.valid()) submit();
+      return;
+    }
+    if (control == resetButton_.get() && control->getValue() > 0.5F) {
+      if (!selectedRoute()) return;
+      gainSlider_->setValueNormalized(60.0F / 72.0F);
+      gainText_->setText("0.0 dB");
+      routeCommand_ = RouteCommand{RouteAction::Gain, selectedInputId_,
+                                   selectedOutputId_, 1.0F, false};
+      if (!pending_.valid()) submit();
+      return;
+    }
     for (std::size_t i = 0; i < navigation_.size(); ++i) {
       if (control == navigation_[i].get() && control->getValue() > 0.5f) {
         if (i == 0 && rowOffset_ > 0) --rowOffset_;
@@ -142,10 +212,15 @@ class HeaderController final : public IControlListener {
       const auto& output = last_.matrix.outputs[column].id;
       const bool connected = std::any_of(last_.matrix.routes.begin(), last_.matrix.routes.end(),
           [&](const auto& route) { return route.input_id == input && route.output_id == output; });
-      routeCommand_ = RouteCommand{input, output, !connected};
+      selectedInputId_ = input;
+      selectedOutputId_ = output;
+      if (!cells_[i]->selectOnly()) {
+        routeCommand_ = RouteCommand{connected ? RouteAction::Disconnect : RouteAction::Connect,
+                                     input, output, 1.0F, false};
+      }
       error_.clear();
       renderMatrix();
-      submit();
+      if (routeCommand_) submit();
       return;
     }
     if (control != button_.get() || control->getValue() <= 0.5f) {
@@ -158,11 +233,33 @@ class HeaderController final : public IControlListener {
   }
 
  private:
-  struct RouteCommand { std::string input; std::string output; bool connect; };
+  enum class RouteAction { Connect, Disconnect, Gain, Mute };
+  struct RouteCommand {
+    RouteAction action;
+    std::string input;
+    std::string output;
+    float gain;
+    bool mute;
+  };
+
+  const control::PresetRoute* selectedRoute() const {
+    const auto& routes = last_.matrix.routes;
+    const auto found = std::find_if(routes.begin(), routes.end(), [&](const auto& route) {
+      return route.input_id == selectedInputId_ && route.output_id == selectedOutputId_;
+    });
+    return found == routes.end() ? nullptr : &*found;
+  }
+
+  static std::string formatGain(float gain) {
+    if (gain <= 0.001F) return "-inf dB";
+    char buffer[32] = {};
+    std::snprintf(buffer, sizeof(buffer), "%.1f dB", 20.0 * std::log10(gain));
+    return buffer;
+  }
 
   void submit() {
     int command = 0;
-    if (queuedCommand_ != 0) {
+    if (!routeCommand_ && queuedCommand_ != 0) {
       command = queuedCommand_;
       queuedCommand_ = 0;
     }
@@ -170,7 +267,18 @@ class HeaderController final : public IControlListener {
     routeCommand_.reset();
     try {
       pending_ = std::async(std::launch::async, [client = client_, command, route] {
-        if (route) return client->setRoute(route->input, route->output, route->connect);
+        if (route) {
+          switch (route->action) {
+            case RouteAction::Connect:
+              return client->setRoute(route->input, route->output, true);
+            case RouteAction::Disconnect:
+              return client->setRoute(route->input, route->output, false);
+            case RouteAction::Gain:
+              return client->setRouteGain(route->input, route->output, route->gain);
+            case RouteAction::Mute:
+              return client->setRouteMuted(route->input, route->output, route->mute);
+          }
+        }
         return command == 1 ? client->start()
              : command == 2 ? client->stop() : client->poll();
       });
@@ -242,8 +350,11 @@ class HeaderController final : public IControlListener {
             return route.input_id == matrix.inputs[row].id &&
                    route.output_id == matrix.outputs[column].id;
           });
+      const bool selected = valid && matrix.inputs[row].id == selectedInputId_ &&
+                            matrix.outputs[column].id == selectedOutputId_;
       cells_[i]->setTitle(valid ? (connected ? "ON" : "+") : "");
       cells_[i]->setTextColor(connected ? palette::kHealthy : palette::kMuted);
+      cells_[i]->setFrameColor(selected ? palette::kHealthy : palette::kLine);
       cells_[i]->setMouseEnabled(valid && !pending_.valid() && !routeCommand_);
     }
     summary_->setText(!available ? "Matrix unavailable" :
@@ -254,6 +365,33 @@ class HeaderController final : public IControlListener {
     navigation_[1]->setMouseEnabled(available && (rowOffset_ + 1) * kVisibleRows < matrix.inputs.size());
     navigation_[2]->setMouseEnabled(columnOffset_ > 0);
     navigation_[3]->setMouseEnabled(available && (columnOffset_ + 1) * kVisibleColumns < matrix.outputs.size());
+    renderInspector();
+  }
+
+  void renderInspector() {
+    if (!gainSlider_) return;
+    const auto& matrix = last_.matrix;
+    const auto input = std::find_if(matrix.inputs.begin(), matrix.inputs.end(),
+        [&](const auto& endpoint) { return endpoint.id == selectedInputId_; });
+    const auto output = std::find_if(matrix.outputs.begin(), matrix.outputs.end(),
+        [&](const auto& endpoint) { return endpoint.id == selectedOutputId_; });
+    const bool selected = last_.transportOk && last_.hasMatrix &&
+                          input != matrix.inputs.end() && output != matrix.outputs.end();
+    selectedSource_->setText(selected ? input->label.c_str() : "No source selected");
+    selectedDestination_->setText(selected ? output->label.c_str() : "No destination selected");
+    const auto* route = selected ? selectedRoute() : nullptr;
+    const bool active = route != nullptr;
+    if (!gainSlider_->isEditing() && !routeCommand_) {
+      const float db = active && route->gain > 0.001F
+                           ? std::clamp(20.0F * std::log10(route->gain), -60.0F, 12.0F)
+                           : -60.0F;
+      gainSlider_->setValueNormalized((db + 60.0F) / 72.0F);
+      gainText_->setText(active ? formatGain(route->gain).c_str() : "-- dB");
+    }
+    gainSlider_->setMouseEnabled(active);
+    muteButton_->setMouseEnabled(active && !pending_.valid());
+    muteButton_->setTitle(active && route->muted ? "Unmute" : "Mute");
+    resetButton_->setMouseEnabled(active && !pending_.valid());
   }
 
   std::shared_ptr<EngineClient> client_ = std::make_shared<EngineClient>();
@@ -265,9 +403,17 @@ class HeaderController final : public IControlListener {
   std::size_t columnOffset_ = 0;
   std::vector<SharedPointer<CTextLabel>> inputs_;
   std::vector<SharedPointer<CTextLabel>> outputs_;
-  std::vector<SharedPointer<CTextButton>> cells_;
+  std::vector<SharedPointer<MatrixCellButton>> cells_;
   SharedPointer<CTextLabel> summary_;
   std::vector<SharedPointer<CTextButton>> navigation_;
+  std::string selectedInputId_;
+  std::string selectedOutputId_;
+  SharedPointer<CTextLabel> selectedSource_;
+  SharedPointer<CTextLabel> selectedDestination_;
+  SharedPointer<CTextLabel> gainText_;
+  SharedPointer<CHorizontalSlider> gainSlider_;
+  SharedPointer<CTextButton> muteButton_;
+  SharedPointer<CTextButton> resetButton_;
   std::string error_;
   SharedPointer<CTextLabel> errorText_;
   EngineState last_;
@@ -363,7 +509,7 @@ WindowPtr createMainWindow() {
   body->setBackgroundColor(palette::kCanvas);
   auto title = makeLabel(CRect(24, 14, 300, 42), "ROUTING MATRIX", palette::kText, true);
   body->addView(title);
-  auto summary = makeLabel(CRect(300, 14, 780, 42), "Matrix unavailable", palette::kMuted, false);
+  auto summary = makeLabel(CRect(300, 14, 740, 42), "Matrix unavailable", palette::kMuted, false);
   body->addView(summary);
   auto errorText = makeLabel(CRect(24, 44, kWindowWidth - 24, 70), "",
                             palette::kDanger, false);
@@ -374,7 +520,7 @@ WindowPtr createMainWindow() {
   constexpr CCoord kCellHeight = 46;
   std::vector<SharedPointer<CTextLabel>> inputs;
   std::vector<SharedPointer<CTextLabel>> outputs;
-  std::vector<SharedPointer<CTextButton>> cells;
+  std::vector<SharedPointer<MatrixCellButton>> cells;
   for (std::size_t column = 0; column < kVisibleColumns; ++column) {
     const auto left = kGridLeft + column * kCellWidth;
     auto label = makeLabel(CRect(left + 5, 82, left + kCellWidth - 5, 118), "",
@@ -390,12 +536,13 @@ WindowPtr createMainWindow() {
     inputs.push_back(label);
     for (std::size_t column = 0; column < kVisibleColumns; ++column) {
       const auto left = kGridLeft + column * kCellWidth;
-      auto cell = makeOwned<CTextButton>(
+      auto cell = makeOwned<MatrixCellButton>(
           CRect(left + 4, top + 4, left + kCellWidth - 4, top + kCellHeight - 4),
           nullptr, -1, "");
       cell->setGradient(nullptr);
       cell->setFrameColor(palette::kLine);
       cell->setRoundRadius(2);
+      cell->setTooltipText("Left click: toggle route. Right click: inspect route.");
       body->addView(cell);
       cells.push_back(cell);
     }
@@ -411,8 +558,46 @@ WindowPtr createMainWindow() {
   };
   auto previousRows = makeNav(24, "Rows <");
   auto nextRows = makeNav(112, "Rows >");
-  auto previousColumns = makeNav(776, "Cols <");
-  auto nextColumns = makeNav(864, "Cols >");
+  auto previousColumns = makeNav(206, "Cols <");
+  auto nextColumns = makeNav(294, "Cols >");
+
+  auto inspector = makeOwned<CViewContainer>(CRect(760, 0, 1000, kWindowHeight - kHeaderHeight));
+  inspector->setBackgroundColor(palette::kSurface);
+  body->addView(inspector);
+  inspector->addView(makeLabel(CRect(16, 14, 220, 42), "ROUTE INSPECTOR",
+                               palette::kMuted, true));
+  auto selectedSource = makeLabel(CRect(16, 70, 222, 96), "No source selected",
+                                  palette::kText, false);
+  inspector->addView(selectedSource);
+  inspector->addView(makeLabel(CRect(16, 100, 222, 120), "TO",
+                               palette::kMuted, false));
+  auto selectedDestination = makeLabel(CRect(16, 124, 222, 150),
+                                       "No destination selected", palette::kText, false);
+  inspector->addView(selectedDestination);
+  inspector->addView(makeLabel(CRect(16, 196, 222, 218), "GAIN",
+                               palette::kMuted, false));
+  auto gainText = makeLabel(CRect(16, 226, 222, 252), "-- dB", palette::kText, true);
+  inspector->addView(gainText);
+  auto gainSlider = makeOwned<CHorizontalSlider>(
+      CRect(16, 268, 222, 286), nullptr, -1, 0, 206, nullptr, nullptr);
+  gainSlider->setDrawStyle(CSlider::kDrawFrame | CSlider::kDrawBack | CSlider::kDrawValue);
+  gainSlider->setFrameColor(palette::kLine);
+  gainSlider->setBackColor(palette::kCanvas);
+  gainSlider->setValueColor(palette::kHealthy);
+  gainSlider->setTooltipText("Route gain: -60 to +12 dB");
+  inspector->addView(gainSlider);
+  auto makeInspectorButton = [&](CCoord left, const char* label) {
+    auto button = makeOwned<CTextButton>(CRect(left, 312, left + 96, 346),
+                                        nullptr, -1, label);
+    button->setGradient(nullptr);
+    button->setFrameColor(palette::kLine);
+    button->setTextColor(palette::kText);
+    button->setRoundRadius(2);
+    inspector->addView(button);
+    return button;
+  };
+  auto muteButton = makeInspectorButton(16, "Mute");
+  auto resetButton = makeInspectorButton(124, "0 dB");
   frame->addView(body);
 
   auto controller = std::make_shared<HeaderController>();
@@ -421,6 +606,8 @@ WindowPtr createMainWindow() {
                           startStopButton);
   controller->attachMatrix(std::move(inputs), std::move(outputs), std::move(cells),
                            summary, previousRows, nextRows, previousColumns, nextColumns);
+  controller->attachInspector(selectedSource, selectedDestination, gainText,
+                              gainSlider, muteButton, resetButton);
   startStopButton->setListener(controller.get());
   // The controller and its views must outlive the timer, which is the case
   // here: the frame (owned by the window) holds the views, and this lambda

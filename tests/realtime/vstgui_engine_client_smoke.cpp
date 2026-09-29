@@ -15,6 +15,8 @@ int main() {
   std::atomic_uint diagnostics_queries{0};
   std::atomic_uint route_changes{0};
   bool connected = false;
+  float gain = 1.0F;
+  bool muted = false;
   service::WindowsNamedPipeControlServer server(config,
       [&](std::span<const std::byte> payload) {
         std::vector<std::uint8_t> bytes;
@@ -44,7 +46,7 @@ int main() {
               response.has_preset = true;
               response.preset.matrix.inputs = {{"mic", "Microphone"}};
               response.preset.matrix.outputs = {{"main", "Main out"}};
-              if (connected) response.preset.matrix.routes = {{"mic", "main", 1.0F, false}};
+              if (connected) response.preset.matrix.routes = {{"mic", "main", gain, muted}};
             }
             break;
           case control::ControlCommandType::ConnectRoute:
@@ -53,6 +55,14 @@ int main() {
             assert(command.type != control::ControlCommandType::ConnectRoute || command.gain == 1.0F);
             connected = command.type == control::ControlCommandType::ConnectRoute;
             ++route_changes;
+            break;
+          case control::ControlCommandType::SetGain:
+            assert(command.input_id == "mic" && command.output_id == "main");
+            gain = command.gain;
+            break;
+          case control::ControlCommandType::SetMute:
+            assert(command.input_id == "mic" && command.output_id == "main");
+            muted = command.mute;
             break;
           case control::ControlCommandType::QueryDiagnostics:
             ++diagnostics_queries;
@@ -76,6 +86,11 @@ int main() {
   assert(initial.matrix.routes.empty());
   const auto routed = client.setRoute("mic", "main", true);
   assert(routed.hasMatrix && routed.matrix.routes.size() == 1);
+  const auto quieter = client.setRouteGain("mic", "main", 0.5F);
+  assert(quieter.matrix.routes.size() == 1 &&
+         quieter.matrix.routes.front().gain == 0.5F);
+  const auto silent = client.setRouteMuted("mic", "main", true);
+  assert(silent.matrix.routes.size() == 1 && silent.matrix.routes.front().muted);
   const auto disconnected = client.setRoute("mic", "main", false);
   assert(disconnected.matrix.routes.empty() && route_changes.load() == 2);
   assert(initial.lastError.empty());

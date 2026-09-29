@@ -44,6 +44,10 @@ class EngineClient final {
   [[nodiscard]] EngineState stop();
   [[nodiscard]] EngineState setRoute(std::string input_id, std::string output_id,
                                      bool connect);
+  [[nodiscard]] EngineState setRouteGain(std::string input_id, std::string output_id,
+                                         float gain);
+  [[nodiscard]] EngineState setRouteMuted(std::string input_id, std::string output_id,
+                                          bool muted);
 
  private:
   [[nodiscard]] std::string next_command_id();
