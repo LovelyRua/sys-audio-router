@@ -1,5 +1,19 @@
 # Virtual WASAPI / ACX transport boundary
 
+## Driver implementation status
+
+`sysvad/` is a source fork of Microsoft's SysVAD sample at
+`2dc3fd3a0cc84a2933f2194e7ec0871584979071` (MS-PL, see `MS-PL.txt`).
+The `Windows Virtual WASAPI Driver` workflow builds this foundation with the
+WDK NuGet packages. It is not yet a SAR device package: its INF still has the
+upstream sample identity, and its stream still generates synthetic capture
+audio and discards render audio. Do not install or distribute it as SAR.
+
+The next driver milestones are SAR-specific INF identity and endpoint set,
+then a bounded kernel/user transport attached to the real WaveRT render and
+capture streams. An endpoint enumerating without content-correlated audio is
+not considered complete.
+
 This directory is a transport-contract spike, not a production virtual audio driver. It does not
 contain device creation, INF packaging, signing, power management, APOs, or a complete ACX circuit.
 

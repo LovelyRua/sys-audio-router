@@ -1,0 +1,28 @@
+name: Windows Virtual WASAPI Driver
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/windows-virtual-wasapi-driver.yml
+      - driver/windows_virtual_wasapi/**
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/windows-virtual-wasapi-driver.yml
+      - driver/windows_virtual_wasapi/**
+
+jobs:
+  sysvad-foundation:
+    runs-on: windows-2025-vs2026
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - name: Restore WDK packages
+        shell: pwsh
+        run: |
+          nuget restore driver/windows_virtual_wasapi/packages.config -PackagesDirectory driver/windows_virtual_wasapi/packages -NonInteractive
+      - name: Build SysVAD foundation
+        shell: pwsh
+        run: |
+          msbuild driver/windows_virtual_wasapi/sysvad/sysvad.sln /m /p:Configuration=Debug /p:Platform=x64 /verbosity:minimal

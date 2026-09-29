@@ -4,6 +4,12 @@ System Audio Route is licensed under GNU GPL version 3. See `LICENSE`.
 
 ## Third-party components
 
+- **Microsoft SysVAD virtual audio driver sample**, forked from
+  `microsoft/Windows-driver-samples` at commit
+  `2dc3fd3a0cc84a2933f2194e7ec0871584979071`. Its source under
+  `driver/windows_virtual_wasapi/sysvad/` remains subject to the Microsoft
+  Public License; the full text is in `driver/windows_virtual_wasapi/MS-PL.txt`.
+  The sample does not represent a finished SAR virtual audio driver.
 - **Steinberg ASIO SDK 2.3.4** (unmodified interface headers). Copyright
   Steinberg Media Technologies GmbH, used under the GPLv3 option described by
   the SDK's included license. Source and archive verification details are in
