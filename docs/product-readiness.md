@@ -51,6 +51,7 @@ a certificate, hardware, a driver test machine).
 | UX-9 | Per-channel meters and mixer view | Open |
 | UX-10 | Engine-provided endpoint families (replace name matching in `Main.qml`) | Open |
 | GUI-1 | Split `Main.qml`; add Qt Quick Test | Open |
+| GUI-2 | VSTGUI-based control panel (same toolkit as Nuendo/Cubase) as a from-scratch replacement for the Qt Quick GUI | Open: `app/gui_vstgui` is a parallel prototype behind `SAR_BUILD_GUI_VSTGUI` (default off), wired to the real engine over the existing `core/control` pipe protocol. So far it only has the header bar (connection status, sample-rate/block-size/xrun LCD readouts, start/stop). Not yet ported: routing matrix, devices page, diagnostics detail, presets, dialogs, localization, keyboard/accessible navigation. The Qt Quick GUI (`SAR_BUILD_GUI`) remains the shipped, fully-featured control panel until this catches up |
 
 ## Engineering and process
 
