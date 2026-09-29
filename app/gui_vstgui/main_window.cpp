@@ -579,7 +579,7 @@ WindowPtr createMainWindow() {
   auto gainText = makeLabel(CRect(16, 226, 222, 252), "-- dB", palette::kText, true);
   inspector->addView(gainText);
   auto gainSlider = makeOwned<CHorizontalSlider>(
-      CRect(16, 268, 222, 286), nullptr, -1, 0, 206, nullptr, nullptr);
+      CRect(16, 268, 222, 286), nullptr, -1, 16, 222, nullptr, nullptr);
   gainSlider->setDrawStyle(CSlider::kDrawFrame | CSlider::kDrawBack | CSlider::kDrawValue);
   gainSlider->setFrameColor(palette::kLine);
   gainSlider->setBackColor(palette::kCanvas);
