@@ -128,16 +128,19 @@ class HeaderController final : public IControlListener {
                        SharedPointer<CTextLabel> gainText,
                        SharedPointer<CHorizontalSlider> gain,
                        SharedPointer<CTextButton> mute,
-                       SharedPointer<CTextButton> reset) {
+                       SharedPointer<CTextButton> reset,
+                       SharedPointer<CTextButton> remove) {
     selectedSource_ = std::move(source);
     selectedDestination_ = std::move(destination);
     gainText_ = std::move(gainText);
     gainSlider_ = std::move(gain);
     muteButton_ = std::move(mute);
     resetButton_ = std::move(reset);
+    removeButton_ = std::move(remove);
     gainSlider_->setListener(this);
     muteButton_->setListener(this);
     resetButton_->setListener(this);
+    removeButton_->setListener(this);
     renderInspector();
   }
 
@@ -190,6 +193,13 @@ class HeaderController final : public IControlListener {
       routeCommand_ = RouteCommand{RouteAction::Gain, selectedInputId_,
                                    selectedOutputId_, 1.0F, false};
       if (!pending_.valid()) submit();
+      return;
+    }
+    if (control == removeButton_.get() && control->getValue() > 0.5F) {
+      if (!selectedRoute() || pending_.valid()) return;
+      routeCommand_ = RouteCommand{RouteAction::Disconnect, selectedInputId_,
+                                   selectedOutputId_, 1.0F, false};
+      submit();
       return;
     }
     for (std::size_t i = 0; i < navigation_.size(); ++i) {
@@ -392,6 +402,7 @@ class HeaderController final : public IControlListener {
     muteButton_->setMouseEnabled(active && !pending_.valid());
     muteButton_->setTitle(active && route->muted ? "Unmute" : "Mute");
     resetButton_->setMouseEnabled(active && !pending_.valid());
+    removeButton_->setMouseEnabled(active && !pending_.valid());
   }
 
   std::shared_ptr<EngineClient> client_ = std::make_shared<EngineClient>();
@@ -414,6 +425,7 @@ class HeaderController final : public IControlListener {
   SharedPointer<CHorizontalSlider> gainSlider_;
   SharedPointer<CTextButton> muteButton_;
   SharedPointer<CTextButton> resetButton_;
+  SharedPointer<CTextButton> removeButton_;
   std::string error_;
   SharedPointer<CTextLabel> errorText_;
   EngineState last_;
@@ -598,6 +610,13 @@ WindowPtr createMainWindow() {
   };
   auto muteButton = makeInspectorButton(16, "Mute");
   auto resetButton = makeInspectorButton(124, "0 dB");
+  auto removeButton = makeOwned<CTextButton>(CRect(16, 374, 220, 408),
+                                            nullptr, -1, "Remove route");
+  removeButton->setGradient(nullptr);
+  removeButton->setFrameColor(palette::kLine);
+  removeButton->setTextColor(palette::kText);
+  removeButton->setRoundRadius(2);
+  inspector->addView(removeButton);
   frame->addView(body);
 
   auto controller = std::make_shared<HeaderController>();
@@ -607,7 +626,7 @@ WindowPtr createMainWindow() {
   controller->attachMatrix(std::move(inputs), std::move(outputs), std::move(cells),
                            summary, previousRows, nextRows, previousColumns, nextColumns);
   controller->attachInspector(selectedSource, selectedDestination, gainText,
-                              gainSlider, muteButton, resetButton);
+                              gainSlider, muteButton, resetButton, removeButton);
   startStopButton->setListener(controller.get());
   // The controller and its views must outlive the timer, which is the case
   // here: the frame (owned by the window) holds the views, and this lambda
