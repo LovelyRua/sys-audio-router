@@ -1377,6 +1377,7 @@ if(WIN32 AND SAR_BUILD_GUI)
     LIBRARY DESTINATION ${CMAKE_INSTALL_BINDIR}
   )
   install(TARGETS sar_virtual_wasapi_lab_producer
+                  sar_measure_wasapi_capture_level
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}/lab)
   if(SAR_BUILD_GUI)
     install(TARGETS sar_gui
