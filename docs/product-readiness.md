@@ -17,7 +17,7 @@ a certificate, hardware, a driver test machine).
 | REL-3 | Icon, version resource, About/version display | Done: every shipped executable and the driver carry VERSIONINFO; executables carry the icon; the version shows in the control panel |
 | REL-4 | Update check | Open |
 | LIC-1 | Third-party license texts in the package | Done: libsamplerate and ASIO SDK licenses ship under `licenses/`; `NOTICE.md` lists Qt, libsamplerate, ASIO SDK, and the VC++ runtime |
-| FEAT-1 | Virtual WDM/WASAPI endpoints | Open: the Win11 driver lab exists and Microsoft sample endpoints were enumerated there, but SAR does not yet install or expose its own virtual WASAPI endpoint. A driver architecture and licensing decision is still required before implementation |
+| FEAT-1 | Virtual WDM/WASAPI endpoints | Open: the Win11 driver lab exists and Microsoft sample endpoints were enumerated there. The driver is now scoped as a separate MS-PL project with a public-WASAPI-only integration boundary; SAR still does not install or expose its own virtual endpoint. See `docs/architecture/virtual-wasapi-driver-boundary.md` |
 | QUAL-1 | Release soaks (second 8 h pairing, 24 h, multi-DAW) and more DAWs/interfaces | External: needs hardware time |
 
 ## Lifecycle and reliability
