@@ -17,7 +17,7 @@ a certificate, hardware, a driver test machine).
 | REL-3 | Icon, version resource, About/version display | Done: every shipped executable and the driver carry VERSIONINFO; executables carry the icon; the version shows in the control panel |
 | REL-4 | Update check | Open |
 | LIC-1 | Third-party license texts in the package | Done: libsamplerate and ASIO SDK licenses ship under `licenses/`; `NOTICE.md` lists Qt, libsamplerate, ASIO SDK, and the VC++ runtime |
-| FEAT-1 | Virtual WDM/WASAPI endpoints | Open: blocked on the kernel-driver decision spike and a driver test machine |
+| FEAT-1 | Virtual WDM/WASAPI endpoints | Open: the Win11 driver lab exists and Microsoft sample endpoints were enumerated there, but SAR does not yet install or expose its own virtual WASAPI endpoint. A driver architecture and licensing decision is still required before implementation |
 | QUAL-1 | Release soaks (second 8 h pairing, 24 h, multi-DAW) and more DAWs/interfaces | External: needs hardware time |
 
 ## Lifecycle and reliability
@@ -51,7 +51,7 @@ a certificate, hardware, a driver test machine).
 | UX-9 | Per-channel meters and mixer view | Open |
 | UX-10 | Engine-provided endpoint families (replace name matching in `Main.qml`) | Open |
 | GUI-1 | Split `Main.qml`; add Qt Quick Test | Open |
-| GUI-2 | VSTGUI-based control panel (same toolkit as Nuendo/Cubase) as a from-scratch replacement for the Qt Quick GUI | Open: `app/gui_vstgui` is a parallel prototype behind `SAR_BUILD_GUI_VSTGUI` (default off), wired to the real engine over the existing `core/control` pipe protocol. So far it only has the header bar (connection status, sample-rate/block-size/xrun LCD readouts, start/stop). Not yet ported: routing matrix, devices page, diagnostics detail, presets, dialogs, localization, keyboard/accessible navigation. The Qt Quick GUI (`SAR_BUILD_GUI`) remains the shipped, fully-featured control panel until this catches up |
+| GUI-2 | VSTGUI-based control panel as a replacement for the Qt Quick GUI | Open: `app/gui_vstgui` is a parallel prototype behind `SAR_BUILD_GUI_VSTGUI` (default off), wired to the real engine over the control pipe. It has engine status and start/stop, a paged interactive routing matrix, and a route inspector with gain and mute. Windows CI builds, tests, and publishes a preview executable. Still missing: device configuration, diagnostics detail, presets, dialogs, localization, keyboard/accessible navigation, and interactive user-flow verification. The Qt Quick GUI remains the shipped control panel until this catches up |
 
 ## Engineering and process
 
