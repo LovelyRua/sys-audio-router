@@ -1097,6 +1097,10 @@ int main(int argc, char** argv) {
   }
 
   std::vector<sar::service::WindowsVirtualWasapiMatrixInput> virtual_inputs;
+  if (!virtual_wasapi_lab_render_id.empty()) {
+    auto& inputs = desired_session.preset.matrix.inputs;
+    inputs.erase(inputs.begin(), inputs.begin() + 2);
+  }
   for (std::size_t index = 0; index < virtual_wasapi_lab_maps.size(); ++index) {
     const auto& name = virtual_wasapi_lab_maps[index];
     if (std::find(virtual_wasapi_lab_maps.begin(),
