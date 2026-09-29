@@ -13,6 +13,8 @@ int main() {
   config.pipe_name = L"sar-vstgui-client-test-" + std::to_wstring(GetCurrentProcessId());
   std::atomic_bool reject_session{false};
   std::atomic_uint diagnostics_queries{0};
+  std::atomic_uint route_changes{0};
+  bool connected = false;
   service::WindowsNamedPipeControlServer server(config,
       [&](std::span<const std::byte> payload) {
         std::vector<std::uint8_t> bytes;
@@ -39,7 +41,18 @@ int main() {
               response.has_active_graph = true;
               response.active_graph.sample_rate = 48000;
               response.active_graph.frames = 128;
+              response.has_preset = true;
+              response.preset.matrix.inputs = {{"mic", "Microphone"}};
+              response.preset.matrix.outputs = {{"main", "Main out"}};
+              if (connected) response.preset.matrix.routes = {{"mic", "main", 1.0F, false}};
             }
+            break;
+          case control::ControlCommandType::ConnectRoute:
+          case control::ControlCommandType::DisconnectRoute:
+            assert(command.input_id == "mic" && command.output_id == "main");
+            assert(command.type != control::ControlCommandType::ConnectRoute || command.gain == 1.0F);
+            connected = command.type == control::ControlCommandType::ConnectRoute;
+            ++route_changes;
             break;
           case control::ControlCommandType::QueryDiagnostics:
             ++diagnostics_queries;
@@ -58,6 +71,13 @@ int main() {
   const auto initial = client.poll();
   assert(initial.transportOk && initial.runtimeConfigured);
   assert(initial.sampleRate == 48000 && initial.blockFrames == 128);
+  assert(initial.hasMatrix && initial.matrix.inputs.size() == 1);
+  assert(initial.matrix.outputs.front().label == "Main out");
+  assert(initial.matrix.routes.empty());
+  const auto routed = client.setRoute("mic", "main", true);
+  assert(routed.hasMatrix && routed.matrix.routes.size() == 1);
+  const auto disconnected = client.setRoute("mic", "main", false);
+  assert(disconnected.matrix.routes.empty() && route_changes.load() == 2);
   assert(initial.lastError.empty());
   assert(client.start().lastError == "Device could not start or stop");
   assert(client.stop().lastError == "Device could not start or stop");
