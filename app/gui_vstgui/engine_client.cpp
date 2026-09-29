@@ -106,6 +106,10 @@ EngineState EngineClient::poll() {
     state.blockFrames =
         static_cast<std::uint32_t>(session_response->active_graph.frames);
   }
+  if (session_response->has_preset) {
+    state.matrix = session_response->preset.matrix;
+    state.hasMatrix = true;
+  }
 
   control::ControlCommand diagnostics_query;
   diagnostics_query.command_id = next_command_id();
@@ -138,6 +142,24 @@ EngineState EngineClient::stop() {
   control::ControlCommand command;
   command.command_id = next_command_id();
   command.type = control::ControlCommandType::StopAudioRuntime;
+  const auto response = transact(config, std::move(command), state);
+  auto current = poll();
+  if (!response) current.lastError = state.lastError;
+  return current;
+}
+
+EngineState EngineClient::setRoute(std::string input_id, std::string output_id,
+                                    bool connect) {
+  EngineState state;
+  sar::service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  control::ControlCommand command;
+  command.command_id = next_command_id();
+  command.type = connect ? control::ControlCommandType::ConnectRoute
+                         : control::ControlCommandType::DisconnectRoute;
+  command.input_id = std::move(input_id);
+  command.output_id = std::move(output_id);
+  command.gain = 1.0F;
   const auto response = transact(config, std::move(command), state);
   auto current = poll();
   if (!response) current.lastError = state.lastError;

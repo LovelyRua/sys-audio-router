@@ -3,14 +3,13 @@
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <vector>
+
+#include "core/control/preset_document.h"
 
 namespace sar::gui_vstgui {
 
-// A snapshot of the state the header bar displays. Deliberately small: this
-// is the first slice of the VSTGUI control panel, covering only what the
-// header needs. Later slices (routing matrix, devices, diagnostics detail)
-// add their own query/state types the same way rather than growing this one
-// into a god object.
+// One engine snapshot for the header and route matrix.
 struct EngineState {
   bool transportOk = false;
   bool runtimeConfigured = false;
@@ -19,6 +18,8 @@ struct EngineState {
   std::uint32_t blockFrames = 0;
   std::uint64_t xrunCount = 0;
   std::string lastError;
+  control::PresetRouteMatrix matrix;
+  bool hasMatrix = false;
 };
 
 // Talks to the engine over the same per-user named pipe the engine service,
@@ -32,7 +33,7 @@ class EngineClient final {
  public:
   explicit EngineClient(std::wstring pipe_name = {});
 
-  // Queries runtime, session, and diagnostics to refresh the counters.
+  // Queries runtime, session (including preset matrix), and diagnostics.
   // A transport failure is reported
   // through EngineState::transportOk instead.
   [[nodiscard]] EngineState poll();
@@ -41,6 +42,8 @@ class EngineClient final {
   // observed right after, same as poll().
   [[nodiscard]] EngineState start();
   [[nodiscard]] EngineState stop();
+  [[nodiscard]] EngineState setRoute(std::string input_id, std::string output_id,
+                                     bool connect);
 
  private:
   [[nodiscard]] std::string next_command_id();
