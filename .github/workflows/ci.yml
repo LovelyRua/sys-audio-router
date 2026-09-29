@@ -27,6 +27,14 @@ jobs:
         timeout-minutes: 10
         run: scripts/windows-script-self-tests.ps1
 
+      - name: Upload VSTGUI preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-audio-route-vstgui-preview
+          path: build/Release/SystemAudioRouteVstgui.exe
+          if-no-files-found: error
+          retention-days: 7
+
   windows-asan:
     name: Windows AddressSanitizer (advisory)
     runs-on: windows-latest
