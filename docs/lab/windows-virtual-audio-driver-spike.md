@@ -183,3 +183,32 @@ validation, disable test signing and restore Secure Boot.
 - Bounded ring and passive-level user-mode receiver implementation.
 - Measured transport copy count and receiver-down behavior.
 - Install, application playback, and uninstall transcripts.
+## Experimental endpoint to SAR matrix preflight
+
+The separate MS-PL driver repository has now demonstrated an interactive
+Speaker-to-MicArray1 shared-mode loopback in REAPER on VM24. That verifies the
+experimental driver pair, not audio through SAR. The sample device was removed
+after the lab test; it is not included in SAR's installer.
+
+When the experimental device is installed again on the dedicated driver lab,
+`scripts/windows-virtual-wasapi-matrix-preflight.ps1` connects its MicArray1
+capture endpoint to a selected WASAPI render endpoint through the SAR matrix.
+Run it in the logged-on desktop session using endpoint IDs from
+`sar_control_cli devices` (never from WinRM Session 0):
+
+```powershell
+scripts/windows-virtual-wasapi-matrix-preflight.ps1 `
+  -BuildPath C:\path\to\sar-build `
+  -CaptureDeviceId '<MicArray1 capture ID>' `
+  -RenderDeviceId '<physical render ID>'
+```
+
+The script uses an isolated pipe and session, checks both device directions
+and 48 kHz formats, creates matrix routes, starts the engine, records the
+inventory/graph/diagnostics, and stops only the service it started. A passing
+result proves discovery and matrix execution, **not** signal integrity or
+latency. Play a known signal into the experimental Speaker endpoint and record
+the selected output through a separate verified capture path before claiming
+SAR's virtual-WASAPI audio loop is complete. Driver signing, installation,
+uninstallation, and boot-policy changes remain separate, explicitly authorized
+lab operations.
