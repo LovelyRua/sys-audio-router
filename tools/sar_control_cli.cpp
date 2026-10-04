@@ -43,7 +43,9 @@ std::vector<std::uint8_t> as_u8(std::span<const std::byte> input) {
 void usage() {
   std::cerr << "Usage: sar_control_cli [--pipe NAME] state|devices|diagnostics|graph|"
                "preset-save FILE|preset-load FILE|virtual-asio-list|"
-               "runtime-state|runtime-start|runtime-stop|set-gain INPUT OUTPUT "
+               "runtime-state|runtime-start|runtime-stop|"
+               "connect-route INPUT OUTPUT GAIN|disconnect-route INPUT OUTPUT|"
+               "set-gain INPUT OUTPUT "
                "VALUE|set-mute INPUT OUTPUT true|false|"
                "runtime-configure-render [RENDER_ID]|"
                "runtime-configure-duplex [CAPTURE_ID RENDER_ID]|"
@@ -398,8 +400,11 @@ int main(int argc, char** argv) {
       }
       command.audio_runtime.endpoints.push_back(std::move(endpoint));
     }
-  } else if (operation == "set-gain" && index + 2 < argc) {
-    command.type = sar::control::ControlCommandType::SetGain;
+  } else if ((operation == "connect-route" || operation == "set-gain") &&
+             index + 2 < argc) {
+    command.type = operation == "connect-route"
+                       ? sar::control::ControlCommandType::ConnectRoute
+                       : sar::control::ControlCommandType::SetGain;
     command.input_id = argv[index++];
     command.output_id = argv[index++];
     try {
@@ -408,6 +413,10 @@ int main(int argc, char** argv) {
       usage();
       return 2;
     }
+  } else if (operation == "disconnect-route" && index + 1 < argc) {
+    command.type = sar::control::ControlCommandType::DisconnectRoute;
+    command.input_id = argv[index++];
+    command.output_id = argv[index++];
   } else if (operation == "set-mute" && index + 2 < argc) {
     command.type = sar::control::ControlCommandType::SetMute;
     command.input_id = argv[index++];
