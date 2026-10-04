@@ -262,3 +262,29 @@ The ESXi firewall is enabled with default action `DROP`, and its enabled
 rulesets do not include outbound WinRM. Remote preflight deployment is still
 blocked; do not infer an audio regression from this management-path failure or
 weaken either firewall broadly to work around it.
+
+### VM24 in-window signal gate rerun (2026-10-04)
+
+After reinstalling the experimental test-signed SysVAD package on VM24, an
+interactive shared-mode Speaker-to-MicArray1 control probe sent 144,576 frames,
+captured 191,040 frames, and measured target power `2.87847e16` with zero
+silent frames. The updated matrix preflight then ran its probe *inside* the
+active SAR route window. The enabled-route run passed with 3,320 processed
+blocks, `signal_checked=true`, 144,576 probe frames sent, 178,944 captured,
+and nonzero target power (`2.53359e16`) in both downstream VB-Cable channels.
+The separate `-SkipRoutes` control also passed with 3,433 processed blocks:
+143,232 probe frames were sent, 175,104 were captured, and target power was
+zero in both channels. Evidence is on VM24 under
+`C:\sar-lab\20261004\matrix-positive-ew2` and
+`C:\sar-lab\20261004\matrix-negative-new` (`result.json` and
+`signal-probe.log`). An earlier run failed before starting audio because one
+manually entered endpoint ID was malformed; it is not an audio failure.
+
+Afterward, both test-created PnP nodes (`ROOT\MEDIA\0001` and `0002`),
+`oem10.inf`, and the lab certificate were removed. Windows test signing was
+turned off, VM24 was shut down, its Secure Boot option was restored, and the
+guest confirmed `Confirm-SecureBootUEFI=True` after reboot. A final check found
+zero experimental nodes, driver packages, or copies of the lab certificate;
+the Domain, Private, and Public firewall profiles were all enabled. This is
+short functional evidence for the experimental driver and SAR matrix, not a
+production-driver or long-run stability certification.
