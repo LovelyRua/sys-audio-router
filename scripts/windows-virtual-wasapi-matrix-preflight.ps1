@@ -120,6 +120,7 @@ try {
   $graph | Set-Content -LiteralPath (Join-Path $OutputDirectory 'graph.log') -Encoding UTF8
   $null = Invoke-Cli @('runtime-start')
   $before = @(Invoke-Cli @('diagnostics'))
+  'running' | Set-Content -LiteralPath (Join-Path $OutputDirectory 'ready.flag') -Encoding ASCII
   Start-Sleep -Seconds $ObserveSeconds
   $after = @(Invoke-Cli @('diagnostics'))
   $after | Set-Content -LiteralPath (Join-Path $OutputDirectory 'diagnostics.log') -Encoding UTF8
