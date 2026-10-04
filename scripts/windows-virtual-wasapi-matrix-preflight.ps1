@@ -158,9 +158,9 @@ try {
     $probeText = $probeLines -join "`n"
     $probeLines | Set-Content -LiteralPath (Join-Path $OutputDirectory 'signal-probe.log') -Encoding UTF8
     $result.signal_checked = $true
-    $result.signal_detected = ($probeExit -eq 0)
     $leftPower = Get-SignalPower $probeText 'target_power'
     $rightPower = Get-SignalPower $probeText 'second_channel_power'
+    $result.signal_detected = ($leftPower -gt 0 -and $rightPower -gt 0)
     if ($SkipRoutes) {
       if ($probeExit -ne 3 -or $leftPower -ne 0 -or $rightPower -ne 0) {
         throw "Route-free control was not silent (probe exit $probeExit)."
