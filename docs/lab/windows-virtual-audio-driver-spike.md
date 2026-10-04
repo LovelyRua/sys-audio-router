@@ -205,10 +205,53 @@ scripts/windows-virtual-wasapi-matrix-preflight.ps1 `
 
 The script uses an isolated pipe and session, checks both device directions
 and 48 kHz formats, creates matrix routes, starts the engine, records the
-inventory/graph/diagnostics, and stops only the service it started. A passing
-result proves discovery and matrix execution, **not** signal integrity or
-latency. Play a known signal into the experimental Speaker endpoint and record
-the selected output through a separate verified capture path before claiming
-SAR's virtual-WASAPI audio loop is complete. Driver signing, installation,
-uninstallation, and boot-policy changes remain separate, explicitly authorized
-lab operations.
+inventory/graph/diagnostics, and stops only the service it started. Without a
+signal probe, `signal_checked=false`: a pass proves discovery and matrix
+execution, **not** audible output. To gate the same run on actual stereo signal,
+pass the separate lab probe and both of its endpoint IDs:
+
+```powershell
+scripts/windows-virtual-wasapi-matrix-preflight.ps1 `
+  -BuildPath C:\path\to\sar-build `
+  -CaptureDeviceId '<MicArray1 capture ID>' `
+  -RenderDeviceId '<VB-Cable Input render ID>' `
+  -SignalProbePath C:\path\to\wasapi_bridge_probe.exe `
+  -ProbeRenderDeviceId '<experimental Speaker render ID>' `
+  -ProbeCaptureDeviceId '<VB-Cable Output capture ID>'
+```
+
+The probe runs inside the preflight's active route window. With routes enabled,
+both target channels must carry signal and the probe must exit 0. For a negative
+control, repeat with `-SkipRoutes` and a new output directory; both channels
+must be silent and the probe must exit 3. `signal-probe.log` and `result.json`
+record which check actually ran. Driver signing, installation, uninstallation,
+and boot-policy changes remain separate, explicitly authorized lab operations.
+
+### VM24 matrix loop evidence (2026-10-04)
+
+On the dedicated Windows 11 driver lab VM, a test-signed SysVAD sample exposed
+a Speaker render endpoint and a MicArray1 capture endpoint. SAR captured from
+MicArray1 and rendered to VB-Cable Input; a separate interactive probe sent a
+stereo 997/1501 Hz signal to Speaker and captured VB-Cable Output. With the
+two SAR crosspoints enabled, the probe reported 75,456 sent frames, 97,632
+captured frames, nonzero power in both target channels, and exit 0. The matrix
+preflight passed with 16,747 processed blocks, zero XRUNs, and zero capture or
+render FIFO overflows in that observation window.
+
+With the same endpoints but `-SkipRoutes`, the final control preflight passed
+with 11,247 processed blocks and `routes_enabled=false`; the downstream probe
+reported zero target and fixed-tone power in both channels and exited 3 as
+expected. The later final positive preflight passed with 11,164 processed
+blocks, but its probe ran after the 30-second route window had ended and read
+silence. Do not treat that late probe as an audio failure or as another positive
+result. Lab logs are under `C:\sar-lab\20261004` on VM24.
+
+This demonstrates a real signal path through SAR's matrix using an experimental
+third-party-derived endpoint and VB-Cable. It does not validate a distributable
+SAR virtual WASAPI driver, low-latency behavior, extended stability, or DAW
+compatibility. After the test, the sample PnP device, `oem10.inf`, and lab
+certificate were removed and Windows test signing was set to No. ESXi reports
+`efiSecureBootEnabled=true` and the VM is powered on. Windows-side
+`Confirm-SecureBootUEFI` could not be rerun after reboot because the VM's WinRM
+listener became unreachable, including from the ESXi host. Treat the guest-side
+security verification as outstanding until remote access is restored.

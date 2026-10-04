@@ -6,6 +6,10 @@ param(
   [ValidateSet('', 'Debug', 'Release', 'RelWithDebInfo', 'MinSizeRel')]
   [string]$Configuration = '',
   [ValidateRange(1, 60)][int]$ObserveSeconds = 5,
+  [switch]$SkipRoutes,
+  [string]$SignalProbePath = '',
+  [string]$ProbeRenderDeviceId = '',
+  [string]$ProbeCaptureDeviceId = '',
   [string]$OutputDirectory = ''
 )
 
@@ -43,6 +47,13 @@ function Get-Counter([string]$Text, [string]$Name) {
   return [long]$Matches[1]
 }
 
+function Get-SignalPower([string]$Text, [string]$Name) {
+  if ($Text -notmatch "(?:^|\s)$([regex]::Escape($Name))=([0-9.eE+-]+)(?:\s|$)") {
+    throw "signal probe did not include $Name"
+  }
+  return [double]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture)
+}
+
 function Assert-Endpoint([string[]]$Inventory, [string]$Id, [string]$Direction) {
   $escaped = [regex]::Escape($Id)
   $pattern = "^device index=(\d+) id=`"$escaped`" .*backend=wasapi direction=$Direction "
@@ -68,6 +79,17 @@ if ([Diagnostics.Process]::GetCurrentProcess().SessionId -eq 0) {
 if ($CaptureDeviceId -eq $RenderDeviceId) {
   throw 'Capture and render endpoint IDs must differ.'
 }
+if ($SignalProbePath) {
+  if (!$ProbeRenderDeviceId -or !$ProbeCaptureDeviceId) {
+    throw 'Signal probe requires both probe endpoint IDs.'
+  }
+  $SignalProbePath = (Resolve-Path -LiteralPath $SignalProbePath -ErrorAction Stop).Path
+  if (!(Test-Path -LiteralPath $SignalProbePath -PathType Leaf)) {
+    throw 'Signal probe must be an executable file.'
+  }
+} elseif ($ProbeRenderDeviceId -or $ProbeCaptureDeviceId) {
+  throw 'Probe endpoint IDs require SignalProbePath.'
+}
 
 $runId = [guid]::NewGuid().ToString('N')
 if (!$OutputDirectory) {
@@ -83,6 +105,8 @@ $log = Join-Path $OutputDirectory 'engine.log'
 $result = [ordered]@{
   passed = $false; capture_device_id = $CaptureDeviceId
   render_device_id = $RenderDeviceId; processed_block_delta = 0
+  routes_enabled = !$SkipRoutes
+  signal_checked = $false; signal_detected = $null
   output_directory = $OutputDirectory; reason = ''
 }
 $process = $null
@@ -105,6 +129,10 @@ try {
   $inventory | Set-Content -LiteralPath (Join-Path $OutputDirectory 'devices.log') -Encoding UTF8
   $captureChannels = Assert-Endpoint $inventory $CaptureDeviceId 'input'
   $renderChannels = Assert-Endpoint $inventory $RenderDeviceId 'output'
+  if ($SignalProbePath) {
+    $null = Assert-Endpoint $inventory $ProbeRenderDeviceId 'output'
+    $null = Assert-Endpoint $inventory $ProbeCaptureDeviceId 'input'
+  }
   $configured = @(Invoke-Cli @(
     'runtime-configure-matrix', 'capture', 'virtual-in', $CaptureDeviceId,
     '0', [string]$captureChannels, 'follower',
@@ -112,15 +140,35 @@ try {
     '0', [string]$renderChannels, 'master'
   ))
   $configured | Set-Content -LiteralPath (Join-Path $OutputDirectory 'configure.log') -Encoding UTF8
-  for ($channel = 1; $channel -le $renderChannels; ++$channel) {
-    $sourceChannel = [Math]::Min($channel, $captureChannels)
-    $null = Invoke-Cli @('connect-route', "virtual-in.ch$sourceChannel", "hardware-out.ch$channel", '1')
+  if (!$SkipRoutes) {
+    for ($channel = 1; $channel -le $renderChannels; ++$channel) {
+      $sourceChannel = [Math]::Min($channel, $captureChannels)
+      $null = Invoke-Cli @('connect-route', "virtual-in.ch$sourceChannel", "hardware-out.ch$channel", '1')
+    }
   }
   $graph = @(Invoke-Cli @('graph'))
   $graph | Set-Content -LiteralPath (Join-Path $OutputDirectory 'graph.log') -Encoding UTF8
   $null = Invoke-Cli @('runtime-start')
   $before = @(Invoke-Cli @('diagnostics'))
   'running' | Set-Content -LiteralPath (Join-Path $OutputDirectory 'ready.flag') -Encoding ASCII
+  if ($SignalProbePath) {
+    $probeLines = @(& $SignalProbePath --route $ProbeRenderDeviceId $ProbeCaptureDeviceId 2>&1 |
+      ForEach-Object { [string]$_ })
+    $probeExit = $LASTEXITCODE
+    $probeText = $probeLines -join "`n"
+    $probeLines | Set-Content -LiteralPath (Join-Path $OutputDirectory 'signal-probe.log') -Encoding UTF8
+    $result.signal_checked = $true
+    $result.signal_detected = ($probeExit -eq 0)
+    $leftPower = Get-SignalPower $probeText 'target_power'
+    $rightPower = Get-SignalPower $probeText 'second_channel_power'
+    if ($SkipRoutes) {
+      if ($probeExit -ne 3 -or $leftPower -ne 0 -or $rightPower -ne 0) {
+        throw "Route-free control was not silent (probe exit $probeExit)."
+      }
+    } elseif ($probeExit -ne 0 -or $leftPower -le 0 -or $rightPower -le 0) {
+      throw "Enabled matrix route did not carry stereo signal (probe exit $probeExit)."
+    }
+  }
   Start-Sleep -Seconds $ObserveSeconds
   $after = @(Invoke-Cli @('diagnostics'))
   $after | Set-Content -LiteralPath (Join-Path $OutputDirectory 'diagnostics.log') -Encoding UTF8
@@ -141,5 +189,5 @@ try {
   }
 }
 $result | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'result.json') -Encoding UTF8
-Write-Output "virtual_wasapi_matrix_preflight passed=$([int]$result.passed) processed_delta=$($result.processed_block_delta) output_directory=$OutputDirectory reason=$($result.reason)"
+Write-Output "virtual_wasapi_matrix_preflight passed=$([int]$result.passed) signal_checked=$([int]$result.signal_checked) processed_delta=$($result.processed_block_delta) output_directory=$OutputDirectory reason=$($result.reason)"
 if (!$result.passed) { exit 1 }
