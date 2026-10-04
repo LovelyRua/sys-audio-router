@@ -251,7 +251,14 @@ third-party-derived endpoint and VB-Cable. It does not validate a distributable
 SAR virtual WASAPI driver, low-latency behavior, extended stability, or DAW
 compatibility. After the test, the sample PnP device, `oem10.inf`, and lab
 certificate were removed and Windows test signing was set to No. ESXi reports
-`efiSecureBootEnabled=true` and the VM is powered on. Windows-side
-`Confirm-SecureBootUEFI` could not be rerun after reboot because the VM's WinRM
-listener became unreachable, including from the ESXi host. Treat the guest-side
-security verification as outstanding until remote access is restored.
+`efiSecureBootEnabled=true` and the VM is powered on. On 2026-10-04, an
+elevated interactive console check confirmed
+`Confirm-SecureBootUEFI=True`. WinRM is running, its HTTP listener lists
+`192.168.123.17:5985`, and `Test-WSMan` succeeds both on localhost and on that
+LAN address from inside the guest. The ESXi host can ping the guest but its TCP
+connection to port 5985 times out even while the guest's Public firewall is
+temporarily off. The guest firewall was restored to `ON` and verified afterward.
+The ESXi firewall is enabled with default action `DROP`, and its enabled
+rulesets do not include outbound WinRM. Remote preflight deployment is still
+blocked; do not infer an audio regression from this management-path failure or
+weaken either firewall broadly to work around it.
