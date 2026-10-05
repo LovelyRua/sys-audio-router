@@ -183,3 +183,108 @@ validation, disable test signing and restore Secure Boot.
 - Bounded ring and passive-level user-mode receiver implementation.
 - Measured transport copy count and receiver-down behavior.
 - Install, application playback, and uninstall transcripts.
+## Experimental endpoint to SAR matrix preflight
+
+The separate MS-PL driver repository has now demonstrated an interactive
+Speaker-to-MicArray1 shared-mode loopback in REAPER on VM24. That verifies the
+experimental driver pair, not audio through SAR. The sample device was removed
+after the lab test; it is not included in SAR's installer.
+
+When the experimental device is installed again on the dedicated driver lab,
+`scripts/windows-virtual-wasapi-matrix-preflight.ps1` connects its MicArray1
+capture endpoint to a selected WASAPI render endpoint through the SAR matrix.
+Run it in the logged-on desktop session using endpoint IDs from
+`sar_control_cli devices` (never from WinRM Session 0):
+
+```powershell
+scripts/windows-virtual-wasapi-matrix-preflight.ps1 `
+  -BuildPath C:\path\to\sar-build `
+  -CaptureDeviceId '<MicArray1 capture ID>' `
+  -RenderDeviceId '<physical render ID>'
+```
+
+The script uses an isolated pipe and session, checks both device directions
+and 48 kHz formats, creates matrix routes, starts the engine, records the
+inventory/graph/diagnostics, and stops only the service it started. Without a
+signal probe, `signal_checked=false`: a pass proves discovery and matrix
+execution, **not** audible output. To gate the same run on actual stereo signal,
+pass the separate lab probe and both of its endpoint IDs:
+
+```powershell
+scripts/windows-virtual-wasapi-matrix-preflight.ps1 `
+  -BuildPath C:\path\to\sar-build `
+  -CaptureDeviceId '<MicArray1 capture ID>' `
+  -RenderDeviceId '<VB-Cable Input render ID>' `
+  -SignalProbePath C:\path\to\wasapi_bridge_probe.exe `
+  -ProbeRenderDeviceId '<experimental Speaker render ID>' `
+  -ProbeCaptureDeviceId '<VB-Cable Output capture ID>'
+```
+
+The probe runs inside the preflight's active route window. With routes enabled,
+both target channels must carry signal and the probe must exit 0. For a negative
+control, repeat with `-SkipRoutes` and a new output directory; both channels
+must be silent and the probe must exit 3. `signal-probe.log` and `result.json`
+record which check actually ran. Driver signing, installation, uninstallation,
+and boot-policy changes remain separate, explicitly authorized lab operations.
+
+### VM24 matrix loop evidence (2026-10-04)
+
+On the dedicated Windows 11 driver lab VM, a test-signed SysVAD sample exposed
+a Speaker render endpoint and a MicArray1 capture endpoint. SAR captured from
+MicArray1 and rendered to VB-Cable Input; a separate interactive probe sent a
+stereo 997/1501 Hz signal to Speaker and captured VB-Cable Output. With the
+two SAR crosspoints enabled, the probe reported 75,456 sent frames, 97,632
+captured frames, nonzero power in both target channels, and exit 0. The matrix
+preflight passed with 16,747 processed blocks, zero XRUNs, and zero capture or
+render FIFO overflows in that observation window.
+
+With the same endpoints but `-SkipRoutes`, the final control preflight passed
+with 11,247 processed blocks and `routes_enabled=false`; the downstream probe
+reported zero target and fixed-tone power in both channels and exited 3 as
+expected. The later final positive preflight passed with 11,164 processed
+blocks, but its probe ran after the 30-second route window had ended and read
+silence. Do not treat that late probe as an audio failure or as another positive
+result. Lab logs are under `C:\sar-lab\20261004` on VM24.
+
+This demonstrates a real signal path through SAR's matrix using an experimental
+third-party-derived endpoint and VB-Cable. It does not validate a distributable
+SAR virtual WASAPI driver, low-latency behavior, extended stability, or DAW
+compatibility. After the test, the sample PnP device, `oem10.inf`, and lab
+certificate were removed and Windows test signing was set to No. ESXi reports
+`efiSecureBootEnabled=true` and the VM is powered on. On 2026-10-04, an
+elevated interactive console check confirmed
+`Confirm-SecureBootUEFI=True`. WinRM is running, its HTTP listener lists
+`192.168.123.17:5985`, and `Test-WSMan` succeeds both on localhost and on that
+LAN address from inside the guest. The ESXi host can ping the guest but its TCP
+connection to port 5985 times out even while the guest's Public firewall is
+temporarily off. The guest firewall was restored to `ON` and verified afterward.
+The ESXi firewall is enabled with default action `DROP`, and its enabled
+rulesets do not include outbound WinRM. Remote preflight deployment is still
+blocked; do not infer an audio regression from this management-path failure or
+weaken either firewall broadly to work around it.
+
+### VM24 in-window signal gate rerun (2026-10-04)
+
+After reinstalling the experimental test-signed SysVAD package on VM24, an
+interactive shared-mode Speaker-to-MicArray1 control probe sent 144,576 frames,
+captured 191,040 frames, and measured target power `2.87847e16` with zero
+silent frames. The updated matrix preflight then ran its probe *inside* the
+active SAR route window. The enabled-route run passed with 3,320 processed
+blocks, `signal_checked=true`, 144,576 probe frames sent, 178,944 captured,
+and nonzero target power (`2.53359e16`) in both downstream VB-Cable channels.
+The separate `-SkipRoutes` control also passed with 3,433 processed blocks:
+143,232 probe frames were sent, 175,104 were captured, and target power was
+zero in both channels. Evidence is on VM24 under
+`C:\sar-lab\20261004\matrix-positive-ew2` and
+`C:\sar-lab\20261004\matrix-negative-new` (`result.json` and
+`signal-probe.log`). An earlier run failed before starting audio because one
+manually entered endpoint ID was malformed; it is not an audio failure.
+
+Afterward, both test-created PnP nodes (`ROOT\MEDIA\0001` and `0002`),
+`oem10.inf`, and the lab certificate were removed. Windows test signing was
+turned off, VM24 was shut down, its Secure Boot option was restored, and the
+guest confirmed `Confirm-SecureBootUEFI=True` after reboot. A final check found
+zero experimental nodes, driver packages, or copies of the lab certificate;
+the Domain, Private, and Public firewall profiles were all enabled. This is
+short functional evidence for the experimental driver and SAR matrix, not a
+production-driver or long-run stability certification.
