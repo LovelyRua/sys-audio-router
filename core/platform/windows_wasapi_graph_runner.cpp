@@ -869,6 +869,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
   if (capture_stream_ != nullptr) {
     constexpr std::size_t kMaximumCapturePacketsPerCycle = 8;
     const auto packet_limit = render_master_ ? kMaximumCapturePacketsPerCycle : 1;
+    std::size_t capture_packets_drained = 0;
     for (std::size_t packet_index = 0; packet_index < packet_limit; ++packet_index) {
       if (render_master_ &&
           capture_path_->fifo.free_frames() < capture_path_->packet.frames()) {
@@ -893,6 +894,7 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
             !render_master_ && capture_result.timed_out();
         break;
       }
+      ++capture_packets_drained;
 
       const bool capture_data_discontinuity =
           capture_packet_baseline_established_ &&
@@ -933,6 +935,12 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
             capture_result.frames() - queued;
         ++diagnostics.xrun_count;
       }
+    }
+    if (render_master_ &&
+        capture_packets_drained == kMaximumCapturePacketsPerCycle) {
+      capture_stream_->request_capture_poll();
+      stats.capture_packet_drain_budget_reached = true;
+      ++diagnostics.capture_packet_drain_budget_cycles;
     }
     stats.capture_stream_idle = stats.captured_frames == 0;
   }

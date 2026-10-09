@@ -69,6 +69,7 @@ sar::platform::WasapiRuntimeSummary make_summary() {
   summary.render_fifo_fill_frames = 96;
   summary.capture_fifo_overflow_cycles = 2;
   summary.capture_fifo_overflow_frames = 48;
+  summary.capture_packet_drain_budget_cycles = 23;
   summary.render_fifo_overflow_cycles = 3;
   summary.render_fifo_overflow_frames = 72;
   summary.render_fifo_underflow_cycles = 4;
@@ -178,6 +179,7 @@ sar::diagnostics::EngineDiagnostics make_diagnostics() {
   diagnostics.render_fifo_fill_frames = 96;
   diagnostics.capture_fifo_overflow_cycles = 2;
   diagnostics.capture_fifo_overflow_frames = 48;
+  diagnostics.capture_packet_drain_budget_cycles = 23;
   diagnostics.render_fifo_overflow_cycles = 3;
   diagnostics.render_fifo_overflow_frames = 72;
   diagnostics.render_fifo_underflow_cycles = 4;
@@ -272,6 +274,7 @@ int main() {
                        contains(text, "render_fifo_fill_frames=96") &&
                        contains(text, "capture_fifo_overflow_cycles=2") &&
                        contains(text, "capture_fifo_overflow_frames=48") &&
+                       contains(text, "capture_packet_drain_budget_cycles=23") &&
                        contains(text, "render_fifo_overflow_cycles=3") &&
                        contains(text, "render_fifo_overflow_frames=72") &&
                        contains(text, "render_fifo_underflow_cycles=4") &&

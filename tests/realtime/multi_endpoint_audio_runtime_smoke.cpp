@@ -76,13 +76,16 @@ int main() {
   auto* follower_b_observer = follower_b.get();
   master_observer->diagnostics_.processed_blocks = 100;
   master_observer->diagnostics_.xrun_count = 1;
+  master_observer->diagnostics_.capture_packet_drain_budget_cycles = 2;
   master_observer->diagnostics_.peak_callback_seconds = 0.001;
   follower_a_observer->diagnostics_.processed_blocks = 500;
   follower_a_observer->diagnostics_.xrun_count = 2;
   follower_a_observer->diagnostics_.render_fifo_underflow_frames = 128;
+  follower_a_observer->diagnostics_.capture_packet_drain_budget_cycles = 3;
   follower_a_observer->diagnostics_.virtual_asio_silent_reads = 4;
   follower_a_observer->diagnostics_.virtual_asio_maximum_queue_depth = 7;
   follower_b_observer->diagnostics_.xrun_count = 3;
+  follower_b_observer->diagnostics_.capture_packet_drain_budget_cycles = 5;
   follower_b_observer->diagnostics_.peak_callback_seconds = 0.002;
   follower_b_observer->recovery_ =
       sar::service::EngineAudioRecoveryDiagnostics{
@@ -108,6 +111,7 @@ int main() {
   const auto diagnostics = runtime.diagnostics();
   assert(diagnostics.processed_blocks == 100);
   assert(diagnostics.xrun_count == 6);
+  assert(diagnostics.capture_packet_drain_budget_cycles == 10);
   assert(diagnostics.render_fifo_underflow_frames == 128);
   assert(diagnostics.virtual_asio_silent_reads == 4);
   assert(diagnostics.virtual_asio_maximum_queue_depth == 7);
@@ -154,6 +158,7 @@ int main() {
   resource_diagnostics.virtual_asio_dropped_blocks = 4;
   resource_diagnostics.virtual_asio_producer_overflows = 2;
   resource_diagnostics.virtual_asio_maximum_queue_depth = 9;
+  resource_diagnostics.capture_packet_drain_budget_cycles = 17;
   sar::service::merge_windows_wasapi_matrix_endpoint_diagnostics(
       endpoint_diagnostics,
       {{.endpoint_id = "render-a",
@@ -175,6 +180,8 @@ int main() {
              .diagnostics.virtual_asio_maximum_queue_depth == 9);
   assert(endpoint_diagnostics[1].queue_fill_frames == 384);
   assert(endpoint_diagnostics[1].correction_ppm == -17.25);
+  assert(endpoint_diagnostics[1].diagnostics
+             .capture_packet_drain_budget_cycles == 17);
   assert(!endpoint_diagnostics[0].queue_fill_frames.has_value());
   assert(!endpoint_diagnostics[2].queue_fill_frames.has_value());
 

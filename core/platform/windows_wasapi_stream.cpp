@@ -836,6 +836,13 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
       packet_frames, data_discontinuity, timestamp_error);
 }
 
+void WindowsWasapiStream::request_capture_poll() noexcept {
+  if (state_ == WasapiStreamState::Started &&
+      probe_.direction == WasapiStreamDirection::Capture && impl_) {
+    impl_->samples_ready_latched = true;
+  }
+}
+
 WasapiDuplexEventWaitStatus wait_for_wasapi_duplex_events(
     WindowsWasapiStream& capture_stream,
     WindowsWasapiStream& render_stream,

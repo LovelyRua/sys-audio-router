@@ -75,6 +75,8 @@ void add_follower_diagnostics(diagnostics::EngineDiagnostics& aggregate,
       follower.capture_fifo_overflow_cycles;
   aggregate.capture_fifo_overflow_frames +=
       follower.capture_fifo_overflow_frames;
+  aggregate.capture_packet_drain_budget_cycles +=
+      follower.capture_packet_drain_budget_cycles;
   aggregate.render_fifo_overflow_cycles += follower.render_fifo_overflow_cycles;
   aggregate.render_fifo_overflow_frames += follower.render_fifo_overflow_frames;
   aggregate.render_fifo_underflow_cycles +=

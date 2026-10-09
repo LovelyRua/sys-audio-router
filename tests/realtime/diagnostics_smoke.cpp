@@ -15,6 +15,7 @@ int main() {
       diagnostics.render_fifo_fill_frames != 0 ||
       diagnostics.capture_fifo_overflow_cycles != 0 ||
       diagnostics.capture_fifo_overflow_frames != 0 ||
+      diagnostics.capture_packet_drain_budget_cycles != 0 ||
       diagnostics.render_fifo_overflow_cycles != 0 ||
       diagnostics.render_fifo_overflow_frames != 0 ||
       diagnostics.render_fifo_underflow_cycles != 0 ||

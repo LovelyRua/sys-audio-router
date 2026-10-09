@@ -100,6 +100,46 @@ class WorkerStopNode final : public sar::graph::Node {
 
 int main() {
   {
+    auto capture_probe = make_adaptive_probe(
+        sar::platform::WasapiStreamDirection::Capture);
+    capture_probe.buffer_frames = 1;
+    capture_probe.mix_format.frames_per_block = 1;
+    sar::tests::ScriptedWasapiStream capture(capture_probe);
+    for (std::uint32_t packet = 0; packet < 8; ++packet) {
+      capture.enqueue_capture(
+          {.frames = 1, .samples = {{static_cast<float>(packet)}}});
+    }
+
+    sar::platform::WindowsWasapiGraphRunner runner(
+        &capture, nullptr, 1, 1, 1, 1, 0, 32, true, false);
+    sar::graph::Graph graph(2, 1, 1, 48000);
+    auto stop_node = std::make_unique<WorkerStopNode>();
+    auto* stop_node_view = stop_node.get();
+    graph.add_node(std::move(stop_node));
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    sar::platform::WindowsWasapiRealtimeWorker worker(runner, graph, diagnostics);
+    stop_node_view->set_worker(&worker);
+
+    const auto started = worker.start(1);
+    if (const auto failure = expect(started.ok(),
+                                    "Expected capture drain worker to start")) {
+      return failure;
+    }
+    for (int attempt = 0; attempt < 100 && worker.running(); ++attempt) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    worker.stop();
+    const auto stats = worker.stats();
+    if (const auto failure = expect(
+            stats.capture_packet_drain_budget_cycles == 1 &&
+                diagnostics.capture_packet_drain_budget_cycles == 1 &&
+                capture.capture_poll_requests() == 1,
+            "Expected drain-budget diagnostic to survive worker handoff")) {
+      return failure;
+    }
+  }
+
+  {
     sar::platform::WindowsWasapiGraphRunner runner(nullptr, nullptr, 2, 16);
     auto& input = runner.input_buffer();
     for (std::size_t channel = 0; channel < input.channels(); ++channel) {

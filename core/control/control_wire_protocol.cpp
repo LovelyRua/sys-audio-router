@@ -332,6 +332,7 @@ void encode_diagnostics(Writer& writer,
   writer.scalar(diagnostics.render_fifo_fill_frames);
   writer.scalar(diagnostics.capture_fifo_overflow_cycles);
   writer.scalar(diagnostics.capture_fifo_overflow_frames);
+  writer.scalar(diagnostics.capture_packet_drain_budget_cycles);
   writer.scalar(diagnostics.render_fifo_overflow_cycles);
   writer.scalar(diagnostics.render_fifo_overflow_frames);
   writer.scalar(diagnostics.render_fifo_underflow_cycles);
@@ -383,6 +384,8 @@ diagnostics::EngineDiagnostics decode_diagnostics(Reader& reader) {
   diagnostics.render_fifo_fill_frames = reader.scalar<std::uint64_t>();
   diagnostics.capture_fifo_overflow_cycles = reader.scalar<std::uint64_t>();
   diagnostics.capture_fifo_overflow_frames = reader.scalar<std::uint64_t>();
+  diagnostics.capture_packet_drain_budget_cycles =
+      reader.version() >= 15 ? reader.scalar<std::uint64_t>() : 0;
   diagnostics.render_fifo_overflow_cycles = reader.scalar<std::uint64_t>();
   diagnostics.render_fifo_overflow_frames = reader.scalar<std::uint64_t>();
   diagnostics.render_fifo_underflow_cycles = reader.scalar<std::uint64_t>();

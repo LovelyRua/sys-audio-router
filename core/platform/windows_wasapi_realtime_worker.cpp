@@ -168,6 +168,7 @@ WasapiRealtimeWorkerResult WindowsWasapiRealtimeWorker::start(std::uint32_t time
   render_fifo_fill_frames_.store(0);
   capture_fifo_overflow_cycles_.store(0);
   capture_fifo_overflow_frames_.store(0);
+  capture_packet_drain_budget_cycles_.store(0);
   render_fifo_overflow_cycles_.store(0);
   render_fifo_overflow_frames_.store(0);
   render_fifo_underflow_cycles_.store(0);
@@ -314,6 +315,8 @@ WasapiRealtimeWorkerStats WindowsWasapiRealtimeWorker::stats() const noexcept {
   result.render_fifo_fill_frames = render_fifo_fill_frames_.load();
   result.capture_fifo_overflow_cycles = capture_fifo_overflow_cycles_.load();
   result.capture_fifo_overflow_frames = capture_fifo_overflow_frames_.load();
+  result.capture_packet_drain_budget_cycles =
+      capture_packet_drain_budget_cycles_.load();
   result.render_fifo_overflow_cycles = render_fifo_overflow_cycles_.load();
   result.render_fifo_overflow_frames = render_fifo_overflow_frames_.load();
   result.render_fifo_underflow_cycles = render_fifo_underflow_cycles_.load();
@@ -505,6 +508,9 @@ void WindowsWasapiRealtimeWorker::run(std::uint32_t timeout_ms) noexcept {
         diagnostics_.capture_fifo_overflow_cycles);
     capture_fifo_overflow_frames_.store(
         diagnostics_.capture_fifo_overflow_frames);
+    if (result.stats().capture_packet_drain_budget_reached) {
+      capture_packet_drain_budget_cycles_.fetch_add(1);
+    }
     render_fifo_overflow_cycles_.store(diagnostics_.render_fifo_overflow_cycles);
     render_fifo_overflow_frames_.store(diagnostics_.render_fifo_overflow_frames);
     render_fifo_underflow_cycles_.store(

@@ -245,6 +245,7 @@ void duplex_leaves_native_capture_queued_when_fifo_is_full() {
   const auto first = runner.process_once(route, diagnostics, 25);
   assert(first.ok() && first.stats().captured_frames == 8);
   assert(diagnostics.capture_fifo_overflow_cycles == 0);
+  assert(diagnostics.capture_packet_drain_budget_cycles == 0);
   const auto second = runner.process_once(route, diagnostics, 25);
   assert(second.ok() && second.stats().captured_frames == 4);
   assert(diagnostics.capture_fifo_overflow_cycles == 0);

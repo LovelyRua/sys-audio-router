@@ -124,6 +124,7 @@ class ScriptedWasapiStream final : public platform::WasapiStreamIo {
   }
 
   void request_stop() noexcept override { ++request_stop_calls_; }
+  void request_capture_poll() noexcept override { ++capture_poll_requests_; }
 
   [[nodiscard]] const platform::WasapiStreamProbe& probe() const noexcept override {
     return probe_;
@@ -142,6 +143,9 @@ class ScriptedWasapiStream final : public platform::WasapiStreamIo {
   [[nodiscard]] std::size_t stop_calls() const noexcept { return stop_calls_; }
   [[nodiscard]] std::size_t request_stop_calls() const noexcept {
     return request_stop_calls_;
+  }
+  [[nodiscard]] std::size_t capture_poll_requests() const noexcept {
+    return capture_poll_requests_;
   }
 
  private:
@@ -181,6 +185,7 @@ class ScriptedWasapiStream final : public platform::WasapiStreamIo {
   std::size_t start_calls_ = 0;
   std::size_t stop_calls_ = 0;
   std::size_t request_stop_calls_ = 0;
+  std::size_t capture_poll_requests_ = 0;
 };
 
 }  // namespace sar::tests

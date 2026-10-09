@@ -53,6 +53,7 @@ struct WasapiGraphRunnerStats {
   bool render_partial = false;
   bool capture_silent = false;
   bool capture_data_discontinuity = false;
+  bool capture_packet_drain_budget_reached = false;
   bool capture_timestamp_error = false;
   bool external_input_mixed = false;
   bool external_output_published = false;

@@ -204,6 +204,7 @@ int main() {
     stats.render_fifo_fill_frames = 22;
     stats.capture_fifo_overflow_cycles = 1;
     stats.capture_fifo_overflow_frames = 33;
+    stats.capture_packet_drain_budget_cycles = 7;
     stats.render_fifo_overflow_cycles = 2;
     stats.render_fifo_overflow_frames = 44;
     stats.render_fifo_underflow_cycles = 3;
@@ -215,6 +216,7 @@ int main() {
                        stats_summary.render_fifo_fill_frames == 22 &&
                        stats_summary.capture_fifo_overflow_cycles == 1 &&
                        stats_summary.capture_fifo_overflow_frames == 33 &&
+                       stats_summary.capture_packet_drain_budget_cycles == 7 &&
                        stats_summary.render_fifo_overflow_cycles == 2 &&
                        stats_summary.render_fifo_overflow_frames == 44 &&
                        stats_summary.render_fifo_underflow_cycles == 3 &&
@@ -228,6 +230,7 @@ int main() {
     diagnostics.render_fifo_fill_frames = 96;
     diagnostics.capture_fifo_overflow_cycles = 2;
     diagnostics.capture_fifo_overflow_frames = 48;
+    diagnostics.capture_packet_drain_budget_cycles = 9;
     diagnostics.render_fifo_overflow_cycles = 3;
     diagnostics.render_fifo_overflow_frames = 72;
     diagnostics.render_fifo_underflow_cycles = 4;
@@ -241,6 +244,7 @@ int main() {
                        summary.render_fifo_fill_frames == 96 &&
                        summary.capture_fifo_overflow_cycles == 2 &&
                        summary.capture_fifo_overflow_frames == 48 &&
+                       summary.capture_packet_drain_budget_cycles == 9 &&
                        summary.render_fifo_overflow_cycles == 3 &&
                        summary.render_fifo_overflow_frames == 72 &&
                        summary.render_fifo_underflow_cycles == 4 &&
@@ -272,6 +276,8 @@ int main() {
                        summary_line.find("capture_fifo_overflow_cycles=2") !=
                            std::string::npos &&
                        summary_line.find("capture_fifo_overflow_frames=48") !=
+                           std::string::npos &&
+                       summary_line.find("capture_packet_drain_budget_cycles=9") !=
                            std::string::npos &&
                        summary_line.find("render_fifo_overflow_cycles=3") !=
                            std::string::npos &&

@@ -185,6 +185,7 @@ int main() {
   response.diagnostics.virtual_asio_producer_underflows = 12;
   response.diagnostics.virtual_asio_producer_overflows = 3;
   response.diagnostics.virtual_asio_peak = 0.75;
+  response.diagnostics.capture_packet_drain_budget_cycles = 29;
   response.has_wasapi_recovery = true;
   response.wasapi_recovery.state = sar::control::WasapiRecoveryState::Backoff;
   response.wasapi_recovery.runtime_health =
@@ -257,6 +258,26 @@ int main() {
   assert(decoded_response.response.diagnostics.virtual_asio_producer_overflows ==
          3);
   assert(decoded_response.response.diagnostics.virtual_asio_peak == 0.75);
+  assert(decoded_response.response.diagnostics
+             .capture_packet_drain_budget_cycles == 29);
+
+  sar::control::ControlResponse version14_response;
+  version14_response.has_diagnostics = true;
+  version14_response.diagnostics.capture_packet_drain_budget_cycles = 29;
+  auto encoded_v14 =
+      sar::control::encode_control_response(version14_response).bytes;
+  constexpr std::size_t kBudgetFieldOffset =
+      sar::control::kControlWireHeaderSize + 4 + 4 + 4 + 1 + 1 + 7 * 8;
+  encoded_v14.erase(encoded_v14.begin() + kBudgetFieldOffset,
+                     encoded_v14.begin() + kBudgetFieldOffset + 8);
+  write_u16(encoded_v14, 4, 14);
+  write_u32(encoded_v14, 8,
+            static_cast<std::uint32_t>(encoded_v14.size() -
+                                       sar::control::kControlWireHeaderSize));
+  const auto decoded_v14 = sar::control::decode_control_response(encoded_v14);
+  assert(decoded_v14.ok());
+  assert(decoded_v14.response.diagnostics.capture_packet_drain_budget_cycles ==
+         0);
   assert(decoded_response.response.has_wasapi_recovery);
   assert(decoded_response.response.wasapi_recovery.state ==
          sar::control::WasapiRecoveryState::Backoff);

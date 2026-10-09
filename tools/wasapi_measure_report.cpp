@@ -92,6 +92,8 @@ void print_wasapi_runtime_summary(
   out << "  Render FIFO fill frames: " << summary.render_fifo_fill_frames << '\n';
   out << "  Capture FIFO overflow cycles: "
       << summary.capture_fifo_overflow_cycles << '\n';
+  out << "  Capture packet drain budget cycles: "
+      << summary.capture_packet_drain_budget_cycles << '\n';
   out << "  Capture FIFO overflow frames: "
       << summary.capture_fifo_overflow_frames << '\n';
   out << "  Render FIFO overflow cycles: "
@@ -382,6 +384,8 @@ void print_wasapi_engine_diagnostics(
       << " render_fifo_fill_frames=" << diagnostics.render_fifo_fill_frames
       << " capture_fifo_overflow_cycles="
       << diagnostics.capture_fifo_overflow_cycles
+      << " capture_packet_drain_budget_cycles="
+      << diagnostics.capture_packet_drain_budget_cycles
       << " capture_fifo_overflow_frames="
       << diagnostics.capture_fifo_overflow_frames
       << " render_fifo_overflow_cycles="
@@ -402,6 +406,8 @@ void print_wasapi_engine_diagnostics(
       << '\n';
   out << "  Capture FIFO overflow cycles: "
       << diagnostics.capture_fifo_overflow_cycles << '\n';
+  out << "  Capture packet drain budget cycles: "
+      << diagnostics.capture_packet_drain_budget_cycles << '\n';
   out << "  Capture FIFO overflow frames: "
       << diagnostics.capture_fifo_overflow_frames << '\n';
   out << "  Render FIFO overflow cycles: "

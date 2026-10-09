@@ -458,6 +458,8 @@ diagnostics::EngineDiagnostics WindowsWasapiEngineRuntime::diagnostics() const {
   result.render_fifo_fill_frames = snapshot.render_fifo_fill_frames;
   result.capture_fifo_overflow_cycles = snapshot.capture_fifo_overflow_cycles;
   result.capture_fifo_overflow_frames = snapshot.capture_fifo_overflow_frames;
+  result.capture_packet_drain_budget_cycles =
+      snapshot.capture_packet_drain_budget_cycles;
   result.render_fifo_overflow_cycles = snapshot.render_fifo_overflow_cycles;
   result.render_fifo_overflow_frames = snapshot.render_fifo_overflow_frames;
   result.render_fifo_underflow_cycles = snapshot.render_fifo_underflow_cycles;

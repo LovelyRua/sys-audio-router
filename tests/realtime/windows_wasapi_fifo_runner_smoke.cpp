@@ -111,6 +111,37 @@ int main() {
     assert(diagnostics.capture_fifo_overflow_cycles == 0);
     assert(diagnostics.capture_fifo_overflow_frames == 0);
   }
+
+  {
+    sar::tests::ScriptedWasapiStream capture(
+        make_probe(sar::platform::WasapiStreamDirection::Capture, 1));
+    for (std::uint32_t packet = 0; packet < 8; ++packet) {
+      capture.enqueue_capture({.frames = 1,
+                               .samples = {{static_cast<float>(packet + 1)}}});
+    }
+    capture.enqueue_capture(
+        {.status = sar::platform::WasapiStreamIoStatus::TimedOut});
+
+    sar::platform::WindowsWasapiGraphRunner runner(
+        &capture, nullptr, 1, 1, 1, 1, 0, 32, true);
+    sar::graph::Graph graph(3, 1, 1, 48000);
+    graph.add_node(std::make_unique<sar::graph::PassthroughNode>());
+    sar::diagnostics::EngineDiagnostics diagnostics;
+
+    const auto drained = runner.process_once(graph, diagnostics, 1);
+    assert(drained.ok());
+    assert(drained.stats().capture_packet_drain_budget_reached);
+    assert(capture.capture_poll_requests() == 1);
+    assert(diagnostics.capture_packet_drain_budget_cycles == 1);
+    assert(diagnostics.capture_fifo_overflow_cycles == 0);
+    assert(diagnostics.xrun_count == 0);
+
+    const auto idle = runner.process_once(graph, diagnostics, 1);
+    assert(idle.ok());
+    assert(!idle.stats().capture_packet_drain_budget_reached);
+    assert(capture.capture_poll_requests() == 1);
+    assert(diagnostics.capture_packet_drain_budget_cycles == 1);
+  }
   std::cout << "Windows WASAPI FIFO runner smoke test passed\n";
   return 0;
 }

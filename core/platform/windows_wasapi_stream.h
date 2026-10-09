@@ -142,6 +142,9 @@ class WasapiStreamIo {
   [[nodiscard]] virtual WasapiStreamIoResult capture_once(
       realtime::AudioBuffer& destination,
       std::uint32_t timeout_ms) noexcept = 0;
+  // Requests one nonblocking capture poll on the next call. Buffered runners
+  // use this when they stop draining at a per-cycle packet budget.
+  virtual void request_capture_poll() noexcept {}
   virtual void request_stop() noexcept = 0;
   [[nodiscard]] virtual const WasapiStreamProbe& probe() const noexcept = 0;
 };
@@ -165,6 +168,7 @@ class WindowsWasapiStream final : public WasapiStreamIo {
   [[nodiscard]] WasapiStreamIoResult capture_once(
       realtime::AudioBuffer& destination,
       std::uint32_t timeout_ms) noexcept override;
+  void request_capture_poll() noexcept override;
   [[nodiscard]] bool read_clock(WasapiClockSnapshot& snapshot) const noexcept;
   void request_stop() noexcept override;
   void close() noexcept;

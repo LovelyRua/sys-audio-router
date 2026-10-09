@@ -113,6 +113,8 @@ std::string format_wasapi_runtime_summary_line(
          << summary.capture_fifo_overflow_cycles
          << " capture_fifo_overflow_frames="
          << summary.capture_fifo_overflow_frames
+         << " capture_packet_drain_budget_cycles="
+         << summary.capture_packet_drain_budget_cycles
          << " render_fifo_overflow_cycles="
          << summary.render_fifo_overflow_cycles
          << " render_fifo_overflow_frames="
@@ -266,6 +268,8 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
   summary.render_fifo_fill_frames = stats.render_fifo_fill_frames;
   summary.capture_fifo_overflow_cycles = stats.capture_fifo_overflow_cycles;
   summary.capture_fifo_overflow_frames = stats.capture_fifo_overflow_frames;
+  summary.capture_packet_drain_budget_cycles =
+      stats.capture_packet_drain_budget_cycles;
   summary.render_fifo_overflow_cycles = stats.render_fifo_overflow_cycles;
   summary.render_fifo_overflow_frames = stats.render_fifo_overflow_frames;
   summary.render_fifo_underflow_cycles = stats.render_fifo_underflow_cycles;
@@ -279,6 +283,8 @@ WasapiRuntimeSummary summarize_wasapi_runtime(
         engine_diagnostics->capture_fifo_overflow_cycles;
     summary.capture_fifo_overflow_frames =
         engine_diagnostics->capture_fifo_overflow_frames;
+    summary.capture_packet_drain_budget_cycles =
+        engine_diagnostics->capture_packet_drain_budget_cycles;
     summary.render_fifo_overflow_cycles =
         engine_diagnostics->render_fifo_overflow_cycles;
     summary.render_fifo_overflow_frames =

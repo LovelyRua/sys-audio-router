@@ -504,6 +504,8 @@ int main(int argc, char** argv) {
               << response.response.diagnostics.render_fifo_fill_frames
               << " capture_overflow_frames="
               << response.response.diagnostics.capture_fifo_overflow_frames
+              << " capture_packet_drain_budget_cycles="
+              << response.response.diagnostics.capture_packet_drain_budget_cycles
               << " render_overflow_frames="
               << response.response.diagnostics.render_fifo_overflow_frames
               << " render_underflow_frames="

@@ -12,6 +12,7 @@ struct EngineDiagnostics {
   std::uint64_t render_fifo_fill_frames = 0;
   std::uint64_t capture_fifo_overflow_cycles = 0;
   std::uint64_t capture_fifo_overflow_frames = 0;
+  std::uint64_t capture_packet_drain_budget_cycles = 0;
   std::uint64_t render_fifo_overflow_cycles = 0;
   std::uint64_t render_fifo_overflow_frames = 0;
   std::uint64_t render_fifo_underflow_cycles = 0;

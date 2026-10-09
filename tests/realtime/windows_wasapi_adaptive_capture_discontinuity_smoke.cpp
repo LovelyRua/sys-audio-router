@@ -95,6 +95,7 @@ void assert_no_capture_overflow(
     const sar::diagnostics::EngineDiagnostics& diagnostics) {
   assert(diagnostics.capture_fifo_overflow_cycles == 0);
   assert(diagnostics.capture_fifo_overflow_frames == 0);
+  assert(diagnostics.capture_packet_drain_budget_cycles == 0);
 }
 
 struct RunResult {

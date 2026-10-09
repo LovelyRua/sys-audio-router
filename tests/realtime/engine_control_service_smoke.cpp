@@ -62,6 +62,7 @@ class FakeAudioRuntime final : public sar::service::EngineAudioRuntime {
     result.graph_version = 10;
     result.processed_blocks = 42;
     result.xrun_count = 3;
+    result.capture_packet_drain_budget_cycles = 31;
     return result;
   }
 
@@ -303,6 +304,8 @@ int main() {
   assert(diagnostic_response.diagnostics.graph_version == 10);
   assert(diagnostic_response.diagnostics.processed_blocks == 42);
   assert(diagnostic_response.diagnostics.xrun_count == 3);
+  assert(diagnostic_response.diagnostics.capture_packet_drain_budget_cycles ==
+         31);
   assert(diagnostic_response.has_wasapi_recovery);
   assert(diagnostic_response.wasapi_recovery.state ==
          sar::control::WasapiRecoveryState::Opening);
