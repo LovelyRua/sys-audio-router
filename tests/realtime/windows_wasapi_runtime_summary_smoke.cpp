@@ -158,6 +158,7 @@ int main() {
                        "render_fifo_fill_frames=0 "
                        "capture_fifo_overflow_cycles=0 "
                        "capture_fifo_overflow_frames=0 "
+                       "capture_packet_drain_budget_cycles=0 "
                        "render_fifo_overflow_cycles=0 "
                        "render_fifo_overflow_frames=0 "
                        "render_fifo_underflow_cycles=0 "
