@@ -201,6 +201,8 @@ void merge_windows_wasapi_matrix_endpoint_diagnostics(
         resource.diagnostics.virtual_asio_pushed_blocks;
     endpoint->diagnostics.virtual_asio_dropped_blocks +=
         resource.diagnostics.virtual_asio_dropped_blocks;
+    endpoint->diagnostics.capture_packet_drain_budget_cycles +=
+        resource.diagnostics.capture_packet_drain_budget_cycles;
     endpoint->diagnostics.virtual_asio_producer_overflows +=
         resource.diagnostics.virtual_asio_producer_overflows;
     endpoint->diagnostics.virtual_asio_maximum_queue_depth = std::max(
