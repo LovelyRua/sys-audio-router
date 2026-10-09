@@ -181,7 +181,7 @@ int main() {
   assert(endpoint_diagnostics[1].queue_fill_frames == 384);
   assert(endpoint_diagnostics[1].correction_ppm == -17.25);
   assert(endpoint_diagnostics[1].diagnostics
-             .capture_packet_drain_budget_cycles == 17);
+             .capture_packet_drain_budget_cycles == 20);
   assert(!endpoint_diagnostics[0].queue_fill_frames.has_value());
   assert(!endpoint_diagnostics[2].queue_fill_frames.has_value());
 

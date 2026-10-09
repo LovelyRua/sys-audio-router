@@ -338,7 +338,11 @@ int main() {
   assert(decoded_response.response.audio_runtime.configuration.endpoints[0]
              .device_group_id == "studio-asio");
 
-  auto encoded_response_v13 = encoded_response.bytes;
+  auto legacy_response = response;
+  legacy_response.has_diagnostics = false;
+  legacy_response.endpoint_diagnostics.clear();
+  auto encoded_response_v13 =
+      sar::control::encode_control_response(legacy_response).bytes;
   encoded_response_v13.resize(encoded_response_v13.size() -
                               command_extension_bytes);
   write_u16(encoded_response_v13, 4, 13);
