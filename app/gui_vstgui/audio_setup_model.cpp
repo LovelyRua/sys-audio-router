@@ -21,7 +21,7 @@ void AudioSetupModel::load(
   const auto restore_endpoint = [&](
       control::AudioRuntimeEndpointDirection direction,
       const std::string& endpoint_id, const std::string& device_id,
-      std::uint32_t channel_count) {
+      std::uint32_t first_channel, std::uint32_t channel_count) {
     if (endpoint_id.empty() || device_id.empty() ||
         endpoints_.size() >= control::kMaximumAudioRuntimeEndpoints ||
         endpoint_id_in_use(endpoint_id)) {
@@ -34,7 +34,8 @@ void AudioSetupModel::load(
     if (channel_count == 0 && device != nullptr) {
       channel_count = channels_for(*device, direction);
     }
-    endpoints_.push_back({endpoint_id, device_id, direction, channel_count});
+    endpoints_.push_back({endpoint_id, device_id, direction, first_channel,
+                          channel_count});
   };
 
   if (configuration.mode == control::AudioRuntimeMode::WasapiMatrix) {
@@ -43,21 +44,22 @@ void AudioSetupModel::load(
         continue;
       }
       restore_endpoint(endpoint.direction, endpoint.endpoint_id,
-                       endpoint.device_id, endpoint.channel_count);
+                       endpoint.device_id, endpoint.first_channel,
+                       endpoint.channel_count);
     }
   } else if (configuration.mode == control::AudioRuntimeMode::WasapiDuplex) {
     if (!configuration.capture_device_id.empty()) {
       restore_endpoint(control::AudioRuntimeEndpointDirection::Capture,
-                       "wasapi.capture", configuration.capture_device_id, 0);
+                       "wasapi.capture", configuration.capture_device_id, 0, 0);
     }
     if (!configuration.render_device_id.empty()) {
       restore_endpoint(control::AudioRuntimeEndpointDirection::Render,
-                       "wasapi.render", configuration.render_device_id, 0);
+                       "wasapi.render", configuration.render_device_id, 0, 0);
     }
   } else if (configuration.mode == control::AudioRuntimeMode::WasapiRender &&
              !configuration.render_device_id.empty()) {
     restore_endpoint(control::AudioRuntimeEndpointDirection::Render,
-                     "wasapi.render", configuration.render_device_id, 0);
+                     "wasapi.render", configuration.render_device_id, 0, 0);
   }
 
   const bool has_saved_configuration =
@@ -124,9 +126,46 @@ bool AudioSetupModel::cycle_device(std::size_t endpoint_index, bool forward) {
     }
     auto& selected = endpoints_[endpoint_index];
     selected.device_id = candidate.id;
+    selected.first_channel = 0;
     selected.channel_count = channels_for(candidate, selected.direction);
     return true;
   }
+  return false;
+}
+
+bool AudioSetupModel::set_first_channel(std::size_t endpoint_index,
+                                        std::uint32_t first_channel) {
+  if (endpoint_index >= endpoints_.size()) {
+    return false;
+  }
+  const auto& endpoint = endpoints_[endpoint_index];
+  const auto* device = device_for(endpoint);
+  if (device == nullptr) {
+    return false;
+  }
+  auto candidate = endpoint;
+  candidate.first_channel = first_channel;
+  if (!valid_channel_range(candidate, *device)) return false;
+  endpoints_[endpoint_index].first_channel = first_channel;
+  return true;
+}
+
+bool AudioSetupModel::set_channel_count(std::size_t endpoint_index,
+                                        std::uint32_t channel_count) {
+  if (endpoint_index >= endpoints_.size() || channel_count == 0) {
+    return false;
+  }
+  auto& endpoint = endpoints_[endpoint_index];
+  const auto* device = device_for(endpoint);
+  if (device == nullptr) {
+    return false;
+  }
+  const auto previous = endpoint.channel_count;
+  endpoint.channel_count = channel_count;
+  if (valid_channel_range(endpoint, *device)) {
+    return true;
+  }
+  endpoint.channel_count = previous;
   return false;
 }
 
@@ -155,6 +194,12 @@ const platform::AudioDeviceDescriptor* AudioSetupModel::device_for(
   return found == devices_.end() ? nullptr : &*found;
 }
 
+std::uint32_t AudioSetupModel::available_channels(
+    const AudioSetupEndpoint& endpoint) const noexcept {
+  const auto* device = device_for(endpoint);
+  return device == nullptr ? 0 : channels_for(*device, endpoint.direction);
+}
+
 bool AudioSetupModel::can_add_capture() const noexcept {
   return endpoints_.size() < control::kMaximumAudioRuntimeEndpoints &&
          first_available(control::AudioRuntimeEndpointDirection::Capture) !=
@@ -177,8 +222,8 @@ bool AudioSetupModel::can_apply() const noexcept {
     const auto& endpoint = endpoints_[index];
     const auto* device = device_for(endpoint);
     if (device == nullptr || endpoint.endpoint_id.empty() ||
-        endpoint.channel_count == 0 ||
-        !supports(*device, endpoint.direction)) {
+        !supports(*device, endpoint.direction) ||
+        !valid_channel_range(endpoint, *device)) {
       return false;
     }
     for (std::size_t previous = 0; previous < index; ++previous) {
@@ -215,7 +260,7 @@ control::AudioRuntimeConfiguration AudioSetupModel::configuration() const {
         endpoint.device_id,
         endpoint.direction,
         is_master,
-        0,
+        endpoint.first_channel,
         endpoint.channel_count,
     });
   }
@@ -245,7 +290,7 @@ bool AudioSetupModel::add(
     return false;
   }
   endpoints_.push_back({std::move(endpoint_id), std::move(device_id), direction,
-                        channel_count});
+                        0, channel_count});
   return true;
 }
 
@@ -274,6 +319,14 @@ std::uint32_t AudioSetupModel::channels_for(
     return channels;
   }
   return device.formats.empty() ? 0 : device.formats.front().channels;
+}
+
+bool AudioSetupModel::valid_channel_range(
+    const AudioSetupEndpoint& endpoint,
+    const platform::AudioDeviceDescriptor& device) const noexcept {
+  const auto available = channels_for(device, endpoint.direction);
+  return endpoint.channel_count > 0 && endpoint.first_channel < available &&
+         endpoint.channel_count <= available - endpoint.first_channel;
 }
 
 const platform::AudioDeviceDescriptor* AudioSetupModel::first_available(

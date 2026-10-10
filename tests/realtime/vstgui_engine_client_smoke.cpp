@@ -116,7 +116,7 @@ int main() {
   configuration.mode = control::AudioRuntimeMode::WasapiMatrix;
   configuration.endpoints = {
       {"capture-1", "capture-device", control::AudioRuntimeEndpointDirection::Capture,
-       false, 0, 2},
+       false, 1, 1},
       {"render-1", "render-device", control::AudioRuntimeEndpointDirection::Render,
        true, 0, 2},
   };
@@ -125,6 +125,8 @@ int main() {
   assert(configured.audioRuntimeConfiguration.mode ==
          control::AudioRuntimeMode::WasapiMatrix);
   assert(configured.audioRuntimeConfiguration.endpoints.size() == 2);
+  assert(configured.audioRuntimeConfiguration.endpoints.front().first_channel == 1);
+  assert(configured.audioRuntimeConfiguration.endpoints.front().channel_count == 1);
   assert(runtime_configurations.load() == 1);
   assert(initial.lastError.empty());
   assert(client.start().lastError == "Device could not start or stop");

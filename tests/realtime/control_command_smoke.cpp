@@ -357,6 +357,21 @@ int main() {
       return failure;
     }
 
+    command.audio_runtime.endpoints[0].first_channel =
+        std::numeric_limits<std::uint32_t>::max();
+    result = sar::control::validate_command(command);
+    if (const auto failure = expect(
+            has_error_code(result, "invalid_audio_runtime_channel_range"),
+            "Expected overflowing channel slice validation error")) {
+      return failure;
+    }
+    command.audio_runtime.endpoints[0].first_channel = 2;
+    command.audio_runtime.endpoints[0].channel_count = 2;
+    result = sar::control::validate_command(command);
+    if (const auto failure = expect(result.ok(), "Expected valid nonzero channel slice")) {
+      return failure;
+    }
+
     command.audio_runtime.endpoints[0].endpoint_id = "render-main";
     command.audio_runtime.endpoints[1].clock_master = false;
     result = sar::control::validate_command(command);

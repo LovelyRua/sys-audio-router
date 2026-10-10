@@ -54,6 +54,7 @@ int main() {
   model.load(empty);
   assert(model.endpoints().size() == 1);
   assert(model.endpoints().front().device_id == "render-default");
+  assert(model.available_channels(model.endpoints().front()) == 2);
   assert(model.can_add_render());
   assert(model.add_capture());
   assert(model.endpoints().size() == 2);
@@ -64,6 +65,7 @@ int main() {
   assert(!model.add_capture());
   assert(model.cycle_device(0, true));
   assert(model.endpoints()[0].device_id == "render-wide");
+  assert(model.endpoints()[0].first_channel == 0);
   assert(model.cycle_device(0, false));
   assert(model.endpoints()[0].device_id == "render-default");
   assert(model.add_render());
@@ -79,7 +81,24 @@ int main() {
   assert(configuration.endpoints.front().direction ==
          AudioRuntimeEndpointDirection::Render);
   assert(configuration.endpoints.front().channel_count == 2);
-  assert(control::validate_audio_runtime_configuration(configuration, false).empty());
+  auto restored_slice = configuration;
+  restored_slice.endpoints[1].first_channel = 1;
+  model.load(restored_slice);
+  assert(model.endpoints()[1].first_channel == 1);
+  assert(model.configuration().endpoints[1].first_channel == 1);
+  model.load(configuration);
+  assert(model.set_first_channel(1, 1));
+  assert(model.set_channel_count(1, 2));
+  assert(model.configuration().endpoints[1].first_channel == 1);
+  assert(model.configuration().endpoints[1].channel_count == 2);
+  assert(!model.set_first_channel(1, 3));
+  assert(model.endpoints()[1].first_channel == 1);
+  assert(!model.set_channel_count(1, 4));
+  assert(model.endpoints()[1].channel_count == 2);
+  assert(!model.set_channel_count(1, 0));
+  assert(!model.set_first_channel(99, 0));
+  assert(control::validate_audio_runtime_configuration(
+             model.configuration(), false).empty());
 
   auto stable_ids = configuration;
   stable_ids.endpoints.resize(2);

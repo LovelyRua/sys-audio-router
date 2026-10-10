@@ -156,6 +156,12 @@ class HeaderController final : public IControlListener {
                    std::vector<SharedPointer<CTextLabel>> devices,
                    std::vector<SharedPointer<CTextButton>> previous,
                    std::vector<SharedPointer<CTextButton>> next,
+                   std::vector<SharedPointer<CTextButton>> firstPrevious,
+                   std::vector<SharedPointer<CTextLabel>> firstValue,
+                   std::vector<SharedPointer<CTextButton>> firstNext,
+                   std::vector<SharedPointer<CTextButton>> countPrevious,
+                   std::vector<SharedPointer<CTextLabel>> countValue,
+                   std::vector<SharedPointer<CTextButton>> countNext,
                    std::vector<SharedPointer<CTextButton>> remove) {
     setupPanel_ = std::move(panel);
     setupStatus_ = std::move(status);
@@ -167,6 +173,12 @@ class HeaderController final : public IControlListener {
     setupDevices_ = std::move(devices);
     setupPrevious_ = std::move(previous);
     setupNext_ = std::move(next);
+    setupFirstPrevious_ = std::move(firstPrevious);
+    setupFirstValue_ = std::move(firstValue);
+    setupFirstNext_ = std::move(firstNext);
+    setupCountPrevious_ = std::move(countPrevious);
+    setupCountValue_ = std::move(countValue);
+    setupCountNext_ = std::move(countNext);
     setupRemove_ = std::move(remove);
     setupAddCapture_->setListener(this);
     setupAddRender_->setListener(this);
@@ -174,6 +186,10 @@ class HeaderController final : public IControlListener {
     setupCancel_->setListener(this);
     for (auto& control : setupPrevious_) control->setListener(this);
     for (auto& control : setupNext_) control->setListener(this);
+    for (auto& control : setupFirstPrevious_) control->setListener(this);
+    for (auto& control : setupFirstNext_) control->setListener(this);
+    for (auto& control : setupCountPrevious_) control->setListener(this);
+    for (auto& control : setupCountNext_) control->setListener(this);
     for (auto& control : setupRemove_) control->setListener(this);
     setupPanel_->setVisible(false);
   }
@@ -263,6 +279,32 @@ class HeaderController final : public IControlListener {
         if (!setupModel_.cycle_device(i, true)) {
           setSetupStatus("No other compatible unused device is available.");
         }
+        renderSetup();
+        return;
+      }
+      if (control == setupFirstPrevious_[i].get() && control->getValue() > 0.5F) {
+        const auto first = setupModel_.endpoints()[i].first_channel;
+        if (first > 0) static_cast<void>(setupModel_.set_first_channel(i, first - 1));
+        renderSetup();
+        return;
+      }
+      if (control == setupFirstNext_[i].get() && control->getValue() > 0.5F) {
+        const auto first = setupModel_.endpoints()[i].first_channel;
+        if (!setupModel_.set_first_channel(i, first + 1))
+          setSetupStatus("The selected channel range exceeds this device.");
+        renderSetup();
+        return;
+      }
+      if (control == setupCountPrevious_[i].get() && control->getValue() > 0.5F) {
+        const auto count = setupModel_.endpoints()[i].channel_count;
+        if (count > 1) static_cast<void>(setupModel_.set_channel_count(i, count - 1));
+        renderSetup();
+        return;
+      }
+      if (control == setupCountNext_[i].get() && control->getValue() > 0.5F) {
+        const auto count = setupModel_.endpoints()[i].channel_count;
+        if (!setupModel_.set_channel_count(i, count + 1))
+          setSetupStatus("The selected channel count exceeds this device.");
         renderSetup();
         return;
       }
@@ -583,6 +625,12 @@ class HeaderController final : public IControlListener {
         setupDevices_[i]->setText("");
         setupPrevious_[i]->setMouseEnabled(false);
         setupNext_[i]->setMouseEnabled(false);
+        setupFirstPrevious_[i]->setMouseEnabled(false);
+        setupFirstNext_[i]->setMouseEnabled(false);
+        setupCountPrevious_[i]->setMouseEnabled(false);
+        setupCountNext_[i]->setMouseEnabled(false);
+        setupFirstValue_[i]->setText("");
+        setupCountValue_[i]->setText("");
         setupRemove_[i]->setMouseEnabled(false);
         continue;
       }
@@ -596,8 +644,22 @@ class HeaderController final : public IControlListener {
                             : device->label + "  |  " +
                                   std::to_string(endpoint.channel_count) + " ch";
       setupDevices_[i]->setText(text.c_str());
+      setupFirstValue_[i]->setText(
+          std::to_string(static_cast<std::uint64_t>(endpoint.first_channel) + 1).c_str());
+      setupCountValue_[i]->setText(std::to_string(endpoint.channel_count).c_str());
       setupPrevious_[i]->setMouseEnabled(!setupUnsupported_ && !setupApplyPending_);
       setupNext_[i]->setMouseEnabled(!setupUnsupported_ && !setupApplyPending_);
+      const auto available = setupModel_.available_channels(endpoint);
+      const bool has_more = endpoint.first_channel < available &&
+                            endpoint.channel_count < available - endpoint.first_channel;
+      setupFirstPrevious_[i]->setMouseEnabled(!setupUnsupported_ && !setupApplyPending_ &&
+                                               endpoint.first_channel > 0);
+      setupFirstNext_[i]->setMouseEnabled(!setupUnsupported_ && !setupApplyPending_ &&
+                                          has_more);
+      setupCountPrevious_[i]->setMouseEnabled(!setupUnsupported_ && !setupApplyPending_ &&
+                                               endpoint.channel_count > 1);
+      setupCountNext_[i]->setMouseEnabled(!setupUnsupported_ && !setupApplyPending_ &&
+                                          has_more);
       setupRemove_[i]->setMouseEnabled(!setupUnsupported_ && !setupApplyPending_);
     }
     const bool editable = !setupUnsupported_ && !setupApplyPending_;
@@ -651,6 +713,12 @@ class HeaderController final : public IControlListener {
   std::vector<SharedPointer<CTextLabel>> setupDevices_;
   std::vector<SharedPointer<CTextButton>> setupPrevious_;
   std::vector<SharedPointer<CTextButton>> setupNext_;
+  std::vector<SharedPointer<CTextButton>> setupFirstPrevious_;
+  std::vector<SharedPointer<CTextLabel>> setupFirstValue_;
+  std::vector<SharedPointer<CTextButton>> setupFirstNext_;
+  std::vector<SharedPointer<CTextButton>> setupCountPrevious_;
+  std::vector<SharedPointer<CTextLabel>> setupCountValue_;
+  std::vector<SharedPointer<CTextButton>> setupCountNext_;
   std::vector<SharedPointer<CTextButton>> setupRemove_;
   AudioSetupModel setupModel_;
   std::optional<control::AudioRuntimeConfiguration> runtimeConfigurationCommand_;
@@ -856,12 +924,22 @@ WindowPtr createMainWindow() {
                                 palette::kMuted, false));
   setupPanel->addView(makeLabel(CRect(24, 112, 160, 136), "DIRECTION",
                                 palette::kMuted, true));
-  setupPanel->addView(makeLabel(CRect(176, 112, 480, 136), "DEVICE / CHANNELS",
+  setupPanel->addView(makeLabel(CRect(176, 112, 480, 136), "WASAPI DEVICE",
+                                palette::kMuted, true));
+  setupPanel->addView(makeLabel(CRect(488, 112, 606, 136), "FIRST CH",
+                                palette::kMuted, true));
+  setupPanel->addView(makeLabel(CRect(640, 112, 770, 136), "CHANNELS",
                                 palette::kMuted, true));
   std::vector<SharedPointer<CTextLabel>> setupDirections;
   std::vector<SharedPointer<CTextLabel>> setupDevices;
   std::vector<SharedPointer<CTextButton>> setupPrevious;
   std::vector<SharedPointer<CTextButton>> setupNext;
+  std::vector<SharedPointer<CTextButton>> setupFirstPrevious;
+  std::vector<SharedPointer<CTextLabel>> setupFirstValue;
+  std::vector<SharedPointer<CTextButton>> setupFirstNext;
+  std::vector<SharedPointer<CTextButton>> setupCountPrevious;
+  std::vector<SharedPointer<CTextLabel>> setupCountValue;
+  std::vector<SharedPointer<CTextButton>> setupCountNext;
   std::vector<SharedPointer<CTextButton>> setupRemove;
   for (std::size_t i = 0; i < kSetupRows; ++i) {
     const auto top = 140 + static_cast<CCoord>(i) * 44;
@@ -872,7 +950,7 @@ WindowPtr createMainWindow() {
                                palette::kSteel, true);
     setupPanel->addView(direction);
     setupDirections.push_back(direction);
-    auto device = makeLabel(CRect(178, top, 488, top + 38), "",
+    auto device = makeLabel(CRect(178, top, 382, top + 38), "",
                             palette::kText, false);
     setupPanel->addView(device);
     setupDevices.push_back(device);
@@ -886,9 +964,21 @@ WindowPtr createMainWindow() {
       setupPanel->addView(button);
       return button;
     };
-    setupPrevious.push_back(makeSetupButton(500, 42, "<"));
-    setupNext.push_back(makeSetupButton(548, 42, ">"));
-    setupRemove.push_back(makeSetupButton(604, 86, "Remove"));
+    setupPrevious.push_back(makeSetupButton(388, 32, "<"));
+    setupNext.push_back(makeSetupButton(424, 32, ">"));
+    setupFirstPrevious.push_back(makeSetupButton(494, 30, "-"));
+    auto firstValue = makeLabel(CRect(526, top, 566, top + 38), "1",
+                                palette::kText, true);
+    setupPanel->addView(firstValue);
+    setupFirstValue.push_back(firstValue);
+    setupFirstNext.push_back(makeSetupButton(568, 30, "+"));
+    setupCountPrevious.push_back(makeSetupButton(650, 30, "-"));
+    auto countValue = makeLabel(CRect(682, top, 722, top + 38), "2",
+                                palette::kText, true);
+    setupPanel->addView(countValue);
+    setupCountValue.push_back(countValue);
+    setupCountNext.push_back(makeSetupButton(724, 30, "+"));
+    setupRemove.push_back(makeSetupButton(850, 86, "Remove"));
   }
   auto setupAddCapture = makeOwned<CTextButton>(CRect(24, 504, 166, 538),
                                                  nullptr, -1, "+ Capture");
@@ -922,7 +1012,10 @@ WindowPtr createMainWindow() {
   controller->attachSetup(setupPanel, setupStatus, setupAddCapture, setupAddRender,
                           setupApply, setupCancel, std::move(setupDirections),
                           std::move(setupDevices), std::move(setupPrevious),
-                          std::move(setupNext), std::move(setupRemove));
+                          std::move(setupNext), std::move(setupFirstPrevious),
+                          std::move(setupFirstValue), std::move(setupFirstNext),
+                          std::move(setupCountPrevious), std::move(setupCountValue),
+                          std::move(setupCountNext), std::move(setupRemove));
   controller->attachSetupButton(setupButton);
   startStopButton->setListener(controller.get());
   // The controller and its views must outlive the timer, which is the case

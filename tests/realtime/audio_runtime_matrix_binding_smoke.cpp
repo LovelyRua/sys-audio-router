@@ -7,7 +7,7 @@ int main() {
   sar::service::AudioRuntimeTopology topology;
   topology.endpoints = {
       {"capture-a", "capture-native", AudioRuntimeEndpointDirection::Capture,
-       false, 0, 2},
+       false, 1, 1},
       {"render-main", "render-native",
        AudioRuntimeEndpointDirection::Render, true, 0, 2},
       {"render-b", "render-native-b", AudioRuntimeEndpointDirection::Render,
@@ -17,8 +17,7 @@ int main() {
   sar::control::PresetRouteMatrix matrix;
   matrix.inputs = {{"asio.ch1", "ASIO 1"},
                    {"asio.ch2", "ASIO 2"},
-                   {"capture-a.ch1", "Capture A 1"},
-                   {"capture-a.ch2", "Capture A 2"}};
+                   {"capture-a.ch1", "Capture A 1"}};
   matrix.outputs = {{"asio.ch1", "ASIO 1"},
                     {"asio.ch2", "ASIO 2"},
                     {"render-main.ch1", "Main 1"},
@@ -29,6 +28,7 @@ int main() {
   auto result = sar::service::bind_audio_runtime_to_matrix(topology, matrix);
   assert(result.ok());
   assert(result.bindings().size() == 3);
+  // Native channel slicing does not renumber the endpoint's logical graph ports.
   assert(result.bindings()[0].graph_first_channel == 2);
   assert(result.bindings()[1].graph_first_channel == 2);
   assert(result.bindings()[2].graph_first_channel == 4);

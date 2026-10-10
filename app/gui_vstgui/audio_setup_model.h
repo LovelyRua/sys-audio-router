@@ -16,6 +16,7 @@ struct AudioSetupEndpoint {
   std::string device_id;
   control::AudioRuntimeEndpointDirection direction =
       control::AudioRuntimeEndpointDirection::Capture;
+  std::uint32_t first_channel = 0;
   std::uint32_t channel_count = 0;
 };
 
@@ -30,12 +31,18 @@ class AudioSetupModel final {
   [[nodiscard]] bool add_render();
   [[nodiscard]] bool cycle_device(std::size_t endpoint_index,
                                   bool forward = true);
+  [[nodiscard]] bool set_first_channel(std::size_t endpoint_index,
+                                       std::uint32_t first_channel);
+  [[nodiscard]] bool set_channel_count(std::size_t endpoint_index,
+                                       std::uint32_t channel_count);
   [[nodiscard]] bool remove(std::size_t endpoint_index);
 
   [[nodiscard]] const std::vector<AudioSetupEndpoint>& endpoints() const noexcept;
   [[nodiscard]] const std::vector<platform::AudioDeviceDescriptor>& devices()
       const noexcept;
   [[nodiscard]] const platform::AudioDeviceDescriptor* device_for(
+      const AudioSetupEndpoint& endpoint) const noexcept;
+  [[nodiscard]] std::uint32_t available_channels(
       const AudioSetupEndpoint& endpoint) const noexcept;
   [[nodiscard]] bool can_add_capture() const noexcept;
   [[nodiscard]] bool can_add_render() const noexcept;
@@ -53,6 +60,9 @@ class AudioSetupModel final {
   [[nodiscard]] std::uint32_t channels_for(
       const platform::AudioDeviceDescriptor& device,
       control::AudioRuntimeEndpointDirection direction) const noexcept;
+  [[nodiscard]] bool valid_channel_range(
+      const AudioSetupEndpoint& endpoint,
+      const platform::AudioDeviceDescriptor& device) const noexcept;
   [[nodiscard]] const platform::AudioDeviceDescriptor* first_available(
       control::AudioRuntimeEndpointDirection direction,
       std::size_t after_index = 0) const noexcept;
