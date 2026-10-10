@@ -199,6 +199,8 @@ if(SAR_BUILD_GUI_VSTGUI)
     app/gui_vstgui/main.cpp
     app/gui_vstgui/main_window.cpp
     app/gui_vstgui/main_window.h
+    app/gui_vstgui/audio_setup_model.cpp
+    app/gui_vstgui/audio_setup_model.h
     app/gui_vstgui/engine_client.cpp
     app/gui_vstgui/engine_client.h
     app/gui_vstgui/lcd_readout_view.cpp
@@ -236,6 +238,13 @@ add_executable(sar_realtime_smoke
 )
 
 target_link_libraries(sar_realtime_smoke PRIVATE sar_core)
+
+add_executable(sar_audio_setup_model_smoke
+  tests/realtime/audio_setup_model_smoke.cpp
+  app/gui_vstgui/audio_setup_model.cpp
+)
+
+target_link_libraries(sar_audio_setup_model_smoke PRIVATE sar_core)
 
 add_executable(sar_atomic_float_parameter_smoke
   tests/realtime/atomic_float_parameter_smoke.cpp
@@ -1038,6 +1047,7 @@ target_link_libraries(sar_spsc_ring_buffer_threaded_smoke PRIVATE sar_core)
 
 enable_testing()
 add_test(NAME realtime_smoke COMMAND sar_realtime_smoke)
+add_test(NAME audio_setup_model_smoke COMMAND sar_audio_setup_model_smoke)
 add_test(NAME atomic_float_parameter_smoke COMMAND sar_atomic_float_parameter_smoke)
 add_test(NAME meter_node_smoke COMMAND sar_meter_node_smoke)
 add_test(NAME bus_polarity_node_smoke COMMAND sar_bus_polarity_node_smoke)
