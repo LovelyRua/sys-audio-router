@@ -431,6 +431,21 @@ int main() {
                                     "Expected failed I/O error code")) {
       return failure;
     }
+    const auto native_error = sar::platform::map_wasapi_realtime_error(
+        "wasapi_capture_buffer_failed",
+        "Synthetic capture buffer acquisition failure.", true,
+        static_cast<std::int32_t>(0x88890004U));
+    const auto realtime_failure =
+        sar::platform::WasapiStreamIoResult::failure(native_error);
+    const auto preserved_error = realtime_failure.realtime_error();
+    if (const auto failure = expect(
+            !realtime_failure.ok() && realtime_failure.errors().empty() &&
+                preserved_error.code == native_error.code &&
+                preserved_error.context == native_error.context &&
+                preserved_error.value == native_error.value,
+            "Expected realtime I/O failure to preserve its compact native error")) {
+      return failure;
+    }
   }
 
   {

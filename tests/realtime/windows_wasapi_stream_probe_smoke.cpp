@@ -157,6 +157,16 @@ int main() {
                  "Expected invalid selected device ID encoding error")) {
     return failure;
   }
+  const auto malformed_device_id = sar::platform::probe_wasapi_stream(
+      std::string("\xC3\x28", 2),
+      sar::platform::WasapiStreamDirection::Render);
+  if (const auto failure = expect(!malformed_device_id.ok() &&
+                                      malformed_device_id.errors().size() == 1 &&
+                                      malformed_device_id.errors().front().code ==
+                                          "invalid_device_id_encoding",
+                                  "Expected malformed UTF-8 device ID rejection")) {
+    return failure;
+  }
   if (const auto failure =
           expect(std::string(sar::platform::wasapi_stream_direction_name(
                      sar::platform::WasapiStreamDirection::Capture)) == "capture",

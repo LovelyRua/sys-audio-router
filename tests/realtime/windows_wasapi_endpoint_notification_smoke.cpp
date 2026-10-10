@@ -270,6 +270,46 @@ int main() {
     return failure;
   }
 
+  sar::platform::WindowsWasapiEndpointNotification coalesced_notification;
+  if (FAILED(coalesced_notification.register_notifications())) {
+    std::cerr << "Failed to register coalescing notification probe\n";
+    if (uninitialize_com) {
+      CoUninitialize();
+    }
+    return 1;
+  }
+  WindowsWasapiEndpointNotificationTestAccess::notify_default_device(
+      coalesced_notification, eCapture, eConsole);
+  WindowsWasapiEndpointNotificationTestAccess::notify_default_device(
+      coalesced_notification, eRender, eConsole);
+  if (const auto failure = expect(
+          coalesced_notification.capture_generation() == 1 &&
+              coalesced_notification.render_generation() == 1 &&
+              WaitForSingleObject(
+                  static_cast<HANDLE>(coalesced_notification.change_event()), 0) ==
+                  WAIT_OBJECT_0,
+          "Expected queued endpoint changes to coalesce without losing generations")) {
+    return failure;
+  }
+  const auto coalesced_snapshot = coalesced_notification.consume_snapshot();
+  if (const auto failure = expect(
+          coalesced_snapshot.capture_generation == 1 &&
+              coalesced_snapshot.render_generation == 1 &&
+              coalesced_snapshot.event_reset_succeeded &&
+              WaitForSingleObject(
+                  static_cast<HANDLE>(coalesced_notification.change_event()), 0) ==
+                  WAIT_TIMEOUT,
+          "Expected coalesced endpoint snapshot to preserve both changes and reset")) {
+    return failure;
+  }
+  if (FAILED(coalesced_notification.unregister_notifications())) {
+    std::cerr << "Failed to unregister coalescing notification probe\n";
+    if (uninitialize_com) {
+      CoUninitialize();
+    }
+    return 1;
+  }
+
   if (uninitialize_com) {
     CoUninitialize();
   }

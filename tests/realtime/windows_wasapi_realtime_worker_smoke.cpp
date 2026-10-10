@@ -880,6 +880,38 @@ int main() {
   }
 
   {
+    sar::tests::ScriptedWasapiStream capture(
+        make_adaptive_probe(sar::platform::WasapiStreamDirection::Capture));
+    capture.enqueue_capture({.frames = 64, .samples = {adaptive_samples(0)}});
+    sar::platform::WindowsWasapiGraphRunner runner(&capture, nullptr, 1, 64);
+    sar::graph::Graph graph(23, 1, 64, 48000);
+    auto stop_node = std::make_unique<WorkerStopNode>();
+    auto* const stop_node_ptr = stop_node.get();
+    graph.add_node(std::move(stop_node));
+    sar::diagnostics::EngineDiagnostics diagnostics;
+    sar::platform::WindowsWasapiRealtimeWorker worker(runner, graph, diagnostics);
+    stop_node_ptr->set_worker(&worker);
+
+    const auto start_result = worker.start(1);
+    if (const auto failure = expect(start_result.ok(),
+                                    "Expected stream-backed self-stop worker start")) {
+      return failure;
+    }
+    for (int attempt = 0; attempt < 100 && worker.running(); ++attempt) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    worker.stop();
+    worker.stop();
+
+    if (const auto failure = expect(
+            !worker.running() && stop_node_ptr->process_calls() == 1 &&
+                capture.stop_calls() == 1,
+            "Expected self-stop followed by repeated control stops to clean stream once")) {
+      return failure;
+    }
+  }
+
+  {
     sar::platform::WindowsWasapiStream render_stream;
     sar::platform::WindowsWasapiGraphRunner runner(nullptr, &render_stream, 2, 16);
     sar::graph::Graph graph(13, 2, 16);

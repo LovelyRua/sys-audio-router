@@ -661,6 +661,37 @@ int main() {
   }
 
   {
+    sar::tests::ScriptedWasapiStream capture_stream(make_capture_probe());
+    sar::tests::ScriptedWasapiStream render_stream(make_mismatched_render_probe());
+    capture_stream.enqueue_capture({.frames = 4,
+                                   .samples = {{0.25F, 0.25F, 0.25F, 0.25F},
+                                               {-0.25F, -0.25F, -0.25F, -0.25F}}});
+    render_stream.enqueue_render({.writable_frames = 4});
+    std::vector<sar::platform::WasapiStreamDirection> io_calls;
+    capture_stream.set_io_call_log(&io_calls);
+    render_stream.set_io_call_log(&io_calls);
+    sar::platform::WindowsWasapiGraphRunner runner(
+        &capture_stream, &render_stream, 2, 4);
+    sar::graph::Graph graph(22, 2, 4, 48000);
+    graph.add_node(std::make_unique<sar::graph::GainNode>(1.0F));
+    sar::diagnostics::EngineDiagnostics diagnostics;
+
+    const auto result = runner.process_once(graph, diagnostics, 0);
+    if (const auto failure = expect(
+            !result.ok() && has_error_code(result, "graph_sample_rate_mismatch"),
+            "Expected duplex rate mismatch rejection")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            io_calls.empty() && capture_stream.remaining_capture_steps() == 1 &&
+                render_stream.remaining_render_steps() == 1 &&
+                render_stream.render_submissions().empty(),
+            "Expected duplex preflight to reject before consuming endpoint I/O")) {
+      return failure;
+    }
+  }
+
+  {
     sar::platform::WindowsWasapiStream capture_stream;
     auto open_result = capture_stream.open(make_mismatched_capture_probe());
     if (const auto failure =
