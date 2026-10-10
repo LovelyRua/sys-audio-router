@@ -83,7 +83,9 @@ int main() {
   assert(configuration.endpoints.front().channel_count == 2);
   auto restored_slice = configuration;
   restored_slice.endpoints[2].first_channel = 1;
+  restored_slice.endpoints[2].channel_count = 2;
   model.load(restored_slice);
+  if (!model.can_apply()) return 1;
   assert(model.endpoints()[2].first_channel == 1);
   assert(model.configuration().endpoints[2].first_channel == 1);
   model.load(configuration);
