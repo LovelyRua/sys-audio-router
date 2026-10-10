@@ -89,8 +89,8 @@ int main() {
   assert(model.endpoints()[2].first_channel == 1);
   assert(model.configuration().endpoints[2].first_channel == 1);
   model.load(configuration);
-  assert(model.set_first_channel(2, 1));
   assert(model.set_channel_count(2, 2));
+  assert(model.set_first_channel(2, 1));
   assert(model.configuration().endpoints[2].first_channel == 1);
   assert(model.configuration().endpoints[2].channel_count == 2);
   assert(!model.set_first_channel(1, 1));
