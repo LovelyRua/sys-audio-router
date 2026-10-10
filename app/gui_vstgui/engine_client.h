@@ -5,7 +5,9 @@
 #include <string>
 #include <vector>
 
+#include "core/control/control_command.h"
 #include "core/control/preset_document.h"
+#include "core/platform/audio_device.h"
 
 namespace sar::gui_vstgui {
 
@@ -18,6 +20,8 @@ struct EngineState {
   std::uint32_t blockFrames = 0;
   std::uint64_t xrunCount = 0;
   std::string lastError;
+  control::AudioRuntimeConfiguration audioRuntimeConfiguration;
+  std::vector<platform::AudioDeviceDescriptor> devices;
   control::PresetRouteMatrix matrix;
   bool hasMatrix = false;
 };
@@ -42,6 +46,8 @@ class EngineClient final {
   // observed right after, same as poll().
   [[nodiscard]] EngineState start();
   [[nodiscard]] EngineState stop();
+  [[nodiscard]] EngineState configureAudioRuntime(
+      control::AudioRuntimeConfiguration configuration);
   [[nodiscard]] EngineState setRoute(std::string input_id, std::string output_id,
                                      bool connect);
   [[nodiscard]] EngineState setRouteGain(std::string input_id, std::string output_id,

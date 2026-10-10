@@ -51,7 +51,7 @@ a certificate, hardware, a driver test machine).
 | UX-9 | Per-channel meters and mixer view | Open |
 | UX-10 | Engine-provided endpoint families (replace name matching in `Main.qml`) | Open |
 | GUI-1 | Split `Main.qml`; add Qt Quick Test | Open |
-| GUI-2 | VSTGUI-based control panel as a replacement for the Qt Quick GUI | Open: `app/gui_vstgui` is a parallel prototype behind `SAR_BUILD_GUI_VSTGUI` (default off), wired to the real engine over the control pipe. It has engine status and start/stop, a paged interactive routing matrix, and a route inspector with gain and mute. Windows CI builds, tests, and publishes a preview executable. Still missing: device configuration, diagnostics detail, presets, dialogs, localization, keyboard/accessible navigation, and interactive user-flow verification. The Qt Quick GUI remains the shipped control panel until this catches up |
+| GUI-2 | VSTGUI-based control panel as a replacement for the Qt Quick GUI | Open: `app/gui_vstgui` is a parallel prototype behind `SAR_BUILD_GUI_VSTGUI` (default off), wired to the real engine over the control pipe. It has engine status and start/stop, a paged interactive routing matrix, route inspection with gain and mute, and a first-run WASAPI matrix setup page with multi-endpoint selection. Physical ASIO configuration is not exposed by this page. Windows CI builds, tests, and publishes a preview executable. Still missing: diagnostics detail, presets, dialogs, localization, keyboard/accessible navigation, and interactive user-flow verification. The Qt Quick GUI remains the shipped control panel until this catches up |
 
 ## Engineering and process
 

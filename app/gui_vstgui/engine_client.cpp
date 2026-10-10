@@ -94,6 +94,7 @@ EngineState EngineClient::poll() {
   if (runtime_response->has_audio_runtime_state) {
     state.runtimeConfigured = runtime_response->audio_runtime.configured;
     state.runtimeRunning = runtime_response->audio_runtime.running;
+    state.audioRuntimeConfiguration = runtime_response->audio_runtime.configuration;
   }
 
   control::ControlCommand session_query;
@@ -101,6 +102,9 @@ EngineState EngineClient::poll() {
   session_query.type = control::ControlCommandType::QuerySessionState;
   const auto session_response = transact(config, std::move(session_query), state);
   if (!session_response) return state;
+  if (session_response->has_devices) {
+    state.devices = session_response->devices;
+  }
   if (session_response && session_response->has_active_graph) {
     state.sampleRate = session_response->active_graph.sample_rate;
     state.blockFrames =
@@ -142,6 +146,21 @@ EngineState EngineClient::stop() {
   control::ControlCommand command;
   command.command_id = next_command_id();
   command.type = control::ControlCommandType::StopAudioRuntime;
+  const auto response = transact(config, std::move(command), state);
+  auto current = poll();
+  if (!response) current.lastError = state.lastError;
+  return current;
+}
+
+EngineState EngineClient::configureAudioRuntime(
+    control::AudioRuntimeConfiguration configuration) {
+  EngineState state;
+  sar::service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  control::ControlCommand command;
+  command.command_id = next_command_id();
+  command.type = control::ControlCommandType::ConfigureAudioRuntime;
+  command.audio_runtime = std::move(configuration);
   const auto response = transact(config, std::move(command), state);
   auto current = poll();
   if (!response) current.lastError = state.lastError;

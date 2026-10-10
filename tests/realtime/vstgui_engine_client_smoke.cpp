@@ -14,6 +14,8 @@ int main() {
   std::atomic_bool reject_session{false};
   std::atomic_uint diagnostics_queries{0};
   std::atomic_uint route_changes{0};
+  std::atomic_uint runtime_configurations{0};
+  control::AudioRuntimeConfiguration runtime_configuration;
   bool connected = false;
   float gain = 1.0F;
   bool muted = false;
@@ -33,7 +35,9 @@ int main() {
             break;
           case control::ControlCommandType::QueryAudioRuntime:
             response.has_audio_runtime_state = true;
-            response.audio_runtime.configured = true;
+            response.audio_runtime.configured =
+                runtime_configuration.mode != control::AudioRuntimeMode::None;
+            response.audio_runtime.configuration = runtime_configuration;
             break;
           case control::ControlCommandType::QuerySessionState:
             if (reject_session.load()) {
@@ -46,8 +50,21 @@ int main() {
               response.has_preset = true;
               response.preset.matrix.inputs = {{"mic", "Microphone"}};
               response.preset.matrix.outputs = {{"main", "Main out"}};
+              response.has_devices = true;
+              response.devices = {
+                  {"capture-device", "Capture device", platform::AudioBackendKind::Wasapi,
+                   platform::AudioDeviceDirection::Input, {}, false, false, 2, 0},
+                  {"render-device", "Render device", platform::AudioBackendKind::Wasapi,
+                   platform::AudioDeviceDirection::Output, {}, true, false, 0, 2},
+              };
               if (connected) response.preset.matrix.routes = {{"mic", "main", gain, muted}};
             }
+            break;
+          case control::ControlCommandType::ConfigureAudioRuntime:
+            assert(command.audio_runtime.mode == control::AudioRuntimeMode::WasapiMatrix);
+            assert(command.audio_runtime.endpoints.size() == 2);
+            runtime_configuration = command.audio_runtime;
+            ++runtime_configurations;
             break;
           case control::ControlCommandType::ConnectRoute:
           case control::ControlCommandType::DisconnectRoute:
@@ -79,10 +96,12 @@ int main() {
   assert(server.start().ok());
   gui_vstgui::EngineClient client(config.pipe_name);
   const auto initial = client.poll();
-  assert(initial.transportOk && initial.runtimeConfigured);
+  assert(initial.transportOk && !initial.runtimeConfigured);
   assert(initial.sampleRate == 48000 && initial.blockFrames == 128);
   assert(initial.hasMatrix && initial.matrix.inputs.size() == 1);
   assert(initial.matrix.outputs.front().label == "Main out");
+  assert(initial.devices.size() == 2);
+  assert(initial.audioRuntimeConfiguration.mode == control::AudioRuntimeMode::None);
   assert(initial.matrix.routes.empty());
   const auto routed = client.setRoute("mic", "main", true);
   assert(routed.hasMatrix && routed.matrix.routes.size() == 1);
@@ -93,6 +112,22 @@ int main() {
   assert(silent.matrix.routes.size() == 1 && silent.matrix.routes.front().muted);
   const auto disconnected = client.setRoute("mic", "main", false);
   assert(disconnected.matrix.routes.empty() && route_changes.load() == 2);
+  control::AudioRuntimeConfiguration configuration;
+  configuration.mode = control::AudioRuntimeMode::WasapiMatrix;
+  configuration.endpoints = {
+      {"capture-1", "capture-device", control::AudioRuntimeEndpointDirection::Capture,
+       false, 1, 1},
+      {"render-1", "render-device", control::AudioRuntimeEndpointDirection::Render,
+       true, 0, 2},
+  };
+  const auto configured = client.configureAudioRuntime(configuration);
+  assert(configured.transportOk && configured.runtimeConfigured);
+  assert(configured.audioRuntimeConfiguration.mode ==
+         control::AudioRuntimeMode::WasapiMatrix);
+  assert(configured.audioRuntimeConfiguration.endpoints.size() == 2);
+  assert(configured.audioRuntimeConfiguration.endpoints.front().first_channel == 1);
+  assert(configured.audioRuntimeConfiguration.endpoints.front().channel_count == 1);
+  assert(runtime_configurations.load() == 1);
   assert(initial.lastError.empty());
   assert(client.start().lastError == "Device could not start or stop");
   assert(client.stop().lastError == "Device could not start or stop");

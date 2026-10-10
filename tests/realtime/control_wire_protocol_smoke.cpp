@@ -53,6 +53,8 @@ int main() {
   };
   command.audio_runtime.endpoints[0].backend =
       sar::control::AudioRuntimeEndpointBackend::PhysicalAsio;
+  command.audio_runtime.endpoints[0].first_channel = 3;
+  command.audio_runtime.endpoints[0].channel_count = 1;
   command.audio_runtime.endpoints[0].device_group_id = "studio-asio";
   command.audio_runtime.endpoints[0].sample_rate = 48000;
   command.audio_runtime.endpoints[0].block_frames = 128;
@@ -84,6 +86,8 @@ int main() {
          "capture-1");
   assert(decoded_command.command.audio_runtime.endpoints[0].device_id ==
          "native-capture-1");
+  assert(decoded_command.command.audio_runtime.endpoints[0].first_channel == 3);
+  assert(decoded_command.command.audio_runtime.endpoints[0].channel_count == 1);
   assert(decoded_command.command.audio_runtime.endpoints[0].backend ==
          sar::control::AudioRuntimeEndpointBackend::PhysicalAsio);
   assert(decoded_command.command.audio_runtime.endpoints[0].device_group_id ==
@@ -312,10 +316,27 @@ int main() {
              .direction ==
          sar::control::AudioRuntimeEndpointDirection::Render);
   assert(decoded_response.response.audio_runtime.configuration.endpoints[0]
+             .first_channel == 3);
+  assert(decoded_response.response.audio_runtime.configuration.endpoints[0]
+             .channel_count == 1);
+  assert(decoded_response.response.audio_runtime.configuration.endpoints[0]
              .backend ==
          sar::control::AudioRuntimeEndpointBackend::PhysicalAsio);
   assert(decoded_response.response.audio_runtime.configuration.endpoints[0]
              .device_group_id == "studio-asio");
+
+  auto sliced_response = response;
+  sliced_response.audio_runtime.configuration.endpoints[0].first_channel = 3;
+  sliced_response.audio_runtime.configuration.endpoints[0].channel_count = 1;
+  const auto sliced_bytes = sar::control::encode_control_response(sliced_response);
+  assert(sliced_bytes.ok());
+  const auto sliced_round_trip =
+      sar::control::decode_control_response(sliced_bytes.bytes);
+  assert(sliced_round_trip.ok());
+  const auto& sliced_endpoint =
+      sliced_round_trip.response.audio_runtime.configuration.endpoints[0];
+  assert(sliced_endpoint.first_channel == 3);
+  assert(sliced_endpoint.channel_count == 1);
 
   auto encoded_response_v13 = encoded_response.bytes;
   encoded_response_v13.resize(encoded_response_v13.size() -
