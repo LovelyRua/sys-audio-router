@@ -31,6 +31,18 @@ int main() {
   assert(layout->instances[1].output_channels == 4);
   assert(layout->instances[1].input_channels == 2);
 
+  definitions[1].input_channels = 0;
+  definitions[1].output_channels = 0;
+  assert(sar::service::virtual_asio_instance_layout(definitions, profile)
+             .has_value());
+  definitions[1].input_channels = 32;
+  definitions[1].output_channels = 32;
+
+  definitions[2].input_channels = 1;
+  assert(!sar::service::virtual_asio_instance_layout(definitions, profile)
+              .has_value());
+  definitions[2].input_channels = 2;
+
   definitions[2].output_channels = 3;
   assert(!sar::service::virtual_asio_instance_layout(definitions, profile)
               .has_value());

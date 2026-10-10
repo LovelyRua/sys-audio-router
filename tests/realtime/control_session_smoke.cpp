@@ -426,6 +426,42 @@ int main() {
                                     "Expected graph version preserved after bad batch")) {
       return failure;
     }
+
+    sar::control::ControlCommand staged_gain;
+    staged_gain.command_id = "batch_staged_gain";
+    staged_gain.type = sar::control::ControlCommandType::SetGain;
+    staged_gain.input_id = "mic_l";
+    staged_gain.output_id = "monitor_l";
+    staged_gain.gain = 0.9F;
+
+    sar::control::ControlCommand invalid_followup;
+    invalid_followup.command_id = "batch_invalid_followup";
+    invalid_followup.type = sar::control::ControlCommandType::SetGain;
+    invalid_followup.input_id = "missing";
+    invalid_followup.output_id = "monitor_r";
+    invalid_followup.gain = 0.1F;
+
+    const auto partially_invalid = session->handle_batch(
+        "batch_atomicity", {staged_gain, invalid_followup});
+    if (const auto failure = expect(
+            partially_invalid.status ==
+                sar::control::ControlResponseStatus::Rejected,
+            "Expected invalid follow-up to reject the complete batch")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            session->current_graph()->version() == 12,
+            "Expected rejected batch to preserve published graph version")) {
+      return failure;
+    }
+
+    output.clear();
+    session->process(input, output, diagnostics);
+    if (const auto failure = expect_output_gain(
+            input, output, 0.5F, 0.25F,
+            "Rejected batch must not publish its valid prefix")) {
+      return failure;
+    }
   }
 
   {

@@ -21,9 +21,9 @@ int main() {
   matrix.mode = AudioRuntimeMode::WasapiMatrix;
   matrix.endpoints = {
       {"capture-a", "capture-native-a",
-       AudioRuntimeEndpointDirection::Capture, false, 0, 2},
+       AudioRuntimeEndpointDirection::Capture, false, 4, 2},
       {"render-a", "render-native-a", AudioRuntimeEndpointDirection::Render,
-       false, 0, 2},
+       false, 8, 2},
       {"render-main", "render-native-main",
        AudioRuntimeEndpointDirection::Render, true, 0, 2},
   };
@@ -35,7 +35,12 @@ int main() {
   assert(result.topology().ports.size() == 6);
   assert(result.topology().ports[0].port_id == "capture-a.ch1");
   assert(result.topology().ports[3].port_id == "render-a.ch2");
+  assert(result.topology().ports[0].native_channel == 4);
+  assert(result.topology().ports[1].native_channel == 5);
+  assert(result.topology().ports[2].native_channel == 8);
+  assert(result.topology().ports[3].native_channel == 9);
   assert(result.topology().ports[4].native_channel == 0);
+  assert(result.topology().ports[5].native_channel == 1);
   assert(result.topology().ports[4].clock_master);
 
   matrix.endpoints[2].clock_master = false;

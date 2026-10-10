@@ -89,6 +89,34 @@ int main() {
   assert(decoded.session().virtual_asio_devices[0].broker_token ==
          "virtual-asio");
 
+  auto multi_device_session = session;
+  auto auxiliary_device =
+      sar::control::default_virtual_asio_device_definition();
+  auxiliary_device.device_id = "sar_aux";
+  auxiliary_device.clsid = "{12345678-1234-1234-1234-1234567890AB}";
+  auxiliary_device.registry_name = "System Audio Route Aux";
+  auxiliary_device.broker_token = "virtual-asio-aux";
+  auxiliary_device.input_channels = 8;
+  auxiliary_device.output_channels = 16;
+  auxiliary_device.enabled = false;
+  multi_device_session.virtual_asio_devices.push_back(auxiliary_device);
+  const auto encoded_multi_device =
+      sar::control::encode_session_file(multi_device_session);
+  assert(encoded_multi_device.ok());
+  const auto decoded_multi_device =
+      sar::control::decode_session_file(encoded_multi_device.bytes());
+  assert(decoded_multi_device.ok());
+  assert(decoded_multi_device.session().virtual_asio_devices.size() == 2);
+  const auto& decoded_auxiliary =
+      decoded_multi_device.session().virtual_asio_devices[1];
+  assert(decoded_auxiliary.device_id == "sar_aux");
+  assert(decoded_auxiliary.clsid == auxiliary_device.clsid);
+  assert(decoded_auxiliary.registry_name == auxiliary_device.registry_name);
+  assert(decoded_auxiliary.broker_token == auxiliary_device.broker_token);
+  assert(decoded_auxiliary.input_channels == 8);
+  assert(decoded_auxiliary.output_channels == 16);
+  assert(!decoded_auxiliary.enabled);
+
   auto invalid_identity = session;
   invalid_identity.virtual_asio_devices[0].broker_token = "nested\\pipe";
   assert(!sar::control::validate_session_document(invalid_identity).ok());

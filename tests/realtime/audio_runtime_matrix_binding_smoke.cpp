@@ -34,6 +34,16 @@ int main() {
   assert(result.bindings()[2].graph_first_channel == 4);
   assert(result.bindings()[1].clock_master);
 
+  auto wrong_axis = matrix;
+  wrong_axis.inputs.erase(wrong_axis.inputs.begin() + 2,
+                          wrong_axis.inputs.begin() + 4);
+  wrong_axis.outputs.push_back({"capture-a.ch1", "Misplaced Capture 1"});
+  wrong_axis.outputs.push_back({"capture-a.ch2", "Misplaced Capture 2"});
+  result = sar::service::bind_audio_runtime_to_matrix(topology, wrong_axis);
+  assert(!result.ok());
+  assert(!result.errors().empty());
+  assert(result.errors()[0].code == "audio_runtime_matrix_port_missing");
+
   std::swap(matrix.outputs[4], matrix.outputs[5]);
   result = sar::service::bind_audio_runtime_to_matrix(topology, matrix);
   assert(!result.ok());
