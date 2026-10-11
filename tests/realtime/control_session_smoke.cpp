@@ -455,6 +455,10 @@ int main() {
                                     "Expected load preset accepted")) {
       return failure;
     }
+    if (const auto failure = expect(!response.has_preset,
+                                    "Expected load command acknowledgement only")) {
+      return failure;
+    }
     if (const auto failure = expect(session->current_graph()->version() == 13,
                                     "Expected graph republish after load preset")) {
       return failure;
@@ -467,6 +471,47 @@ int main() {
                                                 0.0F,
                                                 1.0F,
                                                 "Unexpected loaded preset output")) {
+      return failure;
+    }
+
+    sar::control::ControlCommand save;
+    save.command_id = "save_after_load";
+    save.type = sar::control::ControlCommandType::SavePreset;
+    const auto saved = session->handle(save);
+    if (const auto failure = expect(saved.status ==
+                                        sar::control::ControlResponseStatus::Accepted &&
+                                        saved.has_preset &&
+                                        saved.preset.matrix.routes[0].muted,
+                                    "Expected save to return the active preset")) {
+      return failure;
+    }
+
+    sar::control::ControlCommand query;
+    query.command_id = "query_after_load";
+    query.type = sar::control::ControlCommandType::QuerySessionState;
+    const auto current = session->handle(query);
+    if (const auto failure = expect(current.has_preset &&
+                                        current.preset.sample_rate == 48000 &&
+                                        current.preset.matrix.routes.size() == 2 &&
+                                        current.preset.matrix.routes[0].muted,
+                                    "Expected session query to return loaded preset")) {
+      return failure;
+    }
+
+    sar::control::ControlCommand invalid_load;
+    invalid_load.command_id = "invalid_load_after_valid_load";
+    invalid_load.type = sar::control::ControlCommandType::LoadPreset;
+    invalid_load.preset = make_valid_preset();
+    invalid_load.preset.matrix.routes[0].input_id = "unknown-input";
+    const auto rejected_load = session->handle(invalid_load);
+    if (const auto failure = expect(rejected_load.status ==
+                                        sar::control::ControlResponseStatus::Rejected,
+                                    "Expected invalid preset load rejected")) {
+      return failure;
+    }
+    if (const auto failure = expect(session->current_graph()->version() == 13 &&
+                                        session->current_preset().matrix.routes[0].muted,
+                                    "Rejected preset load must preserve live state")) {
       return failure;
     }
   }

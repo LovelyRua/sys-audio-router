@@ -5,7 +5,10 @@
 #include <string>
 #include <vector>
 
+#include "core/control/control_command.h"
+#include "core/control/control_response.h"
 #include "core/control/preset_document.h"
+#include "core/platform/audio_device.h"
 
 namespace sar::gui_vstgui {
 
@@ -18,8 +21,19 @@ struct EngineState {
   std::uint32_t blockFrames = 0;
   std::uint64_t xrunCount = 0;
   std::string lastError;
+  diagnostics::EngineDiagnostics diagnostics;
+  control::WasapiRecoveryDiagnostics wasapiRecovery;
+  bool hasWasapiRecovery = false;
+  std::vector<control::AudioEndpointRuntimeDiagnostics> endpointDiagnostics;
+  control::AudioRuntimeConfiguration audioRuntimeConfiguration;
+  std::vector<platform::AudioDeviceDescriptor> devices;
   control::PresetRouteMatrix matrix;
   bool hasMatrix = false;
+  control::PresetDocument currentPreset;
+  bool hasCurrentPreset = false;
+  std::vector<std::string> presetNames;
+  bool hasPresetNames = false;
+  std::string presetStatus;
 };
 
 // Talks to the engine over the same per-user named pipe the engine service,
@@ -42,12 +56,16 @@ class EngineClient final {
   // observed right after, same as poll().
   [[nodiscard]] EngineState start();
   [[nodiscard]] EngineState stop();
+  [[nodiscard]] EngineState configureAudioRuntime(
+      control::AudioRuntimeConfiguration configuration);
   [[nodiscard]] EngineState setRoute(std::string input_id, std::string output_id,
                                      bool connect);
   [[nodiscard]] EngineState setRouteGain(std::string input_id, std::string output_id,
                                          float gain);
   [[nodiscard]] EngineState setRouteMuted(std::string input_id, std::string output_id,
                                           bool muted);
+  [[nodiscard]] EngineState savePreset();
+  [[nodiscard]] EngineState loadPreset(control::PresetDocument preset);
 
  private:
   [[nodiscard]] std::string next_command_id();

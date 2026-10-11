@@ -35,6 +35,25 @@ int main() {
   assert(decoded.preset().matrix.routes[0].gain == 0.5F);
   assert(decoded.preset().matrix.routes[0].muted);
 
+  auto expanded = preset;
+  expanded.sample_rate = 96000;
+  expanded.frames_per_block = 256;
+  expanded.matrix.inputs.push_back({"input-2", "Synth L"});
+  expanded.matrix.outputs.push_back({"output-2", "Phones R"});
+  expanded.matrix.routes.push_back({"input-2", "output-2", 0.125F, false});
+  const auto expanded_file = sar::control::encode_preset_file(expanded);
+  assert(expanded_file.ok());
+  const auto expanded_roundtrip =
+      sar::control::decode_preset_file(expanded_file.bytes());
+  assert(expanded_roundtrip.ok());
+  assert(expanded_roundtrip.preset().sample_rate == 96000);
+  assert(expanded_roundtrip.preset().frames_per_block == 256);
+  assert(expanded_roundtrip.preset().matrix.inputs.size() == 2);
+  assert(expanded_roundtrip.preset().matrix.outputs.size() == 2);
+  assert(expanded_roundtrip.preset().matrix.routes.size() == 2);
+  assert(expanded_roundtrip.preset().matrix.routes[1].gain == 0.125F);
+  assert(!expanded_roundtrip.preset().matrix.routes[1].muted);
+
   const std::vector<std::uint8_t> empty;
   const auto empty_result = sar::control::decode_preset_file(empty);
   assert(!empty_result.ok());

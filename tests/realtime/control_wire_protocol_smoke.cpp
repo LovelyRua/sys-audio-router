@@ -14,7 +14,7 @@ sar::control::PresetDocument make_preset() {
   preset.nodes.push_back({"matrix", "Main Matrix", "route_matrix"});
   preset.matrix.inputs.push_back({"input-1", "Input 1"});
   preset.matrix.outputs.push_back({"output-1", "Output 1"});
-  preset.matrix.routes.push_back({"input-1", "output-1", 0.5F, false});
+  preset.matrix.routes.push_back({"input-1", "output-1", 0.5F, true});
   return preset;
 }
 
@@ -50,9 +50,13 @@ int main() {
        sar::control::AudioRuntimeEndpointDirection::Capture, false, 0, 2},
       {"render-1", "native-render-1",
        sar::control::AudioRuntimeEndpointDirection::Render, true, 0, 2},
+      {"render-2", "native-render-2",
+       sar::control::AudioRuntimeEndpointDirection::Render, false, 0, 2},
   };
   command.audio_runtime.endpoints[0].backend =
       sar::control::AudioRuntimeEndpointBackend::PhysicalAsio;
+  command.audio_runtime.endpoints[0].first_channel = 3;
+  command.audio_runtime.endpoints[0].channel_count = 1;
   command.audio_runtime.endpoints[0].device_group_id = "studio-asio";
   command.audio_runtime.endpoints[0].sample_rate = 48000;
   command.audio_runtime.endpoints[0].block_frames = 128;
@@ -77,13 +81,17 @@ int main() {
   assert(decoded_command.command.output_id == command.output_id);
   assert(decoded_command.command.gain == command.gain);
   assert(decoded_command.command.preset.matrix.routes.size() == 1);
+  assert(decoded_command.command.preset.matrix.routes[0].gain == 0.5F);
+  assert(decoded_command.command.preset.matrix.routes[0].muted);
   assert(decoded_command.command.audio_runtime.mode ==
          sar::control::AudioRuntimeMode::WasapiMatrix);
-  assert(decoded_command.command.audio_runtime.endpoints.size() == 2);
+  assert(decoded_command.command.audio_runtime.endpoints.size() == 3);
   assert(decoded_command.command.audio_runtime.endpoints[0].endpoint_id ==
          "capture-1");
   assert(decoded_command.command.audio_runtime.endpoints[0].device_id ==
          "native-capture-1");
+  assert(decoded_command.command.audio_runtime.endpoints[0].first_channel == 3);
+  assert(decoded_command.command.audio_runtime.endpoints[0].channel_count == 1);
   assert(decoded_command.command.audio_runtime.endpoints[0].backend ==
          sar::control::AudioRuntimeEndpointBackend::PhysicalAsio);
   assert(decoded_command.command.audio_runtime.endpoints[0].device_group_id ==
@@ -93,8 +101,37 @@ int main() {
   assert(decoded_command.command.audio_runtime.endpoints[0].block_frames ==
          128);
   assert(decoded_command.command.audio_runtime.endpoints[1].clock_master);
+  auto alternate_master_command = command;
+  alternate_master_command.audio_runtime.endpoints[1].clock_master = false;
+  alternate_master_command.audio_runtime.endpoints[2].clock_master = true;
+  const auto alternate_master_wire =
+      sar::control::encode_control_command(alternate_master_command);
+  assert(alternate_master_wire.ok());
+  const auto alternate_master_decoded =
+      sar::control::decode_control_command(alternate_master_wire.bytes);
+  assert(alternate_master_decoded.ok());
+  assert(!alternate_master_decoded.command.audio_runtime.endpoints[1].clock_master);
+  assert(alternate_master_decoded.command.audio_runtime.endpoints[2].clock_master);
   assert(decoded_command.command.virtual_asio_devices.size() == 1);
   assert(decoded_command.command.virtual_asio_devices[0].input_channels == 8);
+
+  for (const auto type : {sar::control::ControlCommandType::SavePreset,
+                           sar::control::ControlCommandType::LoadPreset}) {
+    auto preset_command = command;
+    preset_command.type = type;
+    preset_command.command_id =
+        type == sar::control::ControlCommandType::SavePreset
+            ? "save-preset-roundtrip"
+            : "load-preset-roundtrip";
+    const auto wire = sar::control::encode_control_command(preset_command);
+    assert(wire.ok());
+    const auto roundtrip = sar::control::decode_control_command(wire.bytes);
+    assert(roundtrip.ok());
+    assert(roundtrip.command.type == type);
+    assert(roundtrip.command.preset.sample_rate == 48000);
+    assert(roundtrip.command.preset.matrix.routes[0].gain == 0.5F);
+    assert(roundtrip.command.preset.matrix.routes[0].muted);
+  }
 
   auto legacy_command = command;
   legacy_command.audio_runtime = {};
@@ -129,7 +166,7 @@ int main() {
                                        sar::control::kControlWireHeaderSize));
   const auto decoded_v13 = sar::control::decode_control_command(encoded_v13);
   assert(decoded_v13.ok());
-  assert(decoded_v13.command.audio_runtime.endpoints.size() == 2);
+  assert(decoded_v13.command.audio_runtime.endpoints.size() == 3);
   assert(decoded_v13.command.audio_runtime.endpoints[0].backend ==
          sar::control::AudioRuntimeEndpointBackend::Wasapi);
   assert(decoded_v13.command.audio_runtime.endpoints[0].device_group_id.empty());
@@ -181,10 +218,22 @@ int main() {
   response.has_diagnostics = true;
   response.diagnostics.graph_version = 6;
   response.diagnostics.processed_blocks = 123;
+  response.diagnostics.xrun_count = 2;
+  response.diagnostics.capture_fifo_fill_frames = 321;
+  response.diagnostics.capture_fifo_overflow_cycles = 4;
+  response.diagnostics.capture_fifo_overflow_frames = 99;
+  response.diagnostics.render_fifo_fill_frames = 456;
+  response.diagnostics.render_fifo_underflow_cycles = 5;
+  response.diagnostics.render_fifo_underflow_frames = 111;
+  response.diagnostics.last_callback_seconds = 0.000012;
+  response.diagnostics.peak_callback_seconds = 0.000034;
+  response.diagnostics.sample_conversion_import_failures = 6;
+  response.diagnostics.sample_conversion_export_failures = 7;
   response.diagnostics.virtual_asio_pushed_blocks = 456;
   response.diagnostics.virtual_asio_producer_underflows = 12;
   response.diagnostics.virtual_asio_producer_overflows = 3;
   response.diagnostics.virtual_asio_peak = 0.75;
+  response.diagnostics.virtual_asio_clipped_samples = 8;
   response.has_wasapi_recovery = true;
   response.wasapi_recovery.state = sar::control::WasapiRecoveryState::Backoff;
   response.wasapi_recovery.runtime_health =
@@ -240,6 +289,11 @@ int main() {
       sar::control::decode_control_response(encoded_response.bytes);
   assert(decoded_response.ok());
   assert(decoded_response.response.has_session_state);
+  assert(decoded_response.response.has_preset);
+  assert(decoded_response.response.preset.sample_rate == 48000);
+  assert(decoded_response.response.preset.matrix.inputs[0].label == "Input 1");
+  assert(decoded_response.response.preset.matrix.routes[0].gain == 0.5F);
+  assert(decoded_response.response.preset.matrix.routes[0].muted);
   assert(decoded_response.response.next_graph_version == 7);
   assert(decoded_response.response.active_graph.nodes.size() == 1);
   assert(decoded_response.response.devices.size() == 1);
@@ -251,12 +305,24 @@ int main() {
   assert(decoded_response.response.virtual_asio_devices[0].broker_token ==
          "main");
   assert(decoded_response.response.diagnostics.processed_blocks == 123);
+  assert(decoded_response.response.diagnostics.xrun_count == 2);
+  assert(decoded_response.response.diagnostics.capture_fifo_fill_frames == 321);
+  assert(decoded_response.response.diagnostics.capture_fifo_overflow_cycles == 4);
+  assert(decoded_response.response.diagnostics.capture_fifo_overflow_frames == 99);
+  assert(decoded_response.response.diagnostics.render_fifo_fill_frames == 456);
+  assert(decoded_response.response.diagnostics.render_fifo_underflow_cycles == 5);
+  assert(decoded_response.response.diagnostics.render_fifo_underflow_frames == 111);
+  assert(decoded_response.response.diagnostics.last_callback_seconds == 0.000012);
+  assert(decoded_response.response.diagnostics.peak_callback_seconds == 0.000034);
+  assert(decoded_response.response.diagnostics.sample_conversion_import_failures == 6);
+  assert(decoded_response.response.diagnostics.sample_conversion_export_failures == 7);
   assert(decoded_response.response.diagnostics.virtual_asio_pushed_blocks == 456);
   assert(decoded_response.response.diagnostics.virtual_asio_producer_underflows ==
          12);
   assert(decoded_response.response.diagnostics.virtual_asio_producer_overflows ==
          3);
   assert(decoded_response.response.diagnostics.virtual_asio_peak == 0.75);
+  assert(decoded_response.response.diagnostics.virtual_asio_clipped_samples == 8);
   assert(decoded_response.response.has_wasapi_recovery);
   assert(decoded_response.response.wasapi_recovery.state ==
          sar::control::WasapiRecoveryState::Backoff);
@@ -307,15 +373,32 @@ int main() {
   assert(decoded_response.response.audio_runtime.configuration.mode ==
          sar::control::AudioRuntimeMode::WasapiMatrix);
   assert(decoded_response.response.audio_runtime.configuration.endpoints.size() ==
-         2);
+         3);
   assert(decoded_response.response.audio_runtime.configuration.endpoints[1]
              .direction ==
          sar::control::AudioRuntimeEndpointDirection::Render);
+  assert(decoded_response.response.audio_runtime.configuration.endpoints[0]
+             .first_channel == 3);
+  assert(decoded_response.response.audio_runtime.configuration.endpoints[0]
+             .channel_count == 1);
   assert(decoded_response.response.audio_runtime.configuration.endpoints[0]
              .backend ==
          sar::control::AudioRuntimeEndpointBackend::PhysicalAsio);
   assert(decoded_response.response.audio_runtime.configuration.endpoints[0]
              .device_group_id == "studio-asio");
+
+  auto sliced_response = response;
+  sliced_response.audio_runtime.configuration.endpoints[0].first_channel = 3;
+  sliced_response.audio_runtime.configuration.endpoints[0].channel_count = 1;
+  const auto sliced_bytes = sar::control::encode_control_response(sliced_response);
+  assert(sliced_bytes.ok());
+  const auto sliced_round_trip =
+      sar::control::decode_control_response(sliced_bytes.bytes);
+  assert(sliced_round_trip.ok());
+  const auto& sliced_endpoint =
+      sliced_round_trip.response.audio_runtime.configuration.endpoints[0];
+  assert(sliced_endpoint.first_channel == 3);
+  assert(sliced_endpoint.channel_count == 1);
 
   auto encoded_response_v13 = encoded_response.bytes;
   encoded_response_v13.resize(encoded_response_v13.size() -

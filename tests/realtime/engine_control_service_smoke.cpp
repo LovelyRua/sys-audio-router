@@ -62,6 +62,13 @@ class FakeAudioRuntime final : public sar::service::EngineAudioRuntime {
     result.graph_version = 10;
     result.processed_blocks = 42;
     result.xrun_count = 3;
+    result.render_fifo_fill_frames = 640;
+    result.render_fifo_underflow_cycles = 2;
+    result.render_fifo_underflow_frames = 96;
+    result.last_callback_seconds = 0.000011;
+    result.peak_callback_seconds = 0.000027;
+    result.sample_conversion_import_failures = 1;
+    result.virtual_asio_active_producers = 2;
     return result;
   }
 
@@ -303,6 +310,13 @@ int main() {
   assert(diagnostic_response.diagnostics.graph_version == 10);
   assert(diagnostic_response.diagnostics.processed_blocks == 42);
   assert(diagnostic_response.diagnostics.xrun_count == 3);
+  assert(diagnostic_response.diagnostics.render_fifo_fill_frames == 640);
+  assert(diagnostic_response.diagnostics.render_fifo_underflow_cycles == 2);
+  assert(diagnostic_response.diagnostics.render_fifo_underflow_frames == 96);
+  assert(diagnostic_response.diagnostics.last_callback_seconds == 0.000011);
+  assert(diagnostic_response.diagnostics.peak_callback_seconds == 0.000027);
+  assert(diagnostic_response.diagnostics.sample_conversion_import_failures == 1);
+  assert(diagnostic_response.diagnostics.virtual_asio_active_producers == 2);
   assert(diagnostic_response.has_wasapi_recovery);
   assert(diagnostic_response.wasapi_recovery.state ==
          sar::control::WasapiRecoveryState::Opening);
@@ -731,6 +745,29 @@ int main() {
   assert(observed_matrix_inputs == 2);
   assert(configure_service->session().current_preset().matrix.inputs.size() ==
          2);
+
+  sar::control::ControlCommand preset_state;
+  preset_state.command_id = "query-loaded-matrix-preset";
+  preset_state.type = sar::control::ControlCommandType::QuerySessionState;
+  const auto loaded_state = send(*configure_service, preset_state);
+  assert(loaded_state.status == sar::control::ControlResponseStatus::Accepted);
+  assert(loaded_state.has_session_state && loaded_state.has_preset);
+  assert(loaded_state.preset.matrix.inputs.size() == 2);
+  assert(loaded_state.preset.matrix.outputs.size() == 2);
+  assert(loaded_state.preset.matrix.routes.size() ==
+         expand_matrix.preset.matrix.routes.size());
+
+  sar::control::ControlCommand save_matrix;
+  save_matrix.command_id = "save-configured-runtime-matrix";
+  save_matrix.type = sar::control::ControlCommandType::SavePreset;
+  const auto saved_matrix = send(*configure_service, save_matrix);
+  assert(saved_matrix.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  assert(saved_matrix.has_preset);
+  assert(saved_matrix.preset.matrix.inputs.size() == 2);
+  assert(saved_matrix.preset.matrix.outputs.size() == 2);
+  assert(saved_matrix.preset.sample_rate ==
+         configure_service->session().current_preset().sample_rate);
 
   configure.command_id = "configure-multi-capture-matrix";
   configure.audio_runtime = {};

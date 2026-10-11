@@ -94,6 +94,7 @@ EngineState EngineClient::poll() {
   if (runtime_response->has_audio_runtime_state) {
     state.runtimeConfigured = runtime_response->audio_runtime.configured;
     state.runtimeRunning = runtime_response->audio_runtime.running;
+    state.audioRuntimeConfiguration = runtime_response->audio_runtime.configuration;
   }
 
   control::ControlCommand session_query;
@@ -101,12 +102,17 @@ EngineState EngineClient::poll() {
   session_query.type = control::ControlCommandType::QuerySessionState;
   const auto session_response = transact(config, std::move(session_query), state);
   if (!session_response) return state;
+  if (session_response->has_devices) {
+    state.devices = session_response->devices;
+  }
   if (session_response && session_response->has_active_graph) {
     state.sampleRate = session_response->active_graph.sample_rate;
     state.blockFrames =
         static_cast<std::uint32_t>(session_response->active_graph.frames);
   }
   if (session_response->has_preset) {
+    state.currentPreset = session_response->preset;
+    state.hasCurrentPreset = true;
     state.matrix = session_response->preset.matrix;
     state.hasMatrix = true;
   }
@@ -117,6 +123,10 @@ EngineState EngineClient::poll() {
   const auto diagnostics_response = transact(config, std::move(diagnostics_query), state);
   if (diagnostics_response && diagnostics_response->has_diagnostics) {
     state.xrunCount = diagnostics_response->diagnostics.xrun_count;
+    state.diagnostics = diagnostics_response->diagnostics;
+    state.wasapiRecovery = diagnostics_response->wasapi_recovery;
+    state.hasWasapiRecovery = diagnostics_response->has_wasapi_recovery;
+    state.endpointDiagnostics = diagnostics_response->endpoint_diagnostics;
   }
 
   return state;
@@ -142,6 +152,21 @@ EngineState EngineClient::stop() {
   control::ControlCommand command;
   command.command_id = next_command_id();
   command.type = control::ControlCommandType::StopAudioRuntime;
+  const auto response = transact(config, std::move(command), state);
+  auto current = poll();
+  if (!response) current.lastError = state.lastError;
+  return current;
+}
+
+EngineState EngineClient::configureAudioRuntime(
+    control::AudioRuntimeConfiguration configuration) {
+  EngineState state;
+  sar::service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  control::ControlCommand command;
+  command.command_id = next_command_id();
+  command.type = control::ControlCommandType::ConfigureAudioRuntime;
+  command.audio_runtime = std::move(configuration);
   const auto response = transact(config, std::move(command), state);
   auto current = poll();
   if (!response) current.lastError = state.lastError;
@@ -194,6 +219,40 @@ EngineState EngineClient::setRouteMuted(std::string input_id, std::string output
   command.input_id = std::move(input_id);
   command.output_id = std::move(output_id);
   command.mute = muted;
+  const auto response = transact(config, std::move(command), state);
+  auto current = poll();
+  if (!response) current.lastError = state.lastError;
+  return current;
+}
+
+EngineState EngineClient::savePreset() {
+  EngineState state;
+  sar::service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  control::ControlCommand command;
+  command.command_id = next_command_id();
+  command.type = control::ControlCommandType::SavePreset;
+  const auto response = transact(config, std::move(command), state);
+  auto current = poll();
+  if (!response) {
+    current.lastError = state.lastError;
+  } else if (response->has_preset) {
+    current.currentPreset = response->preset;
+    current.hasCurrentPreset = true;
+  } else {
+    current.lastError = "The engine did not return a preset document";
+  }
+  return current;
+}
+
+EngineState EngineClient::loadPreset(control::PresetDocument preset) {
+  EngineState state;
+  sar::service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  control::ControlCommand command;
+  command.command_id = next_command_id();
+  command.type = control::ControlCommandType::LoadPreset;
+  command.preset = std::move(preset);
   const auto response = transact(config, std::move(command), state);
   auto current = poll();
   if (!response) current.lastError = state.lastError;

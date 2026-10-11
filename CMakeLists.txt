@@ -199,10 +199,16 @@ if(SAR_BUILD_GUI_VSTGUI)
     app/gui_vstgui/main.cpp
     app/gui_vstgui/main_window.cpp
     app/gui_vstgui/main_window.h
+    app/gui_vstgui/audio_setup_model.cpp
+    app/gui_vstgui/audio_setup_model.h
+    app/gui_vstgui/diagnostics_model.cpp
+    app/gui_vstgui/diagnostics_model.h
     app/gui_vstgui/engine_client.cpp
     app/gui_vstgui/engine_client.h
     app/gui_vstgui/lcd_readout_view.cpp
     app/gui_vstgui/lcd_readout_view.h
+    app/gui_vstgui/preset_store.cpp
+    app/gui_vstgui/preset_store.h
     app/gui_vstgui/palette.h
   )
   target_include_directories(sar_gui_vstgui PRIVATE
@@ -216,6 +222,7 @@ if(SAR_BUILD_GUI_VSTGUI)
     vstgui
     vstgui_uidescription
     vstgui_standalone
+    comdlg32
   )
   sar_add_version_resource(sar_gui_vstgui
     "System Audio Route control panel (VSTGUI prototype)"
@@ -236,6 +243,27 @@ add_executable(sar_realtime_smoke
 )
 
 target_link_libraries(sar_realtime_smoke PRIVATE sar_core)
+
+add_executable(sar_audio_setup_model_smoke
+  tests/realtime/audio_setup_model_smoke.cpp
+  app/gui_vstgui/audio_setup_model.cpp
+)
+
+target_link_libraries(sar_audio_setup_model_smoke PRIVATE sar_core)
+
+add_executable(sar_vstgui_diagnostics_model_smoke
+  tests/realtime/vstgui_diagnostics_model_smoke.cpp
+  app/gui_vstgui/diagnostics_model.cpp
+)
+
+target_link_libraries(sar_vstgui_diagnostics_model_smoke PRIVATE sar_core)
+
+add_executable(sar_vstgui_preset_store_smoke
+  tests/realtime/vstgui_preset_store_smoke.cpp
+  app/gui_vstgui/preset_store.cpp
+)
+
+target_link_libraries(sar_vstgui_preset_store_smoke PRIVATE sar_core)
 
 add_executable(sar_atomic_float_parameter_smoke
   tests/realtime/atomic_float_parameter_smoke.cpp
@@ -1038,6 +1066,7 @@ target_link_libraries(sar_spsc_ring_buffer_threaded_smoke PRIVATE sar_core)
 
 enable_testing()
 add_test(NAME realtime_smoke COMMAND sar_realtime_smoke)
+add_test(NAME audio_setup_model_smoke COMMAND sar_audio_setup_model_smoke)
 add_test(NAME atomic_float_parameter_smoke COMMAND sar_atomic_float_parameter_smoke)
 add_test(NAME meter_node_smoke COMMAND sar_meter_node_smoke)
 add_test(NAME bus_polarity_node_smoke COMMAND sar_bus_polarity_node_smoke)
@@ -1072,6 +1101,9 @@ add_test(NAME virtual_asio_instance_layout_smoke
 add_test(NAME realtime_audio_input_assembler_smoke
   COMMAND sar_realtime_audio_input_assembler_smoke)
 add_test(NAME control_response_smoke COMMAND sar_control_response_smoke)
+add_test(NAME vstgui_diagnostics_model_smoke
+         COMMAND sar_vstgui_diagnostics_model_smoke)
+add_test(NAME vstgui_preset_store_smoke COMMAND sar_vstgui_preset_store_smoke)
 add_test(NAME control_session_smoke COMMAND sar_control_session_smoke)
 add_test(NAME control_wire_protocol_smoke COMMAND sar_control_wire_protocol_smoke)
 add_test(NAME control_codec_mutation_smoke COMMAND sar_control_codec_mutation_smoke)
