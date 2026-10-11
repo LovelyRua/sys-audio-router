@@ -146,7 +146,7 @@ int main() {
                                        sar::control::kControlWireHeaderSize));
   const auto decoded_v13 = sar::control::decode_control_command(encoded_v13);
   assert(decoded_v13.ok());
-  assert(decoded_v13.command.audio_runtime.endpoints.size() == 2);
+  assert(decoded_v13.command.audio_runtime.endpoints.size() == 3);
   assert(decoded_v13.command.audio_runtime.endpoints[0].backend ==
          sar::control::AudioRuntimeEndpointBackend::Wasapi);
   assert(decoded_v13.command.audio_runtime.endpoints[0].device_group_id.empty());
