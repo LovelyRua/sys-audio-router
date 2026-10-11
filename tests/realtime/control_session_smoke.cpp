@@ -455,6 +455,13 @@ int main() {
                                     "Expected load preset accepted")) {
       return failure;
     }
+    if (const auto failure = expect(response.has_preset &&
+                                        response.preset.sample_rate == 48000 &&
+                                        response.preset.matrix.routes.size() == 2 &&
+                                        response.preset.matrix.routes[0].muted,
+                                    "Expected complete loaded preset snapshot")) {
+      return failure;
+    }
     if (const auto failure = expect(session->current_graph()->version() == 13,
                                     "Expected graph republish after load preset")) {
       return failure;
@@ -467,6 +474,18 @@ int main() {
                                                 0.0F,
                                                 1.0F,
                                                 "Unexpected loaded preset output")) {
+      return failure;
+    }
+
+    sar::control::ControlCommand save;
+    save.command_id = "save_after_load";
+    save.type = sar::control::ControlCommandType::SavePreset;
+    const auto saved = session->handle(save);
+    if (const auto failure = expect(saved.status ==
+                                        sar::control::ControlResponseStatus::Accepted &&
+                                        saved.has_preset &&
+                                        saved.preset.matrix.routes[0].muted,
+                                    "Expected save to return the active preset")) {
       return failure;
     }
   }

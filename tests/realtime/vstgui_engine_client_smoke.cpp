@@ -15,7 +15,10 @@ int main() {
   std::atomic_uint diagnostics_queries{0};
   std::atomic_uint route_changes{0};
   std::atomic_uint runtime_configurations{0};
+  std::atomic_uint preset_saves{0};
+  std::atomic_uint preset_loads{0};
   control::AudioRuntimeConfiguration runtime_configuration;
+  control::PresetDocument loaded_preset;
   bool connected = false;
   float gain = 1.0F;
   bool muted = false;
@@ -45,11 +48,20 @@ int main() {
                   {{"session_failure", "Session query failed"}});
             } else {
               response.has_active_graph = true;
-              response.active_graph.sample_rate = 48000;
-              response.active_graph.frames = 128;
+              response.active_graph.sample_rate = loaded_preset.sample_rate == 0
+                                                      ? 48000
+                                                      : loaded_preset.sample_rate;
+              response.active_graph.frames = loaded_preset.frames_per_block == 0
+                                                 ? 128
+                                                 : loaded_preset.frames_per_block;
               response.has_preset = true;
-              response.preset.matrix.inputs = {{"mic", "Microphone"}};
-              response.preset.matrix.outputs = {{"main", "Main out"}};
+              response.preset = loaded_preset;
+              if (response.preset.sample_rate == 0) {
+                response.preset.sample_rate = 48000;
+                response.preset.frames_per_block = 128;
+                response.preset.matrix.inputs = {{"mic", "Microphone"}};
+                response.preset.matrix.outputs = {{"main", "Main out"}};
+              }
               response.has_devices = true;
               response.devices = {
                   {"capture-device", "Capture device", platform::AudioBackendKind::Wasapi,
@@ -80,6 +92,19 @@ int main() {
           case control::ControlCommandType::SetMute:
             assert(command.input_id == "mic" && command.output_id == "main");
             muted = command.mute;
+            break;
+          case control::ControlCommandType::SavePreset:
+            response = control::preset_response(command.command_id, loaded_preset);
+            ++preset_saves;
+            break;
+          case control::ControlCommandType::LoadPreset:
+            assert(command.preset.sample_rate == 44100);
+            assert(command.preset.matrix.routes.size() == 1);
+            loaded_preset = command.preset;
+            connected = true;
+            gain = command.preset.matrix.routes.front().gain;
+            muted = command.preset.matrix.routes.front().muted;
+            ++preset_loads;
             break;
           case control::ControlCommandType::QueryDiagnostics:
             ++diagnostics_queries;
@@ -117,6 +142,7 @@ int main() {
   assert(initial.transportOk && !initial.runtimeConfigured);
   assert(initial.sampleRate == 48000 && initial.blockFrames == 128);
   assert(initial.hasMatrix && initial.matrix.inputs.size() == 1);
+  assert(initial.hasCurrentPreset && initial.currentPreset.sample_rate == 48000);
   assert(initial.matrix.outputs.front().label == "Main out");
   assert(initial.devices.size() == 2);
   assert(initial.audioRuntimeConfiguration.mode == control::AudioRuntimeMode::None);
@@ -141,6 +167,24 @@ int main() {
   assert(silent.matrix.routes.size() == 1 && silent.matrix.routes.front().muted);
   const auto disconnected = client.setRoute("mic", "main", false);
   assert(disconnected.matrix.routes.empty() && route_changes.load() == 2);
+  control::PresetDocument preset;
+  preset.sample_rate = 44100;
+  preset.frames_per_block = 256;
+  preset.matrix.inputs = {{"mic", "Microphone"}};
+  preset.matrix.outputs = {{"main", "Main out"}};
+  preset.matrix.routes = {{"mic", "main", 0.25F, true}};
+  const auto applied_preset = client.loadPreset(preset);
+  assert(applied_preset.transportOk && applied_preset.hasCurrentPreset);
+  assert(applied_preset.matrix.routes.size() == 1);
+  assert(applied_preset.matrix.routes.front().gain == 0.25F);
+  assert(applied_preset.matrix.routes.front().muted);
+  assert(preset_loads.load() == 1);
+  const auto saved_preset = client.savePreset();
+  assert(saved_preset.transportOk && saved_preset.hasCurrentPreset);
+  assert(saved_preset.currentPreset.sample_rate == 44100);
+  assert(saved_preset.currentPreset.matrix.routes.front().gain == 0.25F);
+  assert(saved_preset.currentPreset.matrix.routes.front().muted);
+  assert(preset_saves.load() == 1);
   control::AudioRuntimeConfiguration configuration;
   configuration.mode = control::AudioRuntimeMode::WasapiMatrix;
   configuration.endpoints = {

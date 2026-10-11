@@ -111,6 +111,8 @@ EngineState EngineClient::poll() {
         static_cast<std::uint32_t>(session_response->active_graph.frames);
   }
   if (session_response->has_preset) {
+    state.currentPreset = session_response->preset;
+    state.hasCurrentPreset = true;
     state.matrix = session_response->preset.matrix;
     state.hasMatrix = true;
   }
@@ -217,6 +219,40 @@ EngineState EngineClient::setRouteMuted(std::string input_id, std::string output
   command.input_id = std::move(input_id);
   command.output_id = std::move(output_id);
   command.mute = muted;
+  const auto response = transact(config, std::move(command), state);
+  auto current = poll();
+  if (!response) current.lastError = state.lastError;
+  return current;
+}
+
+EngineState EngineClient::savePreset() {
+  EngineState state;
+  sar::service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  control::ControlCommand command;
+  command.command_id = next_command_id();
+  command.type = control::ControlCommandType::SavePreset;
+  const auto response = transact(config, std::move(command), state);
+  auto current = poll();
+  if (!response) {
+    current.lastError = state.lastError;
+  } else if (response->has_preset) {
+    current.currentPreset = response->preset;
+    current.hasCurrentPreset = true;
+  } else {
+    current.lastError = "The engine did not return a preset document";
+  }
+  return current;
+}
+
+EngineState EngineClient::loadPreset(control::PresetDocument preset) {
+  EngineState state;
+  sar::service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  control::ControlCommand command;
+  command.command_id = next_command_id();
+  command.type = control::ControlCommandType::LoadPreset;
+  command.preset = std::move(preset);
   const auto response = transact(config, std::move(command), state);
   auto current = poll();
   if (!response) current.lastError = state.lastError;

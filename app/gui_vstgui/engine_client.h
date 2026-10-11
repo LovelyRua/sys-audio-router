@@ -29,6 +29,11 @@ struct EngineState {
   std::vector<platform::AudioDeviceDescriptor> devices;
   control::PresetRouteMatrix matrix;
   bool hasMatrix = false;
+  control::PresetDocument currentPreset;
+  bool hasCurrentPreset = false;
+  std::vector<std::string> presetNames;
+  bool hasPresetNames = false;
+  std::string presetStatus;
 };
 
 // Talks to the engine over the same per-user named pipe the engine service,
@@ -59,6 +64,8 @@ class EngineClient final {
                                          float gain);
   [[nodiscard]] EngineState setRouteMuted(std::string input_id, std::string output_id,
                                           bool muted);
+  [[nodiscard]] EngineState savePreset();
+  [[nodiscard]] EngineState loadPreset(control::PresetDocument preset);
 
  private:
   [[nodiscard]] std::string next_command_id();

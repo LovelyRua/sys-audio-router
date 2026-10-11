@@ -207,6 +207,8 @@ if(SAR_BUILD_GUI_VSTGUI)
     app/gui_vstgui/engine_client.h
     app/gui_vstgui/lcd_readout_view.cpp
     app/gui_vstgui/lcd_readout_view.h
+    app/gui_vstgui/preset_store.cpp
+    app/gui_vstgui/preset_store.h
     app/gui_vstgui/palette.h
   )
   target_include_directories(sar_gui_vstgui PRIVATE
@@ -254,6 +256,13 @@ add_executable(sar_vstgui_diagnostics_model_smoke
 )
 
 target_link_libraries(sar_vstgui_diagnostics_model_smoke PRIVATE sar_core)
+
+add_executable(sar_vstgui_preset_store_smoke
+  tests/realtime/vstgui_preset_store_smoke.cpp
+  app/gui_vstgui/preset_store.cpp
+)
+
+target_link_libraries(sar_vstgui_preset_store_smoke PRIVATE sar_core)
 
 add_executable(sar_atomic_float_parameter_smoke
   tests/realtime/atomic_float_parameter_smoke.cpp
@@ -429,6 +438,14 @@ add_executable(sar_engine_control_service_smoke
 )
 
 target_link_libraries(sar_engine_control_service_smoke PRIVATE sar_core)
+
+if(WIN32)
+  add_executable(sar_vstgui_engine_client_smoke
+    tests/realtime/vstgui_engine_client_smoke.cpp
+    app/gui_vstgui/engine_client.cpp
+  )
+  target_link_libraries(sar_vstgui_engine_client_smoke PRIVATE sar_core)
+endif()
 
 add_executable(sar_mock_asio_transport_smoke
   tests/realtime/mock_asio_transport_smoke.cpp
@@ -1093,6 +1110,7 @@ add_test(NAME realtime_audio_input_assembler_smoke
 add_test(NAME control_response_smoke COMMAND sar_control_response_smoke)
 add_test(NAME vstgui_diagnostics_model_smoke
          COMMAND sar_vstgui_diagnostics_model_smoke)
+add_test(NAME vstgui_preset_store_smoke COMMAND sar_vstgui_preset_store_smoke)
 add_test(NAME control_session_smoke COMMAND sar_control_session_smoke)
 add_test(NAME control_wire_protocol_smoke COMMAND sar_control_wire_protocol_smoke)
 add_test(NAME control_codec_mutation_smoke COMMAND sar_control_codec_mutation_smoke)
@@ -1104,6 +1122,9 @@ add_test(NAME virtual_asio_broker_protocol_mutation_smoke
 set_tests_properties(virtual_asio_broker_protocol_mutation_smoke
                      PROPERTIES TIMEOUT 60)
 add_test(NAME engine_control_service_smoke COMMAND sar_engine_control_service_smoke)
+if(WIN32)
+  add_test(NAME vstgui_engine_client_smoke COMMAND sar_vstgui_engine_client_smoke)
+endif()
 add_test(NAME mock_asio_transport_smoke COMMAND sar_mock_asio_transport_smoke)
 add_test(NAME virtual_asio_client_registry_smoke
          COMMAND sar_virtual_asio_client_registry_smoke)

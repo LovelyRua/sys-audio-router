@@ -746,6 +746,18 @@ int main() {
   assert(configure_service->session().current_preset().matrix.inputs.size() ==
          2);
 
+  sar::control::ControlCommand save_matrix;
+  save_matrix.command_id = "save-configured-runtime-matrix";
+  save_matrix.type = sar::control::ControlCommandType::SavePreset;
+  const auto saved_matrix = send(*configure_service, save_matrix);
+  assert(saved_matrix.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  assert(saved_matrix.has_preset);
+  assert(saved_matrix.preset.matrix.inputs.size() == 2);
+  assert(saved_matrix.preset.matrix.outputs.size() == 2);
+  assert(saved_matrix.preset.sample_rate ==
+         configure_service->session().current_preset().sample_rate);
+
   configure.command_id = "configure-multi-capture-matrix";
   configure.audio_runtime = {};
   configure.audio_runtime.mode =

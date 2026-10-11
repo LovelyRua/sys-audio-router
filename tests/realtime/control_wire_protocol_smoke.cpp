@@ -81,6 +81,8 @@ int main() {
   assert(decoded_command.command.output_id == command.output_id);
   assert(decoded_command.command.gain == command.gain);
   assert(decoded_command.command.preset.matrix.routes.size() == 1);
+  assert(decoded_command.command.preset.matrix.routes[0].gain == 0.5F);
+  assert(!decoded_command.command.preset.matrix.routes[0].muted);
   assert(decoded_command.command.audio_runtime.mode ==
          sar::control::AudioRuntimeMode::WasapiMatrix);
   assert(decoded_command.command.audio_runtime.endpoints.size() == 3);
@@ -112,6 +114,24 @@ int main() {
   assert(alternate_master_decoded.command.audio_runtime.endpoints[2].clock_master);
   assert(decoded_command.command.virtual_asio_devices.size() == 1);
   assert(decoded_command.command.virtual_asio_devices[0].input_channels == 8);
+
+  for (const auto type : {sar::control::ControlCommandType::SavePreset,
+                           sar::control::ControlCommandType::LoadPreset}) {
+    auto preset_command = command;
+    preset_command.type = type;
+    preset_command.command_id =
+        type == sar::control::ControlCommandType::SavePreset
+            ? "save-preset-roundtrip"
+            : "load-preset-roundtrip";
+    const auto wire = sar::control::encode_control_command(preset_command);
+    assert(wire.ok());
+    const auto roundtrip = sar::control::decode_control_command(wire.bytes);
+    assert(roundtrip.ok());
+    assert(roundtrip.command.type == type);
+    assert(roundtrip.command.preset.sample_rate == 48000);
+    assert(roundtrip.command.preset.matrix.routes[0].gain == 0.5F);
+    assert(!roundtrip.command.preset.matrix.routes[0].muted);
+  }
 
   auto legacy_command = command;
   legacy_command.audio_runtime = {};

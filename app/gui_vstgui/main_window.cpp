@@ -5,12 +5,14 @@
 #include "app/gui_vstgui/diagnostics_model.h"
 #include "app/gui_vstgui/lcd_readout_view.h"
 #include "app/gui_vstgui/palette.h"
+#include "app/gui_vstgui/preset_store.h"
 
 #include "vstgui/lib/cfont.h"
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/controls/cbuttons.h"
 #include "vstgui/lib/controls/cslider.h"
+#include "vstgui/lib/controls/ctextedit.h"
 #include "vstgui/lib/controls/ctextlabel.h"
 #include "vstgui/lib/cvstguitimer.h"
 #include "vstgui/standalone/include/iapplication.h"
@@ -24,7 +26,9 @@
 #include <algorithm>
 #include <array>
 #include <optional>
+#include <string_view>
 #include <utility>
+#include <cctype>
 
 using namespace VSTGUI;
 using namespace VSTGUI::Standalone;
@@ -39,6 +43,7 @@ constexpr std::uint32_t kPollIntervalMs = 750;
 constexpr std::size_t kVisibleRows = 8;
 constexpr std::size_t kVisibleColumns = 5;
 constexpr std::size_t kSetupRows = 8;
+constexpr std::size_t kPresetRows = 8;
 
 // A small filled circle: the header's connection indicator.
 class StatusDotView final : public CView {
@@ -237,6 +242,49 @@ class HeaderController final : public IControlListener {
     diagnosticsButton_->setListener(this);
   }
 
+  void attachPresets(
+      SharedPointer<CViewContainer> panel, SharedPointer<CTextButton> open,
+      SharedPointer<CTextButton> close, SharedPointer<CTextEdit> name,
+      SharedPointer<CTextButton> save,
+      std::vector<SharedPointer<CTextLabel>> rows,
+      std::vector<SharedPointer<CTextButton>> load,
+      std::vector<SharedPointer<CTextButton>> remove,
+      SharedPointer<CTextButton> previous, SharedPointer<CTextButton> next,
+      SharedPointer<CTextLabel> page, SharedPointer<CTextLabel> status,
+      SharedPointer<CViewContainer> confirmation,
+      SharedPointer<CTextLabel> confirmationText,
+      SharedPointer<CTextButton> confirm, SharedPointer<CTextButton> cancel) {
+    presetPanel_ = std::move(panel);
+    presetsButton_ = std::move(open);
+    presetsClose_ = std::move(close);
+    presetName_ = std::move(name);
+    presetSave_ = std::move(save);
+    presetRows_ = std::move(rows);
+    presetLoad_ = std::move(load);
+    presetRemove_ = std::move(remove);
+    presetPrevious_ = std::move(previous);
+    presetNext_ = std::move(next);
+    presetPage_ = std::move(page);
+    presetStatus_ = std::move(status);
+    presetConfirmation_ = std::move(confirmation);
+    presetConfirmationText_ = std::move(confirmationText);
+    presetConfirm_ = std::move(confirm);
+    presetCancel_ = std::move(cancel);
+    for (auto* control : {presetsButton_.get(), presetsClose_.get(),
+                          presetSave_.get(), presetPrevious_.get(),
+                          presetNext_.get(), presetConfirm_.get(),
+                          presetCancel_.get()}) {
+      control->setListener(this);
+    }
+    presetName_->setListener(this);
+    for (std::size_t index = 0; index < presetRows_.size(); ++index) {
+      presetLoad_[index]->setListener(this);
+      presetRemove_[index]->setListener(this);
+    }
+    presetPanel_->setVisible(false);
+    presetConfirmation_->setVisible(false);
+  }
+
   void refresh() {
     if (pending_.valid()) {
       if (pending_.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
@@ -251,7 +299,8 @@ class HeaderController final : public IControlListener {
         state.lastError = "Engine request failed";
         apply(state);
       }
-      if (queuedCommand_ != 0 || routeCommand_ || runtimeConfigurationCommand_) {
+      if (queuedCommand_ != 0 || routeCommand_ || runtimeConfigurationCommand_ ||
+          presetCommand_) {
         submit();
       }
       nextPoll_ = std::chrono::steady_clock::now() +
@@ -262,6 +311,65 @@ class HeaderController final : public IControlListener {
   }
 
   void valueChanged(CControl* control) override {
+    if (control == presetsButton_.get() && control->getValue() > 0.5F) {
+      openPresets();
+      return;
+    }
+    if (control == presetsClose_.get() && control->getValue() > 0.5F) {
+      closePresets();
+      return;
+    }
+    if (control == presetSave_.get() && control->getValue() > 0.5F) {
+      const std::string name = presetName_->getText();
+      std::string validation_error;
+      if (!PresetStore::valid_name(name, &validation_error)) {
+        setPresetStatus(validation_error);
+        return;
+      }
+      const auto duplicate = std::find_if(presetNames_.begin(), presetNames_.end(),
+          [&](const auto& existing) { return same_name(existing, name); });
+      if (duplicate != presetNames_.end() || presetStore_.contains(name)) {
+        showPresetConfirmation("Replace preset \"" + name + "\"?",
+                               PresetAction::Save, name);
+      } else {
+        queue_preset_command({PresetAction::Save, name});
+      }
+      return;
+    }
+    if (control == presetPrevious_.get() && control->getValue() > 0.5F) {
+      if (presetOffset_ >= kPresetRows) presetOffset_ -= kPresetRows;
+      renderPresets();
+      return;
+    }
+    if (control == presetNext_.get() && control->getValue() > 0.5F) {
+      if (presetOffset_ + kPresetRows < presetNames_.size()) presetOffset_ += kPresetRows;
+      renderPresets();
+      return;
+    }
+    if (control == presetConfirm_.get() && control->getValue() > 0.5F) {
+      presetConfirmation_->setVisible(false);
+      queue_preset_command(std::move(confirmedPresetCommand_));
+      return;
+    }
+    if (control == presetCancel_.get() && control->getValue() > 0.5F) {
+      presetConfirmation_->setVisible(false);
+      confirmedPresetCommand_ = {};
+      return;
+    }
+    if (control == presetName_.get()) return;
+    for (std::size_t index = 0; index < presetRows_.size(); ++index) {
+      const auto entry = presetOffset_ + index;
+      if (entry >= presetNames_.size()) break;
+      if (control == presetLoad_[index].get() && control->getValue() > 0.5F) {
+        queue_preset_command({PresetAction::Load, presetNames_[entry]});
+        return;
+      }
+      if (control == presetRemove_[index].get() && control->getValue() > 0.5F) {
+        showPresetConfirmation("Delete preset \"" + presetNames_[entry] + "\"?",
+                               PresetAction::Remove, presetNames_[entry]);
+        return;
+      }
+    }
     if (control == diagnosticsButton_.get() && control->getValue() > 0.5F) {
       openDiagnostics();
       return;
@@ -463,6 +571,7 @@ class HeaderController final : public IControlListener {
 
  private:
   enum class RouteAction { Connect, Disconnect, Gain, Mute };
+  enum class PresetAction { Refresh, Save, Load, Remove };
   struct RouteCommand {
     RouteAction action;
     std::string input;
@@ -470,6 +579,18 @@ class HeaderController final : public IControlListener {
     float gain;
     bool mute;
   };
+  struct PresetCommand {
+    PresetAction action = PresetAction::Refresh;
+    std::string name;
+  };
+
+  static bool same_name(std::string_view left, std::string_view right) {
+    return left.size() == right.size() &&
+           std::equal(left.begin(), left.end(), right.begin(), [](char a, char b) {
+             return std::tolower(static_cast<unsigned char>(a)) ==
+                    std::tolower(static_cast<unsigned char>(b));
+           });
+  }
 
   const control::PresetRoute* selectedRoute() const {
     const auto& routes = last_.matrix.routes;
@@ -488,18 +609,28 @@ class HeaderController final : public IControlListener {
 
   void submit() {
     int command = 0;
-    if (!routeCommand_ && queuedCommand_ != 0) {
+    if (!routeCommand_ && !runtimeConfigurationCommand_ && !presetCommand_ &&
+        queuedCommand_ != 0) {
       command = queuedCommand_;
       queuedCommand_ = 0;
     }
     auto route = std::move(routeCommand_);
     routeCommand_.reset();
-    auto runtime_configuration = std::move(runtimeConfigurationCommand_);
-    runtimeConfigurationCommand_.reset();
+    std::optional<control::AudioRuntimeConfiguration> runtime_configuration;
+    std::optional<PresetCommand> preset_command;
+    if (!route && command == 0 && runtimeConfigurationCommand_) {
+      runtime_configuration = std::move(runtimeConfigurationCommand_);
+      runtimeConfigurationCommand_.reset();
+    } else if (!route && command == 0 && presetCommand_) {
+      preset_command = std::move(presetCommand_);
+      presetCommand_.reset();
+    }
     try {
       pending_ = std::async(std::launch::async,
                             [client = client_, command, route,
-                             runtime_configuration = std::move(runtime_configuration)] {
+                             runtime_configuration = std::move(runtime_configuration),
+                             preset_command = std::move(preset_command),
+                             store = presetStore_] {
         if (runtime_configuration) {
           return client->configureAudioRuntime(*runtime_configuration);
         }
@@ -514,6 +645,51 @@ class HeaderController final : public IControlListener {
             case RouteAction::Mute:
               return client->setRouteMuted(route->input, route->output, route->mute);
           }
+        }
+        EngineState state;
+        if (preset_command) {
+          std::string error;
+          switch (preset_command->action) {
+            case PresetAction::Refresh:
+              state = client->poll();
+              break;
+            case PresetAction::Save:
+              state = client->savePreset();
+              if (state.lastError.empty() && state.hasCurrentPreset &&
+                  !store.save(preset_command->name, state.currentPreset, &error)) {
+                state.presetStatus = std::move(error);
+              } else if (state.lastError.empty() && state.hasCurrentPreset) {
+                state.presetStatus = "Saved preset \"" + preset_command->name + "\"";
+              }
+              break;
+            case PresetAction::Load: {
+              control::PresetDocument preset;
+              if (store.load(preset_command->name, &preset, &error)) {
+                state = client->loadPreset(std::move(preset));
+                if (state.lastError.empty()) {
+                  state.presetStatus = "Loaded preset \"" + preset_command->name + "\"";
+                }
+              } else {
+                state = client->poll();
+                state.presetStatus = std::move(error);
+              }
+              break;
+            }
+            case PresetAction::Remove:
+              state = client->poll();
+              if (store.remove(preset_command->name, &error)) {
+                state.presetStatus = "Deleted preset \"" + preset_command->name + "\"";
+              } else {
+                state.presetStatus = std::move(error);
+              }
+              break;
+          }
+          state.presetNames = store.names(&error);
+          state.hasPresetNames = error.empty();
+          if (!error.empty() && state.presetStatus.empty()) {
+            state.presetStatus = std::move(error);
+          }
+          return state;
         }
         return command == 1 ? client->start()
              : command == 2 ? client->stop() : client->poll();
@@ -530,6 +706,9 @@ class HeaderController final : public IControlListener {
   void apply(const EngineState& state) {
     last_ = state;
     renderDiagnostics();
+    if (state.hasPresetNames) presetNames_ = state.presetNames;
+    if (!state.presetStatus.empty()) setPresetStatus(state.presetStatus);
+    renderPresets();
     if (setupApplyPending_ && !runtimeConfigurationCommand_) {
       setupApplyPending_ = false;
       if (state.transportOk && state.runtimeConfigured && state.lastError.empty()) {
@@ -670,6 +849,7 @@ class HeaderController final : public IControlListener {
                               return endpoint.backend ==
                                      control::AudioRuntimeEndpointBackend::PhysicalAsio;
                             });
+    closePresets();
     setupPanel_->setVisible(true);
     if (!last_.transportOk) {
       setSetupStatus("Connect to the audio engine to configure devices.");
@@ -691,6 +871,7 @@ class HeaderController final : public IControlListener {
   void openDiagnostics() {
     if (!diagnosticsPanel_) return;
     closeSetup();
+    closePresets();
     error_.clear();
     if (errorText_) errorText_->setText("");
     diagnosticsPanel_->setVisible(true);
@@ -699,6 +880,65 @@ class HeaderController final : public IControlListener {
 
   void closeDiagnostics() {
     if (diagnosticsPanel_) diagnosticsPanel_->setVisible(false);
+  }
+
+  void openPresets() {
+    if (!presetPanel_) return;
+    closeSetup();
+    closeDiagnostics();
+    presetPanel_->setVisible(true);
+    presetConfirmation_->setVisible(false);
+    queue_preset_command({PresetAction::Refresh, {}});
+  }
+
+  void closePresets() {
+    if (presetPanel_) presetPanel_->setVisible(false);
+    if (presetConfirmation_) presetConfirmation_->setVisible(false);
+  }
+
+  void queue_preset_command(PresetCommand command) {
+    confirmedPresetCommand_ = {};
+    presetCommand_ = std::move(command);
+    if (presetStatus_) presetStatus_->setText("Working...");
+    if (!pending_.valid()) submit();
+    renderPresets();
+  }
+
+  void showPresetConfirmation(std::string message, PresetAction action,
+                              std::string name) {
+    confirmedPresetCommand_ = {action, std::move(name)};
+    presetConfirmationText_->setText(message.c_str());
+    presetConfirmation_->setVisible(true);
+  }
+
+  void setPresetStatus(const std::string& message) {
+    if (presetStatus_) presetStatus_->setText(message.c_str());
+  }
+
+  void renderPresets() {
+    if (!presetPanel_ || presetRows_.empty()) return;
+    if (presetOffset_ >= presetNames_.size()) {
+      presetOffset_ = presetNames_.empty()
+                          ? 0
+                          : ((presetNames_.size() - 1) / kPresetRows) * kPresetRows;
+    }
+    const auto count = std::min(kPresetRows,
+        presetNames_.size() > presetOffset_ ? presetNames_.size() - presetOffset_ : 0);
+    for (std::size_t row = 0; row < presetRows_.size(); ++row) {
+      const bool available = row < count;
+      presetRows_[row]->setText(available ? presetNames_[presetOffset_ + row].c_str() : "");
+      presetLoad_[row]->setMouseEnabled(available && !pending_.valid());
+      presetRemove_[row]->setMouseEnabled(available && !pending_.valid());
+    }
+    const auto total = presetNames_.size();
+    const auto page = total == 0 ? std::string("No saved presets")
+        : std::to_string(presetOffset_ + 1) + "-" +
+              std::to_string(presetOffset_ + count) + " / " + std::to_string(total);
+    presetPage_->setText(page.c_str());
+    const bool idle = !pending_.valid();
+    presetPrevious_->setMouseEnabled(idle && presetOffset_ > 0);
+    presetNext_->setMouseEnabled(idle && presetOffset_ + count < total);
+    presetSave_->setMouseEnabled(idle);
   }
 
   void renderDiagnostics() {
@@ -903,6 +1143,27 @@ class HeaderController final : public IControlListener {
   std::vector<SharedPointer<CTextLabel>> diagnosticRecoveryLabels_;
   std::vector<SharedPointer<CTextLabel>> diagnosticRecoveryValues_;
   std::vector<SharedPointer<CTextLabel>> diagnosticEndpointCells_;
+  PresetStore presetStore_;
+  SharedPointer<CViewContainer> presetPanel_;
+  SharedPointer<CTextButton> presetsButton_;
+  SharedPointer<CTextButton> presetsClose_;
+  SharedPointer<CTextEdit> presetName_;
+  SharedPointer<CTextButton> presetSave_;
+  std::vector<SharedPointer<CTextLabel>> presetRows_;
+  std::vector<SharedPointer<CTextButton>> presetLoad_;
+  std::vector<SharedPointer<CTextButton>> presetRemove_;
+  SharedPointer<CTextButton> presetPrevious_;
+  SharedPointer<CTextButton> presetNext_;
+  SharedPointer<CTextLabel> presetPage_;
+  SharedPointer<CTextLabel> presetStatus_;
+  SharedPointer<CViewContainer> presetConfirmation_;
+  SharedPointer<CTextLabel> presetConfirmationText_;
+  SharedPointer<CTextButton> presetConfirm_;
+  SharedPointer<CTextButton> presetCancel_;
+  std::vector<std::string> presetNames_;
+  std::size_t presetOffset_ = 0;
+  std::optional<PresetCommand> presetCommand_;
+  PresetCommand confirmedPresetCommand_;
 };
 
 SharedPointer<CTextLabel> makeLabel(const CRect& rect, const char* text, CColor color,
@@ -1005,6 +1266,13 @@ WindowPtr createMainWindow() {
   diagnosticsButton->setTextColor(palette::kText);
   diagnosticsButton->setRoundRadius(2);
   body->addView(diagnosticsButton);
+  auto presetsButton = makeOwned<CTextButton>(CRect(750, 12, 842, 42), nullptr, -1,
+                                               "Presets");
+  presetsButton->setGradient(nullptr);
+  presetsButton->setFrameColor(palette::kLine);
+  presetsButton->setTextColor(palette::kText);
+  presetsButton->setRoundRadius(2);
+  body->addView(presetsButton);
   auto errorText = makeLabel(CRect(24, 44, kWindowWidth - 24, 70), "",
                             palette::kDanger, false);
   body->addView(errorText);
@@ -1269,6 +1537,92 @@ WindowPtr createMainWindow() {
   }
   diagnosticsPanel->addView(diagnosticPage);
   body->addView(diagnosticsPanel);
+
+  auto presetPanel = makeOwned<CViewContainer>(
+      CRect(0, 0, kWindowWidth, kWindowHeight - kHeaderHeight));
+  presetPanel->setBackgroundColor(palette::kCanvas);
+  presetPanel->addView(makeLabel(CRect(24, 16, 560, 48), "PRESET LIBRARY",
+                                  palette::kText, true));
+  presetPanel->addView(makeLabel(CRect(24, 54, 860, 78),
+      "Save and recall complete routing-matrix snapshots", palette::kMuted, false));
+  auto presetClose = makeOwned<CTextButton>(CRect(880, 14, 976, 44), nullptr, -1,
+                                             "Close");
+  auto stylePresetButton = [](const SharedPointer<CTextButton>& button) {
+    button->setGradient(nullptr);
+    button->setFrameColor(palette::kLine);
+    button->setTextColor(palette::kText);
+    button->setRoundRadius(2);
+  };
+  stylePresetButton(presetClose);
+  presetPanel->addView(presetClose);
+  presetPanel->addView(makeLabel(CRect(24, 94, 150, 120), "PRESET NAME",
+                                  palette::kMuted, true));
+  auto presetName = makeOwned<CTextEdit>(CRect(24, 122, 690, 158), nullptr, -1,
+                                          "New preset");
+  presetName->setBackColor(palette::kSurface);
+  presetName->setFontColor(palette::kText);
+  presetName->setFrameColor(palette::kLine);
+  presetPanel->addView(presetName);
+  auto presetSave = makeOwned<CTextButton>(CRect(704, 122, 820, 158), nullptr, -1,
+                                            "Save snapshot");
+  stylePresetButton(presetSave);
+  presetPanel->addView(presetSave);
+  presetPanel->addView(makeLabel(CRect(24, 172, 620, 196), "SAVED PRESETS",
+                                  palette::kSteel, true));
+  std::vector<SharedPointer<CTextLabel>> presetRows;
+  std::vector<SharedPointer<CTextButton>> presetLoad;
+  std::vector<SharedPointer<CTextButton>> presetRemove;
+  for (std::size_t row = 0; row < kPresetRows; ++row) {
+    const auto top = 202 + static_cast<CCoord>(row) * 42;
+    auto label = makeLabel(CRect(24, top, 690, top + 36), "",
+                           palette::kText, false);
+    presetPanel->addView(label);
+    presetRows.push_back(label);
+    auto load = makeOwned<CTextButton>(CRect(704, top, 812, top + 34), nullptr, -1,
+                                        "Load");
+    auto remove = makeOwned<CTextButton>(CRect(824, top, 920, top + 34), nullptr, -1,
+                                          "Delete");
+    stylePresetButton(load);
+    stylePresetButton(remove);
+    presetPanel->addView(load);
+    presetPanel->addView(remove);
+    presetLoad.push_back(load);
+    presetRemove.push_back(remove);
+  }
+  auto presetStatus = makeLabel(CRect(24, 548, 590, 580), "",
+                                 palette::kMuted, false);
+  auto presetPage = makeLabel(CRect(600, 548, 770, 580), "No saved presets",
+                               palette::kMuted, false);
+  auto presetPrevious = makeOwned<CTextButton>(CRect(786, 548, 874, 580), nullptr, -1,
+                                                "Previous");
+  auto presetNext = makeOwned<CTextButton>(CRect(882, 548, 976, 580), nullptr, -1,
+                                            "Next");
+  stylePresetButton(presetPrevious);
+  stylePresetButton(presetNext);
+  presetPanel->addView(presetStatus);
+  presetPanel->addView(presetPage);
+  presetPanel->addView(presetPrevious);
+  presetPanel->addView(presetNext);
+
+  auto presetConfirmation = makeOwned<CViewContainer>(
+      CRect(0, 0, kWindowWidth, kWindowHeight - kHeaderHeight));
+  presetConfirmation->setBackgroundColor(palette::kSurface);
+  presetConfirmation->addView(makeLabel(CRect(230, 210, 770, 248),
+      "CONFIRM PRESET ACTION", palette::kText, true));
+  auto presetConfirmationText = makeLabel(CRect(230, 264, 770, 316), "",
+                                           palette::kMuted, false);
+  presetConfirmation->addView(presetConfirmationText);
+  auto presetConfirm = makeOwned<CTextButton>(CRect(500, 344, 620, 382), nullptr, -1,
+                                               "Confirm");
+  auto presetCancel = makeOwned<CTextButton>(CRect(636, 344, 756, 382), nullptr, -1,
+                                              "Cancel");
+  stylePresetButton(presetConfirm);
+  stylePresetButton(presetCancel);
+  presetConfirmation->addView(presetConfirm);
+  presetConfirmation->addView(presetCancel);
+  presetConfirmation->setVisible(false);
+  presetPanel->addView(presetConfirmation);
+  body->addView(presetPanel);
   frame->addView(body);
 
   auto controller = std::make_shared<HeaderController>();
@@ -1297,6 +1651,12 @@ WindowPtr createMainWindow() {
                                  std::move(diagnosticRecoveryValues),
                                  std::move(diagnosticEndpointCells));
   controller->attachDiagnosticsButton(diagnosticsButton);
+  controller->attachPresets(presetPanel, presetsButton, presetClose, presetName,
+                            presetSave, std::move(presetRows),
+                            std::move(presetLoad), std::move(presetRemove),
+                            presetPrevious, presetNext, presetPage, presetStatus,
+                            presetConfirmation, presetConfirmationText,
+                            presetConfirm, presetCancel);
   startStopButton->setListener(controller.get());
   // The controller and its views must outlive the timer, which is the case
   // here: the frame (owned by the window) holds the views, and this lambda
