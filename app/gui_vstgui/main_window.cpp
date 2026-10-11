@@ -299,7 +299,7 @@ class HeaderController final : public IControlListener {
       SharedPointer<CTextButton> save, SharedPointer<CTextButton> import,
       std::vector<SharedPointer<CTextLabel>> rows,
       std::vector<SharedPointer<CTextButton>> load,
-      std::vector<SharedPointer<CTextButton>> export,
+      std::vector<SharedPointer<CTextButton>> export_buttons,
       std::vector<SharedPointer<CTextButton>> rename,
       std::vector<SharedPointer<CTextButton>> remove,
       SharedPointer<CTextButton> previous, SharedPointer<CTextButton> next,
@@ -315,7 +315,7 @@ class HeaderController final : public IControlListener {
     presetImport_ = std::move(import);
     presetRows_ = std::move(rows);
     presetLoad_ = std::move(load);
-    presetExport_ = std::move(export);
+    presetExport_ = std::move(export_buttons);
     presetRename_ = std::move(rename);
     presetRemove_ = std::move(remove);
     presetPrevious_ = std::move(previous);
