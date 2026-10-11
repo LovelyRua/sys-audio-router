@@ -74,6 +74,10 @@ int main() {
     sar::diagnostics::EngineDiagnostics diagnostics;
     diagnostics.graph_version = 7;
     diagnostics.xrun_count = 3;
+    diagnostics.processed_blocks = 900;
+    diagnostics.render_fifo_underflow_frames = 512;
+    diagnostics.peak_callback_seconds = 0.000025;
+    diagnostics.virtual_asio_active_producers = 2;
     const auto response = sar::control::diagnostics_response("cmd_3", diagnostics);
     if (const auto failure = expect(response.has_diagnostics,
                                     "Expected diagnostics payload")) {
@@ -85,6 +89,25 @@ int main() {
     }
     if (const auto failure = expect(response.diagnostics.xrun_count == 3,
                                     "Expected diagnostics xrun count")) {
+      return failure;
+    }
+    if (const auto failure = expect(response.diagnostics.processed_blocks == 900,
+                                    "Expected processed block count")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            response.diagnostics.render_fifo_underflow_frames == 512,
+            "Expected render FIFO underflow frames")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            response.diagnostics.peak_callback_seconds == 0.000025,
+            "Expected peak callback duration")) {
+      return failure;
+    }
+    if (const auto failure = expect(
+            response.diagnostics.virtual_asio_active_producers == 2,
+            "Expected active Virtual ASIO producer count")) {
       return failure;
     }
     if (const auto failure = expect(

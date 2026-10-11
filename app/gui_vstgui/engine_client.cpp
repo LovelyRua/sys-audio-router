@@ -121,6 +121,10 @@ EngineState EngineClient::poll() {
   const auto diagnostics_response = transact(config, std::move(diagnostics_query), state);
   if (diagnostics_response && diagnostics_response->has_diagnostics) {
     state.xrunCount = diagnostics_response->diagnostics.xrun_count;
+    state.diagnostics = diagnostics_response->diagnostics;
+    state.wasapiRecovery = diagnostics_response->wasapi_recovery;
+    state.hasWasapiRecovery = diagnostics_response->has_wasapi_recovery;
+    state.endpointDiagnostics = diagnostics_response->endpoint_diagnostics;
   }
 
   return state;

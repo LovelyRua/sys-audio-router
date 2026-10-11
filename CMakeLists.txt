@@ -201,6 +201,8 @@ if(SAR_BUILD_GUI_VSTGUI)
     app/gui_vstgui/main_window.h
     app/gui_vstgui/audio_setup_model.cpp
     app/gui_vstgui/audio_setup_model.h
+    app/gui_vstgui/diagnostics_model.cpp
+    app/gui_vstgui/diagnostics_model.h
     app/gui_vstgui/engine_client.cpp
     app/gui_vstgui/engine_client.h
     app/gui_vstgui/lcd_readout_view.cpp
@@ -245,6 +247,13 @@ add_executable(sar_audio_setup_model_smoke
 )
 
 target_link_libraries(sar_audio_setup_model_smoke PRIVATE sar_core)
+
+add_executable(sar_vstgui_diagnostics_model_smoke
+  tests/realtime/vstgui_diagnostics_model_smoke.cpp
+  app/gui_vstgui/diagnostics_model.cpp
+)
+
+target_link_libraries(sar_vstgui_diagnostics_model_smoke PRIVATE sar_core)
 
 add_executable(sar_atomic_float_parameter_smoke
   tests/realtime/atomic_float_parameter_smoke.cpp
@@ -1082,6 +1091,8 @@ add_test(NAME virtual_asio_instance_layout_smoke
 add_test(NAME realtime_audio_input_assembler_smoke
   COMMAND sar_realtime_audio_input_assembler_smoke)
 add_test(NAME control_response_smoke COMMAND sar_control_response_smoke)
+add_test(NAME vstgui_diagnostics_model_smoke
+         COMMAND sar_vstgui_diagnostics_model_smoke)
 add_test(NAME control_session_smoke COMMAND sar_control_session_smoke)
 add_test(NAME control_wire_protocol_smoke COMMAND sar_control_wire_protocol_smoke)
 add_test(NAME control_codec_mutation_smoke COMMAND sar_control_codec_mutation_smoke)

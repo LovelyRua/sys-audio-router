@@ -198,10 +198,22 @@ int main() {
   response.has_diagnostics = true;
   response.diagnostics.graph_version = 6;
   response.diagnostics.processed_blocks = 123;
+  response.diagnostics.xrun_count = 2;
+  response.diagnostics.capture_fifo_fill_frames = 321;
+  response.diagnostics.capture_fifo_overflow_cycles = 4;
+  response.diagnostics.capture_fifo_overflow_frames = 99;
+  response.diagnostics.render_fifo_fill_frames = 456;
+  response.diagnostics.render_fifo_underflow_cycles = 5;
+  response.diagnostics.render_fifo_underflow_frames = 111;
+  response.diagnostics.last_callback_seconds = 0.000012;
+  response.diagnostics.peak_callback_seconds = 0.000034;
+  response.diagnostics.sample_conversion_import_failures = 6;
+  response.diagnostics.sample_conversion_export_failures = 7;
   response.diagnostics.virtual_asio_pushed_blocks = 456;
   response.diagnostics.virtual_asio_producer_underflows = 12;
   response.diagnostics.virtual_asio_producer_overflows = 3;
   response.diagnostics.virtual_asio_peak = 0.75;
+  response.diagnostics.virtual_asio_clipped_samples = 8;
   response.has_wasapi_recovery = true;
   response.wasapi_recovery.state = sar::control::WasapiRecoveryState::Backoff;
   response.wasapi_recovery.runtime_health =
@@ -268,12 +280,24 @@ int main() {
   assert(decoded_response.response.virtual_asio_devices[0].broker_token ==
          "main");
   assert(decoded_response.response.diagnostics.processed_blocks == 123);
+  assert(decoded_response.response.diagnostics.xrun_count == 2);
+  assert(decoded_response.response.diagnostics.capture_fifo_fill_frames == 321);
+  assert(decoded_response.response.diagnostics.capture_fifo_overflow_cycles == 4);
+  assert(decoded_response.response.diagnostics.capture_fifo_overflow_frames == 99);
+  assert(decoded_response.response.diagnostics.render_fifo_fill_frames == 456);
+  assert(decoded_response.response.diagnostics.render_fifo_underflow_cycles == 5);
+  assert(decoded_response.response.diagnostics.render_fifo_underflow_frames == 111);
+  assert(decoded_response.response.diagnostics.last_callback_seconds == 0.000012);
+  assert(decoded_response.response.diagnostics.peak_callback_seconds == 0.000034);
+  assert(decoded_response.response.diagnostics.sample_conversion_import_failures == 6);
+  assert(decoded_response.response.diagnostics.sample_conversion_export_failures == 7);
   assert(decoded_response.response.diagnostics.virtual_asio_pushed_blocks == 456);
   assert(decoded_response.response.diagnostics.virtual_asio_producer_underflows ==
          12);
   assert(decoded_response.response.diagnostics.virtual_asio_producer_overflows ==
          3);
   assert(decoded_response.response.diagnostics.virtual_asio_peak == 0.75);
+  assert(decoded_response.response.diagnostics.virtual_asio_clipped_samples == 8);
   assert(decoded_response.response.has_wasapi_recovery);
   assert(decoded_response.response.wasapi_recovery.state ==
          sar::control::WasapiRecoveryState::Backoff);

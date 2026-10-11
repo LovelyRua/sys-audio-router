@@ -62,6 +62,13 @@ class FakeAudioRuntime final : public sar::service::EngineAudioRuntime {
     result.graph_version = 10;
     result.processed_blocks = 42;
     result.xrun_count = 3;
+    result.render_fifo_fill_frames = 640;
+    result.render_fifo_underflow_cycles = 2;
+    result.render_fifo_underflow_frames = 96;
+    result.last_callback_seconds = 0.000011;
+    result.peak_callback_seconds = 0.000027;
+    result.sample_conversion_import_failures = 1;
+    result.virtual_asio_active_producers = 2;
     return result;
   }
 
@@ -303,6 +310,13 @@ int main() {
   assert(diagnostic_response.diagnostics.graph_version == 10);
   assert(diagnostic_response.diagnostics.processed_blocks == 42);
   assert(diagnostic_response.diagnostics.xrun_count == 3);
+  assert(diagnostic_response.diagnostics.render_fifo_fill_frames == 640);
+  assert(diagnostic_response.diagnostics.render_fifo_underflow_cycles == 2);
+  assert(diagnostic_response.diagnostics.render_fifo_underflow_frames == 96);
+  assert(diagnostic_response.diagnostics.last_callback_seconds == 0.000011);
+  assert(diagnostic_response.diagnostics.peak_callback_seconds == 0.000027);
+  assert(diagnostic_response.diagnostics.sample_conversion_import_failures == 1);
+  assert(diagnostic_response.diagnostics.virtual_asio_active_producers == 2);
   assert(diagnostic_response.has_wasapi_recovery);
   assert(diagnostic_response.wasapi_recovery.state ==
          sar::control::WasapiRecoveryState::Opening);

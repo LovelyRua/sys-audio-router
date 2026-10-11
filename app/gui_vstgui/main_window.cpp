@@ -2,6 +2,7 @@
 
 #include "app/gui_vstgui/engine_client.h"
 #include "app/gui_vstgui/audio_setup_model.h"
+#include "app/gui_vstgui/diagnostics_model.h"
 #include "app/gui_vstgui/lcd_readout_view.h"
 #include "app/gui_vstgui/palette.h"
 
@@ -21,7 +22,9 @@
 #include <memory>
 #include <vector>
 #include <algorithm>
+#include <array>
 #include <optional>
+#include <utility>
 
 using namespace VSTGUI;
 using namespace VSTGUI::Standalone;
@@ -202,6 +205,38 @@ class HeaderController final : public IControlListener {
     setupButton_->setListener(this);
   }
 
+  void attachDiagnostics(
+      SharedPointer<CViewContainer> panel,
+      SharedPointer<CTextButton> close,
+      SharedPointer<CTextButton> previous,
+      SharedPointer<CTextButton> next,
+      SharedPointer<CTextLabel> page,
+      std::vector<SharedPointer<CTextLabel>> engineLabels,
+      std::vector<SharedPointer<CTextLabel>> engineValues,
+      std::vector<SharedPointer<CTextLabel>> recoveryLabels,
+      std::vector<SharedPointer<CTextLabel>> recoveryValues,
+      std::vector<SharedPointer<CTextLabel>> endpointCells) {
+    diagnosticsPanel_ = std::move(panel);
+    diagnosticsClose_ = std::move(close);
+    diagnosticsPrevious_ = std::move(previous);
+    diagnosticsNext_ = std::move(next);
+    diagnosticsPage_ = std::move(page);
+    diagnosticEngineLabels_ = std::move(engineLabels);
+    diagnosticEngineValues_ = std::move(engineValues);
+    diagnosticRecoveryLabels_ = std::move(recoveryLabels);
+    diagnosticRecoveryValues_ = std::move(recoveryValues);
+    diagnosticEndpointCells_ = std::move(endpointCells);
+    diagnosticsClose_->setListener(this);
+    diagnosticsPrevious_->setListener(this);
+    diagnosticsNext_->setListener(this);
+    diagnosticsPanel_->setVisible(false);
+  }
+
+  void attachDiagnosticsButton(SharedPointer<CTextButton> button) {
+    diagnosticsButton_ = std::move(button);
+    diagnosticsButton_->setListener(this);
+  }
+
   void refresh() {
     if (pending_.valid()) {
       if (pending_.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
@@ -227,6 +262,28 @@ class HeaderController final : public IControlListener {
   }
 
   void valueChanged(CControl* control) override {
+    if (control == diagnosticsButton_.get() && control->getValue() > 0.5F) {
+      openDiagnostics();
+      return;
+    }
+    if (control == diagnosticsClose_.get() && control->getValue() > 0.5F) {
+      closeDiagnostics();
+      return;
+    }
+    if (control == diagnosticsPrevious_.get() && control->getValue() > 0.5F) {
+      if (endpointOffset_ >= kDiagnosticEndpointRows) {
+        endpointOffset_ -= kDiagnosticEndpointRows;
+      }
+      renderDiagnostics();
+      return;
+    }
+    if (control == diagnosticsNext_.get() && control->getValue() > 0.5F) {
+      if (endpointOffset_ + kDiagnosticEndpointRows < last_.endpointDiagnostics.size()) {
+        endpointOffset_ += kDiagnosticEndpointRows;
+      }
+      renderDiagnostics();
+      return;
+    }
     if (control == setupButton_.get() && control->getValue() > 0.5F) {
       openSetup();
       return;
@@ -472,6 +529,7 @@ class HeaderController final : public IControlListener {
 
   void apply(const EngineState& state) {
     last_ = state;
+    renderDiagnostics();
     if (setupApplyPending_ && !runtimeConfigurationCommand_) {
       setupApplyPending_ = false;
       if (state.transportOk && state.runtimeConfigured && state.lastError.empty()) {
@@ -518,6 +576,9 @@ class HeaderController final : public IControlListener {
     }
     if (setupButton_) {
       setupButton_->setMouseEnabled(state.transportOk && !setupApplyPending_);
+    }
+    if (diagnosticsButton_) {
+      diagnosticsButton_->setMouseEnabled(true);
     }
     renderMatrix();
   }
@@ -596,6 +657,7 @@ class HeaderController final : public IControlListener {
 
   void openSetup() {
     if (!setupPanel_) return;
+    closeDiagnostics();
     error_.clear();
     if (errorText_) errorText_->setText("");
     setupModel_.set_devices(last_.devices);
@@ -624,6 +686,91 @@ class HeaderController final : public IControlListener {
   void closeSetup() {
     if (setupPanel_) setupPanel_->setVisible(false);
     setupApplyPending_ = false;
+  }
+
+  void openDiagnostics() {
+    if (!diagnosticsPanel_) return;
+    closeSetup();
+    error_.clear();
+    if (errorText_) errorText_->setText("");
+    diagnosticsPanel_->setVisible(true);
+    renderDiagnostics();
+  }
+
+  void closeDiagnostics() {
+    if (diagnosticsPanel_) diagnosticsPanel_->setVisible(false);
+  }
+
+  void renderDiagnostics() {
+    if (!diagnosticsPanel_ || diagnosticEngineLabels_.empty()) return;
+    const auto snapshot = build_diagnostics_snapshot(last_);
+    if (endpointOffset_ >= snapshot.endpoints.size()) {
+      endpointOffset_ = snapshot.endpoints.empty()
+                            ? 0
+                            : ((snapshot.endpoints.size() - 1) /
+                               kDiagnosticEndpointRows) * kDiagnosticEndpointRows;
+    }
+    const auto render_rows = [](const auto& rows, auto& labels, auto& values) {
+      for (std::size_t i = 0; i < labels.size(); ++i) {
+        if (i >= rows.size()) {
+          labels[i]->setText("");
+          values[i]->setText("");
+          continue;
+        }
+        labels[i]->setText(rows[i].label.c_str());
+        values[i]->setText(rows[i].value.c_str());
+        const auto color = rows[i].severity == DiagnosticSeverity::Fault
+                               ? palette::kDanger
+                           : rows[i].severity == DiagnosticSeverity::Warning
+                               ? palette::kWarning
+                               : palette::kText;
+        values[i]->setFontColor(color);
+      }
+    };
+    render_rows(snapshot.engine, diagnosticEngineLabels_, diagnosticEngineValues_);
+    render_rows(snapshot.recovery, diagnosticRecoveryLabels_,
+                diagnosticRecoveryValues_);
+
+    constexpr std::size_t kCellsPerEndpoint = 6;
+    const auto visible_count = std::min(kDiagnosticEndpointRows,
+        snapshot.endpoints.size() > endpointOffset_
+            ? snapshot.endpoints.size() - endpointOffset_ : std::size_t{0});
+    for (std::size_t row_index = 0; row_index < kDiagnosticEndpointRows;
+         ++row_index) {
+      const auto first = row_index * kCellsPerEndpoint;
+      if (row_index >= visible_count) {
+        for (std::size_t column = 0; column < kCellsPerEndpoint; ++column) {
+          diagnosticEndpointCells_[first + column]->setText("");
+        }
+        continue;
+      }
+      const auto& row = snapshot.endpoints[endpointOffset_ + row_index];
+      diagnosticEndpointCells_[first]->setText(row.endpoint.c_str());
+      diagnosticEndpointCells_[first + 1]->setText(row.role.c_str());
+      diagnosticEndpointCells_[first + 2]->setText(row.health.c_str());
+      diagnosticEndpointCells_[first + 3]->setText(row.queue.c_str());
+      diagnosticEndpointCells_[first + 4]->setText(row.clock.c_str());
+      diagnosticEndpointCells_[first + 5]->setText(row.xruns.c_str());
+      const auto color = row.severity == DiagnosticSeverity::Fault
+                             ? palette::kDanger
+                         : row.severity == DiagnosticSeverity::Warning
+                             ? palette::kWarning
+                             : palette::kHealthy;
+      diagnosticEndpointCells_[first + 2]->setFontColor(color);
+      diagnosticEndpointCells_[first + 5]->setFontColor(
+          row.xruns == "0" ? palette::kHealthy : palette::kDanger);
+    }
+    const auto total = snapshot.endpoints.size();
+    const auto first_visible = total == 0 ? 0 : endpointOffset_ + 1;
+    const auto last_visible = endpointOffset_ + visible_count;
+    const auto page_text = total == 0
+                               ? "No active endpoints"
+                               : std::to_string(first_visible) + "-" +
+                                     std::to_string(last_visible) + " / " +
+                                     std::to_string(total);
+    diagnosticsPage_->setText(page_text.c_str());
+    diagnosticsPrevious_->setMouseEnabled(endpointOffset_ > 0);
+    diagnosticsNext_->setMouseEnabled(endpointOffset_ + visible_count < total);
   }
 
   void renderSetup() {
@@ -743,6 +890,19 @@ class HeaderController final : public IControlListener {
   std::optional<control::AudioRuntimeConfiguration> runtimeConfigurationCommand_;
   bool setupApplyPending_ = false;
   bool setupUnsupported_ = false;
+  static constexpr std::size_t kDiagnosticEndpointRows = 6;
+  std::size_t endpointOffset_ = 0;
+  SharedPointer<CTextButton> diagnosticsButton_;
+  SharedPointer<CViewContainer> diagnosticsPanel_;
+  SharedPointer<CTextButton> diagnosticsClose_;
+  SharedPointer<CTextButton> diagnosticsPrevious_;
+  SharedPointer<CTextButton> diagnosticsNext_;
+  SharedPointer<CTextLabel> diagnosticsPage_;
+  std::vector<SharedPointer<CTextLabel>> diagnosticEngineLabels_;
+  std::vector<SharedPointer<CTextLabel>> diagnosticEngineValues_;
+  std::vector<SharedPointer<CTextLabel>> diagnosticRecoveryLabels_;
+  std::vector<SharedPointer<CTextLabel>> diagnosticRecoveryValues_;
+  std::vector<SharedPointer<CTextLabel>> diagnosticEndpointCells_;
 };
 
 SharedPointer<CTextLabel> makeLabel(const CRect& rect, const char* text, CColor color,
@@ -827,17 +987,24 @@ WindowPtr createMainWindow() {
   auto body = makeOwned<CViewContainer>(
       CRect(0, kHeaderHeight, kWindowWidth, kWindowHeight));
   body->setBackgroundColor(palette::kCanvas);
-  auto title = makeLabel(CRect(24, 14, 300, 42), "ROUTING MATRIX", palette::kText, true);
+  auto title = makeLabel(CRect(24, 14, 220, 42), "ROUTING MATRIX", palette::kText, true);
   body->addView(title);
-  auto summary = makeLabel(CRect(300, 14, 620, 42), "Matrix unavailable", palette::kMuted, false);
+  auto summary = makeLabel(CRect(226, 14, 526, 42), "Matrix unavailable", palette::kMuted, false);
   body->addView(summary);
-  auto setupButton = makeOwned<CTextButton>(CRect(630, 12, 742, 42), nullptr, -1,
+  auto setupButton = makeOwned<CTextButton>(CRect(536, 12, 632, 42), nullptr, -1,
                                              "Audio setup");
   setupButton->setGradient(nullptr);
   setupButton->setFrameColor(palette::kLine);
   setupButton->setTextColor(palette::kText);
   setupButton->setRoundRadius(2);
   body->addView(setupButton);
+  auto diagnosticsButton = makeOwned<CTextButton>(CRect(640, 12, 742, 42), nullptr, -1,
+                                                   "Diagnostics");
+  diagnosticsButton->setGradient(nullptr);
+  diagnosticsButton->setFrameColor(palette::kLine);
+  diagnosticsButton->setTextColor(palette::kText);
+  diagnosticsButton->setRoundRadius(2);
+  body->addView(diagnosticsButton);
   auto errorText = makeLabel(CRect(24, 44, kWindowWidth - 24, 70), "",
                             palette::kDanger, false);
   body->addView(errorText);
@@ -1022,6 +1189,86 @@ WindowPtr createMainWindow() {
   }
   setupPanel->addView(setupStatus);
   body->addView(setupPanel);
+
+  auto diagnosticsPanel = makeOwned<CViewContainer>(
+      CRect(0, 0, kWindowWidth, kWindowHeight - kHeaderHeight));
+  diagnosticsPanel->setBackgroundColor(palette::kCanvas);
+  diagnosticsPanel->addView(makeLabel(CRect(24, 16, 500, 44),
+                                      "ENGINE DIAGNOSTICS", palette::kText, true));
+  diagnosticsPanel->addView(makeLabel(CRect(24, 50, 680, 74),
+                                      "Live counters and per-endpoint clock health",
+                                      palette::kMuted, false));
+  auto diagnosticsClose = makeOwned<CTextButton>(
+      CRect(880, 14, 976, 44), nullptr, -1, "Close");
+  diagnosticsClose->setGradient(nullptr);
+  diagnosticsClose->setFrameColor(palette::kLine);
+  diagnosticsClose->setTextColor(palette::kText);
+  diagnosticsClose->setRoundRadius(2);
+  diagnosticsPanel->addView(diagnosticsClose);
+  diagnosticsPanel->addView(makeLabel(CRect(24, 86, 460, 110), "ENGINE / VIRTUAL ASIO",
+                                      palette::kSteel, true));
+  diagnosticsPanel->addView(makeLabel(CRect(510, 86, 960, 110), "WASAPI RECOVERY",
+                                      palette::kSteel, true));
+  std::vector<SharedPointer<CTextLabel>> diagnosticEngineLabels;
+  std::vector<SharedPointer<CTextLabel>> diagnosticEngineValues;
+  std::vector<SharedPointer<CTextLabel>> diagnosticRecoveryLabels;
+  std::vector<SharedPointer<CTextLabel>> diagnosticRecoveryValues;
+  const auto addDiagnosticRows = [&](CCoord label_left, CCoord value_left,
+                                     std::size_t count, auto& labels, auto& values) {
+    for (std::size_t index = 0; index < count; ++index) {
+      const auto top = 116 + static_cast<CCoord>(index) * 23;
+      auto label = makeLabel(CRect(label_left, top, value_left - 8, top + 22), "",
+                             palette::kMuted, false);
+      auto value = makeLabel(CRect(value_left, top, value_left + 244, top + 22), "",
+                             palette::kText, false);
+      diagnosticsPanel->addView(label);
+      diagnosticsPanel->addView(value);
+      labels.push_back(label);
+      values.push_back(value);
+    }
+  };
+  addDiagnosticRows(24, 210, 9, diagnosticEngineLabels, diagnosticEngineValues);
+  addDiagnosticRows(510, 700, 9, diagnosticRecoveryLabels, diagnosticRecoveryValues);
+  diagnosticsPanel->addView(makeLabel(CRect(24, 330, 520, 354), "ENDPOINT CLOCKS",
+                                      palette::kSteel, true));
+  const std::array<std::pair<CCoord, const char*>, 6> endpointColumns{{
+      {24, "ENDPOINT"}, {270, "ROLE"}, {385, "HEALTH"},
+      {585, "QUEUE"}, {705, "CLOCK"}, {855, "XRUN"},
+  }};
+  const std::array<CCoord, 6> endpointWidths{{236, 108, 190, 112, 142, 105}};
+  for (std::size_t column = 0; column < endpointColumns.size(); ++column) {
+    diagnosticsPanel->addView(makeLabel(
+        CRect(endpointColumns[column].first, 356,
+              endpointColumns[column].first + endpointWidths[column], 378),
+        endpointColumns[column].second, palette::kMuted, true));
+  }
+  std::vector<SharedPointer<CTextLabel>> diagnosticEndpointCells;
+  for (std::size_t row = 0; row < 6; ++row) {
+    const auto top = 382 + static_cast<CCoord>(row) * 25;
+    for (std::size_t column = 0; column < endpointColumns.size(); ++column) {
+      auto cell = makeLabel(
+          CRect(endpointColumns[column].first, top,
+                endpointColumns[column].first + endpointWidths[column], top + 24),
+          "", palette::kText, false);
+      diagnosticsPanel->addView(cell);
+      diagnosticEndpointCells.push_back(cell);
+    }
+  }
+  auto diagnosticPage = makeLabel(CRect(620, 536, 770, 570), "No active endpoints",
+                                  palette::kMuted, false);
+  auto diagnosticPrevious = makeOwned<CTextButton>(
+      CRect(786, 538, 872, 570), nullptr, -1, "Previous");
+  auto diagnosticNext = makeOwned<CTextButton>(
+      CRect(880, 538, 976, 570), nullptr, -1, "Next");
+  for (const auto& button : {diagnosticPrevious, diagnosticNext}) {
+    button->setGradient(nullptr);
+    button->setFrameColor(palette::kLine);
+    button->setTextColor(palette::kText);
+    button->setRoundRadius(2);
+    diagnosticsPanel->addView(button);
+  }
+  diagnosticsPanel->addView(diagnosticPage);
+  body->addView(diagnosticsPanel);
   frame->addView(body);
 
   auto controller = std::make_shared<HeaderController>();
@@ -1041,6 +1288,15 @@ WindowPtr createMainWindow() {
                           std::move(setupCountNext), std::move(setupClockMaster),
                           std::move(setupRemove));
   controller->attachSetupButton(setupButton);
+  controller->attachDiagnostics(diagnosticsPanel, diagnosticsClose,
+                                 diagnosticPrevious, diagnosticNext,
+                                 diagnosticPage,
+                                 std::move(diagnosticEngineLabels),
+                                 std::move(diagnosticEngineValues),
+                                 std::move(diagnosticRecoveryLabels),
+                                 std::move(diagnosticRecoveryValues),
+                                 std::move(diagnosticEndpointCells));
+  controller->attachDiagnosticsButton(diagnosticsButton);
   startStopButton->setListener(controller.get());
   // The controller and its views must outlive the timer, which is the case
   // here: the frame (owned by the window) holds the views, and this lambda

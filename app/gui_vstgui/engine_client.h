@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "core/control/control_command.h"
+#include "core/control/control_response.h"
 #include "core/control/preset_document.h"
 #include "core/platform/audio_device.h"
 
@@ -20,6 +21,10 @@ struct EngineState {
   std::uint32_t blockFrames = 0;
   std::uint64_t xrunCount = 0;
   std::string lastError;
+  diagnostics::EngineDiagnostics diagnostics;
+  control::WasapiRecoveryDiagnostics wasapiRecovery;
+  bool hasWasapiRecovery = false;
+  std::vector<control::AudioEndpointRuntimeDiagnostics> endpointDiagnostics;
   control::AudioRuntimeConfiguration audioRuntimeConfiguration;
   std::vector<platform::AudioDeviceDescriptor> devices;
   control::PresetRouteMatrix matrix;

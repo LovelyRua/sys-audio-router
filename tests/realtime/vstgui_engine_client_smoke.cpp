@@ -84,6 +84,24 @@ int main() {
           case control::ControlCommandType::QueryDiagnostics:
             ++diagnostics_queries;
             response.has_diagnostics = true;
+            response.diagnostics.graph_version = 31;
+            response.diagnostics.processed_blocks = 5'000;
+            response.diagnostics.virtual_asio_dropped_blocks = 7;
+            response.diagnostics.peak_callback_seconds = 0.000021;
+            response.has_wasapi_recovery = true;
+            response.wasapi_recovery.state = control::WasapiRecoveryState::Running;
+            response.wasapi_recovery.runtime_health =
+                control::WasapiRuntimeHealth::Degraded;
+            response.wasapi_recovery.runtime_reason_code = "capture_wait_timeout";
+            response.wasapi_recovery.wait_timeout_cycles = 3;
+            response.endpoint_diagnostics.push_back({
+                .endpoint_id = "render-main",
+                .role = control::AudioEndpointRuntimeRole::Master,
+                .diagnostics = {.xrun_count = 2},
+                .recovery = response.wasapi_recovery,
+                .queue_fill_frames = 256,
+                .correction_ppm = 18.5,
+            });
             break;
           default: assert(false);
         }
@@ -102,6 +120,17 @@ int main() {
   assert(initial.matrix.outputs.front().label == "Main out");
   assert(initial.devices.size() == 2);
   assert(initial.audioRuntimeConfiguration.mode == control::AudioRuntimeMode::None);
+  assert(initial.diagnostics.graph_version == 31);
+  assert(initial.diagnostics.processed_blocks == 5'000);
+  assert(initial.diagnostics.virtual_asio_dropped_blocks == 7);
+  assert(initial.diagnostics.peak_callback_seconds == 0.000021);
+  assert(initial.hasWasapiRecovery);
+  assert(initial.wasapiRecovery.runtime_reason_code == "capture_wait_timeout");
+  assert(initial.wasapiRecovery.wait_timeout_cycles == 3);
+  assert(initial.endpointDiagnostics.size() == 1);
+  assert(initial.endpointDiagnostics.front().endpoint_id == "render-main");
+  assert(initial.endpointDiagnostics.front().queue_fill_frames == 256);
+  assert(initial.endpointDiagnostics.front().correction_ppm == 18.5);
   assert(initial.matrix.routes.empty());
   const auto routed = client.setRoute("mic", "main", true);
   assert(routed.hasMatrix && routed.matrix.routes.size() == 1);
