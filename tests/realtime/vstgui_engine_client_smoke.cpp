@@ -62,7 +62,7 @@ int main() {
             break;
           case control::ControlCommandType::ConfigureAudioRuntime:
             assert(command.audio_runtime.mode == control::AudioRuntimeMode::WasapiMatrix);
-            assert(command.audio_runtime.endpoints.size() == 2);
+            assert(command.audio_runtime.endpoints.size() == 3);
             runtime_configuration = command.audio_runtime;
             ++runtime_configurations;
             break;
