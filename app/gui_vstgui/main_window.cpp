@@ -29,6 +29,14 @@
 #include <string_view>
 #include <utility>
 #include <cctype>
+#include <cwctype>
+#include <filesystem>
+
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#include <commdlg.h>
 
 using namespace VSTGUI;
 using namespace VSTGUI::Standalone;
@@ -94,6 +102,49 @@ std::string format_uint(const char* format, std::uint64_t value) {
   char buffer[32] = {};
   std::snprintf(buffer, sizeof(buffer), format, value);
   return buffer;
+}
+
+std::optional<std::filesystem::path> choose_preset_file(bool save,
+                                                        std::string_view name) {
+  std::array<wchar_t, 32768> path{};
+  if (save && !name.empty()) {
+    const std::string utf8_name(name);
+    auto initial = std::filesystem::u8path(utf8_name).wstring();
+    if (initial.size() < path.size()) {
+      std::copy(initial.begin(), initial.end(), path.begin());
+      constexpr std::wstring_view suffix = L".sarpreset";
+      const auto has_suffix = initial.size() >= suffix.size() &&
+          std::equal(suffix.rbegin(), suffix.rend(), initial.rbegin(),
+                     [](wchar_t a, wchar_t b) {
+                       return std::towlower(a) == std::towlower(b);
+                     });
+      if (!has_suffix) {
+        std::copy(suffix.begin(), suffix.end(), path.begin() + initial.size());
+      }
+    }
+  }
+
+  constexpr wchar_t filter[] =
+      L"System Audio Route preset (*.sarpreset)\0*.sarpreset\0"
+      L"All files (*.*)\0*.*\0\0";
+  OPENFILENAMEW dialog{};
+  dialog.lStructSize = sizeof(dialog);
+  dialog.hwndOwner = GetActiveWindow();
+  dialog.lpstrFilter = filter;
+  dialog.nFilterIndex = 1;
+  dialog.lpstrFile = path.data();
+  dialog.nMaxFile = static_cast<DWORD>(path.size());
+  dialog.lpstrDefExt = L"sarpreset";
+  dialog.Flags = OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOCHANGEDIR |
+                 (save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
+  const BOOL selected = save ? GetSaveFileNameW(&dialog) : GetOpenFileNameW(&dialog);
+  if (!selected) return std::nullopt;
+  return std::filesystem::path(path.data());
+}
+
+std::string preset_name_from_path(const std::filesystem::path& path) {
+  const auto stem = path.stem().u8string();
+  return {reinterpret_cast<const char*>(stem.data()), stem.size()};
 }
 
 // Only completed snapshots cross back to the UI thread. At most one pipe
@@ -245,9 +296,11 @@ class HeaderController final : public IControlListener {
   void attachPresets(
       SharedPointer<CViewContainer> panel, SharedPointer<CTextButton> open,
       SharedPointer<CTextButton> close, SharedPointer<CTextEdit> name,
-      SharedPointer<CTextButton> save,
+      SharedPointer<CTextButton> save, SharedPointer<CTextButton> import,
       std::vector<SharedPointer<CTextLabel>> rows,
       std::vector<SharedPointer<CTextButton>> load,
+      std::vector<SharedPointer<CTextButton>> export,
+      std::vector<SharedPointer<CTextButton>> rename,
       std::vector<SharedPointer<CTextButton>> remove,
       SharedPointer<CTextButton> previous, SharedPointer<CTextButton> next,
       SharedPointer<CTextLabel> page, SharedPointer<CTextLabel> status,
@@ -259,8 +312,11 @@ class HeaderController final : public IControlListener {
     presetsClose_ = std::move(close);
     presetName_ = std::move(name);
     presetSave_ = std::move(save);
+    presetImport_ = std::move(import);
     presetRows_ = std::move(rows);
     presetLoad_ = std::move(load);
+    presetExport_ = std::move(export);
+    presetRename_ = std::move(rename);
     presetRemove_ = std::move(remove);
     presetPrevious_ = std::move(previous);
     presetNext_ = std::move(next);
@@ -271,7 +327,8 @@ class HeaderController final : public IControlListener {
     presetConfirm_ = std::move(confirm);
     presetCancel_ = std::move(cancel);
     for (auto* control : {presetsButton_.get(), presetsClose_.get(),
-                          presetSave_.get(), presetPrevious_.get(),
+                          presetSave_.get(), presetImport_.get(),
+                          presetPrevious_.get(),
                           presetNext_.get(), presetConfirm_.get(),
                           presetCancel_.get()}) {
       control->setListener(this);
@@ -279,6 +336,8 @@ class HeaderController final : public IControlListener {
     presetName_->setListener(this);
     for (std::size_t index = 0; index < presetRows_.size(); ++index) {
       presetLoad_[index]->setListener(this);
+      presetExport_[index]->setListener(this);
+      presetRename_[index]->setListener(this);
       presetRemove_[index]->setListener(this);
     }
     presetPanel_->setVisible(false);
@@ -336,6 +395,27 @@ class HeaderController final : public IControlListener {
       }
       return;
     }
+    if (control == presetImport_.get() && control->getValue() > 0.5F) {
+      const auto path = choose_preset_file(false, {});
+      if (!path) return;
+      const auto name = preset_name_from_path(*path);
+      std::string validation_error;
+      if (!PresetStore::valid_name(name, &validation_error)) {
+        setPresetStatus(validation_error);
+        return;
+      }
+      presetName_->setText(name.c_str());
+      PresetCommand command{PresetAction::Import, name, {}, *path};
+      const auto duplicate = std::find_if(presetNames_.begin(), presetNames_.end(),
+          [&](const auto& existing) { return same_name(existing, name); });
+      if (duplicate != presetNames_.end() || presetStore_.contains(name)) {
+        showPresetConfirmation("Replace preset with imported file \"" + name + "\"?",
+                              std::move(command));
+      } else {
+        queue_preset_command(std::move(command));
+      }
+      return;
+    }
     if (control == presetPrevious_.get() && control->getValue() > 0.5F) {
       if (presetOffset_ >= kPresetRows) presetOffset_ -= kPresetRows;
       renderPresets();
@@ -362,6 +442,31 @@ class HeaderController final : public IControlListener {
       if (entry >= presetNames_.size()) break;
       if (control == presetLoad_[index].get() && control->getValue() > 0.5F) {
         queue_preset_command({PresetAction::Load, presetNames_[entry]});
+        return;
+      }
+      if (control == presetExport_[index].get() && control->getValue() > 0.5F) {
+        const auto path = choose_preset_file(true, presetNames_[entry]);
+        if (path) {
+          queue_preset_command({PresetAction::Export, presetNames_[entry], {}, *path});
+        }
+        return;
+      }
+      if (control == presetRename_[index].get() && control->getValue() > 0.5F) {
+        const auto new_name = std::string(presetName_->getText().getString());
+        std::string validation_error;
+        if (!PresetStore::valid_name(new_name, &validation_error)) {
+          setPresetStatus(validation_error);
+          return;
+        }
+        if (!same_name(new_name, presetNames_[entry]) &&
+            (presetStore_.contains(new_name) ||
+             std::any_of(presetNames_.begin(), presetNames_.end(), [&](const auto& existing) {
+               return same_name(existing, new_name);
+             }))) {
+          setPresetStatus("A preset with that name already exists");
+          return;
+        }
+        queue_preset_command({PresetAction::Rename, presetNames_[entry], new_name});
         return;
       }
       if (control == presetRemove_[index].get() && control->getValue() > 0.5F) {
@@ -571,7 +676,7 @@ class HeaderController final : public IControlListener {
 
  private:
   enum class RouteAction { Connect, Disconnect, Gain, Mute };
-  enum class PresetAction { Refresh, Save, Load, Remove };
+  enum class PresetAction { Refresh, Save, Load, Import, Export, Rename, Remove };
   struct RouteCommand {
     RouteAction action;
     std::string input;
@@ -582,6 +687,8 @@ class HeaderController final : public IControlListener {
   struct PresetCommand {
     PresetAction action = PresetAction::Refresh;
     std::string name;
+    std::string targetName;
+    std::filesystem::path path;
   };
 
   static bool same_name(std::string_view left, std::string_view right) {
@@ -675,6 +782,34 @@ class HeaderController final : public IControlListener {
               }
               break;
             }
+            case PresetAction::Import:
+              state = client->poll();
+              if (store.import_file(preset_command->path, preset_command->name,
+                                    &error)) {
+                state.presetStatus = "Imported preset \"" + preset_command->name + "\"";
+              } else {
+                state.presetStatus = std::move(error);
+              }
+              break;
+            case PresetAction::Export:
+              state = client->poll();
+              if (store.export_file(preset_command->name, preset_command->path,
+                                    &error)) {
+                state.presetStatus = "Exported preset \"" + preset_command->name + "\"";
+              } else {
+                state.presetStatus = std::move(error);
+              }
+              break;
+            case PresetAction::Rename:
+              state = client->poll();
+              if (store.rename(preset_command->name, preset_command->targetName,
+                               &error)) {
+                state.presetStatus = "Renamed preset to \"" +
+                                    preset_command->targetName + "\"";
+              } else {
+                state.presetStatus = std::move(error);
+              }
+              break;
             case PresetAction::Remove:
               state = client->poll();
               if (store.remove(preset_command->name, &error)) {
@@ -906,7 +1041,12 @@ class HeaderController final : public IControlListener {
 
   void showPresetConfirmation(std::string message, PresetAction action,
                               std::string name) {
-    confirmedPresetCommand_ = {action, std::move(name)};
+    showPresetConfirmation(std::move(message),
+                           PresetCommand{action, std::move(name)});
+  }
+
+  void showPresetConfirmation(std::string message, PresetCommand command) {
+    confirmedPresetCommand_ = std::move(command);
     presetConfirmationText_->setText(message.c_str());
     presetConfirmation_->setVisible(true);
   }
@@ -928,6 +1068,8 @@ class HeaderController final : public IControlListener {
       const bool available = row < count;
       presetRows_[row]->setText(available ? presetNames_[presetOffset_ + row].c_str() : "");
       presetLoad_[row]->setMouseEnabled(available && !pending_.valid());
+      presetExport_[row]->setMouseEnabled(available && !pending_.valid());
+      presetRename_[row]->setMouseEnabled(available && !pending_.valid());
       presetRemove_[row]->setMouseEnabled(available && !pending_.valid());
     }
     const auto total = presetNames_.size();
@@ -939,6 +1081,7 @@ class HeaderController final : public IControlListener {
     presetPrevious_->setMouseEnabled(idle && presetOffset_ > 0);
     presetNext_->setMouseEnabled(idle && presetOffset_ + count < total);
     presetSave_->setMouseEnabled(idle);
+    presetImport_->setMouseEnabled(idle);
   }
 
   void renderDiagnostics() {
@@ -1149,8 +1292,11 @@ class HeaderController final : public IControlListener {
   SharedPointer<CTextButton> presetsClose_;
   SharedPointer<CTextEdit> presetName_;
   SharedPointer<CTextButton> presetSave_;
+  SharedPointer<CTextButton> presetImport_;
   std::vector<SharedPointer<CTextLabel>> presetRows_;
   std::vector<SharedPointer<CTextButton>> presetLoad_;
+  std::vector<SharedPointer<CTextButton>> presetExport_;
+  std::vector<SharedPointer<CTextButton>> presetRename_;
   std::vector<SharedPointer<CTextButton>> presetRemove_;
   SharedPointer<CTextButton> presetPrevious_;
   SharedPointer<CTextButton> presetNext_;
@@ -1565,28 +1711,44 @@ WindowPtr createMainWindow() {
   presetPanel->addView(presetName);
   auto presetSave = makeOwned<CTextButton>(CRect(704, 122, 820, 158), nullptr, -1,
                                             "Save snapshot");
+  auto presetImport = makeOwned<CTextButton>(CRect(832, 122, 976, 158), nullptr, -1,
+                                              "Import file");
   stylePresetButton(presetSave);
+  stylePresetButton(presetImport);
   presetPanel->addView(presetSave);
+  presetPanel->addView(presetImport);
   presetPanel->addView(makeLabel(CRect(24, 172, 620, 196), "SAVED PRESETS",
                                   palette::kSteel, true));
   std::vector<SharedPointer<CTextLabel>> presetRows;
   std::vector<SharedPointer<CTextButton>> presetLoad;
+  std::vector<SharedPointer<CTextButton>> presetExport;
+  std::vector<SharedPointer<CTextButton>> presetRename;
   std::vector<SharedPointer<CTextButton>> presetRemove;
   for (std::size_t row = 0; row < kPresetRows; ++row) {
     const auto top = 202 + static_cast<CCoord>(row) * 42;
-    auto label = makeLabel(CRect(24, top, 690, top + 36), "",
+    auto label = makeLabel(CRect(24, top, 500, top + 36), "",
                            palette::kText, false);
     presetPanel->addView(label);
     presetRows.push_back(label);
-    auto load = makeOwned<CTextButton>(CRect(704, top, 812, top + 34), nullptr, -1,
+    auto load = makeOwned<CTextButton>(CRect(510, top, 600, top + 34), nullptr, -1,
                                         "Load");
-    auto remove = makeOwned<CTextButton>(CRect(824, top, 920, top + 34), nullptr, -1,
+    auto export_file = makeOwned<CTextButton>(CRect(610, top, 700, top + 34), nullptr, -1,
+                                               "Export");
+    auto rename = makeOwned<CTextButton>(CRect(710, top, 810, top + 34), nullptr, -1,
+                                          "Rename");
+    auto remove = makeOwned<CTextButton>(CRect(820, top, 920, top + 34), nullptr, -1,
                                           "Delete");
     stylePresetButton(load);
+    stylePresetButton(export_file);
+    stylePresetButton(rename);
     stylePresetButton(remove);
     presetPanel->addView(load);
+    presetPanel->addView(export_file);
+    presetPanel->addView(rename);
     presetPanel->addView(remove);
     presetLoad.push_back(load);
+    presetExport.push_back(export_file);
+    presetRename.push_back(rename);
     presetRemove.push_back(remove);
   }
   auto presetStatus = makeLabel(CRect(24, 548, 590, 580), "",
@@ -1652,8 +1814,9 @@ WindowPtr createMainWindow() {
                                  std::move(diagnosticEndpointCells));
   controller->attachDiagnosticsButton(diagnosticsButton);
   controller->attachPresets(presetPanel, presetsButton, presetClose, presetName,
-                            presetSave, std::move(presetRows),
-                            std::move(presetLoad), std::move(presetRemove),
+                            presetSave, presetImport, std::move(presetRows),
+                            std::move(presetLoad), std::move(presetExport),
+                            std::move(presetRename), std::move(presetRemove),
                             presetPrevious, presetNext, presetPage, presetStatus,
                             presetConfirmation, presetConfirmationText,
                             presetConfirm, presetCancel);

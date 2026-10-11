@@ -21,6 +21,15 @@ class PresetStore final {
   [[nodiscard]] bool load(std::string_view name,
                           control::PresetDocument* preset,
                           std::string* error = nullptr) const;
+  [[nodiscard]] bool import_file(const std::filesystem::path& source,
+                                 std::string_view name,
+                                 std::string* error = nullptr) const;
+  [[nodiscard]] bool export_file(std::string_view name,
+                                 const std::filesystem::path& destination,
+                                 std::string* error = nullptr) const;
+  [[nodiscard]] bool rename(std::string_view current_name,
+                            std::string_view new_name,
+                            std::string* error = nullptr) const;
   [[nodiscard]] bool remove(std::string_view name,
                             std::string* error = nullptr) const;
   [[nodiscard]] bool contains(std::string_view name) const;

@@ -497,6 +497,23 @@ int main() {
                                     "Expected session query to return loaded preset")) {
       return failure;
     }
+
+    sar::control::ControlCommand invalid_load;
+    invalid_load.command_id = "invalid_load_after_valid_load";
+    invalid_load.type = sar::control::ControlCommandType::LoadPreset;
+    invalid_load.preset = make_valid_preset();
+    invalid_load.preset.matrix.routes[0].input_id = "unknown-input";
+    const auto rejected_load = session->handle(invalid_load);
+    if (const auto failure = expect(rejected_load.status ==
+                                        sar::control::ControlResponseStatus::Rejected,
+                                    "Expected invalid preset load rejected")) {
+      return failure;
+    }
+    if (const auto failure = expect(session->current_graph()->version() == 13 &&
+                                        session->current_preset().matrix.routes[0].muted,
+                                    "Rejected preset load must preserve live state")) {
+      return failure;
+    }
   }
 
   std::cout << "Control session smoke test passed\n";

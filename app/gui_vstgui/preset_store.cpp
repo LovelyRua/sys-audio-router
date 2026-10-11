@@ -30,6 +30,11 @@ void set_error(std::string* error, std::string value) {
   if (error != nullptr) *error = std::move(value);
 }
 
+std::filesystem::path temporary_path_for(const std::filesystem::path& target);
+bool replace_file(const std::filesystem::path& source,
+                  const std::filesystem::path& destination,
+                  std::string* error);
+
 std::string path_utf8(const std::filesystem::path& path) {
   const auto value = path.u8string();
   return {reinterpret_cast<const char*>(value.data()), value.size()};
@@ -46,6 +51,73 @@ bool ascii_iequal(std::string_view left, std::string_view right) {
            return std::tolower(static_cast<unsigned char>(a)) ==
                   std::tolower(static_cast<unsigned char>(b));
          });
+}
+
+bool read_preset_file(const std::filesystem::path& path,
+                      control::PresetDocument* preset,
+                      std::string* error) {
+  std::error_code ec;
+  const auto size = std::filesystem::file_size(path, ec);
+  if (ec) {
+    set_error(error, "Could not read the preset file: " + ec.message());
+    return false;
+  }
+  if (size > kMaximumPresetFileBytes) {
+    set_error(error, "Preset file exceeds the 1 MiB safety limit");
+    return false;
+  }
+  std::ifstream file(path, std::ios::binary);
+  if (!file) {
+    set_error(error, "Could not open the preset file");
+    return false;
+  }
+  std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
+  file.read(reinterpret_cast<char*>(bytes.data()),
+            static_cast<std::streamsize>(bytes.size()));
+  if (!file || static_cast<std::size_t>(file.gcount()) != bytes.size()) {
+    set_error(error, "Could not read the complete preset file");
+    return false;
+  }
+  const auto decoded = control::decode_preset_file(bytes);
+  if (!decoded.ok()) {
+    set_error(error, decoded.error().message);
+    return false;
+  }
+  *preset = decoded.preset();
+  return true;
+}
+
+bool write_preset_file(const std::filesystem::path& destination,
+                       const control::PresetDocument& preset,
+                       std::string* error) {
+  const auto encoded = control::encode_preset_file(preset);
+  if (!encoded.ok()) {
+    set_error(error, encoded.error().message);
+    return false;
+  }
+  const auto temporary = temporary_path_for(destination);
+  {
+    std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
+    if (!file) {
+      set_error(error, "Could not open a temporary preset file");
+      return false;
+    }
+    const auto& bytes = encoded.bytes();
+    file.write(reinterpret_cast<const char*>(bytes.data()),
+               static_cast<std::streamsize>(bytes.size()));
+    file.flush();
+    if (!file) {
+      file.close();
+      std::error_code ignored;
+      std::filesystem::remove(temporary, ignored);
+      set_error(error, "Could not write the preset file");
+      return false;
+    }
+  }
+  if (replace_file(temporary, destination, error)) return true;
+  std::error_code ignored;
+  std::filesystem::remove(temporary, ignored);
+  return false;
 }
 
 bool reserved_windows_name(std::string_view name) {
@@ -151,11 +223,6 @@ bool PresetStore::save(std::string_view name,
                        std::string* error) const {
   set_error(error, {});
   if (!valid_name(name, error)) return false;
-  const auto encoded = control::encode_preset_file(preset);
-  if (!encoded.ok()) {
-    set_error(error, encoded.error().message);
-    return false;
-  }
   std::error_code ec;
   std::filesystem::create_directories(directory_, ec);
   if (ec) {
@@ -164,27 +231,7 @@ bool PresetStore::save(std::string_view name,
   }
 
   const auto destination = path_for_name(name);
-  const auto temporary = temporary_path_for(destination);
-  {
-    std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
-    if (!file) {
-      set_error(error, "Could not open a temporary preset file");
-      return false;
-    }
-    const auto& bytes = encoded.bytes();
-    file.write(reinterpret_cast<const char*>(bytes.data()),
-               static_cast<std::streamsize>(bytes.size()));
-    file.flush();
-    if (!file) {
-      file.close();
-      std::filesystem::remove(temporary, ec);
-      set_error(error, "Could not write the preset file");
-      return false;
-    }
-  }
-  if (replace_file(temporary, destination, error)) return true;
-  std::filesystem::remove(temporary, ec);
-  return false;
+  return write_preset_file(destination, preset, error);
 }
 
 bool PresetStore::load(std::string_view name, control::PresetDocument* preset,
@@ -195,36 +242,57 @@ bool PresetStore::load(std::string_view name, control::PresetDocument* preset,
     return false;
   }
   if (!valid_name(name, error)) return false;
-  const auto path = path_for_name(name);
-  std::error_code ec;
-  const auto size = std::filesystem::file_size(path, ec);
-  if (ec) {
-    set_error(error, "Could not read the preset file: " + ec.message());
+  return read_preset_file(path_for_name(name), preset, error);
+}
+
+bool PresetStore::import_file(const std::filesystem::path& source,
+                              std::string_view name,
+                              std::string* error) const {
+  set_error(error, {});
+  if (!valid_name(name, error)) return false;
+  control::PresetDocument preset;
+  if (!read_preset_file(source, &preset, error)) return false;
+  return save(name, preset, error);
+}
+
+bool PresetStore::export_file(std::string_view name,
+                              const std::filesystem::path& destination,
+                              std::string* error) const {
+  set_error(error, {});
+  if (destination.empty()) {
+    set_error(error, "Choose a destination for the preset export");
     return false;
   }
-  if (size > kMaximumPresetFileBytes) {
-    set_error(error, "Preset file exceeds the 1 MiB safety limit");
+  control::PresetDocument preset;
+  if (!load(name, &preset, error)) return false;
+  return write_preset_file(destination, preset, error);
+}
+
+bool PresetStore::rename(std::string_view current_name,
+                         std::string_view new_name,
+                         std::string* error) const {
+  set_error(error, {});
+  if (!valid_name(current_name, error) || !valid_name(new_name, error)) return false;
+  if (current_name == new_name) {
+    if (contains(current_name)) return true;
+    set_error(error, "The preset does not exist");
     return false;
   }
-  std::ifstream file(path, std::ios::binary);
-  if (!file) {
-    set_error(error, "Could not open the preset file");
+  if (ascii_iequal(current_name, new_name)) {
+    set_error(error, "Preset names cannot differ only by letter case");
     return false;
   }
-  std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
-  file.read(reinterpret_cast<char*>(bytes.data()),
-            static_cast<std::streamsize>(bytes.size()));
-  if (!file || static_cast<std::size_t>(file.gcount()) != bytes.size()) {
-    set_error(error, "Could not read the complete preset file");
+  if (contains(new_name)) {
+    set_error(error, "A preset with that name already exists");
     return false;
   }
-  const auto decoded = control::decode_preset_file(bytes);
-  if (!decoded.ok()) {
-    set_error(error, decoded.error().message);
-    return false;
-  }
-  *preset = decoded.preset();
-  return true;
+  control::PresetDocument preset;
+  if (!load(current_name, &preset, error)) return false;
+  if (!save(new_name, preset, error)) return false;
+  if (remove(current_name, error)) return true;
+  std::error_code ignored;
+  std::filesystem::remove(path_for_name(new_name), ignored);
+  return false;
 }
 
 bool PresetStore::remove(std::string_view name, std::string* error) const {

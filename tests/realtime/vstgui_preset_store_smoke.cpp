@@ -27,6 +27,8 @@ int main() {
   const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
   const auto directory = std::filesystem::temp_directory_path() /
                          ("sar-vstgui-presets-" + std::to_string(nonce));
+  const auto exchange_directory = directory / "exchange";
+  std::filesystem::create_directories(exchange_directory);
   gui_vstgui::PresetStore store(directory);
   std::string error;
 
@@ -62,6 +64,32 @@ int main() {
   assert(store.save("Studio A", make_preset(0.75F, false), &error));
   assert(store.load("Studio A", &loaded, &error));
   assert(loaded.matrix.routes.front().gain == 0.75F);
+
+  const auto exported = exchange_directory / "Studio B.sarpreset";
+  assert(store.export_file("Studio B", exported, &error));
+  assert(error.empty());
+  assert(store.import_file(exported, "Imported", &error));
+  assert(store.load("Imported", &loaded, &error));
+  assert(loaded.matrix.routes.front().gain == 0.5F);
+  assert(!store.import_file(exported, "../escape", &error));
+  assert(!error.empty());
+  assert(!store.export_file("missing", exchange_directory / "missing.sarpreset",
+                            &error));
+  assert(!error.empty());
+  assert(!store.export_file("Studio B", {}, &error));
+  assert(!error.empty());
+
+  assert(store.rename("Imported", "Studio C", &error));
+  assert(!store.contains("Imported"));
+  assert(store.contains("Studio C"));
+  assert(!store.rename("Studio C", "Studio B", &error));
+  assert(!error.empty());
+  assert(!store.rename("Studio C", "studio c", &error));
+  assert(!error.empty());
+  assert(store.rename("Studio C", "Studio C", &error));
+  assert(!store.rename("missing", "Another", &error));
+  assert(!error.empty());
+  assert(store.remove("Studio C", &error));
   assert(!loaded.matrix.routes.front().muted);
 
   auto invalid_preset = make_preset(0.0F, false);
@@ -83,6 +111,18 @@ int main() {
   }
   assert(!store.load("Broken", &loaded, &error));
   assert(!error.empty());
+  assert(!store.import_file(directory / "Broken.sarpreset", "Studio B", &error));
+  assert(!error.empty());
+  assert(store.load("Studio B", &loaded, &error));
+  assert(loaded.matrix.routes.front().gain == 0.5F);
+  assert(!store.import_file(directory / "Broken.sarpreset", "Broken copy", &error));
+  assert(!error.empty());
+  {
+    std::ofstream oversized(directory / "Oversized.sarpreset", std::ios::binary);
+    oversized << std::string(1024U * 1024U + 1U, 'x');
+  }
+  assert(!store.import_file(directory / "Oversized.sarpreset", "Too large", &error));
+  assert(error.find("1 MiB") != std::string::npos);
   assert(store.remove("Broken", &error));
   assert(!store.contains("Broken"));
   assert(store.remove("Studio A", &error));

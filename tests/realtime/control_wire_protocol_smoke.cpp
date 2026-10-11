@@ -14,7 +14,7 @@ sar::control::PresetDocument make_preset() {
   preset.nodes.push_back({"matrix", "Main Matrix", "route_matrix"});
   preset.matrix.inputs.push_back({"input-1", "Input 1"});
   preset.matrix.outputs.push_back({"output-1", "Output 1"});
-  preset.matrix.routes.push_back({"input-1", "output-1", 0.5F, false});
+  preset.matrix.routes.push_back({"input-1", "output-1", 0.5F, true});
   return preset;
 }
 
@@ -82,7 +82,7 @@ int main() {
   assert(decoded_command.command.gain == command.gain);
   assert(decoded_command.command.preset.matrix.routes.size() == 1);
   assert(decoded_command.command.preset.matrix.routes[0].gain == 0.5F);
-  assert(!decoded_command.command.preset.matrix.routes[0].muted);
+  assert(decoded_command.command.preset.matrix.routes[0].muted);
   assert(decoded_command.command.audio_runtime.mode ==
          sar::control::AudioRuntimeMode::WasapiMatrix);
   assert(decoded_command.command.audio_runtime.endpoints.size() == 3);
@@ -130,7 +130,7 @@ int main() {
     assert(roundtrip.command.type == type);
     assert(roundtrip.command.preset.sample_rate == 48000);
     assert(roundtrip.command.preset.matrix.routes[0].gain == 0.5F);
-    assert(!roundtrip.command.preset.matrix.routes[0].muted);
+    assert(roundtrip.command.preset.matrix.routes[0].muted);
   }
 
   auto legacy_command = command;
@@ -289,6 +289,11 @@ int main() {
       sar::control::decode_control_response(encoded_response.bytes);
   assert(decoded_response.ok());
   assert(decoded_response.response.has_session_state);
+  assert(decoded_response.response.has_preset);
+  assert(decoded_response.response.preset.sample_rate == 48000);
+  assert(decoded_response.response.preset.matrix.inputs[0].label == "Input 1");
+  assert(decoded_response.response.preset.matrix.routes[0].gain == 0.5F);
+  assert(decoded_response.response.preset.matrix.routes[0].muted);
   assert(decoded_response.response.next_graph_version == 7);
   assert(decoded_response.response.active_graph.nodes.size() == 1);
   assert(decoded_response.response.devices.size() == 1);

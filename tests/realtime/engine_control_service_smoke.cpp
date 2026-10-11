@@ -746,6 +746,17 @@ int main() {
   assert(configure_service->session().current_preset().matrix.inputs.size() ==
          2);
 
+  sar::control::ControlCommand preset_state;
+  preset_state.command_id = "query-loaded-matrix-preset";
+  preset_state.type = sar::control::ControlCommandType::QuerySessionState;
+  const auto loaded_state = send(*configure_service, preset_state);
+  assert(loaded_state.status == sar::control::ControlResponseStatus::Accepted);
+  assert(loaded_state.has_session_state && loaded_state.has_preset);
+  assert(loaded_state.preset.matrix.inputs.size() == 2);
+  assert(loaded_state.preset.matrix.outputs.size() == 2);
+  assert(loaded_state.preset.matrix.routes.size() ==
+         expand_matrix.preset.matrix.routes.size());
+
   sar::control::ControlCommand save_matrix;
   save_matrix.command_id = "save-configured-runtime-matrix";
   save_matrix.type = sar::control::ControlCommandType::SavePreset;

@@ -17,6 +17,7 @@ int main() {
   std::atomic_uint runtime_configurations{0};
   std::atomic_uint preset_saves{0};
   std::atomic_uint preset_loads{0};
+  std::atomic_bool reject_preset_load{false};
   control::AudioRuntimeConfiguration runtime_configuration;
   control::PresetDocument loaded_preset;
   loaded_preset.matrix.inputs = {{"mic", "Microphone"}};
@@ -96,6 +97,11 @@ int main() {
             ++preset_saves;
             break;
           case control::ControlCommandType::LoadPreset:
+            if (reject_preset_load.load()) {
+              response = control::command_rejected(command.command_id,
+                  {{"preset_load_failure", "Preset load rejected"}});
+              break;
+            }
             assert(command.preset.sample_rate == 44100);
             assert(command.preset.matrix.routes.size() == 1);
             loaded_preset = command.preset;
@@ -183,6 +189,15 @@ int main() {
   assert(saved_preset.currentPreset.matrix.routes.front().gain == 0.25F);
   assert(saved_preset.currentPreset.matrix.routes.front().muted);
   assert(preset_saves.load() == 1);
+  reject_preset_load = true;
+  const auto rejected_preset = client.loadPreset(preset);
+  assert(rejected_preset.transportOk);
+  assert(rejected_preset.lastError == "Preset load rejected");
+  assert(rejected_preset.hasCurrentPreset);
+  assert(rejected_preset.currentPreset.sample_rate == 44100);
+  assert(rejected_preset.matrix.routes.front().gain == 0.25F);
+  assert(preset_loads.load() == 1);
+  reject_preset_load = false;
   control::AudioRuntimeConfiguration configuration;
   configuration.mode = control::AudioRuntimeMode::WasapiMatrix;
   configuration.endpoints = {
