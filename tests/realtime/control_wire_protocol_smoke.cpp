@@ -324,7 +324,7 @@ int main() {
   assert(decoded_response.response.audio_runtime.configuration.mode ==
          sar::control::AudioRuntimeMode::WasapiMatrix);
   assert(decoded_response.response.audio_runtime.configuration.endpoints.size() ==
-         2);
+         3);
   assert(decoded_response.response.audio_runtime.configuration.endpoints[1]
              .direction ==
          sar::control::AudioRuntimeEndpointDirection::Render);
