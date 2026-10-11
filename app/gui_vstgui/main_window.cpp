@@ -320,7 +320,7 @@ class HeaderController final : public IControlListener {
       return;
     }
     if (control == presetSave_.get() && control->getValue() > 0.5F) {
-      const std::string name = presetName_->getText();
+      const std::string name = presetName_->getText().getString();
       std::string validation_error;
       if (!PresetStore::valid_name(name, &validation_error)) {
         setPresetStatus(validation_error);
