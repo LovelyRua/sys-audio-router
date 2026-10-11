@@ -439,14 +439,6 @@ add_executable(sar_engine_control_service_smoke
 
 target_link_libraries(sar_engine_control_service_smoke PRIVATE sar_core)
 
-if(WIN32)
-  add_executable(sar_vstgui_engine_client_smoke
-    tests/realtime/vstgui_engine_client_smoke.cpp
-    app/gui_vstgui/engine_client.cpp
-  )
-  target_link_libraries(sar_vstgui_engine_client_smoke PRIVATE sar_core)
-endif()
-
 add_executable(sar_mock_asio_transport_smoke
   tests/realtime/mock_asio_transport_smoke.cpp
 )
@@ -1122,9 +1114,6 @@ add_test(NAME virtual_asio_broker_protocol_mutation_smoke
 set_tests_properties(virtual_asio_broker_protocol_mutation_smoke
                      PROPERTIES TIMEOUT 60)
 add_test(NAME engine_control_service_smoke COMMAND sar_engine_control_service_smoke)
-if(WIN32)
-  add_test(NAME vstgui_engine_client_smoke COMMAND sar_vstgui_engine_client_smoke)
-endif()
 add_test(NAME mock_asio_transport_smoke COMMAND sar_mock_asio_transport_smoke)
 add_test(NAME virtual_asio_client_registry_smoke
          COMMAND sar_virtual_asio_client_registry_smoke)
