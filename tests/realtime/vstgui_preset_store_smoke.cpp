@@ -123,6 +123,9 @@ int main() {
   }
   assert(!store.import_file(directory / "Oversized.sarpreset", "Too large", &error));
   assert(error.find("1 MiB") != std::string::npos);
+  std::error_code cleanup_error;
+  std::filesystem::remove(directory / "Oversized.sarpreset", cleanup_error);
+  assert(!cleanup_error);
   assert(store.remove("Broken", &error));
   assert(!store.contains("Broken"));
   assert(store.remove("Studio A", &error));
