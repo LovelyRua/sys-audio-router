@@ -118,15 +118,19 @@ int main() {
       {"capture-1", "capture-device", control::AudioRuntimeEndpointDirection::Capture,
        false, 1, 1},
       {"render-1", "render-device", control::AudioRuntimeEndpointDirection::Render,
+       false, 0, 2},
+      {"render-2", "render-device-2", control::AudioRuntimeEndpointDirection::Render,
        true, 0, 2},
   };
   const auto configured = client.configureAudioRuntime(configuration);
   assert(configured.transportOk && configured.runtimeConfigured);
   assert(configured.audioRuntimeConfiguration.mode ==
          control::AudioRuntimeMode::WasapiMatrix);
-  assert(configured.audioRuntimeConfiguration.endpoints.size() == 2);
+  assert(configured.audioRuntimeConfiguration.endpoints.size() == 3);
   assert(configured.audioRuntimeConfiguration.endpoints.front().first_channel == 1);
   assert(configured.audioRuntimeConfiguration.endpoints.front().channel_count == 1);
+  assert(!configured.audioRuntimeConfiguration.endpoints[1].clock_master);
+  assert(configured.audioRuntimeConfiguration.endpoints[2].clock_master);
   assert(runtime_configurations.load() == 1);
   assert(initial.lastError.empty());
   assert(client.start().lastError == "Device could not start or stop");

@@ -50,6 +50,8 @@ int main() {
        sar::control::AudioRuntimeEndpointDirection::Capture, false, 0, 2},
       {"render-1", "native-render-1",
        sar::control::AudioRuntimeEndpointDirection::Render, true, 0, 2},
+      {"render-2", "native-render-2",
+       sar::control::AudioRuntimeEndpointDirection::Render, false, 0, 2},
   };
   command.audio_runtime.endpoints[0].backend =
       sar::control::AudioRuntimeEndpointBackend::PhysicalAsio;
@@ -97,6 +99,17 @@ int main() {
   assert(decoded_command.command.audio_runtime.endpoints[0].block_frames ==
          128);
   assert(decoded_command.command.audio_runtime.endpoints[1].clock_master);
+  auto alternate_master_command = command;
+  alternate_master_command.audio_runtime.endpoints[1].clock_master = false;
+  alternate_master_command.audio_runtime.endpoints[2].clock_master = true;
+  const auto alternate_master_wire =
+      sar::control::encode_control_command(alternate_master_command);
+  assert(alternate_master_wire.ok());
+  const auto alternate_master_decoded =
+      sar::control::decode_control_command(alternate_master_wire.bytes);
+  assert(alternate_master_decoded.ok());
+  assert(!alternate_master_decoded.command.audio_runtime.endpoints[1].clock_master);
+  assert(alternate_master_decoded.command.audio_runtime.endpoints[2].clock_master);
   assert(decoded_command.command.virtual_asio_devices.size() == 1);
   assert(decoded_command.command.virtual_asio_devices[0].input_channels == 8);
 

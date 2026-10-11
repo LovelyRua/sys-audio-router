@@ -162,6 +162,7 @@ class HeaderController final : public IControlListener {
                    std::vector<SharedPointer<CTextButton>> countPrevious,
                    std::vector<SharedPointer<CTextLabel>> countValue,
                    std::vector<SharedPointer<CTextButton>> countNext,
+                   std::vector<SharedPointer<CTextButton>> clockMaster,
                    std::vector<SharedPointer<CTextButton>> remove) {
     setupPanel_ = std::move(panel);
     setupStatus_ = std::move(status);
@@ -179,6 +180,7 @@ class HeaderController final : public IControlListener {
     setupCountPrevious_ = std::move(countPrevious);
     setupCountValue_ = std::move(countValue);
     setupCountNext_ = std::move(countNext);
+    setupClockMaster_ = std::move(clockMaster);
     setupRemove_ = std::move(remove);
     setupAddCapture_->setListener(this);
     setupAddRender_->setListener(this);
@@ -190,6 +192,7 @@ class HeaderController final : public IControlListener {
     for (auto& control : setupFirstNext_) control->setListener(this);
     for (auto& control : setupCountPrevious_) control->setListener(this);
     for (auto& control : setupCountNext_) control->setListener(this);
+    for (auto& control : setupClockMaster_) control->setListener(this);
     for (auto& control : setupRemove_) control->setListener(this);
     setupPanel_->setVisible(false);
   }
@@ -305,6 +308,14 @@ class HeaderController final : public IControlListener {
         const auto count = setupModel_.endpoints()[i].channel_count;
         if (!setupModel_.set_channel_count(i, count + 1))
           setSetupStatus("The selected channel count exceeds this device.");
+        renderSetup();
+        return;
+      }
+      if (control == setupClockMaster_[i].get() &&
+          control->getValue() > 0.5F) {
+        if (!setupModel_.set_clock_master(i)) {
+          setSetupStatus("Only a render endpoint can be the clock master.");
+        }
         renderSetup();
         return;
       }
@@ -605,7 +616,7 @@ class HeaderController final : public IControlListener {
     } else if (last_.devices.empty()) {
       setSetupStatus("The engine returned no audio devices. Refresh after checking the engine.");
     } else {
-      setSetupStatus("Select one or more WASAPI endpoints. At least one render endpoint is required.");
+      setSetupStatus("Choose WASAPI endpoints and select the render clock master.");
     }
     renderSetup();
   }
@@ -629,6 +640,8 @@ class HeaderController final : public IControlListener {
         setupFirstNext_[i]->setMouseEnabled(false);
         setupCountPrevious_[i]->setMouseEnabled(false);
         setupCountNext_[i]->setMouseEnabled(false);
+        setupClockMaster_[i]->setTitle("CLOCK");
+        setupClockMaster_[i]->setMouseEnabled(false);
         setupFirstValue_[i]->setText("");
         setupCountValue_[i]->setText("");
         setupRemove_[i]->setMouseEnabled(false);
@@ -660,6 +673,11 @@ class HeaderController final : public IControlListener {
                                                endpoint.channel_count > 1);
       setupCountNext_[i]->setMouseEnabled(!setupUnsupported_ && !setupApplyPending_ &&
                                           has_more);
+      setupClockMaster_[i]->setTitle(endpoint.clock_master ? "MASTER" : "Set master");
+      setupClockMaster_[i]->setMouseEnabled(!capture && !setupUnsupported_ &&
+                                            !setupApplyPending_ &&
+                                            (!endpoint.clock_master ||
+                                             !setupModel_.can_apply()));
       setupRemove_[i]->setMouseEnabled(!setupUnsupported_ && !setupApplyPending_);
     }
     const bool editable = !setupUnsupported_ && !setupApplyPending_;
@@ -719,6 +737,7 @@ class HeaderController final : public IControlListener {
   std::vector<SharedPointer<CTextButton>> setupCountPrevious_;
   std::vector<SharedPointer<CTextLabel>> setupCountValue_;
   std::vector<SharedPointer<CTextButton>> setupCountNext_;
+  std::vector<SharedPointer<CTextButton>> setupClockMaster_;
   std::vector<SharedPointer<CTextButton>> setupRemove_;
   AudioSetupModel setupModel_;
   std::optional<control::AudioRuntimeConfiguration> runtimeConfigurationCommand_;
@@ -930,6 +949,8 @@ WindowPtr createMainWindow() {
                                 palette::kMuted, true));
   setupPanel->addView(makeLabel(CRect(640, 112, 770, 136), "CHANNELS",
                                 palette::kMuted, true));
+  setupPanel->addView(makeLabel(CRect(770, 112, 844, 136), "CLOCK",
+                                palette::kMuted, true));
   std::vector<SharedPointer<CTextLabel>> setupDirections;
   std::vector<SharedPointer<CTextLabel>> setupDevices;
   std::vector<SharedPointer<CTextButton>> setupPrevious;
@@ -940,6 +961,7 @@ WindowPtr createMainWindow() {
   std::vector<SharedPointer<CTextButton>> setupCountPrevious;
   std::vector<SharedPointer<CTextLabel>> setupCountValue;
   std::vector<SharedPointer<CTextButton>> setupCountNext;
+  std::vector<SharedPointer<CTextButton>> setupClockMaster;
   std::vector<SharedPointer<CTextButton>> setupRemove;
   for (std::size_t i = 0; i < kSetupRows; ++i) {
     const auto top = 140 + static_cast<CCoord>(i) * 44;
@@ -978,6 +1000,7 @@ WindowPtr createMainWindow() {
     setupPanel->addView(countValue);
     setupCountValue.push_back(countValue);
     setupCountNext.push_back(makeSetupButton(724, 30, "+"));
+    setupClockMaster.push_back(makeSetupButton(766, 78, "Set master"));
     setupRemove.push_back(makeSetupButton(850, 86, "Remove"));
   }
   auto setupAddCapture = makeOwned<CTextButton>(CRect(24, 504, 166, 538),
@@ -1015,7 +1038,8 @@ WindowPtr createMainWindow() {
                           std::move(setupNext), std::move(setupFirstPrevious),
                           std::move(setupFirstValue), std::move(setupFirstNext),
                           std::move(setupCountPrevious), std::move(setupCountValue),
-                          std::move(setupCountNext), std::move(setupRemove));
+                          std::move(setupCountNext), std::move(setupClockMaster),
+                          std::move(setupRemove));
   controller->attachSetupButton(setupButton);
   startStopButton->setListener(controller.get());
   // The controller and its views must outlive the timer, which is the case

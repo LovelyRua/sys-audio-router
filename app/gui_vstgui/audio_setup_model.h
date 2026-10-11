@@ -18,6 +18,7 @@ struct AudioSetupEndpoint {
       control::AudioRuntimeEndpointDirection::Capture;
   std::uint32_t first_channel = 0;
   std::uint32_t channel_count = 0;
+  bool clock_master = false;
 };
 
 // Owns the editable WASAPI endpoint selection used by the setup page. It has
@@ -35,6 +36,7 @@ class AudioSetupModel final {
                                        std::uint32_t first_channel);
   [[nodiscard]] bool set_channel_count(std::size_t endpoint_index,
                                        std::uint32_t channel_count);
+  [[nodiscard]] bool set_clock_master(std::size_t endpoint_index);
   [[nodiscard]] bool remove(std::size_t endpoint_index);
 
   [[nodiscard]] const std::vector<AudioSetupEndpoint>& endpoints() const noexcept;

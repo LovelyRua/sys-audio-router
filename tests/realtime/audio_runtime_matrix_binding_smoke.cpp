@@ -9,9 +9,9 @@ int main() {
       {"capture-a", "capture-native", AudioRuntimeEndpointDirection::Capture,
        false, 1, 1},
       {"render-main", "render-native",
-       AudioRuntimeEndpointDirection::Render, true, 0, 2},
+       AudioRuntimeEndpointDirection::Render, false, 0, 2},
       {"render-b", "render-native-b", AudioRuntimeEndpointDirection::Render,
-       false, 0, 2},
+       true, 0, 2},
   };
 
   sar::control::PresetRouteMatrix matrix;
@@ -32,7 +32,8 @@ int main() {
   assert(result.bindings()[0].graph_first_channel == 2);
   assert(result.bindings()[1].graph_first_channel == 2);
   assert(result.bindings()[2].graph_first_channel == 4);
-  assert(result.bindings()[1].clock_master);
+  assert(!result.bindings()[1].clock_master);
+  assert(result.bindings()[2].clock_master);
 
   std::swap(matrix.outputs[4], matrix.outputs[5]);
   result = sar::service::bind_audio_runtime_to_matrix(topology, matrix);

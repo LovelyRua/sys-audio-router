@@ -81,6 +81,28 @@ int main() {
   assert(configuration.endpoints.front().direction ==
          AudioRuntimeEndpointDirection::Render);
   assert(configuration.endpoints.front().channel_count == 2);
+  assert(model.set_clock_master(3));
+  assert(!model.set_clock_master(1));
+  const auto alternate_master = model.configuration();
+  assert(!alternate_master.endpoints[0].clock_master);
+  assert(alternate_master.endpoints[3].clock_master);
+  assert(std::count_if(alternate_master.endpoints.begin(),
+                       alternate_master.endpoints.end(),
+                       [](const auto& endpoint) { return endpoint.clock_master; }) == 1);
+  model.load(configuration);
+  auto no_master = configuration;
+  no_master.endpoints[0].clock_master = false;
+  model.load(no_master);
+  assert(!model.can_apply());
+  assert(model.set_clock_master(3));
+  assert(model.can_apply());
+  auto duplicate_masters = configuration;
+  duplicate_masters.endpoints[3].clock_master = true;
+  model.load(duplicate_masters);
+  assert(!model.can_apply());
+  assert(model.set_clock_master(3));
+  assert(model.can_apply());
+  model.load(configuration);
   auto restored_slice = configuration;
   restored_slice.endpoints[2].first_channel = 1;
   restored_slice.endpoints[2].channel_count = 2;

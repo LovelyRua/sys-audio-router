@@ -357,6 +357,23 @@ int main() {
       return failure;
     }
 
+    command.audio_runtime.endpoints[1].clock_master = false;
+    command.audio_runtime.endpoints[2].clock_master = true;
+    result = sar::control::validate_command(command);
+    if (const auto failure = expect(
+            result.ok(), "Expected a non-first render endpoint to be clock master")) {
+      return failure;
+    }
+    command.audio_runtime.endpoints[1].clock_master = true;
+    result = sar::control::validate_command(command);
+    if (const auto failure = expect(
+            has_error_code(result, "invalid_audio_runtime_clock_master_count"),
+            "Expected duplicate render clock masters to be rejected")) {
+      return failure;
+    }
+    command.audio_runtime.endpoints[1].clock_master = true;
+    command.audio_runtime.endpoints[2].clock_master = false;
+
     command.audio_runtime.endpoints[0].first_channel =
         std::numeric_limits<std::uint32_t>::max();
     result = sar::control::validate_command(command);
@@ -374,6 +391,7 @@ int main() {
 
     command.audio_runtime.endpoints[0].endpoint_id = "render-main";
     command.audio_runtime.endpoints[1].clock_master = false;
+    command.audio_runtime.endpoints[2].clock_master = false;
     result = sar::control::validate_command(command);
     if (const auto failure = expect(
             has_error_code(result, "duplicate_audio_runtime_endpoint_id"),

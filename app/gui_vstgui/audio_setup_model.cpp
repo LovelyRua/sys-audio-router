@@ -21,7 +21,8 @@ void AudioSetupModel::load(
   const auto restore_endpoint = [&](
       control::AudioRuntimeEndpointDirection direction,
       const std::string& endpoint_id, const std::string& device_id,
-      std::uint32_t first_channel, std::uint32_t channel_count) {
+      std::uint32_t first_channel, std::uint32_t channel_count,
+      bool clock_master) {
     if (endpoint_id.empty() || device_id.empty() ||
         endpoints_.size() >= control::kMaximumAudioRuntimeEndpoints ||
         endpoint_id_in_use(endpoint_id)) {
@@ -35,7 +36,7 @@ void AudioSetupModel::load(
       channel_count = channels_for(*device, direction);
     }
     endpoints_.push_back({endpoint_id, device_id, direction, first_channel,
-                          channel_count});
+                          channel_count, clock_master});
   };
 
   if (configuration.mode == control::AudioRuntimeMode::WasapiMatrix) {
@@ -45,21 +46,24 @@ void AudioSetupModel::load(
       }
       restore_endpoint(endpoint.direction, endpoint.endpoint_id,
                        endpoint.device_id, endpoint.first_channel,
-                       endpoint.channel_count);
+                       endpoint.channel_count, endpoint.clock_master);
     }
   } else if (configuration.mode == control::AudioRuntimeMode::WasapiDuplex) {
     if (!configuration.capture_device_id.empty()) {
       restore_endpoint(control::AudioRuntimeEndpointDirection::Capture,
-                       "wasapi.capture", configuration.capture_device_id, 0, 0);
+                       "wasapi.capture", configuration.capture_device_id, 0, 0,
+                       false);
     }
     if (!configuration.render_device_id.empty()) {
       restore_endpoint(control::AudioRuntimeEndpointDirection::Render,
-                       "wasapi.render", configuration.render_device_id, 0, 0);
+                       "wasapi.render", configuration.render_device_id, 0, 0,
+                       true);
     }
   } else if (configuration.mode == control::AudioRuntimeMode::WasapiRender &&
              !configuration.render_device_id.empty()) {
     restore_endpoint(control::AudioRuntimeEndpointDirection::Render,
-                     "wasapi.render", configuration.render_device_id, 0, 0);
+                     "wasapi.render", configuration.render_device_id, 0, 0,
+                     true);
   }
 
   const bool has_saved_configuration =
@@ -169,6 +173,19 @@ bool AudioSetupModel::set_channel_count(std::size_t endpoint_index,
   return false;
 }
 
+bool AudioSetupModel::set_clock_master(std::size_t endpoint_index) {
+  if (endpoint_index >= endpoints_.size() ||
+      endpoints_[endpoint_index].direction !=
+          control::AudioRuntimeEndpointDirection::Render) {
+    return false;
+  }
+  for (auto& endpoint : endpoints_) {
+    endpoint.clock_master = false;
+  }
+  endpoints_[endpoint_index].clock_master = true;
+  return true;
+}
+
 bool AudioSetupModel::remove(std::size_t endpoint_index) {
   if (endpoint_index >= endpoints_.size()) {
     return false;
@@ -217,7 +234,7 @@ bool AudioSetupModel::can_apply() const noexcept {
     return false;
   }
   std::size_t render_count = 0;
-  bool master_assigned = false;
+  std::size_t master_count = 0;
   for (std::size_t index = 0; index < endpoints_.size(); ++index) {
     const auto& endpoint = endpoints_[index];
     const auto* device = device_for(endpoint);
@@ -236,10 +253,12 @@ bool AudioSetupModel::can_apply() const noexcept {
     }
     if (endpoint.direction == control::AudioRuntimeEndpointDirection::Render) {
       ++render_count;
-      master_assigned = true;
+      master_count += endpoint.clock_master ? 1U : 0U;
+    } else if (endpoint.clock_master) {
+      return false;
     }
   }
-  return render_count > 0 && master_assigned;
+  return render_count > 0 && master_count == 1;
 }
 
 control::AudioRuntimeConfiguration AudioSetupModel::configuration() const {
@@ -248,18 +267,13 @@ control::AudioRuntimeConfiguration AudioSetupModel::configuration() const {
     return result;
   }
   result.mode = control::AudioRuntimeMode::WasapiMatrix;
-  bool clock_master_assigned = false;
   result.endpoints.reserve(endpoints_.size());
   for (const auto& endpoint : endpoints_) {
-    const bool is_master =
-        endpoint.direction == control::AudioRuntimeEndpointDirection::Render &&
-        !clock_master_assigned;
-    clock_master_assigned = clock_master_assigned || is_master;
     result.endpoints.push_back({
         endpoint.endpoint_id,
         endpoint.device_id,
         endpoint.direction,
-        is_master,
+        endpoint.clock_master,
         endpoint.first_channel,
         endpoint.channel_count,
     });
@@ -289,8 +303,13 @@ bool AudioSetupModel::add(
   if (channel_count == 0) {
     return false;
   }
+  const bool assign_clock_master =
+      direction == control::AudioRuntimeEndpointDirection::Render &&
+      std::ranges::none_of(endpoints_, [](const auto& endpoint) {
+        return endpoint.clock_master;
+      });
   endpoints_.push_back({std::move(endpoint_id), std::move(device_id), direction,
-                        0, channel_count});
+                        0, channel_count, assign_clock_master});
   return true;
 }
 
