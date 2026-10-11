@@ -83,7 +83,7 @@ int main() {
   assert(decoded_command.command.preset.matrix.routes.size() == 1);
   assert(decoded_command.command.audio_runtime.mode ==
          sar::control::AudioRuntimeMode::WasapiMatrix);
-  assert(decoded_command.command.audio_runtime.endpoints.size() == 2);
+  assert(decoded_command.command.audio_runtime.endpoints.size() == 3);
   assert(decoded_command.command.audio_runtime.endpoints[0].endpoint_id ==
          "capture-1");
   assert(decoded_command.command.audio_runtime.endpoints[0].device_id ==
