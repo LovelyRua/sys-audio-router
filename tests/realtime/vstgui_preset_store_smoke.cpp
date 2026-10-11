@@ -83,7 +83,8 @@ int main() {
   }
   assert(!store.load("Broken", &loaded, &error));
   assert(!error.empty());
-  assert(!store.remove("Broken", &error));
+  assert(store.remove("Broken", &error));
+  assert(!store.contains("Broken"));
   assert(store.remove("Studio A", &error));
   assert(!store.contains("Studio A"));
   assert((store.names(&error) == std::vector<std::string>{"Studio B"}));

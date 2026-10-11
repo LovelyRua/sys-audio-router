@@ -19,6 +19,8 @@ int main() {
   std::atomic_uint preset_loads{0};
   control::AudioRuntimeConfiguration runtime_configuration;
   control::PresetDocument loaded_preset;
+  loaded_preset.matrix.inputs = {{"mic", "Microphone"}};
+  loaded_preset.matrix.outputs = {{"main", "Main out"}};
   bool connected = false;
   float gain = 1.0F;
   bool muted = false;
@@ -56,12 +58,8 @@ int main() {
                                                  : loaded_preset.frames_per_block;
               response.has_preset = true;
               response.preset = loaded_preset;
-              if (response.preset.sample_rate == 0) {
-                response.preset.sample_rate = 48000;
-                response.preset.frames_per_block = 128;
-                response.preset.matrix.inputs = {{"mic", "Microphone"}};
-                response.preset.matrix.outputs = {{"main", "Main out"}};
-              }
+              response.preset.sample_rate = loaded_preset.sample_rate;
+              response.preset.frames_per_block = loaded_preset.frames_per_block;
               response.has_devices = true;
               response.devices = {
                   {"capture-device", "Capture device", platform::AudioBackendKind::Wasapi,

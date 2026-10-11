@@ -455,11 +455,8 @@ int main() {
                                     "Expected load preset accepted")) {
       return failure;
     }
-    if (const auto failure = expect(response.has_preset &&
-                                        response.preset.sample_rate == 48000 &&
-                                        response.preset.matrix.routes.size() == 2 &&
-                                        response.preset.matrix.routes[0].muted,
-                                    "Expected complete loaded preset snapshot")) {
+    if (const auto failure = expect(!response.has_preset,
+                                    "Expected load command acknowledgement only")) {
       return failure;
     }
     if (const auto failure = expect(session->current_graph()->version() == 13,
@@ -486,6 +483,18 @@ int main() {
                                         saved.has_preset &&
                                         saved.preset.matrix.routes[0].muted,
                                     "Expected save to return the active preset")) {
+      return failure;
+    }
+
+    sar::control::ControlCommand query;
+    query.command_id = "query_after_load";
+    query.type = sar::control::ControlCommandType::QuerySessionState;
+    const auto current = session->handle(query);
+    if (const auto failure = expect(current.has_preset &&
+                                        current.preset.sample_rate == 48000 &&
+                                        current.preset.matrix.routes.size() == 2 &&
+                                        current.preset.matrix.routes[0].muted,
+                                    "Expected session query to return loaded preset")) {
       return failure;
     }
   }
