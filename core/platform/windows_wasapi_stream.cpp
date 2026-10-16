@@ -836,6 +836,41 @@ WasapiStreamIoResult WindowsWasapiStream::capture_once(
       packet_frames, data_discontinuity, timestamp_error);
 }
 
+WasapiStreamIoResult WindowsWasapiStream::peek_capture_packet(
+    std::uint32_t& frames) noexcept {
+  frames = 0;
+  if (state_ != WasapiStreamState::Started) {
+    return WasapiStreamIoResult::failure(
+        realtime_error(WasapiRealtimeErrorCode::StreamNotStarted,
+                       WasapiRealtimeErrorContext::Capture));
+  }
+  if (probe_.direction != WasapiStreamDirection::Capture) {
+    return WasapiStreamIoResult::failure(
+        realtime_error(WasapiRealtimeErrorCode::WrongStreamDirection,
+                       WasapiRealtimeErrorContext::Capture));
+  }
+  if (!impl_ || !impl_->capture_client) {
+    return WasapiStreamIoResult::failure(
+        realtime_error(WasapiRealtimeErrorCode::NativeStreamUnavailable,
+                       WasapiRealtimeErrorContext::Capture));
+  }
+
+  UINT32 packet_frames = 0;
+  const auto packet_result =
+      impl_->capture_client->GetNextPacketSize(&packet_frames);
+  if (FAILED(packet_result)) {
+    return WasapiStreamIoResult::failure(realtime_error(
+        WasapiRealtimeErrorCode::WasapiCapturePacketFailed,
+        static_cast<WasapiRealtimeErrorContext>(
+            static_cast<std::uint16_t>(WasapiRealtimeErrorContext::Capture) |
+            static_cast<std::uint16_t>(WasapiRealtimeErrorContext::NativeHresult)),
+        static_cast<std::uint32_t>(packet_result)));
+  }
+
+  frames = packet_frames;
+  return WasapiStreamIoResult::success(packet_frames);
+}
+
 void WindowsWasapiStream::request_capture_poll() noexcept {
   if (state_ == WasapiStreamState::Started &&
       probe_.direction == WasapiStreamDirection::Capture && impl_) {

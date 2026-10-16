@@ -105,7 +105,7 @@ int main() {
     capture_probe.buffer_frames = 1;
     capture_probe.mix_format.frames_per_block = 1;
     sar::tests::ScriptedWasapiStream capture(capture_probe);
-    for (std::uint32_t packet = 0; packet < 8; ++packet) {
+    for (std::uint32_t packet = 0; packet < 9; ++packet) {
       capture.enqueue_capture(
           {.frames = 1, .samples = {{static_cast<float>(packet)}}});
     }

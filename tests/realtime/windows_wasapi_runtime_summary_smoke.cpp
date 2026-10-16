@@ -267,6 +267,14 @@ int main() {
                    "Expected copied FIFO diagnostics")) {
       return failure;
     }
+    sar::diagnostics::EngineDiagnostics reset_diagnostics;
+    const auto reset_summary = sar::platform::summarize_wasapi_runtime(
+        stats, {}, nullptr, nullptr, &reset_diagnostics);
+    if (const auto failure = expect(
+            reset_summary.capture_packet_drain_budget_cycles == 0,
+            "Expected explicit engine snapshot to clear stale worker count")) {
+      return failure;
+    }
     const auto summary_line =
         sar::platform::format_wasapi_runtime_summary_line(summary);
     if (const auto failure =

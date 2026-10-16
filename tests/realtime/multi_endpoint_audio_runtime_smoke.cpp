@@ -167,7 +167,9 @@ int main() {
         .correction_ppm = -17.25},
        {.endpoint_id = "missing-endpoint",
         .queue_fill_frames = 999,
-        .correction_ppm = 999.0}});
+        .correction_ppm = 999.0},
+       {.endpoint_id = "render-a",
+        .diagnostics = {.capture_packet_drain_budget_cycles = 5}}});
   assert(endpoint_diagnostics[1].diagnostics.xrun_count == 6);
   assert(endpoint_diagnostics[1].diagnostics.virtual_asio_pushed_blocks ==
          12);
@@ -181,7 +183,7 @@ int main() {
   assert(endpoint_diagnostics[1].queue_fill_frames == 384);
   assert(endpoint_diagnostics[1].correction_ppm == -17.25);
   assert(endpoint_diagnostics[1].diagnostics
-             .capture_packet_drain_budget_cycles == 20);
+             .capture_packet_drain_budget_cycles == 25);
   assert(!endpoint_diagnostics[0].queue_fill_frames.has_value());
   assert(!endpoint_diagnostics[2].queue_fill_frames.has_value());
 

@@ -938,9 +938,18 @@ WasapiGraphRunnerResult WindowsWasapiGraphRunner::process_buffered_once(
     }
     if (render_master_ &&
         capture_packets_drained == kMaximumCapturePacketsPerCycle) {
-      capture_stream_->request_capture_poll();
-      stats.capture_packet_drain_budget_reached = true;
-      ++diagnostics.capture_packet_drain_budget_cycles;
+      std::uint32_t pending_capture_frames = 0;
+      const auto pending_result =
+          capture_stream_->peek_capture_packet(pending_capture_frames);
+      if (!pending_result.ok()) {
+        return WasapiGraphRunnerResult::failure(
+            realtime_error_from(pending_result));
+      }
+      if (pending_capture_frames > 0) {
+        capture_stream_->request_capture_poll();
+        stats.capture_packet_drain_budget_reached = true;
+        ++diagnostics.capture_packet_drain_budget_cycles;
+      }
     }
     stats.capture_stream_idle = stats.captured_frames == 0;
   }

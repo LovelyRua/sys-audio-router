@@ -263,7 +263,9 @@ int main() {
 
   sar::control::ControlResponse version14_response;
   version14_response.has_diagnostics = true;
+  version14_response.diagnostics.processed_blocks = 123;
   version14_response.diagnostics.capture_packet_drain_budget_cycles = 29;
+  version14_response.diagnostics.render_fifo_overflow_cycles = 456;
   auto encoded_v14 =
       sar::control::encode_control_response(version14_response).bytes;
   constexpr std::size_t kBudgetFieldOffset =
@@ -278,6 +280,8 @@ int main() {
   assert(decoded_v14.ok());
   assert(decoded_v14.response.diagnostics.capture_packet_drain_budget_cycles ==
          0);
+  assert(decoded_v14.response.diagnostics.processed_blocks == 123);
+  assert(decoded_v14.response.diagnostics.render_fifo_overflow_cycles == 456);
   assert(decoded_response.response.has_wasapi_recovery);
   assert(decoded_response.response.wasapi_recovery.state ==
          sar::control::WasapiRecoveryState::Backoff);

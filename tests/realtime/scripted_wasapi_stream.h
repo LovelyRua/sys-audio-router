@@ -123,6 +123,23 @@ class ScriptedWasapiStream final : public platform::WasapiStreamIo {
                        std::move(step.errors));
   }
 
+  [[nodiscard]] platform::WasapiStreamIoResult peek_capture_packet(
+      std::uint32_t& frames) noexcept override {
+    ++capture_packet_peek_calls_;
+    frames = 0;
+    if (capture_steps_.empty()) {
+      return platform::WasapiStreamIoResult::success(0);
+    }
+    const auto& step = capture_steps_.front();
+    if (step.status == platform::WasapiStreamIoStatus::Failed) {
+      return platform::WasapiStreamIoResult::failure(step.errors);
+    }
+    if (step.status == platform::WasapiStreamIoStatus::Completed) {
+      frames = step.frames;
+    }
+    return platform::WasapiStreamIoResult::success(frames);
+  }
+
   void request_stop() noexcept override { ++request_stop_calls_; }
   void request_capture_poll() noexcept override { ++capture_poll_requests_; }
 
@@ -146,6 +163,9 @@ class ScriptedWasapiStream final : public platform::WasapiStreamIo {
   }
   [[nodiscard]] std::size_t capture_poll_requests() const noexcept {
     return capture_poll_requests_;
+  }
+  [[nodiscard]] std::size_t capture_packet_peek_calls() const noexcept {
+    return capture_packet_peek_calls_;
   }
 
  private:
@@ -186,6 +206,7 @@ class ScriptedWasapiStream final : public platform::WasapiStreamIo {
   std::size_t stop_calls_ = 0;
   std::size_t request_stop_calls_ = 0;
   std::size_t capture_poll_requests_ = 0;
+  std::size_t capture_packet_peek_calls_ = 0;
 };
 
 }  // namespace sar::tests
