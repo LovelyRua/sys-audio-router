@@ -147,13 +147,17 @@ int main() {
   {
     sar::tests::ScriptedWasapiStream capture(
         make_probe(sar::platform::WasapiStreamDirection::Capture, 1));
+    sar::tests::ScriptedWasapiStream render(
+        make_probe(sar::platform::WasapiStreamDirection::Render, 1));
     for (std::uint32_t packet = 0; packet < 9; ++packet) {
       capture.enqueue_capture({.frames = 1,
                                .samples = {{static_cast<float>(packet + 1)}}});
     }
+    render.enqueue_render({.writable_frames = 1});
+    render.enqueue_render({.writable_frames = 1});
 
     sar::platform::WindowsWasapiGraphRunner runner(
-        &capture, nullptr, 1, 1, 1, 1, 0, 32, true);
+        &capture, &render, 1, 1, 1, 1, 1, 32, true);
     sar::graph::Graph graph(3, 1, 1, 48000);
     graph.add_node(std::make_unique<sar::graph::PassthroughNode>());
     sar::diagnostics::EngineDiagnostics diagnostics;
@@ -166,8 +170,10 @@ int main() {
     assert(diagnostics.capture_packet_drain_budget_cycles == 1);
 
     const auto follow_up = runner.process_once(graph, diagnostics, 1);
-    assert(follow_up.ok() && follow_up.stats().captured_frames == 1);
+    assert(follow_up.ok());
+    assert(follow_up.stats().captured_frames == 1);
     assert(!follow_up.stats().capture_packet_drain_budget_reached);
+    assert(capture.remaining_capture_steps() == 0);
     assert(capture.capture_poll_requests() == 1);
     assert(diagnostics.capture_packet_drain_budget_cycles == 1);
   }

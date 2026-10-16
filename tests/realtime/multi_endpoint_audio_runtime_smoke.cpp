@@ -169,6 +169,8 @@ int main() {
         .queue_fill_frames = 999,
         .correction_ppm = 999.0},
        {.endpoint_id = "render-a",
+        .queue_fill_frames = 384,
+        .correction_ppm = -17.25,
         .diagnostics = {.capture_packet_drain_budget_cycles = 5}}});
   assert(endpoint_diagnostics[1].diagnostics.xrun_count == 6);
   assert(endpoint_diagnostics[1].diagnostics.virtual_asio_pushed_blocks ==
