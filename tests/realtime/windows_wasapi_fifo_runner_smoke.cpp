@@ -153,6 +153,8 @@ int main() {
       capture.enqueue_capture({.frames = 1,
                                .samples = {{static_cast<float>(packet + 1)}}});
     }
+    capture.enqueue_capture(
+        {.status = sar::platform::WasapiStreamIoStatus::TimedOut});
     render.enqueue_render({.writable_frames = 1});
     render.enqueue_render({.writable_frames = 1});
 
