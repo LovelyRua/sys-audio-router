@@ -9,8 +9,8 @@ function ConvertFrom-SarMatrixSignalProbeEvidence {
   )
 
   $integerNames = @('sent_frames', 'captured_frames', 'silent_frames',
-    'capture_packets', 'discontinuity_packets', 'max_packet_frames')
-  $powerNames = @('target_power', 'cross_channel_power', 'second_channel_power')
+    'capture_packets', 'discontinuity_packets', 'max_packet_frames', 'nonzero_samples')
+  $powerNames = @('target_power', 'cross_channel_power', 'first_channel_power', 'second_channel_power')
   $names = $integerNames + $powerNames
   $result = [ordered]@{ passed = $false; reason = ''; exit_code = $ExitCode;
     routes_enabled = $RoutesEnabled }
@@ -96,19 +96,29 @@ function ConvertFrom-SarMatrixSignalProbeEvidence {
   }
 
   if ($result.sent_frames -eq 0) { $result.reason = 'no_sent_frames' }
+  elseif ($result.sent_frames -lt 48000) { $result.reason = 'insufficient_render' }
   elseif ($result.captured_frames -lt 48000) { $result.reason = 'insufficient_capture' }
   elseif ($result.capture_packets -eq 0) { $result.reason = 'no_capture_packets' }
   elseif ($result.max_packet_frames -eq 0) { $result.reason = 'no_packet_frames' }
+  elseif ($result.silent_frames -gt $result.captured_frames -or
+      $result.max_packet_frames -gt $result.captured_frames -or
+      $result.capture_packets -gt $result.captured_frames -or
+      $result.nonzero_samples -gt ([decimal]$result.captured_frames * 2)) {
+    $result.reason = 'invalid_capture_accounting'
+  }
   elseif ($RoutesEnabled) {
     if ($ExitCode -ne 0) { $result.reason = 'enabled_exit_code' }
-    elseif ($result.target_power -lt 1e12 -or $result.second_channel_power -lt 1e12) {
+    elseif ($result.nonzero_samples -eq 0 -or $result.target_power -lt 1e12 -or $result.first_channel_power -lt 1e12 -or
+        $result.second_channel_power -lt 1e12) {
       $result.reason = 'insufficient_signal_power'
-    } elseif ($result.target_power -lt $result.cross_channel_power * 100.0) {
+    } elseif ($result.cross_channel_power -gt
+        ($result.first_channel_power / 100.0 + $result.second_channel_power / 100.0)) {
       $result.reason = 'crosstalk'
     }
   } else {
     if ($ExitCode -ne 3) { $result.reason = 'disabled_exit_code' }
-    elseif ($result.target_power -ne 0 -or $result.cross_channel_power -ne 0 -or
+    elseif ($result.nonzero_samples -ne 0 -or $result.target_power -ne 0 -or $result.cross_channel_power -ne 0 -or
+        $result.first_channel_power -ne 0 -or
         $result.second_channel_power -ne 0) { $result.reason = 'control_not_silent' }
   }
   $result.passed = ($result.reason -eq '')

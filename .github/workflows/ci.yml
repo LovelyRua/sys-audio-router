@@ -35,6 +35,36 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Record matrix lab build identity
+        shell: pwsh
+        run: |
+          @{
+            commit = '${{ github.sha }}'
+            run_id = '${{ github.run_id }}'
+            binaries = @(Get-FileHash build/Release/sar_engine_service.exe,
+              build/Release/sar_control_cli.exe -Algorithm SHA256 |
+              Select-Object Path, Hash)
+          } | ConvertTo-Json -Depth 4 |
+            Set-Content build/Release/matrix-lab-build.json -Encoding utf8
+
+      - name: Upload public WASAPI matrix lab tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-audio-route-matrix-lab-tools
+          path: |
+            build/Release/sar_engine_service.exe
+            build/Release/sar_control_cli.exe
+            build/Release/matrix-lab-build.json
+            scripts/windows-virtual-wasapi-matrix-preflight.ps1
+            scripts/windows-lab-process.psm1
+            scripts/windows-virtual-wasapi-signal-evidence.psm1
+            LICENSE
+            NOTICE.md
+            third_party/libsamplerate/COPYING
+            third_party/asio_sdk_2.3.4/common/LICENSE.txt
+          if-no-files-found: error
+          retention-days: 3
+
   windows-asan:
     name: Windows AddressSanitizer (advisory)
     runs-on: windows-latest
