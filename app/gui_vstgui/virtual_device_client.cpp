@@ -273,7 +273,11 @@ VirtualDeviceSnapshot parseVirtualDeviceSnapshot(const std::string& json) {
     // Keep COM lifetime scoped to this blocking worker call, not the client/UI lifetime.
     Apartment apartment;
     using namespace winrt::Windows::Data::Json;
-    const auto root = JsonObject::Parse(winrt::hstring(text));
+    // Each worker may be the last MTA user. A cached static activation factory
+    // can outlive that apartment; keep this factory local and release it first.
+    const auto factory = winrt::get_activation_factory<IJsonObjectStatics>(
+        L"Windows.Data.Json.JsonObject");
+    const auto root = factory.Parse(winrt::hstring(text));
     if (integer(root, L"maximum") != 4) throw std::runtime_error("Unexpected instance maximum");
     const auto items = field(root, L"instances", JsonValueType::Array).GetArray();
     if (items.Size() > 4) throw std::runtime_error("Too many instances");

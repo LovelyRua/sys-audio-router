@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <thread>
 
 namespace {
 using namespace sar::gui_vstgui;
@@ -49,6 +50,7 @@ void invalidAction(VirtualDeviceAction action, const std::string& id,
 
 int main() {
   using namespace sar::gui_vstgui;
+  std::cout << "Starting scoped WinRT inventory checks" << std::endl;
   const auto empty = parseVirtualDeviceSnapshot(roster(""));
   require(empty.available && empty.maximum == 4 && empty.instances.empty() &&
       empty.error.empty(), "Empty inventory is a valid installed helper response");
@@ -63,6 +65,7 @@ int main() {
       "Optional UTF-8 BOM must be accepted");
   require(parseVirtualDeviceSnapshot(" \r\n" + good + "\r\n").available,
       "JSON whitespace must be accepted");
+  std::cout << "Basic inventory and apartment teardown checks passed" << std::endl;
   const std::string chinese = "\xE8\x99\x9A\xE6\x8B\x9F\xE9\x9F\xB3\xE9\xA2\x91";
   const auto unicode = parseVirtualDeviceSnapshot(roster(instance(R"(root\\media\\12)", chinese)));
   require(unicode.available && unicode.instances.size() == 1,
@@ -125,6 +128,18 @@ int main() {
   rejected(roster(instance() + ",null"));
 
   std::cout << "JSON inventory checks passed" << std::endl;
+  for (int round = 0; round < 8; ++round) {
+    std::vector<std::thread> workers;
+    for (int i = 0; i < 4; ++i) {
+      workers.emplace_back([good] {
+        for (int sample = 0; sample < 8; ++sample)
+          require(parseVirtualDeviceSnapshot(good).available,
+              "Repeated worker apartment inventory failed");
+      });
+    }
+    for (auto& worker : workers) worker.join();
+  }
+  std::cout << "Repeated and concurrent worker apartment checks passed" << std::endl;
 
   const std::string id = "ROOT\\MEDIA\\1";
   invalidAction(static_cast<VirtualDeviceAction>(999), {}, {});
