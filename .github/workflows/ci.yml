@@ -29,7 +29,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: system-audio-route-vstgui-preview
-          path: build/Release/SystemAudioRouteVstgui.exe
+          path: |
+            build/Release/SystemAudioRouteVstgui.exe
+            build/Release/licenses/
+            build/Release/LICENSE
+            build/Release/NOTICE.md
           if-no-files-found: error
           retention-days: 7
 

@@ -194,6 +194,13 @@ if(SAR_BUILD_GUI_VSTGUI)
     SOURCE_SUBDIR vstgui
   )
   FetchContent_MakeAvailable(vstgui)
+  set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
+  set(JSON_Install OFF CACHE BOOL "" FORCE)
+  FetchContent_Declare(nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+    GIT_SHALLOW TRUE)
+  FetchContent_MakeAvailable(nlohmann_json)
 
   add_executable(sar_gui_vstgui WIN32
     app/gui_vstgui/main.cpp
@@ -220,7 +227,7 @@ if(SAR_BUILD_GUI_VSTGUI)
     vstgui
     vstgui_uidescription
     vstgui_standalone
-    windowsapp runtimeobject shell32 comdlg32
+    nlohmann_json::nlohmann_json shell32 comdlg32
   )
   sar_add_version_resource(sar_gui_vstgui
     "System Audio Route control panel (VSTGUI prototype)"
@@ -239,7 +246,23 @@ if(SAR_BUILD_GUI_VSTGUI)
     app/gui_vstgui/virtual_device_client.cpp)
   target_include_directories(sar_gui_virtual_device_client_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_compile_features(sar_gui_virtual_device_client_smoke PRIVATE cxx_std_20)
-  target_link_libraries(sar_gui_virtual_device_client_smoke PRIVATE windowsapp runtimeobject shell32 ole32)
+  target_link_libraries(sar_gui_virtual_device_client_smoke PRIVATE nlohmann_json::nlohmann_json shell32 ole32)
+  add_custom_command(TARGET sar_gui_vstgui POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/nlohmann-json"
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/vstgui"
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/libsamplerate"
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/asio-sdk"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${nlohmann_json_SOURCE_DIR}/LICENSE.MIT"
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/nlohmann-json/LICENSE.MIT"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${vstgui_SOURCE_DIR}/LICENSE"
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/vstgui/LICENSE"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PROJECT_SOURCE_DIR}/third_party/libsamplerate/COPYING"
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/libsamplerate/COPYING"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PROJECT_SOURCE_DIR}/third_party/asio_sdk_2.3.4/common/LICENSE.txt"
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/asio-sdk/LICENSE.txt"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PROJECT_SOURCE_DIR}/LICENSE" "${PROJECT_SOURCE_DIR}/NOTICE.md"
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>")
 endif()
 
 add_executable(sar_realtime_smoke

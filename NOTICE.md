@@ -4,6 +4,11 @@ System Audio Route is licensed under GNU GPL version 3. See `LICENSE`.
 
 ## Third-party components
 
+- **nlohmann/json 3.11.3** (MIT), used only by the optional VSTGUI preview to
+  decode the independent virtual-device manager's JSON inventory. Its license
+  ships with that preview in `licenses/nlohmann-json/LICENSE.MIT`.
+- **VSTGUI 4.9** (BSD-3-Clause), used only by the optional native control-panel
+  preview. Its license ships with that preview in `licenses/vstgui/LICENSE`.
 - **Steinberg ASIO SDK 2.3.4** (unmodified interface headers). Copyright
   Steinberg Media Technologies GmbH, used under the GPLv3 option described by
   the SDK's included license. Source and archive verification details are in

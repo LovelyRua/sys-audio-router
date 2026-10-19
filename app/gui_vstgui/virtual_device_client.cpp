@@ -5,11 +5,10 @@
 #endif
 #include <Windows.h>
 #include <shellapi.h>
-#include <winrt/Windows.Foundation.Collections.h>
-#include <winrt/Windows.Data.Json.h>
+#include <nlohmann/json.hpp>
 
 #include <algorithm>
-#include <cmath>
+#include <cstdint>
 #include <cwctype>
 #include <limits>
 #include <mutex>
@@ -37,19 +36,11 @@ struct Handle {
 };
 
 struct Apartment {
-  struct ProcessMta {
-    CO_MTA_USAGE_COOKIE cookie = nullptr;
-    ProcessMta() { winrt::check_hresult(CoIncrementMTAUsage(&cookie)); }
-    ~ProcessMta() { if (cookie) CoDecrementMTAUsage(cookie); }
-  };
   Apartment() {
-    // Prevent COM_E_SERVER_STOPPING when a new query starts while the previous
-    // short-lived worker is tearing down the process's last explicit MTA user.
-    static ProcessMta lifetime;
-    static_cast<void>(lifetime);
-    winrt::init_apartment(winrt::apartment_type::multi_threaded);
+    if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE)))
+      throw std::runtime_error("Could not initialize Windows device management worker");
   }
-  ~Apartment() { winrt::uninit_apartment(); }
+  ~Apartment() { CoUninitialize(); }
 };
 
 struct MutationGate {
@@ -243,22 +234,12 @@ VirtualDeviceSnapshot inspectHelper(const std::wstring& path) {
   return parseVirtualDeviceSnapshot(output);
 }
 
-winrt::Windows::Data::Json::IJsonValue field(
-    const winrt::Windows::Data::Json::JsonObject& object, const wchar_t* name,
-    winrt::Windows::Data::Json::JsonValueType type) {
-  const auto value = object.GetNamedValue(name);
-  if (value.ValueType() != type) throw std::runtime_error("Wrong JSON field type");
-  return value;
-}
-
-unsigned long integer(const winrt::Windows::Data::Json::JsonObject& object,
-                      const wchar_t* name) {
-  const double value = field(object, name,
-      winrt::Windows::Data::Json::JsonValueType::Number).GetNumber();
-  if (!std::isfinite(value) || value < 0 || std::floor(value) != value ||
-      value > (std::numeric_limits<unsigned long>::max)())
+unsigned long integer(const nlohmann::json& object, const char* name) {
+  const auto& value = object.at(name);
+  if (!value.is_number_unsigned() ||
+      value.get<std::uint64_t>() > (std::numeric_limits<unsigned long>::max)())
     throw std::runtime_error("Invalid JSON integer");
-  return static_cast<unsigned long>(value);
+  return value.get<unsigned long>();
 }
 
 bool absoluteInf(const std::wstring& path) {
@@ -279,29 +260,20 @@ VirtualDeviceSnapshot parseVirtualDeviceSnapshot(const std::string& json) {
   if (json.empty() || json.size() > kMaximumOutput)
     return unavailable("Invalid experimental helper JSON size (maximum 1 MiB)");
   try {
-    const bool bom = json.size() >= 3 && json.compare(0, 3, "\xEF\xBB\xBF") == 0;
-    const auto text = wide(bom ? json.substr(3) : json);
-    // Keep COM lifetime scoped to this blocking worker call, not the client/UI lifetime.
-    Apartment apartment;
-    using namespace winrt::Windows::Data::Json;
-    // Each worker may be the last MTA user. A cached static activation factory
-    // can outlive that apartment; keep this factory local and release it first.
-    const auto factory = winrt::get_activation_factory<IJsonObjectStatics>(
-        L"Windows.Data.Json.JsonObject");
-    const auto root = factory.Parse(winrt::hstring(text));
-    if (integer(root, L"maximum") != 4) throw std::runtime_error("Unexpected instance maximum");
-    const auto items = field(root, L"instances", JsonValueType::Array).GetArray();
-    if (items.Size() > 4) throw std::runtime_error("Too many instances");
+    const auto root = nlohmann::json::parse(json);
+    if (!root.is_object() || integer(root, "maximum") != 4)
+      throw std::runtime_error("Unexpected instance maximum");
+    const auto& items = root.at("instances");
+    if (!items.is_array() || items.size() > 4) throw std::runtime_error("Invalid instance array");
     VirtualDeviceSnapshot result;
     result.maximum = 4;
     std::vector<std::wstring> ids;
     for (const auto& item : items) {
-      if (item.ValueType() != JsonValueType::Object) throw std::runtime_error("Invalid instance");
-      const auto object = item.GetObject();
-      const auto idString = field(object, L"id", JsonValueType::String).GetString();
-      const auto labelString = field(object, L"label", JsonValueType::String).GetString();
-      const std::wstring id(idString.c_str(), idString.size());
-      const std::wstring label(labelString.c_str(), labelString.size());
+      if (!item.is_object() || !item.at("id").is_string() || !item.at("label").is_string() ||
+          !item.at("started").is_boolean() || !item.at("problem").is_boolean())
+        throw std::runtime_error("Wrong JSON instance field type");
+      const auto id = wide(item.at("id").get<std::string>());
+      const auto label = wide(item.at("label").get<std::string>());
       if (!validId(id) || !validLabel(label)) throw std::runtime_error("Invalid instance ID or label");
       const auto key = canonicalId(id);
       if (std::find(ids.begin(), ids.end(), key) != ids.end())
@@ -311,18 +283,13 @@ VirtualDeviceSnapshot parseVirtualDeviceSnapshot(const std::string& json) {
       instance.id = utf8(id);
       instance.label = utf8(label);
       // started is only PnP state, never evidence of WASAPI/audio readiness.
-      instance.started = field(object, L"started", JsonValueType::Boolean).GetBoolean();
-      instance.problem = field(object, L"problem", JsonValueType::Boolean).GetBoolean();
-      instance.problemCode = integer(object, L"problemCode");
+      instance.started = item.at("started").get<bool>();
+      instance.problem = item.at("problem").get<bool>();
+      instance.problemCode = integer(item, "problemCode");
       result.instances.push_back(std::move(instance));
     }
     result.available = true;
     return result;
-  } catch (const winrt::hresult_error& error) {
-    return unavailable("Invalid experimental helper JSON (Windows error " +
-        std::to_string(static_cast<long>(error.code())) + ")");
-  } catch (const std::exception& error) {
-    return unavailable(std::string("Invalid experimental helper JSON: ") + error.what());
   } catch (...) {
     return unavailable("Invalid experimental helper JSON: expected a strict four-instance PnP inventory");
   }
