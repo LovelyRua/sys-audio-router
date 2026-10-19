@@ -3,6 +3,7 @@
 #include "app/gui_vstgui/engine_client.h"
 #include "app/gui_vstgui/lcd_readout_view.h"
 #include "app/gui_vstgui/palette.h"
+#include "app/gui_vstgui/virtual_device_window.h"
 
 #include "vstgui/lib/cfont.h"
 #include "vstgui/lib/cdrawcontext.h"
@@ -167,6 +168,10 @@ class HeaderController final : public IControlListener {
   }
 
   void valueChanged(CControl* control) override {
+    if (control->getTag() == 900 && control->getValue() > 0.5F) {
+      showVirtualDeviceWindow();
+      return;
+    }
     if (control == gainSlider_.get()) {
       const auto route = selectedRoute();
       if (!route || !gainSlider_->isEditing()) return;
@@ -521,7 +526,7 @@ WindowPtr createMainWindow() {
   body->setBackgroundColor(palette::kCanvas);
   auto title = makeLabel(CRect(24, 14, 300, 42), "ROUTING MATRIX", palette::kText, true);
   body->addView(title);
-  auto summary = makeLabel(CRect(300, 14, 740, 42), "Matrix unavailable", palette::kMuted, false);
+  auto summary = makeLabel(CRect(240, 14, 590, 42), "Matrix unavailable", palette::kMuted, false);
   body->addView(summary);
   auto errorText = makeLabel(CRect(24, 44, kWindowWidth - 24, 70), "",
                             palette::kDanger, false);
@@ -620,6 +625,13 @@ WindowPtr createMainWindow() {
   frame->addView(body);
 
   auto controller = std::make_shared<HeaderController>();
+  auto virtualDevices = makeOwned<CTextButton>(CRect(596, 14, 742, 42), controller.get(),
+                                               900, "Virtual WASAPI");
+  virtualDevices->setGradient(nullptr);
+  virtualDevices->setFrameColor(palette::kLine);
+  virtualDevices->setTextColor(palette::kSteel);
+  virtualDevices->setRoundRadius(2);
+  body->addView(virtualDevices);
   controller->attachErrorView(errorText);
   controller->attachViews(dot, statusText, hzReadout, smpReadout, xrunReadout,
                           startStopButton);

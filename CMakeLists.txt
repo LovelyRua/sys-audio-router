@@ -204,6 +204,10 @@ if(SAR_BUILD_GUI_VSTGUI)
     app/gui_vstgui/lcd_readout_view.cpp
     app/gui_vstgui/lcd_readout_view.h
     app/gui_vstgui/palette.h
+    app/gui_vstgui/virtual_device_client.cpp
+    app/gui_vstgui/virtual_device_client.h
+    app/gui_vstgui/virtual_device_window.cpp
+    app/gui_vstgui/virtual_device_window.h
   )
   target_include_directories(sar_gui_vstgui PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -216,6 +220,7 @@ if(SAR_BUILD_GUI_VSTGUI)
     vstgui
     vstgui_uidescription
     vstgui_standalone
+    windowsapp runtimeobject shell32 comdlg32
   )
   sar_add_version_resource(sar_gui_vstgui
     "System Audio Route control panel (VSTGUI prototype)"
@@ -229,6 +234,12 @@ if(SAR_BUILD_GUI_VSTGUI)
     # in as the entry point rather than relying on implicit resolution.
     LINK_FLAGS "/INCLUDE:wWinMain"
   )
+  add_executable(sar_gui_virtual_device_client_smoke
+    tests/realtime/gui_virtual_device_client_smoke.cpp
+    app/gui_vstgui/virtual_device_client.cpp)
+  target_include_directories(sar_gui_virtual_device_client_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_compile_features(sar_gui_virtual_device_client_smoke PRIVATE cxx_std_20)
+  target_link_libraries(sar_gui_virtual_device_client_smoke PRIVATE windowsapp runtimeobject shell32)
 endif()
 
 add_executable(sar_realtime_smoke
@@ -1037,6 +1048,10 @@ add_executable(sar_spsc_ring_buffer_threaded_smoke
 target_link_libraries(sar_spsc_ring_buffer_threaded_smoke PRIVATE sar_core)
 
 enable_testing()
+if(TARGET sar_gui_virtual_device_client_smoke)
+  add_test(NAME gui_virtual_device_client_smoke COMMAND sar_gui_virtual_device_client_smoke)
+  set_tests_properties(gui_virtual_device_client_smoke PROPERTIES TIMEOUT 20)
+endif()
 add_test(NAME realtime_smoke COMMAND sar_realtime_smoke)
 add_test(NAME atomic_float_parameter_smoke COMMAND sar_atomic_float_parameter_smoke)
 add_test(NAME meter_node_smoke COMMAND sar_meter_node_smoke)
