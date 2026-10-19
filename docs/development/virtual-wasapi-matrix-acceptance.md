@@ -54,3 +54,33 @@ A content pass is not a continuity or soak pass. Discontinuity counts remain
 visible in the evidence and must be assessed separately with the driver project's
 strict timing/level probe. This lab workflow is also not GUI or installer
 acceptance and does not make the experimental driver a shipped product feature.
+
+## VM24 evidence: 2026-10-19
+
+Interactive run `c2ab6d6510994237a8e4264b249bb5bc` passed both same-adapter
+and cross-adapter cases, each with the four phases above. Both engines stopped
+gracefully with exit code zero. Disabled phases captured actual packets with
+zero nonzero PCM16 samples; enabled phases detected both expected channel tones.
+Local raw reports are retained under the workspace artifact directory, not Git.
+
+| Case | Captured frames per phase | Discontinuity packets per phase |
+| --- | --- | --- |
+| Same adapter | 192000 / 191520 / 191520 / 191616 | 1 / 1 / 1 / 2 |
+| Cross adapter | 159936 / 158976 / 159936 / 121632 | 3 / 3 / 3 / 5 |
+
+This is a content/control milestone, not evidence of stable timing. In particular,
+the cross-adapter capture coverage and discontinuities require separate strict
+continuity analysis before claiming glitch-free operation.
+
+The engine and CLI came from successful main package run `37250595420`, source
+`68ff15ab691143b5fc4c34bfd71c974c73bf4e2d`. Git confirmed no changes in `core`,
+`tools`, `app`, or root `CMakeLists.txt` between that source and this acceptance
+branch. Scripts came from `7c1cc0a1b559d46c5e6743056f7e268c1a3a3dfc`;
+the independent probe came from driver source
+`9943f7ea558a73e2bec8e810e3b1d1afeee0c217`.
+Each result records binary and script hashes for reproduction. No installer was
+run and no driver or host software was installed during this round.
+
+An earlier run passed its per-case sound checks but the outer runner reported
+failure because success had no explicit script exit code. The preflight now
+returns zero explicitly; the run above repeated both cases after that fix.
