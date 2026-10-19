@@ -24,6 +24,7 @@
 #include <vector>
 #include <algorithm>
 #include <optional>
+#include <thread>
 
 using namespace VSTGUI;
 using namespace VSTGUI::Standalone;
@@ -283,7 +284,7 @@ class HeaderController final : public IControlListener {
     auto route = std::move(routeCommand_);
     routeCommand_.reset();
     try {
-      pending_ = std::async(std::launch::async, [client = client_, command, route] {
+      std::packaged_task<EngineState()> task([client = client_, command, route] {
         if (route) {
           switch (route->action) {
             case RouteAction::Connect:
@@ -299,6 +300,9 @@ class HeaderController final : public IControlListener {
         return command == 1 ? client->start()
              : command == 2 ? client->stop() : client->poll();
       });
+      auto future = task.get_future();
+      std::thread(std::move(task)).detach();
+      pending_ = std::move(future);
     } catch (...) {
       auto state = last_;
       state.lastError = "Could not start the engine request worker";
@@ -444,6 +448,27 @@ class HeaderController final : public IControlListener {
   SharedPointer<CTextButton> button_;
 };
 
+class MainWindowController final : public WindowControllerAdapter {
+ public:
+  void startPolling(std::shared_ptr<HeaderController> controller) {
+    controller_ = std::move(controller);
+    timer_ = makeOwned<CVSTGUITimer>([controller = controller_](CVSTGUITimer*) {
+      controller->refresh();
+    }, 30, true);
+    controller_->refresh();
+  }
+
+  void onClosed(const IWindow&) override {
+    if (timer_) timer_->stop();
+    timer_ = nullptr;
+    controller_.reset();
+  }
+
+ private:
+  std::shared_ptr<HeaderController> controller_;
+  SharedPointer<CVSTGUITimer> timer_;
+};
+
 SharedPointer<CTextLabel> makeLabel(const CRect& rect, const char* text, CColor color,
                                     bool bold) {
   auto label = makeOwned<CTextLabel>(rect, text);
@@ -466,9 +491,9 @@ WindowPtr createMainWindow() {
   config.title = "System Audio Route";
   config.autoSaveFrameName = "SystemAudioRouteMainWindow";
 
-  // VSTGUI 4.9's CloseWindow command path requires a non-null controller.
-  auto window = IApplication::instance().createWindow(config,
-      std::make_shared<WindowControllerAdapter>());
+  // Window command/menu dispatch requires a controller, which also owns polling.
+  auto windowController = std::make_shared<MainWindowController>();
+  auto window = IApplication::instance().createWindow(config, windowController);
   if (!window) {
     return nullptr;
   }
@@ -644,15 +669,8 @@ WindowPtr createMainWindow() {
   controller->attachInspector(selectedSource, selectedDestination, gainText,
                               gainSlider, muteButton, resetButton, removeButton);
   startStopButton->setListener(controller.get());
-  // The controller and its views must outlive the timer, which is the case
-  // here: the frame (owned by the window) holds the views, and this lambda
-  // holds the last strong reference to the controller for the process's
-  // lifetime, matching CVSTGUITimer's own fire-and-forget ownership model.
-  new CVSTGUITimer([controller](CVSTGUITimer*) { controller->refresh(); },
-                   30, true);
-  controller->refresh();
-
   window->setContentView(frame);
+  windowController->startPolling(std::move(controller));
   return window;
 }
 
