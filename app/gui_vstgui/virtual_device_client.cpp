@@ -37,7 +37,18 @@ struct Handle {
 };
 
 struct Apartment {
-  Apartment() { winrt::init_apartment(winrt::apartment_type::multi_threaded); }
+  struct ProcessMta {
+    CO_MTA_USAGE_COOKIE cookie = nullptr;
+    ProcessMta() { winrt::check_hresult(CoIncrementMTAUsage(&cookie)); }
+    ~ProcessMta() { if (cookie) CoDecrementMTAUsage(cookie); }
+  };
+  Apartment() {
+    // Prevent COM_E_SERVER_STOPPING when a new query starts while the previous
+    // short-lived worker is tearing down the process's last explicit MTA user.
+    static ProcessMta lifetime;
+    static_cast<void>(lifetime);
+    winrt::init_apartment(winrt::apartment_type::multi_threaded);
+  }
   ~Apartment() { winrt::uninit_apartment(); }
 };
 

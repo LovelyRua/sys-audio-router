@@ -239,7 +239,7 @@ if(SAR_BUILD_GUI_VSTGUI)
     app/gui_vstgui/virtual_device_client.cpp)
   target_include_directories(sar_gui_virtual_device_client_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_compile_features(sar_gui_virtual_device_client_smoke PRIVATE cxx_std_20)
-  target_link_libraries(sar_gui_virtual_device_client_smoke PRIVATE windowsapp runtimeobject shell32)
+  target_link_libraries(sar_gui_virtual_device_client_smoke PRIVATE windowsapp runtimeobject shell32 ole32)
 endif()
 
 add_executable(sar_realtime_smoke
