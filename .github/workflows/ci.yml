@@ -16,6 +16,20 @@ jobs:
       - name: Configure
         run: cmake -S . -B build -DSAR_BUILD_GUI_VSTGUI=ON
 
+      - name: Build native control panel first
+        run: cmake --build build --config Release --target sar_gui_vstgui sar_gui_virtual_device_client_smoke
+
+      - name: Test native virtual device client
+        run: ctest --test-dir build -C Release --output-on-failure -R "^gui_virtual_device_client_smoke$"
+
+      - name: Upload VSTGUI preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-audio-route-vstgui-preview
+          path: build/Release/SystemAudioRouteVstgui.exe
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Build
         run: cmake --build build --config Release
 
@@ -26,14 +40,6 @@ jobs:
         shell: pwsh
         timeout-minutes: 10
         run: scripts/windows-script-self-tests.ps1
-
-      - name: Upload VSTGUI preview
-        uses: actions/upload-artifact@v4
-        with:
-          name: system-audio-route-vstgui-preview
-          path: build/Release/SystemAudioRouteVstgui.exe
-          if-no-files-found: error
-          retention-days: 7
 
       - name: Record matrix lab build identity
         shell: pwsh
