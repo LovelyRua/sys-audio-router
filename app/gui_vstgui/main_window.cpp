@@ -13,6 +13,7 @@
 #include "vstgui/lib/controls/ctextlabel.h"
 #include "vstgui/lib/cvstguitimer.h"
 #include "vstgui/standalone/include/iapplication.h"
+#include "vstgui/standalone/include/helpers/windowcontroller.h"
 
 #include <cstdio>
 #include <cmath>
@@ -464,7 +465,9 @@ WindowPtr createMainWindow() {
   config.title = "System Audio Route";
   config.autoSaveFrameName = "SystemAudioRouteMainWindow";
 
-  auto window = IApplication::instance().createWindow(config, nullptr);
+  // VSTGUI 4.9's CloseWindow command path requires a non-null controller.
+  auto window = IApplication::instance().createWindow(config,
+      std::make_shared<WindowControllerAdapter>());
   if (!window) {
     return nullptr;
   }

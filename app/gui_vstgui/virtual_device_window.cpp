@@ -18,11 +18,13 @@
 #include "vstgui/standalone/include/iapplication.h"
 #include "vstgui/standalone/include/iwindow.h"
 #include "vstgui/standalone/include/helpers/windowlistener.h"
+#include "vstgui/standalone/include/helpers/windowcontroller.h"
 
 #include <algorithm>
 #include <chrono>
 #include <future>
 #include <iterator>
+#include <memory>
 #include <thread>
 
 namespace sar::gui_vstgui {
@@ -319,7 +321,8 @@ void showVirtualDeviceWindow() {
   config.style.border().close().centered();
   config.size = CPoint(kWidth, kHeight);
   config.title = kTitle;
-  auto window = IApplication::instance().createWindow(config, nullptr);
+  auto window = IApplication::instance().createWindow(config,
+      std::make_shared<WindowControllerAdapter>());
   if (!window) return;
   auto frame = makeOwned<CFrame>(CRect(0, 0, kWidth, kHeight), nullptr);
   frame->setFocusDrawingEnabled(true);
