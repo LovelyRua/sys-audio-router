@@ -194,7 +194,8 @@ class DevicePanel final : public CViewContainer, public IControlListener {
       int selected = -1;
       for (std::size_t i = 0; i < snapshot_.instances.size(); ++i) {
         const auto& instance = snapshot_.instances[i];
-        adapters_->addEntry(instance.label.c_str());
+        const auto suffix = instance.id.substr(instance.id.find_last_of('\\') + 1);
+        adapters_->addEntry((instance.label + " [" + suffix + "]").c_str());
         if (instance.id == selectedId_) selected = static_cast<int>(i);
       }
       if (selected < 0 && !snapshot_.instances.empty()) selected = 0;
@@ -237,18 +238,22 @@ class DevicePanel final : public CViewContainer, public IControlListener {
   }
 
   void updateEnabled() {
+    const auto enable = [](CView* view, bool active) {
+      view->setMouseEnabled(active);
+      view->setAlphaValue(active ? 1.0F : 0.4F);
+    };
     const bool idle = !pending_.valid();
     const bool selected = snapshot_.available && !selectedId_.empty();
-    refresh_->setMouseEnabled(idle);
-    adapters_->setMouseEnabled(idle && !snapshot_.instances.empty());
-    browse_->setMouseEnabled(idle);
-    name_->setMouseEnabled(idle);
-    inf_->setMouseEnabled(idle);
+    enable(refresh_, idle);
+    enable(adapters_, idle && !snapshot_.instances.empty());
+    enable(browse_, idle);
+    enable(name_, idle);
+    enable(inf_, idle);
     const bool named = !name_->getText().getString().empty();
-    add_->setMouseEnabled(idle && snapshot_.available && named && !inf_->getText().getString().empty() &&
+    enable(add_, idle && snapshot_.available && named && !inf_->getText().getString().empty() &&
                           snapshot_.instances.size() < snapshot_.maximum);
-    rename_->setMouseEnabled(idle && selected && named);
-    remove_->setMouseEnabled(idle && selected);
+    enable(rename_, idle && selected && named);
+    enable(remove_, idle && selected);
   }
 
   void browse() {
@@ -317,6 +322,8 @@ void showVirtualDeviceWindow() {
   auto window = IApplication::instance().createWindow(config, nullptr);
   if (!window) return;
   auto frame = makeOwned<CFrame>(CRect(0, 0, kWidth, kHeight), nullptr);
+  frame->setFocusDrawingEnabled(true);
+  frame->setFocusColor(palette::kSteel);
   frame->addView(makeOwned<DevicePanel>());
   window->setContentView(frame);
   window->registerWindowListener(&lastWindowListener);
