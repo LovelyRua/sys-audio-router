@@ -158,4 +158,10 @@ foreach ($name in @('steady_discontinuity_packets', 'steady_timestamp_error_pack
 }
 $result = ConvertFrom-SarMatrixSignalProbeEvidence $valid 0 $true -RequireCaptureTimeline
 Assert-True (!$result.passed -and $result.reason -eq 'missing_field:mmcss_registered') 'Old probe cannot prove timeline.'
+$excess = @($timeline | ForEach-Object { $_.Replace('measured_capture_frames=96000', 'measured_capture_frames=143521') })
+$result = ConvertFrom-SarMatrixSignalProbeEvidence ($valid + $excess) 0 $true -RequireCaptureTimeline
+Assert-True (!$result.passed -and $result.reason -eq 'invalid_timeline_accounting') 'Measured frames cannot exceed total capture.'
+$duplicate = $valid + $timeline + 'measured_capture_frames=96000'
+$result = ConvertFrom-SarMatrixSignalProbeEvidence $duplicate 0 $true -RequireCaptureTimeline
+Assert-True (!$result.passed -and $result.reason -eq 'duplicate_field:measured_capture_frames') 'Duplicate timeline evidence was accepted.'
 Write-Output "Matrix signal evidence tests passed ($script:checks assertions)."

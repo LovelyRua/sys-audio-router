@@ -45,6 +45,11 @@ function Invoke-SarLabProcess {
       $lines = @("sent_frames=$sent captured_frames=192000 silent_frames=48000 capture_packets=400 discontinuity_packets=0 max_packet_frames=480 nonzero_samples=$nonzero",
         "target_power=$power cross_channel_power=0", "first_channel_power=$power second_channel_power=$power")
       if ($global:scenario -eq 'probe-timeout') { $failure = 'process_timeout' }
+      if ($global:scenario -ne 'old-probe') {
+        $gaps = if ($global:scenario -eq 'timeline-gap') { 480 } else { 0 }
+        $lines += 'mmcss_registered=1 measured_capture_frames=96000'
+        $lines += "steady_discontinuity_packets=0 steady_timestamp_error_packets=0 steady_position_gap_frames=$gaps steady_position_overlap_frames=0 steady_qpc_regressions=0"
+      }
     }
   }
   $stdout = Join-Path $OutputDirectory "$Name.stdout.log"
@@ -84,7 +89,8 @@ $parameters=@{
   ProbeRenderDeviceId='source-render'; ProbeCaptureDeviceId='sink-capture'
   OutputDirectory=$OutputDirectory; ObserveSeconds=1
 }
-if ($Mode -eq 'transitions') { $parameters.ExerciseRouteTransitions=$true }
+if ($Mode -eq 'transitions' -or $Mode -eq 'timeline') { $parameters.ExerciseRouteTransitions=$true }
+if ($Mode -eq 'timeline') { $parameters.RequireCaptureTimeline=$true }
 if ($Mode -eq 'silent') { $parameters.SkipRoutes=$true }
 & (Join-Path $PSScriptRoot 'windows-virtual-wasapi-matrix-preflight.ps1') @parameters
 exit $LASTEXITCODE
@@ -92,6 +98,9 @@ exit $LASTEXITCODE
   $shell = (Get-Process -Id $PID).Path
   foreach ($case in @(
     @{name='transitions'; scenario='normal'; mode='transitions'; pass=$true; phases=4},
+    @{name='timeline'; scenario='normal'; mode='timeline'; pass=$true; phases=4},
+    @{name='timeline-gap'; scenario='timeline-gap'; mode='timeline'; pass=$false; phases=1},
+    @{name='old-probe'; scenario='old-probe'; mode='timeline'; pass=$false; phases=1},
     @{name='enabled'; scenario='normal'; mode='enabled'; pass=$true; phases=1},
     @{name='silent'; scenario='normal'; mode='silent'; pass=$true; phases=1},
     @{name='leakage'; scenario='leakage'; mode='transitions'; pass=$false; phases=1},
@@ -114,6 +123,7 @@ exit $LASTEXITCODE
     Assert-True ($result.passed -eq $case.pass) "Wrong pass result: $($case.name) $($result.reason)"
     Assert-True (($child.exit_code -eq 0) -eq $case.pass) "Wrong exit status: $($case.name)"
     Assert-True ($result.phases.Count -eq $case.phases) "Wrong phase count: $($case.name)"
+    Assert-True ($result.capture_timeline_required -eq ($case.mode -eq 'timeline')) 'Timeline requirement was lost.'
     if ($case.name -eq 'engine-exit') {
       Assert-True (!$result.engine_stopped_gracefully -and $result.engine_exit_code -eq 17) 'Abnormal engine exit was hidden.'
     } else {
@@ -131,4 +141,4 @@ exit $LASTEXITCODE
 } finally {
   Remove-Item -LiteralPath $root -Recurse -Force
 }
-Write-Output 'Virtual WASAPI matrix user-flow tests passed (9 scenarios)'
+Write-Output 'Virtual WASAPI matrix user-flow tests passed (12 scenarios)'

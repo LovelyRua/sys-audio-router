@@ -95,3 +95,28 @@ run and no driver or host software was installed during this round.
 An earlier run passed its per-case sound checks but the outer runner reported
 failure because success had no explicit script exit code. The preflight now
 returns zero explicitly; the run above repeated both cases after that fix.
+
+## Steady timeline follow-up
+
+Two subsequent interactive VM24 runs enabled `-RequireCaptureTimeline`:
+`c68e9038dab545948b9361b7df6fba2f` and
+`bf0fe280967a4120893e3496349391dd`. Both passed same-adapter and cross-adapter
+four-phase acceptance, totaling 16 successful phases with graceful shutdown.
+Every phase measured 95520-96000 steady capture frames. Steady discontinuity,
+timestamp-error, position-gap, position-overlap, and QPC-regression counts were
+all zero. Probe render-empty observations and wait timeouts were also zero.
+Each phase retained one raw startup discontinuity; that counter is not reset.
+
+These runs used unchanged engine/CLI binaries from the package identified above,
+acceptance scripts from `36bd8fca5e26c1f700508f403dd8c9db4ab47a84`, and probe
+source `2af92b657fc41bd9b65aac982dff166365ca5fad` from successful driver workflow
+run `39184346121`. The probe now pre-fills render buffers, registers MMCSS,
+preallocates bounded capture storage, bounds capture draining, and supplies a
+silent tail rather than starving the running render stream. These changes were
+tested together; the results do not isolate any one change as the sole cause.
+
+This resolves the observed short steady endpoint-timeline failures in these lab
+runs, not all possible audio glitches. Waveform-level continuity, level stability,
+long-duration coverage, user-facing device creation, and installation remain
+separate release gates. The receiving endpoint timeline cannot reveal every
+missing interval or inserted silence upstream inside the matrix.

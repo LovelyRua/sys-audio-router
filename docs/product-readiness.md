@@ -17,7 +17,7 @@ a certificate, hardware, a driver test machine).
 | REL-3 | Icon, version resource, About/version display | Done: every shipped executable and the driver carry VERSIONINFO; executables carry the icon; the version shows in the control panel |
 | REL-4 | Update check | Open |
 | LIC-1 | Third-party license texts in the package | Done: libsamplerate and ASIO SDK licenses ship under `licenses/`; `NOTICE.md` lists Qt, libsamplerate, ASIO SDK, and the VC++ runtime |
-| FEAT-1 | Virtual WDM/WASAPI endpoints | Open: a separate MS-PL experimental driver now passes short public-WASAPI sound-content and live matrix route-transition checks through the product engine, both within one adapter and across two adapters. Continuity is not passed; GUI creation and installer delivery are not implemented. See `docs/development/virtual-wasapi-matrix-acceptance.md` and `docs/architecture/virtual-wasapi-driver-boundary.md` |
+| FEAT-1 | Virtual WDM/WASAPI endpoints | Open: a separate MS-PL experimental driver passes short public-WASAPI sound-content, live matrix route-transition, and steady receiving-endpoint timeline checks through the product engine, both within one adapter and across two adapters. Full waveform continuity/soak is not passed; GUI creation and installer delivery are not implemented. See `docs/development/virtual-wasapi-matrix-acceptance.md` and `docs/architecture/virtual-wasapi-driver-boundary.md` |
 | QUAL-1 | Release soaks (second 8 h pairing, 24 h, multi-DAW) and more DAWs/interfaces | External: needs hardware time |
 
 ## Lifecycle and reliability
