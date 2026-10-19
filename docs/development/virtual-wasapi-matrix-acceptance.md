@@ -55,6 +55,17 @@ visible in the evidence and must be assessed separately with the driver project'
 strict timing/level probe. This lab workflow is also not GUI or installer
 acceptance and does not make the experimental driver a shipped product feature.
 
+For additional steady capture timeline acceptance, supply
+`-RequireCaptureTimeline` with the updated MMCSS bridge probe. The probe retains
+raw discontinuity counts, excludes the first 24000 captured frames from its
+timeline, and observes packets only before 2.5 seconds of wall time (before the
+intentional tone tail). Require at least 90000 measured frames, MMCSS registration,
+and zero steady discontinuities, timestamp errors, position gaps/overlaps, and
+QPC regressions. A missing field or insufficient coverage fails closed. This
+checks the receiving endpoint timeline, not waveform continuity inside the
+matrix or a long-duration soak. The final second is actively supplied with
+silence rather than leaving the source stream starved.
+
 ## VM24 evidence: 2026-10-19
 
 Interactive run `c2ab6d6510994237a8e4264b249bb5bc` passed both same-adapter

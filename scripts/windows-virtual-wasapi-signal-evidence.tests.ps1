@@ -130,4 +130,32 @@ try {
     'Parsing must be invariant under comma-decimal culture.'
   Assert-Rejected (Set-Field 'target_power' '3,456e13') 'invalid_field:target_power'
 } finally { $thread.CurrentCulture = $previousCulture }
+$timeline = @('mmcss_registered=1 measured_capture_frames=96000',
+  'steady_discontinuity_packets=0 steady_timestamp_error_packets=0',
+  'steady_position_gap_frames=0 steady_position_overlap_frames=0 steady_qpc_regressions=0')
+Assert-True (ConvertFrom-SarMatrixSignalProbeEvidence ($valid + $timeline) 0 $true -RequireCaptureTimeline).passed `
+  'A clean steady timeline must pass even when startup discontinuities exist.'
+Assert-True (ConvertFrom-SarMatrixSignalProbeEvidence ($silent + $timeline) 3 $false -RequireCaptureTimeline).passed `
+  'Disabled routes still require real capture timeline evidence.'
+$timelineMutations = @{
+  'mmcss_registered=1' = @('mmcss_registered=0', 'mmcss_not_registered')
+  'measured_capture_frames=96000' = @('measured_capture_frames=89999', 'insufficient_timeline_coverage')
+}
+foreach ($key in $timelineMutations.Keys) {
+  $replacement = $timelineMutations[$key]
+  $lines = @($timeline | ForEach-Object { $_.Replace($key, $replacement[0]) })
+  $result = ConvertFrom-SarMatrixSignalProbeEvidence ($valid + $lines) 0 $true -RequireCaptureTimeline
+  Assert-True (!$result.passed -and $result.reason -eq $replacement[1]) "Wrong rejection for $key"
+}
+foreach ($name in @('steady_discontinuity_packets', 'steady_timestamp_error_packets',
+    'steady_position_gap_frames', 'steady_position_overlap_frames', 'steady_qpc_regressions')) {
+  $lines = @($timeline | ForEach-Object { $_.Replace("$name=0", "$name=1") })
+  $result = ConvertFrom-SarMatrixSignalProbeEvidence ($valid + $lines) 0 $true -RequireCaptureTimeline
+  Assert-True (!$result.passed -and $result.reason -eq "capture_timeline_fault:$name") "Hidden timeline fault: $name"
+  $missing = @($timeline | ForEach-Object { $_.Replace("$name=0", '') })
+  $result = ConvertFrom-SarMatrixSignalProbeEvidence ($valid + $missing) 0 $true -RequireCaptureTimeline
+  Assert-True (!$result.passed -and $result.reason -eq "missing_field:$name") "Missing timeline field accepted: $name"
+}
+$result = ConvertFrom-SarMatrixSignalProbeEvidence $valid 0 $true -RequireCaptureTimeline
+Assert-True (!$result.passed -and $result.reason -eq 'missing_field:mmcss_registered') 'Old probe cannot prove timeline.'
 Write-Output "Matrix signal evidence tests passed ($script:checks assertions)."

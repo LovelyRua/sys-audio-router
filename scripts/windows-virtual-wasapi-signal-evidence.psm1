@@ -5,15 +5,20 @@ function ConvertFrom-SarMatrixSignalProbeEvidence {
   param(
     [AllowNull()][AllowEmptyCollection()][AllowEmptyString()][string[]]$Lines,
     [int]$ExitCode,
-    [bool]$RoutesEnabled
+    [bool]$RoutesEnabled,
+    [switch]$RequireCaptureTimeline
   )
 
   $integerNames = @('sent_frames', 'captured_frames', 'silent_frames',
     'capture_packets', 'discontinuity_packets', 'max_packet_frames', 'nonzero_samples')
   $powerNames = @('target_power', 'cross_channel_power', 'first_channel_power', 'second_channel_power')
+  $timelineNames = @('mmcss_registered', 'measured_capture_frames',
+    'steady_discontinuity_packets', 'steady_timestamp_error_packets',
+    'steady_position_gap_frames', 'steady_position_overlap_frames', 'steady_qpc_regressions')
+  if ($RequireCaptureTimeline) { $integerNames += $timelineNames }
   $names = $integerNames + $powerNames
   $result = [ordered]@{ passed = $false; reason = ''; exit_code = $ExitCode;
-    routes_enabled = $RoutesEnabled }
+    routes_enabled = $RoutesEnabled; capture_timeline_checked = [bool]$RequireCaptureTimeline }
   foreach ($name in $names) { $result[$name] = $null }
 
   # Check each line before tokenizing; never join an unbounded report.
@@ -123,6 +128,21 @@ function ConvertFrom-SarMatrixSignalProbeEvidence {
     elseif ($result.nonzero_samples -ne 0 -or $result.target_power -ne 0 -or $result.cross_channel_power -ne 0 -or
         $result.first_channel_power -ne 0 -or
         $result.second_channel_power -ne 0) { $result.reason = 'control_not_silent' }
+  }
+  if ($result.reason -eq '' -and $RequireCaptureTimeline) {
+    if ($result.mmcss_registered -ne 1) { $result.reason = 'mmcss_not_registered' }
+    elseif ($result.measured_capture_frames -lt 90000) {
+      $result.reason = 'insufficient_timeline_coverage'
+    } elseif ($result.measured_capture_frames -gt $result.captured_frames) {
+      $result.reason = 'invalid_timeline_accounting'
+    } else {
+      foreach ($name in $timelineNames[2..6]) {
+        if ($result[$name] -ne 0) {
+          $result.reason = "capture_timeline_fault:$name"
+          break
+        }
+      }
+    }
   }
   $result.passed = ($result.reason -eq '')
   return [pscustomobject]$result

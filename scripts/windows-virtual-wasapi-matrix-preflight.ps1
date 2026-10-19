@@ -8,6 +8,7 @@ param(
   [ValidateRange(1, 60)][int]$ObserveSeconds = 5,
   [switch]$SkipRoutes,
   [switch]$ExerciseRouteTransitions,
+  [switch]$RequireCaptureTimeline,
   [string]$SignalProbePath = '',
   [string]$ProbeRenderDeviceId = '',
   [string]$ProbeCaptureDeviceId = '',
@@ -71,7 +72,8 @@ function Invoke-SignalPhase([string]$Name, [bool]$RoutesEnabled) {
     '--route', $ProbeRenderDeviceId, $ProbeCaptureDeviceId
   ) -OutputDirectory $OutputDirectory -Name "signal-$Name" -TimeoutMilliseconds 15000
   $evidence = ConvertFrom-SarMatrixSignalProbeEvidence -Lines $probe.stdout_lines `
-    -ExitCode $probe.exit_code -RoutesEnabled $RoutesEnabled
+    -ExitCode $probe.exit_code -RoutesEnabled $RoutesEnabled `
+    -RequireCaptureTimeline:$RequireCaptureTimeline
   $after = @(Invoke-Cli @('diagnostics'))
   $delta = (Get-Counter $after[0] 'processed_blocks') - (Get-Counter $before[0] 'processed_blocks')
   $record = [pscustomobject][ordered]@{
@@ -117,6 +119,9 @@ if ($CaptureDeviceId -eq $RenderDeviceId) {
 if ($ExerciseRouteTransitions -and (!$SignalProbePath -or $SkipRoutes)) {
   throw 'Route transitions require a signal probe and cannot be combined with SkipRoutes.'
 }
+if ($RequireCaptureTimeline -and !$SignalProbePath) {
+  throw 'Capture timeline acceptance requires a signal probe.'
+}
 if ($SignalProbePath) {
   if (!$ProbeRenderDeviceId -or !$ProbeCaptureDeviceId) {
     throw 'Signal probe requires both probe endpoint IDs.'
@@ -155,6 +160,7 @@ $result = [ordered]@{
   routes_enabled = !$SkipRoutes
   signal_checked = $false; signal_detected = $null
   route_transitions_checked = $false
+  capture_timeline_required = [bool]$RequireCaptureTimeline
   phases = [Collections.Generic.List[object]]::new()
   engine_stopped_gracefully = $false; engine_forced_termination = $false
   engine_exit_code = $null
