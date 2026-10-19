@@ -132,9 +132,11 @@ int main() {
     std::vector<std::thread> workers;
     for (int i = 0; i < 4; ++i) {
       workers.emplace_back([good] {
-        for (int sample = 0; sample < 8; ++sample)
-          require(parseVirtualDeviceSnapshot(good).available,
-              "Repeated worker apartment inventory failed");
+        for (int sample = 0; sample < 8; ++sample) {
+          const auto result = parseVirtualDeviceSnapshot(good);
+          if (!result.available) std::cerr << result.error << std::endl;
+          require(result.available, "Repeated worker apartment inventory failed");
+        }
       });
     }
     for (auto& worker : workers) worker.join();

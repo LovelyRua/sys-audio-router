@@ -307,6 +307,11 @@ VirtualDeviceSnapshot parseVirtualDeviceSnapshot(const std::string& json) {
     }
     result.available = true;
     return result;
+  } catch (const winrt::hresult_error& error) {
+    return unavailable("Invalid experimental helper JSON (Windows error " +
+        std::to_string(static_cast<long>(error.code())) + ")");
+  } catch (const std::exception& error) {
+    return unavailable(std::string("Invalid experimental helper JSON: ") + error.what());
   } catch (...) {
     return unavailable("Invalid experimental helper JSON: expected a strict four-instance PnP inventory");
   }
