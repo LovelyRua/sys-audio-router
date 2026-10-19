@@ -14,6 +14,7 @@
 #include "vstgui/lib/controls/coptionmenu.h"
 #include "vstgui/lib/controls/ctextedit.h"
 #include "vstgui/lib/cvstguitimer.h"
+#include "vstgui/lib/platform/iplatformframe.h"
 #include "vstgui/standalone/include/iapplication.h"
 #include "vstgui/standalone/include/iwindow.h"
 #include "vstgui/standalone/include/helpers/windowlistener.h"
@@ -89,6 +90,7 @@ class DevicePanel final : public CViewContainer, public IControlListener {
   ~DevicePanel() noexcept override { timer_->stop(); }
 
   void valueChanged(CControl* control) override {
+    SharedPointer<DevicePanel> keepAlive(this);
     if (control == adapters_.get()) {
       selectedId_.clear();
       const auto index = adapters_->getCurrentIndex();
@@ -110,12 +112,14 @@ class DevicePanel final : public CViewContainer, public IControlListener {
                                                 : VirtualDeviceAction::Remove;
     if (action != VirtualDeviceAction::Add && selectedId_.empty()) return;
     if (action == VirtualDeviceAction::Remove) {
-      const int answer = MessageBoxW(nullptr,
+      const auto owner = dialogOwner();
+      if (!owner) return;
+      const int answer = MessageBoxW(owner,
           L"Remove the selected virtual adapter and both of its stereo bus pairs?\n\n"
           L"Applications using these endpoints will lose their audio connection.\n"
           L"The shared driver package will remain installed.",
           L"Remove SAR virtual adapter", MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING);
-      if (answer != IDYES) return;
+      if (answer != IDYES || !getFrame()) return;
     }
     const auto id = selectedId_;
     const auto name = name_->getText().getString();
@@ -179,7 +183,9 @@ class DevicePanel final : public CViewContainer, public IControlListener {
     try {
       auto result = pending_.get();
       const auto previousId = selectedId_;
-      snapshot_ = std::move(result.snapshot);
+      if (result.snapshot.available || !result.snapshot.error.empty()) {
+        snapshot_ = std::move(result.snapshot);
+      }
       message_->setFontColor(result.success || result.cancelled ? palette::kMuted : palette::kDanger);
       message_->setText(result.message.empty()
           ? snapshot_.available ? "" : "Virtual device inventory is unavailable."
@@ -246,14 +252,18 @@ class DevicePanel final : public CViewContainer, public IControlListener {
   }
 
   void browse() {
+    SharedPointer<DevicePanel> keepAlive(this);
+    const auto owner = dialogOwner();
+    if (!owner) return;
     wchar_t path[32768] = {};
     OPENFILENAMEW request{};
     request.lStructSize = sizeof(request);
+    request.hwndOwner = owner;
     request.lpstrFile = path;
     request.nMaxFile = static_cast<DWORD>(std::size(path));
     request.lpstrFilter = L"Driver INF (*.inf)\0*.inf\0\0";
     request.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
-    if (!GetOpenFileNameW(&request)) return;
+    if (!GetOpenFileNameW(&request) || !getFrame()) return;
     const int size = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, path, -1, nullptr, 0, nullptr, nullptr);
     if (size <= 1) return;
     std::string value(static_cast<std::size_t>(size), '\0');
@@ -261,6 +271,13 @@ class DevicePanel final : public CViewContainer, public IControlListener {
     value.pop_back();
     inf_->setText(value.c_str());
     updateEnabled();
+  }
+
+  HWND dialogOwner() const {
+    const auto frame = getFrame();
+    if (!frame || !frame->getPlatformFrame()) return nullptr;
+    const auto native = static_cast<HWND>(frame->getPlatformFrame()->getPlatformRepresentation());
+    return native ? GetAncestor(native, GA_ROOT) : nullptr;
   }
 
   VirtualDeviceSnapshot snapshot_;
