@@ -1,4 +1,5 @@
 #include "app/gui_vstgui/main_window.h"
+#include "app/gui_vstgui/virtual_device_window.h"
 
 #include "vstgui/standalone/include/helpers/appdelegate.h"
 #include "vstgui/standalone/include/helpers/windowlistener.h"
@@ -40,7 +41,11 @@ struct AppDelegate final : Application::DelegateAdapter, WindowListenerAdapter {
       LocalFree(arguments);
     }
     if (startupSmoke) {
-      Call::later([window] { window->close(); }, 5000);
+      Call::later([] { showVirtualDeviceWindow(); }, 500);
+      Call::later([] {
+        const auto windows = IApplication::instance().getWindows();
+        for (const auto& current : windows) current->close();
+      }, 5000);
     }
   }
 
