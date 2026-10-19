@@ -37,6 +37,16 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Upload native GUI diagnostic symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-audio-route-vstgui-symbols
+          path: |
+            build/Release/SystemAudioRouteVstgui.pdb
+            build/gui-vstgui.map
+          if-no-files-found: error
+          retention-days: 3
+
       - name: Build
         run: cmake --build build --config Release
 

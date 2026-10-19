@@ -222,6 +222,11 @@ if(SAR_BUILD_GUI_VSTGUI)
   )
   target_compile_features(sar_gui_vstgui PRIVATE cxx_std_20)
   target_compile_definitions(sar_gui_vstgui PRIVATE SAR_VERSION="${PROJECT_VERSION}")
+  if(MSVC)
+    target_compile_options(sar_gui_vstgui PRIVATE /Zi)
+    target_link_options(sar_gui_vstgui PRIVATE /DEBUG:FULL /OPT:REF /OPT:ICF /INCREMENTAL:NO
+      "/MAP:${CMAKE_CURRENT_BINARY_DIR}/gui-vstgui.map")
+  endif()
   target_link_libraries(sar_gui_vstgui PRIVATE
     sar_core
     vstgui
