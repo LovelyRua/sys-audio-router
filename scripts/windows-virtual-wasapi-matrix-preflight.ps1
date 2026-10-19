@@ -281,3 +281,4 @@ try {
 $result | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'result.json') -Encoding UTF8
 Write-Output "virtual_wasapi_matrix_preflight passed=$([int]$result.passed) signal_checked=$([int]$result.signal_checked) processed_delta=$($result.processed_block_delta) output_directory=$OutputDirectory reason=$($result.reason)"
 if (!$result.passed) { exit 1 }
+exit 0
