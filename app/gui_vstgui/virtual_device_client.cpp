@@ -5,6 +5,7 @@
 #endif
 #include <Windows.h>
 #include <shellapi.h>
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Data.Json.h>
 
 #include <algorithm>
