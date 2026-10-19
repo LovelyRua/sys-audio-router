@@ -3,6 +3,14 @@
 #include "vstgui/standalone/include/helpers/appdelegate.h"
 #include "vstgui/standalone/include/helpers/windowlistener.h"
 #include "vstgui/standalone/include/iapplication.h"
+#include "vstgui/lib/cvstguitimer.h"
+
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <shellapi.h>
+#include <string_view>
 
 using namespace VSTGUI;
 using namespace VSTGUI::Standalone;
@@ -23,6 +31,17 @@ struct AppDelegate final : Application::DelegateAdapter, WindowListenerAdapter {
     }
     window->show();
     window->registerWindowListener(this);
+    int count = 0;
+    auto arguments = CommandLineToArgvW(GetCommandLineW(), &count);
+    bool startupSmoke = false;
+    if (arguments) {
+      for (int i = 1; i < count; ++i)
+        startupSmoke = startupSmoke || std::wstring_view(arguments[i]) == L"--startup-smoke";
+      LocalFree(arguments);
+    }
+    if (startupSmoke) {
+      Call::later([window] { window->close(); }, 5000);
+    }
   }
 
   void onClosed(const IWindow&) override {

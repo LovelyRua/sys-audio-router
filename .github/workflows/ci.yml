@@ -47,6 +47,19 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+      - name: Test native GUI startup and graceful close
+        shell: pwsh
+        run: scripts/windows-vstgui-startup-smoke.ps1 -Executable build/Release/SystemAudioRouteVstgui.exe -OutputDirectory build/native-gui-startup
+
+      - name: Upload native GUI startup report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-audio-route-vstgui-startup
+          path: build/native-gui-startup/
+          if-no-files-found: ignore
+          retention-days: 3
+
       - name: Build
         run: cmake --build build --config Release
 
