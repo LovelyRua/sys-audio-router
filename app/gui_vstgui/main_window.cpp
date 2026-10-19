@@ -4,6 +4,7 @@
 #include "app/gui_vstgui/lcd_readout_view.h"
 #include "app/gui_vstgui/palette.h"
 #include "app/gui_vstgui/virtual_device_window.h"
+#include "app/gui_vstgui/view_ownership.h"
 
 #include "vstgui/lib/cfont.h"
 #include "vstgui/lib/cdrawcontext.h"
@@ -477,22 +478,22 @@ WindowPtr createMainWindow() {
 
   auto header = makeOwned<CViewContainer>(CRect(0, 0, kWindowWidth, kHeaderHeight));
   header->setBackgroundColor(palette::kSurface);
-  frame->addView(header);
+  addRetainedView(*frame, header);
 
   CCoord x = 18;
   auto brand = makeLabel(CRect(x, 0, x + 220, kHeaderHeight), "SYSTEM AUDIO ROUTE",
                          palette::kText, true);
-  header->addView(brand);
+  addRetainedView(*header, brand);
   x += 236;
 
   auto dot = makeOwned<StatusDotView>(CRect(x, kHeaderHeight / 2 - 4, x + 8,
                                             kHeaderHeight / 2 + 4));
-  header->addView(dot);
+  addRetainedView(*header, dot);
   x += 16;
 
   auto statusText = makeLabel(CRect(x, 0, x + 130, kHeaderHeight), "Engine offline",
                               palette::kText, false);
-  header->addView(statusText);
+  addRetainedView(*header, statusText);
 
   const CCoord readoutWidth = 96;
   const CCoord readoutHeight = 26;
@@ -507,33 +508,33 @@ WindowPtr createMainWindow() {
   startStopButton->setFrameColor(palette::kLine);
   startStopButton->setGradient(nullptr);
   startStopButton->setRoundRadius(2);
-  header->addView(startStopButton);
+  addRetainedView(*header, startStopButton);
 
   right -= 10 + readoutWidth;
   auto xrunReadout = makeOwned<LcdReadoutView>(
       CRect(right, readoutY, right + readoutWidth, readoutY + readoutHeight));
-  header->addView(xrunReadout);
+  addRetainedView(*header, xrunReadout);
 
   right -= 8 + readoutWidth;
   auto smpReadout = makeOwned<LcdReadoutView>(
       CRect(right, readoutY, right + readoutWidth, readoutY + readoutHeight));
-  header->addView(smpReadout);
+  addRetainedView(*header, smpReadout);
 
   right -= 8 + readoutWidth;
   auto hzReadout = makeOwned<LcdReadoutView>(
       CRect(right, readoutY, right + readoutWidth, readoutY + readoutHeight));
-  header->addView(hzReadout);
+  addRetainedView(*header, hzReadout);
 
   auto body = makeOwned<CViewContainer>(
       CRect(0, kHeaderHeight, kWindowWidth, kWindowHeight));
   body->setBackgroundColor(palette::kCanvas);
   auto title = makeLabel(CRect(24, 14, 300, 42), "ROUTING MATRIX", palette::kText, true);
-  body->addView(title);
+  addRetainedView(*body, title);
   auto summary = makeLabel(CRect(240, 14, 590, 42), "Matrix unavailable", palette::kMuted, false);
-  body->addView(summary);
+  addRetainedView(*body, summary);
   auto errorText = makeLabel(CRect(24, 44, kWindowWidth - 24, 70), "",
                             palette::kDanger, false);
-  body->addView(errorText);
+  addRetainedView(*body, errorText);
   constexpr CCoord kGridLeft = 206;
   constexpr CCoord kGridTop = 124;
   constexpr CCoord kCellWidth = 108;
@@ -545,14 +546,14 @@ WindowPtr createMainWindow() {
     const auto left = kGridLeft + column * kCellWidth;
     auto label = makeLabel(CRect(left + 5, 82, left + kCellWidth - 5, 118), "",
                            palette::kMuted, false);
-    body->addView(label);
+    addRetainedView(*body, label);
     outputs.push_back(label);
   }
   for (std::size_t row = 0; row < kVisibleRows; ++row) {
     const auto top = kGridTop + row * kCellHeight;
     auto label = makeLabel(CRect(24, top, kGridLeft - 10, top + kCellHeight), "",
                            palette::kText, false);
-    body->addView(label);
+    addRetainedView(*body, label);
     inputs.push_back(label);
     for (std::size_t column = 0; column < kVisibleColumns; ++column) {
       const auto left = kGridLeft + column * kCellWidth;
@@ -563,7 +564,7 @@ WindowPtr createMainWindow() {
       cell->setFrameColor(palette::kLine);
       cell->setRoundRadius(2);
       cell->setTooltipText("Left click: toggle route. Right click: inspect route.");
-      body->addView(cell);
+      addRetainedView(*body, cell);
       cells.push_back(cell);
     }
   }
@@ -573,7 +574,7 @@ WindowPtr createMainWindow() {
     button->setFrameColor(palette::kLine);
     button->setTextColor(palette::kText);
     button->setRoundRadius(2);
-    body->addView(button);
+    addRetainedView(*body, button);
     return button;
   };
   auto previousRows = makeNav(24, "Rows <");
@@ -583,21 +584,21 @@ WindowPtr createMainWindow() {
 
   auto inspector = makeOwned<CViewContainer>(CRect(760, 0, 1000, kWindowHeight - kHeaderHeight));
   inspector->setBackgroundColor(palette::kSurface);
-  body->addView(inspector);
-  inspector->addView(makeLabel(CRect(16, 14, 220, 42), "ROUTE INSPECTOR",
+  addRetainedView(*body, inspector);
+  addRetainedView(*inspector, makeLabel(CRect(16, 14, 220, 42), "ROUTE INSPECTOR",
                                palette::kMuted, true));
   auto selectedSource = makeLabel(CRect(16, 70, 222, 96), "No source selected",
                                   palette::kText, false);
-  inspector->addView(selectedSource);
-  inspector->addView(makeLabel(CRect(16, 100, 222, 120), "TO",
+  addRetainedView(*inspector, selectedSource);
+  addRetainedView(*inspector, makeLabel(CRect(16, 100, 222, 120), "TO",
                                palette::kMuted, false));
   auto selectedDestination = makeLabel(CRect(16, 124, 222, 150),
                                        "No destination selected", palette::kText, false);
-  inspector->addView(selectedDestination);
-  inspector->addView(makeLabel(CRect(16, 196, 222, 218), "GAIN",
+  addRetainedView(*inspector, selectedDestination);
+  addRetainedView(*inspector, makeLabel(CRect(16, 196, 222, 218), "GAIN",
                                palette::kMuted, false));
   auto gainText = makeLabel(CRect(16, 226, 222, 252), "-- dB", palette::kText, true);
-  inspector->addView(gainText);
+  addRetainedView(*inspector, gainText);
   auto gainSlider = makeOwned<CHorizontalSlider>(
       CRect(16, 268, 222, 286), nullptr, -1, 16, 222, nullptr, nullptr);
   gainSlider->setDrawStyle(CSlider::kDrawFrame | CSlider::kDrawBack | CSlider::kDrawValue);
@@ -605,7 +606,7 @@ WindowPtr createMainWindow() {
   gainSlider->setBackColor(palette::kCanvas);
   gainSlider->setValueColor(palette::kHealthy);
   gainSlider->setTooltipText("Route gain: -60 to +12 dB");
-  inspector->addView(gainSlider);
+  addRetainedView(*inspector, gainSlider);
   auto makeInspectorButton = [&](CCoord left, const char* label) {
     auto button = makeOwned<CTextButton>(CRect(left, 312, left + 96, 346),
                                         nullptr, -1, label);
@@ -613,7 +614,7 @@ WindowPtr createMainWindow() {
     button->setFrameColor(palette::kLine);
     button->setTextColor(palette::kText);
     button->setRoundRadius(2);
-    inspector->addView(button);
+    addRetainedView(*inspector, button);
     return button;
   };
   auto muteButton = makeInspectorButton(16, "Mute");
@@ -624,8 +625,8 @@ WindowPtr createMainWindow() {
   removeButton->setFrameColor(palette::kLine);
   removeButton->setTextColor(palette::kText);
   removeButton->setRoundRadius(2);
-  inspector->addView(removeButton);
-  frame->addView(body);
+  addRetainedView(*inspector, removeButton);
+  addRetainedView(*frame, body);
 
   auto controller = std::make_shared<HeaderController>();
   auto virtualDevices = makeOwned<CTextButton>(CRect(596, 14, 742, 42), controller.get(),
@@ -634,7 +635,7 @@ WindowPtr createMainWindow() {
   virtualDevices->setFrameColor(palette::kLine);
   virtualDevices->setTextColor(palette::kSteel);
   virtualDevices->setRoundRadius(2);
-  body->addView(virtualDevices);
+  addRetainedView(*body, virtualDevices);
   controller->attachErrorView(errorText);
   controller->attachViews(dot, statusText, hzReadout, smpReadout, xrunReadout,
                           startStopButton);

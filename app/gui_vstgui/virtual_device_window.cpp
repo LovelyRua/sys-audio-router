@@ -1,4 +1,5 @@
 #include "app/gui_vstgui/virtual_device_window.h"
+#include "app/gui_vstgui/view_ownership.h"
 #include "app/gui_vstgui/virtual_device_client.h"
 #include "app/gui_vstgui/palette.h"
 
@@ -50,27 +51,27 @@ class DevicePanel final : public CViewContainer, public IControlListener {
  public:
   DevicePanel() : CViewContainer(CRect(0, 0, kWidth, kHeight)) {
     setBackgroundColor(palette::kCanvas);
-    addView(label(CRect(24, 16, 600, 46), "VIRTUAL WASAPI", palette::kSteel));
+    addRetainedView(*this, label(CRect(24, 16, 600, 46), "VIRTUAL WASAPI", palette::kSteel));
     refresh_ = button(CRect(732, 16, 836, 46), "Refresh", 1);
     capacity_ = label(CRect(24, 54, 836, 80), "Inspecting installed adapters...");
-    addView(capacity_);
-    addView(label(CRect(24, 94, 160, 124), "Adapter", palette::kMuted));
+    addRetainedView(*this, capacity_);
+    addRetainedView(*this, label(CRect(24, 94, 160, 124), "Adapter", palette::kMuted));
     adapters_ = makeOwned<COptionMenu>(CRect(160, 94, 836, 126), this, 2);
     adapters_->setFont(makeOwned<CFontDesc>("Segoe UI", 13));
     adapters_->setBackColor(palette::kRaised);
     adapters_->setFontColor(palette::kText);
     adapters_->setFrameColor(palette::kLine);
-    addView(adapters_);
+    addRetainedView(*this, adapters_);
     identity_ = label(CRect(160, 134, 836, 158), "");
     state_ = label(CRect(160, 164, 836, 190), "");
-    addView(identity_);
-    addView(state_);
-    addView(label(CRect(24, 202, 836, 232),
+    addRetainedView(*this, identity_);
+    addRetainedView(*this, state_);
+    addRetainedView(*this, label(CRect(24, 202, 836, 232),
         "2 stereo bus pairs per adapter  /  48 kHz  /  fixed channel topology", palette::kMuted));
-    addView(label(CRect(24, 246, 160, 278), "Adapter label", palette::kMuted));
+    addRetainedView(*this, label(CRect(24, 246, 160, 278), "Adapter label", palette::kMuted));
     name_ = edit(CRect(160, 246, 704, 278), "SAR virtual adapter", 3);
     rename_ = button(CRect(716, 246, 836, 278), "Rename", 4);
-    addView(label(CRect(24, 296, 160, 328), "Driver INF", palette::kMuted));
+    addRetainedView(*this, label(CRect(24, 296, 160, 328), "Driver INF", palette::kMuted));
     inf_ = edit(CRect(160, 296, 782, 328), "", 5);
     inf_->setPlaceholderString("Signed experimental driver package (.inf)");
     browse_ = button(CRect(794, 296, 836, 328), "...", 6);
@@ -84,7 +85,7 @@ class DevicePanel final : public CViewContainer, public IControlListener {
     message_->setFrameColor(palette::kCanvas);
     message_->setHoriAlign(kLeftText);
     message_->setLineLayout(CMultiLineTextLabel::LineLayout::wrap);
-    addView(message_);
+    addRetainedView(*this, message_);
     timer_ = makeOwned<CVSTGUITimer>([this](CVSTGUITimer*) { complete(); }, 50, true);
     inspect();
   }
@@ -139,7 +140,7 @@ class DevicePanel final : public CViewContainer, public IControlListener {
     view->setFrameColor(palette::kLine);
     view->setTextColor(palette::kText);
     view->setRoundRadius(2);
-    addView(view);
+    addRetainedView(*this, view);
     return view;
   }
 
@@ -151,7 +152,7 @@ class DevicePanel final : public CViewContainer, public IControlListener {
     view->setFrameColor(palette::kLine);
     view->setHoriAlign(kLeftText);
     view->setImmediateTextChange(true);
-    addView(view);
+    addRetainedView(*this, view);
     return view;
   }
 
@@ -327,7 +328,7 @@ void showVirtualDeviceWindow() {
   auto frame = makeOwned<CFrame>(CRect(0, 0, kWidth, kHeight), nullptr);
   frame->setFocusDrawingEnabled(true);
   frame->setFocusColor(palette::kSteel);
-  frame->addView(makeOwned<DevicePanel>());
+  addRetainedView(*frame, makeOwned<DevicePanel>());
   window->setContentView(frame);
   window->registerWindowListener(&lastWindowListener);
   window->show();
