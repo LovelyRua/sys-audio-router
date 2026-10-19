@@ -88,6 +88,8 @@ Assert-Rejected (Set-Field 'max_packet_frames' '0') 'no_packet_frames'
 Assert-Rejected (Set-Field 'silent_frames' '143521') 'invalid_capture_accounting'
 Assert-Rejected (Set-Field 'max_packet_frames' '143521') 'invalid_capture_accounting'
 Assert-Rejected (Set-Field 'capture_packets' '143521') 'invalid_capture_accounting'
+Assert-Rejected (Set-Field 'capture_packets' '1') 'invalid_capture_accounting'
+Assert-Rejected (Set-Field 'silent_frames' '143520') 'invalid_capture_accounting'
 Assert-Rejected (Set-Field 'nonzero_samples' '287041') 'invalid_capture_accounting'
 Assert-Rejected (Set-Field 'nonzero_samples' '0') 'insufficient_signal_power'
 Assert-Rejected @($silent[0] -replace 'nonzero_samples=0', 'nonzero_samples=1'; $silent[1]; $silent[2]) 'control_not_silent' 3 $false
@@ -100,7 +102,7 @@ Assert-Rejected (Set-Field 'second_channel_power' '9.999e11') 'insufficient_sign
 Assert-Rejected (Set-Field 'cross_channel_power' '3.457e11') 'crosstalk'
 Assert-Rejected (Set-Field 'cross_channel_power' '1e308') 'crosstalk'
 
-$boundary = @('sent_frames=48000 captured_frames=48000 silent_frames=0 capture_packets=1 discontinuity_packets=0 max_packet_frames=1 nonzero_samples=96000',
+$boundary = @('sent_frames=48000 captured_frames=48000 silent_frames=0 capture_packets=100 discontinuity_packets=0 max_packet_frames=480 nonzero_samples=96000',
   'target_power=2e12 cross_channel_power=2e10 first_channel_power=1e12 second_channel_power=1e12')
 Assert-True (ConvertFrom-SarMatrixSignalProbeEvidence $boundary 0 $true).passed `
   'Inclusive frame, power and crosstalk boundaries must pass.'

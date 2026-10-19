@@ -161,6 +161,9 @@ $result = [ordered]@{
   engine_sha256 = (Get-FileHash -LiteralPath $service -Algorithm SHA256).Hash
   cli_sha256 = (Get-FileHash -LiteralPath $cli -Algorithm SHA256).Hash
   probe_sha256 = if ($SignalProbePath) { (Get-FileHash -LiteralPath $SignalProbePath -Algorithm SHA256).Hash } else { '' }
+  acceptance_script_sha256 = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash
+  process_module_sha256 = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'windows-lab-process.psm1') -Algorithm SHA256).Hash
+  evidence_module_sha256 = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'windows-virtual-wasapi-signal-evidence.psm1') -Algorithm SHA256).Hash
   output_directory = $OutputDirectory; reason = ''
 }
 $process = $null

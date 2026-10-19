@@ -103,7 +103,10 @@ function ConvertFrom-SarMatrixSignalProbeEvidence {
   elseif ($result.silent_frames -gt $result.captured_frames -or
       $result.max_packet_frames -gt $result.captured_frames -or
       $result.capture_packets -gt $result.captured_frames -or
-      $result.nonzero_samples -gt ([decimal]$result.captured_frames * 2)) {
+      ([bigint]$result.capture_packets * [bigint]$result.max_packet_frames) -lt
+        [bigint]$result.captured_frames -or
+      $result.nonzero_samples -gt
+        (([decimal]$result.captured_frames - [decimal]$result.silent_frames) * 2)) {
     $result.reason = 'invalid_capture_accounting'
   }
   elseif ($RoutesEnabled) {
