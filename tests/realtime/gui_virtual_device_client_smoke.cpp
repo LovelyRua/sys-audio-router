@@ -64,10 +64,15 @@ int main() {
   require(parseVirtualDeviceSnapshot(" \r\n" + good + "\r\n").available,
       "JSON whitespace must be accepted");
   const std::string chinese = "\xE8\x99\x9A\xE6\x8B\x9F\xE9\x9F\xB3\xE9\xA2\x91";
-  require(parseVirtualDeviceSnapshot(roster(instance(R"(root\\media\\12)", chinese)))
-      .instances.front().label == chinese, "UTF-8 labels must round trip");
-  require(parseVirtualDeviceSnapshot(roster(instance(R"(ROOT\\MEDIA\\2)",
-      R"(\u865a\u62df\u97f3\u9891)"))).instances.front().label == chinese,
+  const auto unicode = parseVirtualDeviceSnapshot(roster(instance(R"(root\\media\\12)", chinese)));
+  require(unicode.available && unicode.instances.size() == 1,
+      "Raw UTF-8 inventory was rejected");
+  require(unicode.instances.front().label == chinese, "UTF-8 labels must round trip");
+  const auto escaped = parseVirtualDeviceSnapshot(roster(instance(R"(ROOT\\MEDIA\\2)",
+      R"(\u865a\u62df\u97f3\u9891)")));
+  require(escaped.available && escaped.instances.size() == 1,
+      "Escaped Unicode inventory was rejected");
+  require(escaped.instances.front().label == chinese,
       "JSON Unicode escapes must decode to UTF-8");
   require(parseVirtualDeviceSnapshot(roster(instance(R"(ROOT\\MEDIA\\2)",
       R"(A \"quoted\" path\\)"))).available, "Escaped label rejected");
@@ -119,6 +124,8 @@ int main() {
   rejected(roster("null"));
   rejected(roster(instance() + ",null"));
 
+  std::cout << "JSON inventory checks passed" << std::endl;
+
   const std::string id = "ROOT\\MEDIA\\1";
   invalidAction(static_cast<VirtualDeviceAction>(999), {}, {});
   for (const auto* badId : {"", "ROOT\\OTHER\\1", "ROOT\\MEDIA\\", "ROOT\\MEDIA\\1 --confirm",
@@ -141,4 +148,5 @@ int main() {
   invalidAction(VirtualDeviceAction::Add, {}, "Label", "C:\\bad\n.inf");
   invalidAction(VirtualDeviceAction::Add, {}, "Label", "C:\\bad\xFF.inf");
   // Deliberately no valid execute() calls: this test must never request elevation or mutate a driver.
+  std::cout << "Invalid device request checks passed" << std::endl;
 }
