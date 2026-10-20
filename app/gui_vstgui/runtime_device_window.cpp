@@ -4,11 +4,13 @@
 #include "app/gui_vstgui/palette.h"
 #include "app/gui_vstgui/view_ownership.h"
 #include "app/gui_vstgui/window_geometry.h"
+#include "app/gui_vstgui/vb_cable_setup.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <shellapi.h>
 
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/cfont.h"
@@ -33,7 +35,7 @@ namespace {
 using namespace VSTGUI;
 using namespace VSTGUI::Standalone;
 constexpr const char* kTitle = "Audio devices";
-constexpr CCoord kWidth = 860, kHeight = 560;
+constexpr CCoord kWidth = 860, kHeight = 650;
 
 class RuntimePanel final : public CViewContainer, public IControlListener {
  public:
@@ -61,7 +63,10 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     reset_ = button(CRect(24, 384, 172, 420), "New matrix", 11);
     run_ = button(CRect(464, 384, 636, 420), "Start audio", 12);
     apply_ = button(CRect(648, 384, 836, 420), "Apply", 13);
-    message_ = makeOwned<CMultiLineTextLabel>(CRect(24, 440, 836, 536));
+    cableSetup_ = button(CRect(24, 440, 232, 476), "Install VB-CABLE...", 15);
+    cableWebsite_ = button(CRect(248, 440, 460, 476), "VB-Audio / Donate", 16);
+    text(CRect(24, 482, 836, 510), "VB-CABLE by VB-Audio (vb-cable.com). Donationware; contributions are welcome.", palette::kMuted);
+    message_ = makeOwned<CMultiLineTextLabel>(CRect(24, 522, 836, 626));
     message_->setFont(makeOwned<CFontDesc>("Segoe UI", 13));
     message_->setFontColor(palette::kMuted);
     message_->setBackColor(palette::kCanvas);
@@ -77,7 +82,24 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
 
   void valueChanged(CControl* source) override {
     SharedPointer<RuntimePanel> keepAlive(this);
-    if (rendering_ || pending_.valid()) return;
+    if (rendering_ || pending_.valid() || setup_.valid()) return;
+    if (source == cableWebsite_.get() && source->getValue() > 0.5F) {
+      ShellExecuteW(nullptr, L"open", L"https://vb-audio.com/Cable/", nullptr, nullptr, SW_SHOWNORMAL);
+      return;
+    }
+    if (source == cableSetup_.get() && source->getValue() > 0.5F) {
+      if (!confirm(L"Open the original VB-Audio installer? VB-CABLE is donationware from vb-cable.com. Review its terms and complete installation yourself. A reboot may be required. Existing cable routes may be interrupted.")) return;
+      if (!getFrame()) return;
+      std::packaged_task<VbCableSetupResult()> task([] { return openVbCableSetup(); });
+      auto future = task.get_future();
+      try {
+        std::thread(std::move(task)).detach();
+        setup_ = std::move(future);
+        message("Opening original VB-CABLE setup...");
+      } catch (...) { message("Could not start setup worker", true); }
+      updateEnabled();
+      return;
+    }
     if (source == endpoints_.get()) {
       selected_ = endpoints_->getCurrentIndex();
       renderSelected();
@@ -215,6 +237,13 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     launch([client = client_] { return client->inspectDevices(); });
   }
   void complete() {
+    if (setup_.valid() && setup_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+      try {
+        const auto result = setup_.get();
+        message(result.message, result.failed);
+      } catch (...) { message("Vendor setup request failed. No automatic retry.", true); }
+      updateEnabled();
+    }
     if (!pending_.valid() || pending_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
     try {
       auto result = pending_.get();
@@ -277,10 +306,12 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     const auto enable = [](CView* view, bool active) {
       view->setMouseEnabled(active); view->setAlphaValue(active ? 1.0F : 0.4F);
     };
-    const bool idle = !pending_.valid(), available = snapshot_.available && idle;
+    const bool idle = !pending_.valid() && !setup_.valid(), available = snapshot_.available && idle;
     const auto item = selectedItem();
     const bool edit = available && editableItem();
     enable(refresh_, idle);
+    enable(cableSetup_, idle);
+    enable(cableWebsite_, idle);
     enable(reload_, idle);
     enable(endpoints_, available && !draft_.endpoints().empty());
     enable(addCapture_, available && draft_.editable() && draft_.endpoints().size() < control::kMaximumAudioRuntimeEndpoints);
@@ -309,12 +340,14 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
   std::vector<std::string> deviceIds_;
   std::shared_ptr<EngineClient> client_ = std::make_shared<EngineClient>();
   std::future<RuntimeDeviceSnapshot> pending_;
+  std::future<VbCableSetupResult> setup_;
   SharedPointer<CVSTGUITimer> timer_;
   SharedPointer<COptionMenu> endpoints_, devices_;
   SharedPointer<CTextEdit> id_, first_, channels_;
   SharedPointer<CTextLabel> status_, details_;
   SharedPointer<CMultiLineTextLabel> message_;
   SharedPointer<CTextButton> refresh_, reload_, addCapture_, addRender_, remove_, master_, reset_, run_, apply_;
+  SharedPointer<CTextButton> cableSetup_, cableWebsite_;
 };
 
 struct LastRuntimeWindow final : WindowListenerAdapter {

@@ -175,6 +175,10 @@ endif()
 # as its own option so it never affects the Qt build above.
 option(SAR_BUILD_GUI_VSTGUI "Build the VSTGUI-based control panel prototype" OFF)
 option(SAR_PACKAGE_NATIVE_PREVIEW "Include the optional native preview in the Qt installer" OFF)
+option(SAR_BUNDLE_VBCABLE "Include unmodified base VB-CABLE with donationware attribution" OFF)
+if(SAR_BUNDLE_VBCABLE AND NOT SAR_PACKAGE_NATIVE_PREVIEW)
+  message(FATAL_ERROR "VB-CABLE bundle requires the native preview attribution and setup UI")
+endif()
 if(SAR_PACKAGE_NATIVE_PREVIEW AND NOT (SAR_BUILD_GUI AND SAR_BUILD_GUI_VSTGUI))
   message(FATAL_ERROR "SAR_PACKAGE_NATIVE_PREVIEW requires both GUI build options")
 endif()
@@ -222,6 +226,7 @@ if(SAR_BUILD_GUI_VSTGUI)
     app/gui_vstgui/runtime_device_model.h
     app/gui_vstgui/runtime_device_window.cpp
     app/gui_vstgui/runtime_device_window.h
+    app/gui_vstgui/vb_cable_setup.cpp
   )
   target_include_directories(sar_gui_vstgui PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -239,7 +244,7 @@ if(SAR_BUILD_GUI_VSTGUI)
     vstgui
     vstgui_uidescription
     vstgui_standalone
-    nlohmann_json::nlohmann_json shell32 comdlg32
+    nlohmann_json::nlohmann_json shell32 comdlg32 wintrust crypt32
   )
   sar_add_version_resource(sar_gui_vstgui
     "System Audio Route control panel (VSTGUI prototype)"
@@ -1508,6 +1513,19 @@ if(WIN32 AND SAR_BUILD_GUI)
     install(FILES "${vstgui_SOURCE_DIR}/LICENSE" DESTINATION licenses/vstgui)
     install(FILES "${nlohmann_json_SOURCE_DIR}/LICENSE.MIT" DESTINATION licenses/nlohmann-json)
     install(PROGRAMS packaging/windows/start-native-preview.cmd DESTINATION .)
+  endif()
+  if(SAR_BUNDLE_VBCABLE)
+    set(sar_vbcable_archive "${CMAKE_CURRENT_BINARY_DIR}/vendor-downloads/VBCABLE_Driver_Pack45.zip")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vendor-downloads")
+    file(DOWNLOAD
+      "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip"
+      "${sar_vbcable_archive}"
+      EXPECTED_HASH SHA256=b950e39f01af1d04ea623c8f6d8eb9b6ea5c477c637295fabf20631c85116bfb
+      TLS_VERIFY ON TIMEOUT 90)
+    set(sar_vbcable_directory "${CMAKE_CURRENT_BINARY_DIR}/vendor/VB-CABLE")
+    file(ARCHIVE_EXTRACT INPUT "${sar_vbcable_archive}" DESTINATION "${sar_vbcable_directory}")
+    install(DIRECTORY "${sar_vbcable_directory}" DESTINATION vendor)
+    install(FILES "${sar_vbcable_archive}" DESTINATION vendor)
   endif()
   if(SAR_BUILD_GUI)
     install(TARGETS sar_gui

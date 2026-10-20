@@ -44,6 +44,7 @@ jobs:
           -DSAR_BUILD_GUI=ON
           -DSAR_BUILD_GUI_VSTGUI=ON
           -DSAR_PACKAGE_NATIVE_PREVIEW=ON
+          -DSAR_BUNDLE_VBCABLE=ON
           -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
 
@@ -83,6 +84,7 @@ jobs:
           scripts/windows-alpha-package-acceptance.ps1
           -PackagePath (Get-ChildItem build-alpha/package-output/*.zip | Select-Object -First 1).FullName
           -RequireNativePreview
+          -RequireVbCable
 
       - name: Validate installer package
         shell: pwsh
@@ -90,6 +92,7 @@ jobs:
           scripts/windows-installer-acceptance.ps1
           -PackagePath (Get-ChildItem build-alpha/package-output/*.exe | Select-Object -First 1).FullName
           -RequireNativePreview
+          -RequireVbCable
 
       - name: Upload Windows package
         uses: actions/upload-artifact@v4

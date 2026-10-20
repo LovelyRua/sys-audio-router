@@ -163,6 +163,10 @@ try {
   if (Test-Path -LiteralPath $licenses -PathType Container) {
     Copy-Item -LiteralPath $licenses -Destination $stagingPath -Recurse
   }
+  $vendor = Join-Path $packageRoot "vendor"
+  if (Test-Path -LiteralPath $vendor -PathType Container) {
+    Copy-Item -LiteralPath $vendor -Destination $stagingPath -Recurse
+  }
   Set-Content -LiteralPath (Join-Path $stagingPath $markerName) `
       -Value "System Audio Route Alpha 0.1.0" -Encoding ASCII
   foreach ($name in @(

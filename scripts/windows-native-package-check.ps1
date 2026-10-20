@@ -1,5 +1,5 @@
 function Test-NativePackage {
-  param([Parameter(Mandatory=$true)][string]$InstallPath)
+  param([Parameter(Mandatory=$true)][string]$InstallPath, [switch]$RequireVbCable)
 
   foreach ($relative in @('bin\SystemAudioRouteVstgui.exe',
       'licenses\vstgui\LICENSE', 'licenses\nlohmann-json\LICENSE.MIT',
@@ -13,6 +13,24 @@ function Test-NativePackage {
     throw 'Ordinary package unexpectedly contains experimental driver tooling.'
   }
   $engines = @(Get-InstalledProcess -Name sar_engine_service -Directory $InstallPath)
+  $cableArchive = Join-Path $InstallPath 'vendor\VBCABLE_Driver_Pack45.zip'
+  if ($RequireVbCable -and !(Test-Path -LiteralPath $cableArchive -PathType Leaf)) {
+    throw 'Expected base VB-CABLE payload is missing.'
+  }
+  if (Test-Path -LiteralPath $cableArchive) {
+    if ((Get-FileHash -LiteralPath $cableArchive -Algorithm SHA256).Hash -ne
+        'B950E39F01AF1D04EA623C8F6D8EB9B6EA5C477C637295FABF20631C85116BFB') {
+      throw 'Bundled VB-CABLE archive identity mismatch.'
+    }
+    $cableSetup = Join-Path $InstallPath 'vendor\VB-CABLE\VBCABLE_Setup_x64.exe'
+    if ((Get-AuthenticodeSignature -LiteralPath $cableSetup).Status -ne 'Valid') {
+      throw 'Bundled vendor installer signature is not valid.'
+    }
+    if (!(Test-Path -LiteralPath (Join-Path $InstallPath 'vendor\VB-CABLE\readme.txt'))) {
+      throw 'Original VB-CABLE license/readme missing.'
+    }
+    Write-Output 'vbcable_package_acceptance passed=1 archive=passed signature=passed vendor_setup_not_executed=1'
+  }
   if ($engines.Count -ne 1) { throw 'Native launcher test requires one owned engine.' }
   $engineId = $engines[0].Id
   $native = $null

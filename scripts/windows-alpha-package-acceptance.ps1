@@ -8,7 +8,8 @@ param(
 
   [ValidateRange(1, 30)]
   [int]$GuiHealthSeconds = 4,
-  [switch]$RequireNativePreview
+  [switch]$RequireNativePreview,
+  [switch]$RequireVbCable
 )
 
 $ErrorActionPreference = "Stop"
@@ -243,7 +244,7 @@ try {
   }
   if ($RequireNativePreview) {
     . (Join-Path $PSScriptRoot 'windows-native-package-check.ps1')
-    Test-NativePackage -InstallPath $installPath
+    Test-NativePackage -InstallPath $installPath -RequireVbCable:$RequireVbCable
   }
 
   $controlResult = Invoke-CommandScript `
