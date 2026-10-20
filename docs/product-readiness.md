@@ -8,6 +8,13 @@ Status legend: **Done** (implemented and covered by CI), **Open** (work we can
 do in the repository), **External** (needs something outside the repository:
 a certificate, hardware, a driver test machine).
 
+Current delivery priority (2026-10-20): integrate existing VB-CABLE WASAPI
+endpoints and the native user workflow. Self-developed virtual WASAPI driver
+work is on hold; historical FEAT-1 evidence below is retained, not a promise to
+ship that driver. Only base VB-CABLE is eligible for the attributed bundle;
+A/B, C/D and Hi-Fi Cable are separate prerequisites. Installer launch and payload
+checks do not establish audio continuity or compatibility with every VB product.
+
 ## Release and delivery
 
 | ID | Item | Status |
