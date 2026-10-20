@@ -6,7 +6,8 @@ param(
   [string]$InstallDirectory = "",
 
   [ValidateRange(1, 30)]
-  [int]$GuiHealthSeconds = 4
+  [int]$GuiHealthSeconds = 4,
+  [switch]$RequireNativePreview
 )
 
 $ErrorActionPreference = "Stop"
@@ -195,6 +196,10 @@ try {
   if ($guiProcesses[0].HasExited -or $engineProcesses[0].HasExited) {
     throw "A bootstrapped process exited before the health window completed."
   }
+  if ($RequireNativePreview) {
+    . (Join-Path $PSScriptRoot 'windows-native-package-check.ps1')
+    Test-NativePackage -InstallPath $installPath
+  }
 
   $controlCli = Join-Path $installPath "bin\sar_control_cli.exe"
   $previousErrorActionPreference = $ErrorActionPreference
@@ -270,7 +275,7 @@ try {
       " concurrent_launch=passed single_instance=passed" +
       " gui=passed engine=passed asio=passed uninstall=passed")
 } finally {
-  foreach ($processName in @("SystemAudioRoute", "sar_engine_service")) {
+  foreach ($processName in @("SystemAudioRoute", "SystemAudioRouteVstgui", "sar_engine_service")) {
     foreach ($process in @(Get-InstalledProcess -Name $processName `
         -Directory $installPath)) {
       Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue

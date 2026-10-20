@@ -42,6 +42,8 @@ jobs:
           cmake -S . -B build-alpha
           -G Ninja
           -DSAR_BUILD_GUI=ON
+          -DSAR_BUILD_GUI_VSTGUI=ON
+          -DSAR_PACKAGE_NATIVE_PREVIEW=ON
           -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
 
@@ -80,12 +82,14 @@ jobs:
         run: >-
           scripts/windows-alpha-package-acceptance.ps1
           -PackagePath (Get-ChildItem build-alpha/package-output/*.zip | Select-Object -First 1).FullName
+          -RequireNativePreview
 
       - name: Validate installer package
         shell: pwsh
         run: >-
           scripts/windows-installer-acceptance.ps1
           -PackagePath (Get-ChildItem build-alpha/package-output/*.exe | Select-Object -First 1).FullName
+          -RequireNativePreview
 
       - name: Upload Windows package
         uses: actions/upload-artifact@v4

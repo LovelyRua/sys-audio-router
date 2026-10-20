@@ -106,7 +106,7 @@ function Stop-InstalledEngine {
 }
 
 Stop-InstalledEngine -InstallPath $installPath
-foreach ($processName in @("sar_engine_service", "SystemAudioRoute")) {
+foreach ($processName in @("sar_engine_service", "SystemAudioRoute", "SystemAudioRouteVstgui")) {
   $running = @(Get-Process -Name $processName -ErrorAction SilentlyContinue |
       Where-Object {
         try {

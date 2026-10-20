@@ -174,6 +174,10 @@ endif()
 # app/gui_vstgui and docs/product-readiness.md for what is not ported). Kept
 # as its own option so it never affects the Qt build above.
 option(SAR_BUILD_GUI_VSTGUI "Build the VSTGUI-based control panel prototype" OFF)
+option(SAR_PACKAGE_NATIVE_PREVIEW "Include the optional native preview in the Qt installer" OFF)
+if(SAR_PACKAGE_NATIVE_PREVIEW AND NOT (SAR_BUILD_GUI AND SAR_BUILD_GUI_VSTGUI))
+  message(FATAL_ERROR "SAR_PACKAGE_NATIVE_PREVIEW requires both GUI build options")
+endif()
 
 if(SAR_BUILD_GUI_VSTGUI)
   if(NOT WIN32)
@@ -1499,6 +1503,12 @@ if(WIN32 AND SAR_BUILD_GUI)
   install(TARGETS sar_virtual_wasapi_lab_producer
                   sar_measure_wasapi_capture_level
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}/lab)
+  if(SAR_PACKAGE_NATIVE_PREVIEW)
+    install(TARGETS sar_gui_vstgui RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(FILES "${vstgui_SOURCE_DIR}/LICENSE" DESTINATION licenses/vstgui)
+    install(FILES "${nlohmann_json_SOURCE_DIR}/LICENSE.MIT" DESTINATION licenses/nlohmann-json)
+    install(PROGRAMS packaging/windows/start-native-preview.cmd DESTINATION .)
+  endif()
   if(SAR_BUILD_GUI)
     install(TARGETS sar_gui
       RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -1588,8 +1598,12 @@ if(WIN32 AND SAR_BUILD_GUI)
     sar_pre_no_engine:
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /IM SystemAudioRoute.exe'
     Pop $0
+    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /IM SystemAudioRouteVstgui.exe'
+    Pop $0
     Sleep 1500
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM SystemAudioRoute.exe'
+    Pop $0
+    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM SystemAudioRouteVstgui.exe'
     Pop $0
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM sar_engine_service.exe'
     Pop $0
@@ -1617,8 +1631,12 @@ if(WIN32 AND SAR_BUILD_GUI)
     sar_un_no_engine:
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /IM SystemAudioRoute.exe'
     Pop $0
+    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /IM SystemAudioRouteVstgui.exe'
+    Pop $0
     Sleep 1500
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM SystemAudioRoute.exe'
+    Pop $0
+    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM SystemAudioRouteVstgui.exe'
     Pop $0
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM sar_engine_service.exe'
     Pop $0
@@ -1630,5 +1648,13 @@ if(WIN32 AND SAR_BUILD_GUI)
     Abort
     sar_skip_asio_unregistration:
   ]])
+  if(SAR_PACKAGE_NATIVE_PREVIEW)
+    string(APPEND CPACK_NSIS_EXTRA_INSTALL_COMMANDS [[
+      CreateShortCut "$SMPROGRAMS\$STARTMENU_FOLDER\System Audio Route Native Preview.lnk" "$INSTDIR\bin\SystemAudioRouteLauncher.exe" "--native" "$INSTDIR\bin\SystemAudioRouteVstgui.exe"
+    ]])
+    string(APPEND CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS [[
+      Delete "$SMPROGRAMS\$STARTMENU_FOLDER\System Audio Route Native Preview.lnk"
+    ]])
+  endif()
   include(CPack)
 endif()

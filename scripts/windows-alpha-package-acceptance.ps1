@@ -7,7 +7,8 @@ param(
       "Programs\SystemAudioRoute-Alpha-Acceptance"),
 
   [ValidateRange(1, 30)]
-  [int]$GuiHealthSeconds = 4
+  [int]$GuiHealthSeconds = 4,
+  [switch]$RequireNativePreview
 )
 
 $ErrorActionPreference = "Stop"
@@ -239,6 +240,10 @@ try {
   Start-Sleep -Seconds $GuiHealthSeconds
   if ($guiProcess.HasExited -or $engineProcess.HasExited) {
     throw "A bootstrapped process exited before the health window completed."
+  }
+  if ($RequireNativePreview) {
+    . (Join-Path $PSScriptRoot 'windows-native-package-check.ps1')
+    Test-NativePackage -InstallPath $installPath
   }
 
   $controlResult = Invoke-CommandScript `
