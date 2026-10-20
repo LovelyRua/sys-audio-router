@@ -111,4 +111,7 @@ The 870 x 659 console retained visible title bars and close buttons, with fixed
 logical content in themed scroll viewports. General multi-WASAPI configuration
 is now available in a separate native Audio devices window; see
 `native-runtime-editor.md` for its independent runtime readback and acceptance.
-Installer integration and live monitor/work-area re-fitting remain open.
+Experimental-driver installer integration and live monitor/work-area re-fitting
+remain open. The optional native control-panel payload can now be included in
+the ordinary installer, without bundling or installing the experimental driver
+or management helper. See `../user-guide.md` for its separate preview entry.

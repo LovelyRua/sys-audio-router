@@ -4,6 +4,34 @@ System Audio Route (SAR) is alpha software. Read the
 [current limits](../README.md#current-limits) before using it on a production
 rig.
 
+## Installing and choosing a control panel
+
+Use the Windows GUI Package artifact from the revision you want to test. Extract
+the downloaded artifact and run its `SystemAudioRoute-*-windows-x64.exe`
+installer. The regular **System Audio Route** shortcut opens the Qt control
+panel. Packages built with `SAR_PACKAGE_NATIVE_PREVIEW=ON` also install
+**System Audio Route Native Preview** in the Start menu.
+
+Both shortcuts use the same launcher, engine, per-user control pipe, session and
+log paths. You do not need to start the engine manually for the native preview.
+For a ZIP installation, run `install-alpha.cmd`, then use
+`start-native-preview.cmd` in the installed directory. Do not move individual
+EXEs or Qt runtime folders out of the installed layout.
+
+The native preview is optional, not yet feature-equivalent to the Qt panel.
+It supports routing, route gain/mute and multi-WASAPI runtime configuration;
+presets, full diagnostics and other Qt workflows are not ported yet. Closing
+the native window leaves the engine running without the Qt close-choice dialog.
+Its Start audio / Stop audio buttons control streaming, not the engine process.
+Changes in either panel affect the same live session; avoid editing both at once.
+
+This installer registers Virtual ASIO but does **not** install an experimental
+virtual WASAPI kernel driver or its management helper. It does not change Secure
+Boot or test-signing settings. Ordinary WASAPI device routing needs no SAR kernel
+driver. The native Virtual WASAPI management window requires a separately
+provisioned driver-lab environment; a missing helper there is expected for a
+normal installation.
+
 ## Start and stop
 
 Start **System Audio Route** from the Start menu or desktop shortcut. The

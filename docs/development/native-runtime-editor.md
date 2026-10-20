@@ -4,7 +4,9 @@ The optional VSTGUI preview now has an Audio devices window using the same
 `QueryAudioRuntime`, `ListDevices`, `ConfigureAudioRuntime` and start/stop
 commands as the existing Qt control panel. It does not create a second session
 file or bypass engine-side validation. The engine must already be running;
-the regular bootstrap and installer still use the Qt control panel.
+the default bootstrap entry still uses the Qt control panel. Packages built with
+`SAR_PACKAGE_NATIVE_PREVIEW=ON` add a separate native entry through the same
+launcher (`--native`), which starts the engine when needed.
 
 ## Scope
 
@@ -81,8 +83,8 @@ closed or cleared after acceptance. No development-host tools were installed.
 
 This proves configuration and lifecycle behavior, not a new sound-content or
 waveform-continuity pass: the private test matrix contained no signal routes.
-The native preview still lacks physical-ASIO editing, bootstrap/installer
-integration, presets, full diagnostics and localization. It is not yet a
+The native preview still lacks physical-ASIO editing, experimental-driver
+installer integration, presets, full diagnostics and localization. It is not yet a
 replacement for the shipped Qt control panel.
 
 ## Topology changes in the routing matrix
@@ -101,3 +103,23 @@ Revision `b928502` passed CI run `39377647617`: 162 CTest cases, 15 script
 suites, seven advisory ASan cases, the native model/parser checks, and native
 three-window startup/closure. Windows package run `39377651538` passed too.
 This follow-up was verified in CI; no new VM24 audio-content test is claimed.
+
+## Optional installer payload
+
+`SAR_PACKAGE_NATIVE_PREVIEW=ON` requires both GUI build options. It installs the
+native EXE and its third-party licenses alongside the Qt panel. The default
+shortcut is unchanged; the additional Native Preview shortcut invokes
+`SystemAudioRouteLauncher.exe --native`. The ZIP installation retains the
+licenses directory and `start-native-preview.cmd` as well.
+
+Package run `39382435628` for branch revision `17c86ea` (PR merge build
+`515dc64df25a4e29f5208864b84bed781ac6246f`) passed 166 CTest cases, ZIP
+install/update/uninstall acceptance and EXE installer acceptance. Both package
+paths launched the installed native executable, retained the existing engine PID,
+and left the engine alive after disposing the native test process. The native
+probe uses a force-close of its exact owned process; it does not establish
+graceful native-window closure, covered separately by the startup gate.
+
+No experimental kernel driver or manager is included, and neither installer
+changes boot security settings. This is native-preview delivery, not complete
+virtual-WASAPI-driver delivery or a new VM24 sound-content acceptance pass.
