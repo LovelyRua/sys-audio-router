@@ -16,6 +16,50 @@ jobs:
       - name: Configure
         run: cmake -S . -B build -DSAR_BUILD_GUI_VSTGUI=ON
 
+      - name: Build native virtual device client
+        run: cmake --build build --config Release --target sar_gui_virtual_device_client_smoke sar_gui_runtime_device_model_smoke
+
+      - name: Test native virtual device client
+        run: ctest --test-dir build -C Release --output-on-failure -R "^gui_(virtual_device_client|runtime_device_model)_smoke$"
+
+      - name: Build native control panel
+        run: cmake --build build --config Release --target sar_gui_vstgui
+
+      - name: Upload VSTGUI preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-audio-route-vstgui-preview
+          path: |
+            build/Release/SystemAudioRouteVstgui.exe
+            build/Release/licenses/
+            build/Release/LICENSE
+            build/Release/NOTICE.md
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload native GUI diagnostic symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-audio-route-vstgui-symbols
+          path: |
+            build/Release/SystemAudioRouteVstgui.pdb
+            build/gui-vstgui.map
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Test native GUI startup and graceful close
+        shell: pwsh
+        run: scripts/windows-vstgui-startup-smoke.ps1 -Executable build/Release/SystemAudioRouteVstgui.exe -OutputDirectory build/native-gui-startup
+
+      - name: Upload native GUI startup report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-audio-route-vstgui-startup
+          path: build/native-gui-startup/
+          if-no-files-found: ignore
+          retention-days: 3
+
       - name: Build
         run: cmake --build build --config Release
 
@@ -27,13 +71,35 @@ jobs:
         timeout-minutes: 10
         run: scripts/windows-script-self-tests.ps1
 
-      - name: Upload VSTGUI preview
+      - name: Record matrix lab build identity
+        shell: pwsh
+        run: |
+          @{
+            commit = '${{ github.sha }}'
+            run_id = '${{ github.run_id }}'
+            binaries = @(Get-FileHash build/Release/sar_engine_service.exe,
+              build/Release/sar_control_cli.exe -Algorithm SHA256 |
+              Select-Object Path, Hash)
+          } | ConvertTo-Json -Depth 4 |
+            Set-Content build/Release/matrix-lab-build.json -Encoding utf8
+
+      - name: Upload public WASAPI matrix lab tools
         uses: actions/upload-artifact@v4
         with:
-          name: system-audio-route-vstgui-preview
-          path: build/Release/SystemAudioRouteVstgui.exe
+          name: system-audio-route-matrix-lab-tools
+          path: |
+            build/Release/sar_engine_service.exe
+            build/Release/sar_control_cli.exe
+            build/Release/matrix-lab-build.json
+            scripts/windows-virtual-wasapi-matrix-preflight.ps1
+            scripts/windows-lab-process.psm1
+            scripts/windows-virtual-wasapi-signal-evidence.psm1
+            LICENSE
+            NOTICE.md
+            third_party/libsamplerate/COPYING
+            third_party/asio_sdk_2.3.4/common/LICENSE.txt
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 3
 
   windows-asan:
     name: Windows AddressSanitizer (advisory)

@@ -57,6 +57,11 @@ std::optional<control::ControlResponse> transact(
     state.lastError = "The engine response could not be decoded";
     return std::nullopt;
   }
+  if (decoded.response.command_id != command.command_id) {
+    state.transportOk = false;
+    state.lastError = "The engine response belongs to a different request";
+    return std::nullopt;
+  }
   state.transportOk = true;
   if (decoded.response.status == control::ControlResponseStatus::Rejected) {
     state.lastError = decoded.response.errors.empty()
@@ -71,12 +76,10 @@ std::optional<control::ControlResponse> transact(
 
 EngineClient::EngineClient(std::wstring pipe_name)
     : pipe_name_(pipe_name.empty() ? sar::platform::default_control_pipe_name()
-                                   : std::move(pipe_name)),
-      command_prefix_("gui-vstgui-" + std::to_string(GetCurrentProcessId()) + "-") {}
+                                   : std::move(pipe_name)) {}
 
 std::string EngineClient::next_command_id() {
-  return command_prefix_ +
-        std::to_string(command_sequence_.fetch_add(1, std::memory_order_relaxed));
+  return command_ids_.next();
 }
 
 EngineState EngineClient::poll() {
@@ -133,6 +136,74 @@ EngineState EngineClient::start() {
   auto current = poll();
   if (!response) current.lastError = state.lastError;
   return current;
+}
+
+RuntimeDeviceSnapshot EngineClient::inspectDevices() {
+  RuntimeDeviceSnapshot result;
+  EngineState transport;
+  service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  control::ControlCommand query;
+  query.command_id = next_command_id();
+  query.type = control::ControlCommandType::QueryAudioRuntime;
+  const auto runtime = transact(config, std::move(query), transport);
+  if (!runtime || !runtime->has_audio_runtime_state) {
+    result.error = transport.lastError.empty() ? "Runtime configuration is unavailable" : transport.lastError;
+    return result;
+  }
+  query = {};
+  query.command_id = next_command_id();
+  query.type = control::ControlCommandType::ListDevices;
+  const auto devices = transact(config, std::move(query), transport);
+  if (!devices || !devices->has_devices) {
+    result.error = transport.lastError.empty() ? "Device inventory is unavailable" : transport.lastError;
+    return result;
+  }
+  result.available = true;
+  result.operationSucceeded = true;
+  result.running = runtime->audio_runtime.running;
+  result.configuration = runtime->audio_runtime.configuration;
+  result.devices = devices->devices;
+  return result;
+}
+
+RuntimeDeviceSnapshot EngineClient::configureDevices(control::AudioRuntimeConfiguration configuration) {
+  const auto errors = control::validate_audio_runtime_configuration(configuration, false);
+  if (!errors.empty()) {
+    RuntimeDeviceSnapshot result;
+    result.error = errors.front().message;
+    return result;
+  }
+  EngineState transport;
+  service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  control::ControlCommand command;
+  command.command_id = next_command_id();
+  command.type = control::ControlCommandType::ConfigureAudioRuntime;
+  command.audio_runtime = std::move(configuration);
+  const auto response = transact(config, std::move(command), transport);
+  auto result = inspectDevices();
+  result.operationSucceeded = response.has_value() && result.available;
+  if (!response) result.error = transport.lastError +
+      "; refreshed state may differ. No automatic retry was made.";
+  return result;
+}
+
+RuntimeDeviceSnapshot EngineClient::setRuntimeRunning(bool running) {
+  EngineState transport;
+  service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  control::ControlCommand command;
+  command.command_id = next_command_id();
+  command.type = running ? control::ControlCommandType::StartAudioRuntime
+                         : control::ControlCommandType::StopAudioRuntime;
+  const auto response = transact(config, std::move(command), transport);
+  auto result = inspectDevices();
+  result.operationSucceeded = response.has_value() && result.available && result.running == running;
+  if (!response) result.error = transport.lastError;
+  else if (result.available && result.running != running)
+    result.error = "Runtime state did not match the requested transition";
+  return result;
 }
 
 EngineState EngineClient::stop() {

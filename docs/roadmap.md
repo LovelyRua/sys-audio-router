@@ -2,6 +2,21 @@
 
 This roadmap is optimized for depth and stability, not speed.
 
+## Current priority override (2026-10-20)
+
+Self-developed virtual WASAPI driver work is on hold, not deleted. The near-term
+release path uses existing third-party WASAPI endpoints, with VB-CABLE as the
+first supported integration target. Basic VB-CABLE can be bundled only under
+its published attribution/donationware conditions; A/B and C/D are not bundled,
+and Hi-Fi Cable remains a separately installed prerequisite pending distribution
+permission. User-provided paid archives are never committed or uploaded to CI.
+
+Acceptance must cover render/capture direction, reported channel capabilities,
+sample rates, start/stop, endpoint re-enumeration after reboot and sustained
+signal continuity. A successful installer launch is not audio acceptance.
+Hi-Fi Cable must use matching input/output sample rates per its documentation.
+Do not promise bit-perfect transmission through a route that resamples or mixes.
+
 ## Phase 0: Design and Technical Validation
 
 Purpose: decide the hard platform strategy before building too much around the wrong assumptions.

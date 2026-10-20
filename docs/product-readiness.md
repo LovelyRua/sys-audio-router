@@ -8,6 +8,13 @@ Status legend: **Done** (implemented and covered by CI), **Open** (work we can
 do in the repository), **External** (needs something outside the repository:
 a certificate, hardware, a driver test machine).
 
+Current delivery priority (2026-10-20): integrate existing VB-CABLE WASAPI
+endpoints and the native user workflow. Self-developed virtual WASAPI driver
+work is on hold; historical FEAT-1 evidence below is retained, not a promise to
+ship that driver. Only base VB-CABLE is eligible for the attributed bundle;
+A/B, C/D and Hi-Fi Cable are separate prerequisites. Installer launch and payload
+checks do not establish audio continuity or compatibility with every VB product.
+
 ## Release and delivery
 
 | ID | Item | Status |
@@ -17,7 +24,7 @@ a certificate, hardware, a driver test machine).
 | REL-3 | Icon, version resource, About/version display | Done: every shipped executable and the driver carry VERSIONINFO; executables carry the icon; the version shows in the control panel |
 | REL-4 | Update check | Open |
 | LIC-1 | Third-party license texts in the package | Done: libsamplerate and ASIO SDK licenses ship under `licenses/`; `NOTICE.md` lists Qt, libsamplerate, ASIO SDK, and the VC++ runtime |
-| FEAT-1 | Virtual WDM/WASAPI endpoints | Open: the Win11 driver lab exists and Microsoft sample endpoints were enumerated there. The driver is now scoped as a separate MS-PL project with a public-WASAPI-only integration boundary; SAR still does not install or expose its own virtual endpoint. See `docs/architecture/virtual-wasapi-driver-boundary.md` |
+| FEAT-1 | Virtual WDM/WASAPI endpoints | Open: a separate MS-PL experimental driver passes short public-WASAPI sound-content, live matrix route-transition, and steady receiving-endpoint timeline checks through the product engine, both within one adapter and across two adapters. Native GUI adapter management is implemented as an experimental preview, with interactive acceptance tracked separately; this is not shipping installer delivery. Full waveform continuity/soak is not passed. See `docs/development/virtual-wasapi-gui-lab.md`, `docs/development/virtual-wasapi-matrix-acceptance.md` and `docs/architecture/virtual-wasapi-driver-boundary.md` |
 | QUAL-1 | Release soaks (second 8 h pairing, 24 h, multi-DAW) and more DAWs/interfaces | External: needs hardware time |
 
 ## Lifecycle and reliability
@@ -51,7 +58,7 @@ a certificate, hardware, a driver test machine).
 | UX-9 | Per-channel meters and mixer view | Open |
 | UX-10 | Engine-provided endpoint families (replace name matching in `Main.qml`) | Open |
 | GUI-1 | Split `Main.qml`; add Qt Quick Test | Open |
-| GUI-2 | VSTGUI-based control panel as a replacement for the Qt Quick GUI | Open: `app/gui_vstgui` is a parallel prototype behind `SAR_BUILD_GUI_VSTGUI` (default off), wired to the real engine over the control pipe. It has engine status and start/stop, a paged interactive routing matrix, and a route inspector with gain and mute. Windows CI builds, tests, and publishes a preview executable. Still missing: device configuration, diagnostics detail, presets, dialogs, localization, keyboard/accessible navigation, and interactive user-flow verification. The Qt Quick GUI remains the shipped control panel until this catches up |
+| GUI-2 | VSTGUI-based control panel as a replacement for the Qt Quick GUI | Open: `app/gui_vstgui` is a parallel prototype behind `SAR_BUILD_GUI_VSTGUI` (default off), wired to the real engine over the control pipe. It has engine status and start/stop, a paged interactive routing matrix, a route inspector with gain and mute, experimental virtual WASAPI adapter management, and a multi-WASAPI runtime editor. VM24 acceptance covers configuration/readback of two playback plus two capture endpoints, start/stop, dirty-draft reconnect, confirmed reload, INF selection/cancellation and small-screen fit. CI validates all three windows and the optional native payload in both ZIP and EXE installers, including the shared bootstrap engine. Still missing: physical-ASIO configuration editing, experimental-driver installation, diagnostics detail, presets, localization, keyboard/accessible navigation, and complete end-to-end user-flow parity. See `docs/development/native-runtime-editor.md`. Qt remains the default control panel; Native Preview is a separate optional entry |
 
 ## Engineering and process
 

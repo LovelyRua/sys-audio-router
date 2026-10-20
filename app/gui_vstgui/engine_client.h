@@ -6,6 +6,8 @@
 #include <vector>
 
 #include "core/control/preset_document.h"
+#include "core/control/control_response.h"
+#include "app/gui_vstgui/command_ids.h"
 
 namespace sar::gui_vstgui {
 
@@ -20,6 +22,15 @@ struct EngineState {
   std::string lastError;
   control::PresetRouteMatrix matrix;
   bool hasMatrix = false;
+};
+
+struct RuntimeDeviceSnapshot {
+  bool available = false;
+  bool running = false;
+  bool operationSucceeded = false;
+  control::AudioRuntimeConfiguration configuration;
+  std::vector<platform::AudioDeviceDescriptor> devices;
+  std::string error;
 };
 
 // Talks to the engine over the same per-user named pipe the engine service,
@@ -42,6 +53,9 @@ class EngineClient final {
   // observed right after, same as poll().
   [[nodiscard]] EngineState start();
   [[nodiscard]] EngineState stop();
+  [[nodiscard]] RuntimeDeviceSnapshot inspectDevices();
+  [[nodiscard]] RuntimeDeviceSnapshot configureDevices(control::AudioRuntimeConfiguration configuration);
+  [[nodiscard]] RuntimeDeviceSnapshot setRuntimeRunning(bool running);
   [[nodiscard]] EngineState setRoute(std::string input_id, std::string output_id,
                                      bool connect);
   [[nodiscard]] EngineState setRouteGain(std::string input_id, std::string output_id,
@@ -53,8 +67,7 @@ class EngineClient final {
   [[nodiscard]] std::string next_command_id();
 
   std::wstring pipe_name_;
-  std::string command_prefix_;
-  std::atomic<std::uint64_t> command_sequence_{0};
+  GuiCommandIds command_ids_;
 };
 
 }  // namespace sar::gui_vstgui
