@@ -5,6 +5,7 @@
 #include "app/gui_vstgui/palette.h"
 #include "app/gui_vstgui/virtual_device_window.h"
 #include "app/gui_vstgui/runtime_device_window.h"
+#include "app/gui_vstgui/request_error_state.h"
 #include "app/gui_vstgui/view_ownership.h"
 #include "app/gui_vstgui/window_geometry.h"
 
@@ -157,8 +158,8 @@ class HeaderController final : public IControlListener {
         return;
       try {
         auto state = pending_.get();
-        if (!state.lastError.empty()) error_ = state.lastError;
-        state.lastError = error_;
+        error_.observe(state.lastError, state.transportOk);
+        state.lastError = error_.message();
         apply(state);
       } catch (...) {
         EngineState state;
@@ -445,7 +446,7 @@ class HeaderController final : public IControlListener {
   SharedPointer<CTextButton> muteButton_;
   SharedPointer<CTextButton> resetButton_;
   SharedPointer<CTextButton> removeButton_;
-  std::string error_;
+  GuiRequestErrorState error_;
   SharedPointer<CTextLabel> errorText_;
   EngineState last_;
   SharedPointer<StatusDotView> dot_;
@@ -690,12 +691,15 @@ WindowPtr createMainWindow() {
       CScrollView::kVerticalScrollbar | CScrollView::kAutoHideScrollbars |
       CScrollView::kDontDrawFrame | CScrollView::kFollowFocusView);
   viewport->setBackgroundColor(palette::kCanvas);
+  styleScrollbars(*viewport);
   viewport->setAutosizeFlags(kAutosizeLeft | kAutosizeTop | kAutosizeRight | kAutosizeBottom);
   addRetainedView(*viewport, content);
   addRetainedView(*frame, viewport);
   window->setContentView(frame);
   prepareScrollableWindow(*window, *frame, CPoint(kWindowWidth, kWindowHeight),
       MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTONEAREST));
+  frame->setFocusView(audioDevices);
+  viewport->resetScrollOffset();
   windowController->startPolling(std::move(controller));
   return window;
 }

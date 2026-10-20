@@ -1,5 +1,6 @@
 #include "app/gui_vstgui/runtime_device_model.h"
 #include "app/gui_vstgui/command_ids.h"
+#include "app/gui_vstgui/request_error_state.h"
 #include "core/control/control_wire_protocol.h"
 
 #include <cstdlib>
@@ -26,6 +27,16 @@ platform::AudioDeviceDescriptor device(const char* id, platform::AudioDeviceDire
 }
 
 int main() {
+  GuiRequestErrorState errors;
+  errors.observe("offline", false);
+  require(errors.message() == "offline", "Transport error was hidden");
+  errors.observe("", true);
+  require(errors.message().empty(), "Recovered transport stayed faulted");
+  errors.observe("command rejected", true);
+  errors.observe("", true);
+  require(errors.message() == "command rejected", "Action error disappeared on routine poll");
+  errors.clear();
+  require(errors.message().empty(), "Explicit error clear failed");
   std::unordered_set<std::string> ids;
   std::mutex idsMutex;
   std::vector<std::thread> workers;

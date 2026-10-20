@@ -344,6 +344,7 @@ void showRuntimeDeviceWindow() {
       CScrollView::kVerticalScrollbar | CScrollView::kAutoHideScrollbars |
       CScrollView::kDontDrawFrame | CScrollView::kFollowFocusView);
   viewport->setBackgroundColor(palette::kCanvas);
+  styleScrollbars(*viewport);
   viewport->setAutosizeFlags(kAutosizeLeft | kAutosizeTop | kAutosizeRight | kAutosizeBottom);
   addRetainedView(*viewport, makeOwned<RuntimePanel>());
   addRetainedView(*frame, viewport);

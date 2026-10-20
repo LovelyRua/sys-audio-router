@@ -6,6 +6,9 @@
 #include <windows.h>
 
 #include "vstgui/lib/cframe.h"
+#include "vstgui/lib/cscrollview.h"
+#include "vstgui/lib/controls/cscrollbar.h"
+#include "app/gui_vstgui/palette.h"
 #include "vstgui/lib/platform/iplatformframe.h"
 #include "vstgui/standalone/include/iwindow.h"
 
@@ -13,6 +16,18 @@
 #include <cmath>
 
 namespace sar::gui_vstgui {
+
+inline void styleScrollbars(VSTGUI::CScrollView& viewport) {
+  const auto style = [](VSTGUI::CScrollbar* bar) {
+    if (!bar) return;
+    bar->setBackgroundColor(palette::kCanvas);
+    bar->setFrameColor(palette::kLine);
+    bar->setScrollerColor(palette::kMuted);
+    bar->invalid();
+  };
+  style(viewport.getHorizontalScrollbar());
+  style(viewport.getVerticalScrollbar());
+}
 
 // Call after setContentView and before show, without the centered window style.
 // The content must live in an autosizing scroll viewport, not be scaled to fit.
