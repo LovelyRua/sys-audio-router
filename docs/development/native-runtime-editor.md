@@ -84,3 +84,20 @@ waveform-continuity pass: the private test matrix contained no signal routes.
 The native preview still lacks physical-ASIO editing, bootstrap/installer
 integration, presets, full diagnostics and localization. It is not yet a
 replacement for the shipped Qt control panel.
+
+## Topology changes in the routing matrix
+
+The native matrix now clamps both paging axes when it receives an authoritative
+topology with fewer channels. A formerly valid last page cannot strand the user
+on an empty grid after applying a smaller runtime configuration. Temporary
+transport failures preserve the page position and disable navigation; a healthy
+snapshot reconciles it. The portable model smoke covers empty, partial and exact
+page boundaries and repeated topology shrink across 0-256 channels.
+
+The main-window runtime button says Start audio / Stop audio: these commands
+control audio streaming, not the lifetime of the background engine process.
+
+Revision `b928502` passed CI run `39377647617`: 162 CTest cases, 15 script
+suites, seven advisory ASan cases, the native model/parser checks, and native
+three-window startup/closure. Windows package run `39377651538` passed too.
+This follow-up was verified in CI; no new VM24 audio-content test is claimed.
