@@ -49,3 +49,38 @@ physical ASIO field preservation, and 4096 command IDs across concurrent clients
 The bounded GUI startup check opens all three native windows and closes them.
 These checks do not replace interactive device selection, Apply, start/stop,
 dirty-refresh/reconnect, or the existing waveform/continuity acceptance tests.
+
+## Interactive acceptance (2026-10-20)
+
+VM24 used a private engine session and the non-elevated interactive codex user.
+The engine binaries came from product revision `03c2fec`; this batch changes no
+engine or audio-path implementation. The native client was first exercised at
+`27fa10a` and the final regression pass used `f8c1c5c`. Existing experimental
+adapters were selected, not installed, renamed or removed during this round.
+
+| Flow | Observed result |
+| --- | --- |
+| Invalid channel count 0, Apply | Local rejection; independent runtime query confirmed no runtime installed |
+| Configure two playback and two capture endpoints | Actual A/B adapter devices selected; four endpoints applied successfully |
+| Refresh a dirty draft | Endpoint IDs, bindings and numeric edits retained |
+| Disconnect and reconnect while dirty | Explicit transport error, followed by recovery without discarding edits |
+| Apply and reopen Audio devices | Four saved endpoints read back, with render-1 master and capture-2 bound to adapter B |
+| Start and stop audio | GUI state and independent control CLI agreed; the engine service stayed alive |
+| Reload saved, cancel | Five-endpoint dirty draft retained |
+| Reload saved, confirm | Saved four-endpoint configuration restored |
+| Close and reopen editor | No cross-window command-cache collision |
+| Main-window transport recovery | Offline pipe error cleared automatically after the private engine restarted |
+| Small 870 x 659 console | Title bars and close controls visible; fixed-size content scrollable with muted scrollbars |
+| Close native GUI | Independent CLI still responded; engine then stopped explicitly with --stop |
+
+CI run `39354135549` for `f8c1c5c` passed 162 CTest cases, 15 script suites,
+seven advisory ASan cases, the two native model/parser checks, and the bounded
+three-window startup/closure check. Windows package run `39354140497` also passed.
+Temporary GUI/engine processes, scheduled tasks and process-ledger entries were
+closed or cleared after acceptance. No development-host tools were installed.
+
+This proves configuration and lifecycle behavior, not a new sound-content or
+waveform-continuity pass: the private test matrix contained no signal routes.
+The native preview still lacks physical-ASIO editing, bootstrap/installer
+integration, presets, full diagnostics and localization. It is not yet a
+replacement for the shipped Qt control panel.

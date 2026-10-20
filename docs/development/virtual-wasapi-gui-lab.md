@@ -97,3 +97,18 @@ content/continuity pass or shipping driver readiness. The native INF picker was
 not accepted in this round; typed absolute INF paths were used. Small-display
 window placement, general runtime configuration, and installer integration
 remain open. The regular installer still ships the Qt control panel.
+
+### Follow-up picker and window acceptance
+
+The next native GUI round (`27fa10a`, followed by layout regression at
+`f8c1c5c`) exercised the real Windows Open dialog on VM24. Selecting an existing
+absolute Windows INF path populated the field successfully. Reopening the
+picker and cancelling preserved that path. Windows rejected a forward-slash
+filename entered into its classic file dialog; selecting a normal backslash
+path succeeded. No driver mutation was requested in this follow-up.
+
+The 870 x 659 console retained visible title bars and close buttons, with fixed
+logical content in themed scroll viewports. General multi-WASAPI configuration
+is now available in a separate native Audio devices window; see
+`native-runtime-editor.md` for its independent runtime readback and acceptance.
+Installer integration and live monitor/work-area re-fitting remain open.
