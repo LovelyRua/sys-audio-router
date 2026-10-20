@@ -31,6 +31,7 @@ function Test-NativePackage {
     } while ([DateTime]::UtcNow -lt $deadline)
     if ($owned.Count -ne 1) { throw 'Native launcher did not start the installed preview.' }
     $native = $owned[0]
+    $null = $native.Handle
     Start-Sleep -Seconds 3
     $native.Refresh()
     if ($native.HasExited) { throw 'Installed native preview exited during health check.' }
