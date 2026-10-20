@@ -1,6 +1,7 @@
 #include "app/gui_vstgui/runtime_device_model.h"
 #include "app/gui_vstgui/command_ids.h"
 #include "app/gui_vstgui/request_error_state.h"
+#include "app/gui_vstgui/matrix_page.h"
 #include "core/control/control_wire_protocol.h"
 
 #include <cstdlib>
@@ -27,6 +28,35 @@ platform::AudioDeviceDescriptor device(const char* id, platform::AudioDeviceDire
 }
 
 int main() {
+  MatrixPage page(8);
+  require(!page.next() && !page.previous(), "Empty page navigation accepted");
+  page.reconcile(17);
+  require(page.next() && page.next() && !page.next() && page.first() == 16,
+          "Partial last page navigation failed");
+  page.reconcile(8);
+  require(page.first() == 0 && !page.hasNext() && !page.hasPrevious(),
+          "Shrinking topology stranded the matrix on an empty page");
+  page.reconcile(16);
+  require(page.next() && !page.next() && page.first() == 8,
+          "Exact page boundary produced a phantom page");
+  page.reconcile(9);
+  require(page.first() == 8, "Valid selected page was unnecessarily reset");
+  page.reconcile(0);
+  require(page.first() == 0 && !page.next(), "Empty topology did not reset navigation");
+  MatrixPage one(0);
+  one.reconcile(2);
+  require(one.next() && one.first() == 1 && !one.next(), "Zero capacity was unsafe");
+  for (std::size_t count = 0; count < 257; ++count) {
+    page.reconcile(count);
+    while (page.previous()) {}
+    while (page.next()) {}
+    require(count == 0 ? page.first() == 0 : page.first() < count,
+            "Page starts outside the authoritative topology");
+    for (std::size_t reduced = count; reduced > 0; --reduced) {
+      page.reconcile(reduced);
+      require(page.first() < reduced, "Repeated topology shrink lost the active page");
+    }
+  }
   GuiRequestErrorState errors;
   errors.observe("offline", false);
   require(errors.message() == "offline", "Transport error was hidden");

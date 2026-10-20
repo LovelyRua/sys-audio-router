@@ -6,6 +6,7 @@
 #include "app/gui_vstgui/virtual_device_window.h"
 #include "app/gui_vstgui/runtime_device_window.h"
 #include "app/gui_vstgui/request_error_state.h"
+#include "app/gui_vstgui/matrix_page.h"
 #include "app/gui_vstgui/view_ownership.h"
 #include "app/gui_vstgui/window_geometry.h"
 
@@ -220,18 +221,19 @@ class HeaderController final : public IControlListener {
     }
     for (std::size_t i = 0; i < navigation_.size(); ++i) {
       if (control == navigation_[i].get() && control->getValue() > 0.5f) {
-        if (i == 0 && rowOffset_ > 0) --rowOffset_;
-        if (i == 1 && (rowOffset_ + 1) * kVisibleRows < last_.matrix.inputs.size()) ++rowOffset_;
-        if (i == 2 && columnOffset_ > 0) --columnOffset_;
-        if (i == 3 && (columnOffset_ + 1) * kVisibleColumns < last_.matrix.outputs.size()) ++columnOffset_;
+        if (!last_.transportOk || !last_.hasMatrix) return;
+        if (i == 0) rows_.previous();
+        if (i == 1) rows_.next();
+        if (i == 2) columns_.previous();
+        if (i == 3) columns_.next();
         renderMatrix();
         return;
       }
     }
     for (std::size_t i = 0; i < cells_.size(); ++i) {
       if (control != cells_[i].get() || control->getValue() <= 0.5f) continue;
-      const auto row = rowOffset_ * kVisibleRows + i / kVisibleColumns;
-      const auto column = columnOffset_ * kVisibleColumns + i % kVisibleColumns;
+      const auto row = rows_.first() + i / kVisibleColumns;
+      const auto column = columns_.first() + i % kVisibleColumns;
       if (pending_.valid() || !last_.transportOk || !last_.hasMatrix ||
           row >= last_.matrix.inputs.size() || column >= last_.matrix.outputs.size()) return;
       const auto& input = last_.matrix.inputs[row].id;
@@ -349,8 +351,8 @@ class HeaderController final : public IControlListener {
     }
     if (button_) {
       button_->setTitle(!state.runtimeConfigured ? "Configure audio"
-                        : state.runtimeRunning   ? "Stop engine"
-                                                  : "Start engine");
+                        : state.runtimeRunning   ? "Stop audio"
+                                                  : "Start audio");
       button_->setMouseEnabled(state.transportOk &&
                                queuedCommand_ == 0);
     }
@@ -361,19 +363,23 @@ class HeaderController final : public IControlListener {
     if (cells_.empty()) return;
     const auto& matrix = last_.matrix;
     const bool available = last_.transportOk && last_.hasMatrix;
+    if (available) {
+      rows_.reconcile(matrix.inputs.size());
+      columns_.reconcile(matrix.outputs.size());
+    }
     for (std::size_t row = 0; row < kVisibleRows; ++row) {
-      const auto index = rowOffset_ * kVisibleRows + row;
+      const auto index = rows_.first() + row;
       inputs_[row]->setText(available && index < matrix.inputs.size()
           ? matrix.inputs[index].label.c_str() : "");
     }
     for (std::size_t column = 0; column < kVisibleColumns; ++column) {
-      const auto index = columnOffset_ * kVisibleColumns + column;
+      const auto index = columns_.first() + column;
       outputs_[column]->setText(available && index < matrix.outputs.size()
           ? matrix.outputs[index].label.c_str() : "");
     }
     for (std::size_t i = 0; i < cells_.size(); ++i) {
-      const auto row = rowOffset_ * kVisibleRows + i / kVisibleColumns;
-      const auto column = columnOffset_ * kVisibleColumns + i % kVisibleColumns;
+      const auto row = rows_.first() + i / kVisibleColumns;
+      const auto column = columns_.first() + i % kVisibleColumns;
       const bool valid = available && row < matrix.inputs.size() && column < matrix.outputs.size();
       const bool connected = valid && std::any_of(matrix.routes.begin(), matrix.routes.end(),
           [&](const auto& route) {
@@ -391,10 +397,10 @@ class HeaderController final : public IControlListener {
         (std::to_string(matrix.inputs.size()) + " inputs  /  " +
          std::to_string(matrix.outputs.size()) + " outputs  /  " +
          std::to_string(matrix.routes.size()) + " routes").c_str());
-    navigation_[0]->setMouseEnabled(rowOffset_ > 0);
-    navigation_[1]->setMouseEnabled(available && (rowOffset_ + 1) * kVisibleRows < matrix.inputs.size());
-    navigation_[2]->setMouseEnabled(columnOffset_ > 0);
-    navigation_[3]->setMouseEnabled(available && (columnOffset_ + 1) * kVisibleColumns < matrix.outputs.size());
+    navigation_[0]->setMouseEnabled(available && rows_.hasPrevious());
+    navigation_[1]->setMouseEnabled(available && rows_.hasNext());
+    navigation_[2]->setMouseEnabled(available && columns_.hasPrevious());
+    navigation_[3]->setMouseEnabled(available && columns_.hasNext());
     renderInspector();
   }
 
@@ -430,8 +436,8 @@ class HeaderController final : public IControlListener {
   std::chrono::steady_clock::time_point nextPoll_{};
   int queuedCommand_ = 0;
   std::optional<RouteCommand> routeCommand_;
-  std::size_t rowOffset_ = 0;
-  std::size_t columnOffset_ = 0;
+  MatrixPage rows_{kVisibleRows};
+  MatrixPage columns_{kVisibleColumns};
   std::vector<SharedPointer<CTextLabel>> inputs_;
   std::vector<SharedPointer<CTextLabel>> outputs_;
   std::vector<SharedPointer<MatrixCellButton>> cells_;
