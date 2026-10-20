@@ -17,7 +17,7 @@ a certificate, hardware, a driver test machine).
 | REL-3 | Icon, version resource, About/version display | Done: every shipped executable and the driver carry VERSIONINFO; executables carry the icon; the version shows in the control panel |
 | REL-4 | Update check | Open |
 | LIC-1 | Third-party license texts in the package | Done: libsamplerate and ASIO SDK licenses ship under `licenses/`; `NOTICE.md` lists Qt, libsamplerate, ASIO SDK, and the VC++ runtime |
-| FEAT-1 | Virtual WDM/WASAPI endpoints | Open: a separate MS-PL experimental driver passes short public-WASAPI sound-content, live matrix route-transition, and steady receiving-endpoint timeline checks through the product engine, both within one adapter and across two adapters. Full waveform continuity/soak is not passed; GUI creation and installer delivery are not implemented. See `docs/development/virtual-wasapi-matrix-acceptance.md` and `docs/architecture/virtual-wasapi-driver-boundary.md` |
+| FEAT-1 | Virtual WDM/WASAPI endpoints | Open: a separate MS-PL experimental driver passes short public-WASAPI sound-content, live matrix route-transition, and steady receiving-endpoint timeline checks through the product engine, both within one adapter and across two adapters. Native GUI adapter management is implemented as an experimental preview, with interactive acceptance tracked separately; this is not shipping installer delivery. Full waveform continuity/soak is not passed. See `docs/development/virtual-wasapi-gui-lab.md`, `docs/development/virtual-wasapi-matrix-acceptance.md` and `docs/architecture/virtual-wasapi-driver-boundary.md` |
 | QUAL-1 | Release soaks (second 8 h pairing, 24 h, multi-DAW) and more DAWs/interfaces | External: needs hardware time |
 
 ## Lifecycle and reliability
@@ -51,7 +51,7 @@ a certificate, hardware, a driver test machine).
 | UX-9 | Per-channel meters and mixer view | Open |
 | UX-10 | Engine-provided endpoint families (replace name matching in `Main.qml`) | Open |
 | GUI-1 | Split `Main.qml`; add Qt Quick Test | Open |
-| GUI-2 | VSTGUI-based control panel as a replacement for the Qt Quick GUI | Open: `app/gui_vstgui` is a parallel prototype behind `SAR_BUILD_GUI_VSTGUI` (default off), wired to the real engine over the control pipe. It has engine status and start/stop, a paged interactive routing matrix, and a route inspector with gain and mute. Windows CI builds, tests, and publishes a preview executable. Still missing: device configuration, diagnostics detail, presets, dialogs, localization, keyboard/accessible navigation, and interactive user-flow verification. The Qt Quick GUI remains the shipped control panel until this catches up |
+| GUI-2 | VSTGUI-based control panel as a replacement for the Qt Quick GUI | Open: `app/gui_vstgui` is a parallel prototype behind `SAR_BUILD_GUI_VSTGUI` (default off), wired to the real engine over the control pipe. It has engine status and start/stop, a paged interactive routing matrix, a route inspector with gain and mute, and an experimental virtual WASAPI adapter-management window. Windows CI builds and publishes a preview, validates its inventory parser, and gates startup/closure of both windows. Still missing: general audio runtime configuration, diagnostics detail, presets, localization, keyboard/accessible navigation, and complete interactive user-flow verification. The Qt Quick GUI remains the shipped control panel until this catches up |
 
 ## Engineering and process
 

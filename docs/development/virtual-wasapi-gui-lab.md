@@ -14,6 +14,10 @@ The manager remains an independently executed program with JSON inventory and
 command-line mutation requests. The preview artifact does not redistribute a
 driver package or sign one on the user's machine.
 
+The manager serializes add/rename/remove across processes using a machine-wide
+named mutex. A competing operation is rejected, not queued for later execution
+against a possibly changed selection. Read-only inventory remains available.
+
 The driver currently supports at most four adapters, each publishing two fixed
 stereo bus pairs at 48 kHz. The window does not offer arbitrary channel counts.
 Renaming changes the PnP adapter label; Windows endpoint display names may still
@@ -35,7 +39,8 @@ come from the INF. `PnP started` is not a claim of audio readiness or good sound
    not justify automatically repeating a mutation.
 
 All helper waits run off the UI thread. Inventory has a 15-second deadline and a
-1 MiB output bound. Mutation waits are capped at 90 seconds, but a privileged PnP
+1 MiB output bound. After the Windows elevation prompt completes, mutation waits
+are capped at 90 seconds, but a privileged PnP
 operation is never force-killed to satisfy a timeout. Closing the management
 window does not cancel an already approved device operation. The audio runtime
 is neither restarted nor implicitly rerouted by this window; removing an endpoint
@@ -47,3 +52,48 @@ The Windows smoke exercises structured JSON parsing and invalid inputs without
 installing or removing a driver. CI compilation is necessary but does not replace
 interactive UAC, add/rename/remove, helper-missing, and cancelled-operation testing
 on VM24. Record those results separately from the existing matrix sound tests.
+
+CI also launches the preview, opens its management window, and closes both
+windows after five seconds. The process must exit successfully within 15 seconds;
+the report and diagnostic symbols are retained even when the check fails. This
+does not exercise UAC or mutate PnP devices.
+
+The startup gate exposed two lifecycle defects during development: a null
+standalone window controller during menu construction, and incorrect child-view
+reference ownership on closure. VSTGUI 4.9 containers consume an initial child
+reference in addition to their internal shared reference; `view_ownership.h`
+adapts `makeOwned` views to that contract. Window-owned polling timers stop on
+closure, and outstanding background requests do not capture UI objects.
+
+## Interactive acceptance (2026-10-20)
+
+VM24 ran product revision `03c2fec` as the non-elevated interactive `codex`
+user. Product CI run `39258301185` passed 161 CTest cases, 15 script suites,
+seven advisory ASan cases, and the bounded two-window startup/close check.
+Driver manager revision `93ecef1` passed its 21 CTest cases and script suites in
+run `39348123078`. No host build tools or software were installed.
+
+| Flow | Observed result |
+| --- | --- |
+| Helper absent | Explicit unavailable message; mutation controls disabled |
+| Helper installed, Refresh | Actual existing adapter IDs `0001` and `0002` displayed |
+| Invalid relative INF | Rejected locally, inventory and typed label preserved |
+| Cancel Add UAC | Neutral cancellation message; no adapter created |
+| Approve Add | New `ROOT\MEDIA\0003`, label `sar-gui-qa-20261020`, started with no PnP problem |
+| Rename selected `0003` | Readback label changed to `sar-gui-renamed-20261020`; stable ID unchanged |
+| Cancel Remove confirmation | Adapter retained; no mutation launched |
+| Approve Remove | With updated manager, `0003` removed and inventory returned to the original two adapters |
+
+The first removal attempt with manager `c6a2bee` failed closed: an unrelated,
+historical sample endpoint in `NOTPRESENT` state had no present parent devnode.
+The old removal gate treated that historical entry as unresolved live ownership.
+The fix ignores only the exact `NOTPRESENT` state; active, disabled, unplugged,
+unknown and mixed states still require ownership checks. After the GUI retry,
+all four temporary endpoints were absent, and all eight original adapter
+endpoints remained active. The shared driver package was not uninstalled.
+
+These checks establish adapter-management behavior, not a newly repeated audio
+content/continuity pass or shipping driver readiness. The native INF picker was
+not accepted in this round; typed absolute INF paths were used. Small-display
+window placement, general runtime configuration, and installer integration
+remain open. The regular installer still ships the Qt control panel.
