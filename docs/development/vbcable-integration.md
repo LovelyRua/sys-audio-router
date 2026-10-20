@@ -64,3 +64,61 @@ re-enumeration after reboot, saved-session restoration, and concurrent DAW use.
 Measure receiving-end signal continuity and counters separately from listening.
 Hi-Fi Cable requires matching input/output rates. Do not call resampled or
 mixed audio bit-perfect, and do not generalize base-cable results to A/B or Hi-Fi.
+
+## VM24 interactive verification (2026-10-20)
+
+The tested payload was the ZIP from package run `39391417458`, SHA-256
+`d932c1b95baca5aa9c58985a5ed6f42ffc4e965855bc33a8571ce7dcaa4328d3`.
+It was extracted into a unique lab directory, not installed over the user's
+configuration. VM24 already had a working base VB-CABLE adapter. No driver was
+installed, removed or updated; no default endpoint, boot security setting or
+saved user session was changed, and no reboot was performed.
+
+### Vendor setup entry
+
+The native Audio devices button opened a confirmation and then the signed
+VB-Audio UAC prompt. Cancelling UAC produced the neutral cancellation message
+without retrying. On a second attempt, approving elevation opened the original
+VB-Audio installer (version 2.1.5.8). It correctly identified the existing driver
+and offered Remove Driver. That action was not selected; the vendor window was
+closed. Thus setup launch and existing-install recognition passed, but clean
+installation, removal and reboot recovery remain untested.
+
+### Actual signal paths
+
+Tests ran in the logged-on interactive desktop, at the endpoints' reported
+48 kHz stereo shared format, using the packaged engine/CLI and the measurement
+probe from driver repository revision `2af92b6`. An already installed SAR
+experimental endpoint pair was only the opposite-side measurement fixture:
+
+- probe -> VB render -> VB capture -> SAR matrix -> fixture render -> probe;
+- probe -> fixture render -> fixture capture -> SAR matrix -> VB render -> VB capture -> probe.
+
+Each path used four distinct endpoint IDs so direct cable loopback could not
+bypass the matrix. Each ran disabled-before, enabled, disabled-after and
+reenabled phases, followed by ten seconds of additional engine observation.
+
+| Isolated run | Signal phases | Processed block delta | Final XRUN | Capture discontinuities | Render underflow |
+| --- | --- | --- | --- | --- | --- |
+| VB to SAR | 4/4 passed | 10370 | 0 | 0 | 0 frames |
+| SAR to VB | 4/4 passed | 10433 | 0 | 0 | 0 frames |
+
+All eight receiving-endpoint steady timeline checks had zero discontinuities,
+position gaps and overlaps; each measured 95520-96000 capture frames. Disabled
+routes were silent; enabled and reenabled routes had the expected signal.
+Final dropped blocks and capture/render overflow counts were zero. Final
+callback peaks were 44.8 and 142.7 microseconds respectively. Wait-timeout
+counters were nonzero during the source-stopped portions; they are not hidden
+or claimed to be zero. Both final runtime health snapshots were healthy.
+
+The first attempt used an outdated probe and failed closed on missing telemetry
+fields. It was not counted as sound evidence. A corrected run overlapping the
+setup UI test passed signal/timeline checks but recorded one engine-side capture
+discontinuity/XRUN in the VB-to-SAR reenabled phase. This remains evidence, not
+discarded noise: the isolated repeat did not reproduce it, but its cause is not
+established and long-duration/desktop-transition qualification is still open.
+
+All engines stopped gracefully with exit code zero. The GUI and vendor setup
+were closed; final audit found zero owned processes and zero owned scheduled
+tasks. The original three Media adapters remained present and healthy. Local
+raw evidence retains the initial, corrected and isolated results separately.
