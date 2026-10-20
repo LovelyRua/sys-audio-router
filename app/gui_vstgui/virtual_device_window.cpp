@@ -2,6 +2,7 @@
 #include "app/gui_vstgui/view_ownership.h"
 #include "app/gui_vstgui/virtual_device_client.h"
 #include "app/gui_vstgui/palette.h"
+#include "app/gui_vstgui/window_geometry.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -11,6 +12,7 @@
 
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/cfont.h"
+#include "vstgui/lib/cscrollview.h"
 #include "vstgui/lib/controls/cbuttons.h"
 #include "vstgui/lib/controls/coptionmenu.h"
 #include "vstgui/lib/controls/ctextedit.h"
@@ -271,11 +273,23 @@ class DevicePanel final : public CViewContainer, public IControlListener {
     request.nMaxFile = static_cast<DWORD>(std::size(path));
     request.lpstrFilter = L"Driver INF (*.inf)\0*.inf\0\0";
     request.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
-    if (!GetOpenFileNameW(&request) || !getFrame()) return;
+    const BOOL accepted = GetOpenFileNameW(&request);
+    const DWORD dialogError = accepted ? 0 : CommDlgExtendedError();
+    if (!getFrame()) return;
+    if (!accepted) {
+      if (dialogError != 0) {
+        const auto diagnostic = "Could not open the driver INF picker "
+            "(CommDlgExtendedError " + std::to_string(dialogError) + "). The INF path is unchanged.";
+        message_->setFontColor(palette::kDanger);
+        message_->setText(diagnostic.c_str());
+      }
+      return;
+    }
     const int size = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, path, -1, nullptr, 0, nullptr, nullptr);
     if (size <= 1) return;
     std::string value(static_cast<std::size_t>(size), '\0');
-    WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, path, -1, value.data(), size, nullptr, nullptr);
+    if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, path, -1,
+                            value.data(), size, nullptr, nullptr) != size) return;
     value.pop_back();
     inf_->setText(value.c_str());
     updateEnabled();
@@ -310,6 +324,7 @@ LastWindowListener lastWindowListener;
 void showVirtualDeviceWindow() {
   using namespace VSTGUI;
   using namespace VSTGUI::Standalone;
+  const auto monitor = MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTONEAREST);
   for (const auto& window : IApplication::instance().getWindows()) {
     if (window->getTitle().getString() == kTitle) {
       window->show();
@@ -319,7 +334,7 @@ void showVirtualDeviceWindow() {
   }
   WindowConfiguration config;
   config.type = WindowType::Document;
-  config.style.border().close().centered();
+  config.style.border().close();
   config.size = CPoint(kWidth, kHeight);
   config.title = kTitle;
   auto window = IApplication::instance().createWindow(config,
@@ -328,8 +343,16 @@ void showVirtualDeviceWindow() {
   auto frame = makeOwned<CFrame>(CRect(0, 0, kWidth, kHeight), nullptr);
   frame->setFocusDrawingEnabled(true);
   frame->setFocusColor(palette::kSteel);
-  addRetainedView(*frame, makeOwned<DevicePanel>());
+  auto viewport = makeOwned<CScrollView>(CRect(0, 0, kWidth, kHeight),
+      CRect(0, 0, kWidth, kHeight), CScrollView::kHorizontalScrollbar |
+      CScrollView::kVerticalScrollbar | CScrollView::kAutoHideScrollbars |
+      CScrollView::kDontDrawFrame | CScrollView::kFollowFocusView);
+  viewport->setBackgroundColor(palette::kCanvas);
+  viewport->setAutosizeFlags(kAutosizeLeft | kAutosizeTop | kAutosizeRight | kAutosizeBottom);
+  addRetainedView(*viewport, makeOwned<DevicePanel>());
+  addRetainedView(*frame, viewport);
   window->setContentView(frame);
+  prepareScrollableWindow(*window, *frame, CPoint(kWidth, kHeight), monitor);
   window->registerWindowListener(&lastWindowListener);
   window->show();
 }

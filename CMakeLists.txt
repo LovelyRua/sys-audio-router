@@ -215,6 +215,9 @@ if(SAR_BUILD_GUI_VSTGUI)
     app/gui_vstgui/virtual_device_client.h
     app/gui_vstgui/virtual_device_window.cpp
     app/gui_vstgui/virtual_device_window.h
+    app/gui_vstgui/runtime_device_model.h
+    app/gui_vstgui/runtime_device_window.cpp
+    app/gui_vstgui/runtime_device_window.h
   )
   target_include_directories(sar_gui_vstgui PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -252,6 +255,9 @@ if(SAR_BUILD_GUI_VSTGUI)
   target_include_directories(sar_gui_virtual_device_client_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_compile_features(sar_gui_virtual_device_client_smoke PRIVATE cxx_std_20)
   target_link_libraries(sar_gui_virtual_device_client_smoke PRIVATE nlohmann_json::nlohmann_json shell32 ole32)
+  add_executable(sar_gui_runtime_device_model_smoke tests/realtime/gui_runtime_device_model_smoke.cpp)
+  target_link_libraries(sar_gui_runtime_device_model_smoke PRIVATE sar_core)
+  add_test(NAME gui_runtime_device_model_smoke COMMAND sar_gui_runtime_device_model_smoke)
   add_custom_command(TARGET sar_gui_vstgui POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
       "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/nlohmann-json"

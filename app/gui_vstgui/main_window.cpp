@@ -4,11 +4,14 @@
 #include "app/gui_vstgui/lcd_readout_view.h"
 #include "app/gui_vstgui/palette.h"
 #include "app/gui_vstgui/virtual_device_window.h"
+#include "app/gui_vstgui/runtime_device_window.h"
 #include "app/gui_vstgui/view_ownership.h"
+#include "app/gui_vstgui/window_geometry.h"
 
 #include "vstgui/lib/cfont.h"
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cframe.h"
+#include "vstgui/lib/cscrollview.h"
 #include "vstgui/lib/controls/cbuttons.h"
 #include "vstgui/lib/controls/cslider.h"
 #include "vstgui/lib/controls/ctextlabel.h"
@@ -171,6 +174,10 @@ class HeaderController final : public IControlListener {
   }
 
   void valueChanged(CControl* control) override {
+    if (control->getTag() == 901 && control->getValue() > 0.5F) {
+      showRuntimeDeviceWindow();
+      return;
+    }
     if (control->getTag() == 900 && control->getValue() > 0.5F) {
       showVirtualDeviceWindow();
       return;
@@ -244,6 +251,7 @@ class HeaderController final : public IControlListener {
     if (control != button_.get() || control->getValue() <= 0.5f) {
       return;
     }
+    if (!last_.runtimeConfigured) { showRuntimeDeviceWindow(); return; }
     queuedCommand_ = last_.runtimeRunning ? 2 : 1;
     error_.clear();
     button_->setMouseEnabled(false);
@@ -342,7 +350,7 @@ class HeaderController final : public IControlListener {
       button_->setTitle(!state.runtimeConfigured ? "Configure audio"
                         : state.runtimeRunning   ? "Stop engine"
                                                   : "Start engine");
-      button_->setMouseEnabled(state.transportOk && state.runtimeConfigured &&
+      button_->setMouseEnabled(state.transportOk &&
                                queuedCommand_ == 0);
     }
     renderMatrix();
@@ -486,10 +494,9 @@ SharedPointer<CTextLabel> makeLabel(const CRect& rect, const char* text, CColor 
 WindowPtr createMainWindow() {
   WindowConfiguration config;
   config.type = WindowType::Document;
-  config.style.border().close().centered();
+  config.style.border().close();
   config.size = CPoint(kWindowWidth, kWindowHeight);
   config.title = "System Audio Route";
-  config.autoSaveFrameName = "SystemAudioRouteMainWindow";
 
   // Window command/menu dispatch requires a controller, which also owns polling.
   auto windowController = std::make_shared<MainWindowController>();
@@ -500,10 +507,12 @@ WindowPtr createMainWindow() {
 
   auto frame = makeOwned<CFrame>(CRect(0, 0, kWindowWidth, kWindowHeight), nullptr);
   frame->setBackgroundColor(palette::kCanvas);
+  auto content = makeOwned<CViewContainer>(CRect(0, 0, kWindowWidth, kWindowHeight));
+  content->setBackgroundColor(palette::kCanvas);
 
   auto header = makeOwned<CViewContainer>(CRect(0, 0, kWindowWidth, kHeaderHeight));
   header->setBackgroundColor(palette::kSurface);
-  addRetainedView(*frame, header);
+  addRetainedView(*content, header);
 
   CCoord x = 18;
   auto brand = makeLabel(CRect(x, 0, x + 220, kHeaderHeight), "SYSTEM AUDIO ROUTE",
@@ -555,7 +564,7 @@ WindowPtr createMainWindow() {
   body->setBackgroundColor(palette::kCanvas);
   auto title = makeLabel(CRect(24, 14, 300, 42), "ROUTING MATRIX", palette::kText, true);
   addRetainedView(*body, title);
-  auto summary = makeLabel(CRect(240, 14, 590, 42), "Matrix unavailable", palette::kMuted, false);
+  auto summary = makeLabel(CRect(240, 14, 450, 42), "Matrix unavailable", palette::kMuted, false);
   addRetainedView(*body, summary);
   auto errorText = makeLabel(CRect(24, 44, kWindowWidth - 24, 70), "",
                             palette::kDanger, false);
@@ -651,7 +660,7 @@ WindowPtr createMainWindow() {
   removeButton->setTextColor(palette::kText);
   removeButton->setRoundRadius(2);
   addRetainedView(*inspector, removeButton);
-  addRetainedView(*frame, body);
+  addRetainedView(*content, body);
 
   auto controller = std::make_shared<HeaderController>();
   auto virtualDevices = makeOwned<CTextButton>(CRect(596, 14, 742, 42), controller.get(),
@@ -661,6 +670,13 @@ WindowPtr createMainWindow() {
   virtualDevices->setTextColor(palette::kSteel);
   virtualDevices->setRoundRadius(2);
   addRetainedView(*body, virtualDevices);
+  auto audioDevices = makeOwned<CTextButton>(CRect(462, 14, 584, 42), controller.get(),
+                                            901, "Audio devices");
+  audioDevices->setGradient(nullptr);
+  audioDevices->setFrameColor(palette::kLine);
+  audioDevices->setTextColor(palette::kSteel);
+  audioDevices->setRoundRadius(2);
+  addRetainedView(*body, audioDevices);
   controller->attachErrorView(errorText);
   controller->attachViews(dot, statusText, hzReadout, smpReadout, xrunReadout,
                           startStopButton);
@@ -669,7 +685,17 @@ WindowPtr createMainWindow() {
   controller->attachInspector(selectedSource, selectedDestination, gainText,
                               gainSlider, muteButton, resetButton, removeButton);
   startStopButton->setListener(controller.get());
+  auto viewport = makeOwned<CScrollView>(CRect(0, 0, kWindowWidth, kWindowHeight),
+      CRect(0, 0, kWindowWidth, kWindowHeight), CScrollView::kHorizontalScrollbar |
+      CScrollView::kVerticalScrollbar | CScrollView::kAutoHideScrollbars |
+      CScrollView::kDontDrawFrame | CScrollView::kFollowFocusView);
+  viewport->setBackgroundColor(palette::kCanvas);
+  viewport->setAutosizeFlags(kAutosizeLeft | kAutosizeTop | kAutosizeRight | kAutosizeBottom);
+  addRetainedView(*viewport, content);
+  addRetainedView(*frame, viewport);
   window->setContentView(frame);
+  prepareScrollableWindow(*window, *frame, CPoint(kWindowWidth, kWindowHeight),
+      MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTONEAREST));
   windowController->startPolling(std::move(controller));
   return window;
 }

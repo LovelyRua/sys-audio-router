@@ -17,10 +17,10 @@ jobs:
         run: cmake -S . -B build -DSAR_BUILD_GUI_VSTGUI=ON
 
       - name: Build native virtual device client
-        run: cmake --build build --config Release --target sar_gui_virtual_device_client_smoke
+        run: cmake --build build --config Release --target sar_gui_virtual_device_client_smoke sar_gui_runtime_device_model_smoke
 
       - name: Test native virtual device client
-        run: ctest --test-dir build -C Release --output-on-failure -R "^gui_virtual_device_client_smoke$"
+        run: ctest --test-dir build -C Release --output-on-failure -R "^gui_(virtual_device_client|runtime_device_model)_smoke$"
 
       - name: Build native control panel
         run: cmake --build build --config Release --target sar_gui_vstgui
