@@ -122,3 +122,37 @@ All engines stopped gracefully with exit code zero. The GUI and vendor setup
 were closed; final audit found zero owned processes and zero owned scheduled
 tasks. The original three Media adapters remained present and healthy. Local
 raw evidence retains the initial, corrected and isolated results separately.
+
+### Continuous signal and repeated streaming restart
+
+A follow-up on the same VM and packaged binaries used the `2af92b6`
+`wasapi_dual_bus_probe --single` continuous signal mode. Each direction ran a
+90-second signal, then three stop/start cycles with a five-second signal after
+each restart. This is 210 seconds of requested signal across both directions,
+not an hours-long soak. Each direction used a fresh private engine session;
+the three streaming restarts reused that direction's engine process.
+
+Both directions passed all four content/continuity/short-window RMS checks.
+Independent inspection of every post-phase engine snapshot found zero XRUNs,
+dropped blocks, capture/render overflow, render underflow and capture
+discontinuities. All runtime health snapshots were healthy. Wait-timeout counts
+were nonzero (661/704 after the continuous phases); this is not a zero-timeout
+acceptance result.
+
+Each 90-second receiver captured 4320480 frames, with 4272480 measured frames
+after warmup, zero measured discontinuities, zero position gaps/overlaps and
+zero QPC regressions. Both had 89 completed analysis windows with zero failed
+content windows and 890 valid short RMS windows. The maximum short-window RMS
+spread was 0.014/0.008 dB (left/right) for VB-to-SAR and 0.052/0.045 dB for
+SAR-to-VB, below the configured 1 dB limit. Fixed-frequency tone-power spread
+was larger and `tone_level_passed` was false; it is a distinct diagnostic, not
+silently reported as passing. The probe's accepted level criterion is the
+short-window RMS gate, not fixed-bin spectral amplitude under resampling.
+
+Both engines exited gracefully without forced termination. The final audit
+found no owned processes or tasks and the same three healthy Media adapters.
+An initial harness-only startup attempt aborted before any signal measurement;
+it was retained separately and is not counted among the passed signal phases.
+The earlier setup-overlap XRUN remains unresolved evidence, not disproved by
+this repeat. Fresh driver installation, reboot recovery, A/B, Hi-Fi Cable,
+other sample rates/channel counts and long-duration qualification remain open.
