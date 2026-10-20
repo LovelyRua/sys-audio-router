@@ -105,6 +105,24 @@ behaviours intact when touching lifecycle code:
   session file and log path.
 - Track product-level gaps in `docs/product-readiness.md`.
 
+## Audio UI/UX
+
+- Before GUI design or interaction changes, read
+  `docs/development/audio-ui-ux.md`. Treat this as a professional desktop audio
+  tool, not a website or a generic settings script.
+- Establish state semantics, layout hierarchy and shared visual tokens before
+  implementing controls. Preserve the existing design language unless a redesign
+  is explicitly requested. Optional third-party design skills are references,
+  not dependencies or authority to override the audio interaction contract.
+- Keep interaction feedback immediate without claiming engine confirmation
+  prematurely. Polling must not overwrite active edits or rebuild controls
+  during a gesture. No UI work belongs on an audio callback.
+- Validate affected user flows on the designated Windows VM, including failure
+  and recovery. Review actual rendered screenshots at relevant window sizes and
+  DPI settings; mark unavailable checks as not run, never as passed.
+- Separate preview acceptance from shipping installer readiness and measured
+  sound/continuity acceptance. Record the tested revision and limitations.
+
 ## Highest Priority Work (historical)
 
 These were the priorities during the realtime prototype phase and are kept for
