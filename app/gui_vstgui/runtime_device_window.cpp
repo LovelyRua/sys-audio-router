@@ -339,7 +339,7 @@ void showRuntimeDeviceWindow() {
   auto frame = makeOwned<CFrame>(CRect(0, 0, kWidth, kHeight), nullptr);
   frame->setFocusDrawingEnabled(true);
   frame->setFocusColor(palette::kSteel);
-  auto viewport = makeOwned<CScrollView>(CRect(0, 0, kWidth, kHeight),
+  auto viewport = makeOwned<ThemedScrollView>(CRect(0, 0, kWidth, kHeight),
       CRect(0, 0, kWidth, kHeight), CScrollView::kHorizontalScrollbar |
       CScrollView::kVerticalScrollbar | CScrollView::kAutoHideScrollbars |
       CScrollView::kDontDrawFrame | CScrollView::kFollowFocusView);

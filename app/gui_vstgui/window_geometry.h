@@ -29,6 +29,18 @@ inline void styleScrollbars(VSTGUI::CScrollView& viewport) {
   style(viewport.getVerticalScrollbar());
 }
 
+class ThemedScrollView final : public VSTGUI::CScrollView {
+ public:
+  using VSTGUI::CScrollView::CScrollView;
+
+ protected:
+  // Auto-hidden bars are created lazily when a small viewport first overflows.
+  void recalculateSubViews() override {
+    VSTGUI::CScrollView::recalculateSubViews();
+    styleScrollbars(*this);
+  }
+};
+
 // Call after setContentView and before show, without the centered window style.
 // The content must live in an autosizing scroll viewport, not be scaled to fit.
 inline bool prepareScrollableWindow(VSTGUI::Standalone::IWindow& window,

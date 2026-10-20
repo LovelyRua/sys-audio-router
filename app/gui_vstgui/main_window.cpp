@@ -686,7 +686,7 @@ WindowPtr createMainWindow() {
   controller->attachInspector(selectedSource, selectedDestination, gainText,
                               gainSlider, muteButton, resetButton, removeButton);
   startStopButton->setListener(controller.get());
-  auto viewport = makeOwned<CScrollView>(CRect(0, 0, kWindowWidth, kWindowHeight),
+  auto viewport = makeOwned<ThemedScrollView>(CRect(0, 0, kWindowWidth, kWindowHeight),
       CRect(0, 0, kWindowWidth, kWindowHeight), CScrollView::kHorizontalScrollbar |
       CScrollView::kVerticalScrollbar | CScrollView::kAutoHideScrollbars |
       CScrollView::kDontDrawFrame | CScrollView::kFollowFocusView);
