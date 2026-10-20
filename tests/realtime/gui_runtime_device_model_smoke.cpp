@@ -137,7 +137,7 @@ int main() {
   require(!draft.remove(0), "Native WASAPI editor removed physical ASIO group member");
   require(draft.add(AudioRuntimeEndpointDirection::Render), "Mixed WASAPI addition rejected");
   draft.at(2)->endpoint.device_id = "speaker";
-  require(!draft.makeMaster(2), "ASIO master constraint ignored");
+  require(!draft.canMakeMaster(2) && !draft.makeMaster(2), "ASIO master constraint ignored");
   const auto preserved = draft.build(devices, error);
   require(preserved && preserved->endpoints[0].device_group_id == "group" &&
       preserved->endpoints[1].clock_master && preserved->endpoints[0].sample_rate == 48000,

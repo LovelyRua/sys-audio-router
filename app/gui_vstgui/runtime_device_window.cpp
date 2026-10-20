@@ -110,7 +110,7 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
       if (!draft_.dirty() || confirm(L"Discard unsaved endpoint changes and reload the engine configuration?"))
         if (getFrame()) inspect(true);
     } else if (source == reset_.get()) {
-      if (confirm(L"Create a new empty WASAPI matrix draft? Existing configuration is replaced only when Apply succeeds.") && getFrame()) {
+      if (confirm(L"Create a new empty WASAPI matrix draft? Existing configuration is not changed until Apply is requested.") && getFrame()) {
         draft_.newMatrix(); selected_ = -1; renderEndpoints();
       }
     } else if (source == addCapture_.get() || source == addRender_.get()) {
@@ -264,7 +264,7 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     }
     if (selected < 0) {
       devices_->addEntry(item && !item->endpoint.device_id.empty() ? "Configured binding unavailable / preserved" : "Select a device");
-      deviceIds_.push_back({});
+      deviceIds_.push_back(item ? item->endpoint.device_id : std::string{});
       selected = static_cast<int>(deviceIds_.size() - 1);
     }
     devices_->setCurrent(selected);
@@ -288,7 +288,8 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     enable(reset_, available);
     enable(remove_, edit);
     enable(id_, edit); enable(first_, edit); enable(channels_, edit); enable(devices_, edit);
-    enable(master_, edit && item && item->endpoint.direction == control::AudioRuntimeEndpointDirection::Render && !item->endpoint.clock_master);
+    enable(master_, edit && item && !item->endpoint.clock_master && selected_ >= 0 &&
+        draft_.canMakeMaster(static_cast<std::size_t>(selected_)));
     enable(apply_, available && draft_.editable() && draft_.dirty());
     enable(run_, available && !draft_.dirty() && snapshot_.configuration.mode != control::AudioRuntimeMode::None);
     run_->setTitle(snapshot_.running ? "Stop audio" : "Start audio");

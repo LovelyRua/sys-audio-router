@@ -72,15 +72,19 @@ class RuntimeDeviceDraft {
     return true;
   }
 
-  bool makeMaster(std::size_t index) {
-    const auto item = at(index);
-    if (!editable() || !item || item->endpoint.direction != control::AudioRuntimeEndpointDirection::Render)
+  bool canMakeMaster(std::size_t index) const {
+    if (!editable() || index >= endpoints_.size() ||
+        endpoints_[index].endpoint.direction != control::AudioRuntimeEndpointDirection::Render)
       return false;
     // A physical ASIO render must remain the matrix master in the current engine.
-    if (std::any_of(endpoints_.begin(), endpoints_.end(), [](const auto& candidate) {
+    return !std::any_of(endpoints_.begin(), endpoints_.end(), [](const auto& candidate) {
           return candidate.endpoint.backend == control::AudioRuntimeEndpointBackend::PhysicalAsio &&
                  candidate.endpoint.direction == control::AudioRuntimeEndpointDirection::Render;
-        })) return false;
+        });
+  }
+
+  bool makeMaster(std::size_t index) {
+    if (!canMakeMaster(index)) return false;
     for (std::size_t i = 0; i < endpoints_.size(); ++i)
       endpoints_[i].endpoint.clock_master = i == index;
     dirty_ = true;

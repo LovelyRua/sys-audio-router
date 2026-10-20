@@ -1,0 +1,51 @@
+# Native runtime editor
+
+The optional VSTGUI preview now has an Audio devices window using the same
+`QueryAudioRuntime`, `ListDevices`, `ConfigureAudioRuntime` and start/stop
+commands as the existing Qt control panel. It does not create a second session
+file or bypass engine-side validation. The engine must already be running;
+the regular bootstrap and installer still use the Qt control panel.
+
+## Scope
+
+- A matrix draft can contain up to the engine limit of 32 endpoints.
+- Capture and playback bindings use actual enumerated WASAPI IDs, not names.
+- Endpoint IDs remain graph-route identities; channel offsets are zero-based.
+- Numeric fields are parsed strictly and checked against reported capabilities.
+- Exactly one playback endpoint must be the clock master; capture cannot be.
+- Duplicate device/direction bindings fail before applying the configuration.
+- Existing physical ASIO matrix endpoints are retained unchanged and read-only.
+  In particular their group, channel and timing fields survive WASAPI additions.
+  A physical ASIO render remains the master, as required by the current engine.
+- Legacy non-matrix and standalone ASIO modes are preserved read-only. New matrix
+  explicitly creates a replacement draft; it is not applied automatically.
+
+Refresh reconnects and updates device inventory without discarding a dirty draft.
+Reload saved is a separate, confirmed discard operation. Failed Apply preserves
+the draft, refreshes actual runtime state when possible, and never retries an
+uncertain mutation automatically. Start/stop is disabled while edits are dirty.
+The regular engine runtime reconfiguration behavior, including stream restart,
+still applies when the user selects Apply.
+
+All pipe requests run in value-owning background workers. UI timers only collect
+completed results; closing a window does not wait for a pipe request. Command
+IDs are distinct across simultaneous windows and repeated window lifetimes,
+and responses must echo the requesting command ID.
+
+## Window fit
+
+The preview retains fixed logical control dimensions inside scroll viewports.
+On creation, the client viewport is limited to the current monitor's work area
+with DPI-aware window chrome. Small screens scroll rather than shrink text or
+hide the title bar. Live re-fitting after monitor/work-area changes is not yet
+implemented. The INF picker now distinguishes cancellation from Windows dialog
+errors; failed selection does not erase the typed path.
+
+## Verification
+
+`gui_runtime_device_model_smoke` exercises draft validation, wire round trips,
+device disappearance, channel ranges, clock selection, endpoint capacity,
+physical ASIO field preservation, and 4096 command IDs across concurrent clients.
+The bounded GUI startup check opens all three native windows and closes them.
+These checks do not replace interactive device selection, Apply, start/stop,
+dirty-refresh/reconnect, or the existing waveform/continuity acceptance tests.
