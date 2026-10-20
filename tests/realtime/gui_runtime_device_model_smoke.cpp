@@ -1,8 +1,12 @@
 #include "app/gui_vstgui/runtime_device_model.h"
+#include "app/gui_vstgui/command_ids.h"
 #include "core/control/control_wire_protocol.h"
 
 #include <cstdlib>
 #include <iostream>
+#include <thread>
+#include <unordered_set>
+#include <mutex>
 
 namespace {
 using namespace sar;
@@ -22,6 +26,23 @@ platform::AudioDeviceDescriptor device(const char* id, platform::AudioDeviceDire
 }
 
 int main() {
+  std::unordered_set<std::string> ids;
+  std::mutex idsMutex;
+  std::vector<std::thread> workers;
+  for (int thread = 0; thread < 8; ++thread) {
+    workers.emplace_back([&] {
+      for (int window = 0; window < 32; ++window) {
+        GuiCommandIds client;
+        for (int request = 0; request < 16; ++request) {
+          auto id = client.next();
+          const std::lock_guard lock(idsMutex);
+          require(ids.insert(std::move(id)).second, "Command ID collision across native windows");
+        }
+      }
+    });
+  }
+  for (auto& worker : workers) worker.join();
+  require(ids.size() == 4096, "Concurrent command sequence lost requests");
   using control::AudioRuntimeEndpointDirection;
   std::vector<platform::AudioDeviceDescriptor> devices{
       device("speaker", platform::AudioDeviceDirection::Output),

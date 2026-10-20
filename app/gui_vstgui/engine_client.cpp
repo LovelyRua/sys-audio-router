@@ -76,12 +76,10 @@ std::optional<control::ControlResponse> transact(
 
 EngineClient::EngineClient(std::wstring pipe_name)
     : pipe_name_(pipe_name.empty() ? sar::platform::default_control_pipe_name()
-                                   : std::move(pipe_name)),
-      command_prefix_("gui-vstgui-" + std::to_string(GetCurrentProcessId()) + "-") {}
+                                   : std::move(pipe_name)) {}
 
 std::string EngineClient::next_command_id() {
-  return command_prefix_ +
-        std::to_string(command_sequence_.fetch_add(1, std::memory_order_relaxed));
+  return command_ids_.next();
 }
 
 EngineState EngineClient::poll() {

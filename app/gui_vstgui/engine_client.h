@@ -7,6 +7,7 @@
 
 #include "core/control/preset_document.h"
 #include "core/control/control_response.h"
+#include "app/gui_vstgui/command_ids.h"
 
 namespace sar::gui_vstgui {
 
@@ -66,8 +67,7 @@ class EngineClient final {
   [[nodiscard]] std::string next_command_id();
 
   std::wstring pipe_name_;
-  std::string command_prefix_;
-  std::atomic<std::uint64_t> command_sequence_{0};
+  GuiCommandIds command_ids_;
 };
 
 }  // namespace sar::gui_vstgui

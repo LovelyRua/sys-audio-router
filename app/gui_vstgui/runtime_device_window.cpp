@@ -47,6 +47,7 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     addCapture_ = button(CRect(160, 142, 308, 174), "+ Capture", 3);
     addRender_ = button(CRect(320, 142, 468, 174), "+ Playback", 4);
     remove_ = button(CRect(688, 142, 836, 174), "Remove endpoint", 5);
+    reload_ = button(CRect(480, 142, 672, 174), "Reload saved", 14);
     text(CRect(24, 194, 150, 226), "Endpoint ID", palette::kMuted);
     id_ = edit(CRect(160, 194, 596, 226), 6);
     master_ = button(CRect(608, 194, 836, 226), "Set clock master", 7);
@@ -104,8 +105,10 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     }
     if (source->getValue() <= 0.5F) return;
     if (source == refresh_.get()) {
-      if (!draft_.dirty() || confirm(L"Discard unsaved endpoint changes and read the engine configuration?"))
-        if (getFrame()) inspect();
+      inspect();
+    } else if (source == reload_.get()) {
+      if (!draft_.dirty() || confirm(L"Discard unsaved endpoint changes and reload the engine configuration?"))
+        if (getFrame()) inspect(true);
     } else if (source == reset_.get()) {
       if (confirm(L"Create a new empty WASAPI matrix draft? Existing configuration is replaced only when Apply succeeds.") && getFrame()) {
         draft_.newMatrix(); selected_ = -1; renderEndpoints();
@@ -128,10 +131,12 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
       auto configuration = draft_.build(snapshot_.devices, error);
       if (!configuration) { message(error, true); return; }
       message("Applying runtime configuration...");
+      reloadOnCompletion_ = true;
       launch([client = client_, configuration = std::move(*configuration)]() mutable {
         return client->configureDevices(std::move(configuration));
       });
     } else if (source == run_.get()) {
+      reloadOnCompletion_ = false;
       message(snapshot_.running ? "Stopping audio..." : "Starting audio...");
       launch([client = client_, running = !snapshot_.running] { return client->setRuntimeRunning(running); });
     }
@@ -204,7 +209,8 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     catch (...) { message("Could not start runtime request worker", true); }
     updateEnabled();
   }
-  void inspect() {
+  void inspect(bool reload = false) {
+    reloadOnCompletion_ = reload || !draft_.dirty();
     message("Reading engine configuration and device inventory...");
     launch([client = client_] { return client->inspectDevices(); });
   }
@@ -213,7 +219,7 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     try {
       auto result = pending_.get();
       const bool accepted = result.available && result.operationSucceeded;
-      if (accepted) draft_.load(result.configuration);
+      if (accepted && reloadOnCompletion_) draft_.load(result.configuration);
       snapshot_ = std::move(result);
       message(snapshot_.error, !snapshot_.error.empty());
       renderEndpoints();
@@ -275,6 +281,7 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     const auto item = selectedItem();
     const bool edit = available && editableItem();
     enable(refresh_, idle);
+    enable(reload_, idle);
     enable(endpoints_, available && !draft_.endpoints().empty());
     enable(addCapture_, available && draft_.editable() && draft_.endpoints().size() < control::kMaximumAudioRuntimeEndpoints);
     enable(addRender_, available && draft_.editable() && draft_.endpoints().size() < control::kMaximumAudioRuntimeEndpoints);
@@ -297,6 +304,7 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
   RuntimeDeviceDraft draft_;
   int selected_ = -1;
   bool rendering_ = false;
+  bool reloadOnCompletion_ = true;
   std::vector<std::string> deviceIds_;
   std::shared_ptr<EngineClient> client_ = std::make_shared<EngineClient>();
   std::future<RuntimeDeviceSnapshot> pending_;
@@ -305,7 +313,7 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
   SharedPointer<CTextEdit> id_, first_, channels_;
   SharedPointer<CTextLabel> status_, details_;
   SharedPointer<CMultiLineTextLabel> message_;
-  SharedPointer<CTextButton> refresh_, addCapture_, addRender_, remove_, master_, reset_, run_, apply_;
+  SharedPointer<CTextButton> refresh_, reload_, addCapture_, addRender_, remove_, master_, reset_, run_, apply_;
 };
 
 struct LastRuntimeWindow final : WindowListenerAdapter {
