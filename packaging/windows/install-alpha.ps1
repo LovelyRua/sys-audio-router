@@ -159,11 +159,16 @@ try {
     Copy-Item -LiteralPath (Join-Path $packageRoot $directoryName) `
         -Destination $stagingPath -Recurse
   }
+  $licenses = Join-Path $packageRoot "licenses"
+  if (Test-Path -LiteralPath $licenses -PathType Container) {
+    Copy-Item -LiteralPath $licenses -Destination $stagingPath -Recurse
+  }
   Set-Content -LiteralPath (Join-Path $stagingPath $markerName) `
       -Value "System Audio Route Alpha 0.1.0" -Encoding ASCII
   foreach ($name in @(
       "uninstall-alpha.cmd",
       "uninstall-alpha.ps1",
+      "start-native-preview.cmd",
       "LICENSE",
       "NOTICE.md",
       "README.md")) {
