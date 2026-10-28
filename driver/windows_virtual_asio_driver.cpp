@@ -346,6 +346,7 @@ class VirtualAsioDriver final : public IASIO {
       return fail_thread_safe(ASE_InvalidParameter,
                               "Buffer size output pointers must not be null.");
     }
+    std::scoped_lock lock(control_mutex_);
     if (format_discovered_) {
       *minimum = kMinimumBufferFrames;
       *maximum = kMaximumBufferFrames;
@@ -443,7 +444,7 @@ class VirtualAsioDriver final : public IASIO {
     const auto channel_count = info->isInput == ASIOTrue ? input_channels_
                                                          : output_channels_;
     if (info->channel < 0 || info->channel >= channel_count) {
-      return fail_thread_safe(ASE_InvalidParameter,
+      return fail(ASE_InvalidParameter,
                               "The requested channel does not exist.");
     }
     info->isActive = channel_active(info->isInput, info->channel) ? ASIOTrue

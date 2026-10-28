@@ -291,6 +291,18 @@ int wmain(int argc, wchar_t** argv) {
   assert(asio->getChannelInfo(&channel_info) == ASE_OK);
   assert(std::strcmp(channel_info.name, "Input 8") == 0);
 
+  // Invalid host enumeration must return, not recursively lock control_mutex_.
+  for (const auto input : {ASIOFalse, ASIOTrue}) {
+    channel_info = {};
+    channel_info.isInput = input;
+    channel_info.channel = -1;
+    assert(asio->getChannelInfo(&channel_info) == ASE_InvalidParameter);
+    channel_info.channel = input == ASIOTrue ? input_channels : output_channels;
+    assert(asio->getChannelInfo(&channel_info) == ASE_InvalidParameter);
+    channel_info.channel = 0;
+    assert(asio->getChannelInfo(&channel_info) == ASE_OK);
+  }
+
   std::array<ASIOBufferInfo, 4> buffer_infos{};
   for (long index = 0; index < 2; ++index) {
     buffer_infos[static_cast<std::size_t>(index)].isInput = ASIOTrue;
