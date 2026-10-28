@@ -2,6 +2,8 @@
 #include "app/gui_vstgui/command_ids.h"
 #include "app/gui_vstgui/request_error_state.h"
 #include "app/gui_vstgui/matrix_page.h"
+#include "app/gui_vstgui/route_gain_text.h"
+#include <limits>
 #include "core/control/control_wire_protocol.h"
 
 #include <cstdlib>
@@ -28,6 +30,13 @@ platform::AudioDeviceDescriptor device(const char* id, platform::AudioDeviceDire
 }
 
 int main() {
+  require(routeGainText(0.0F) == "-inf dB", "Zero gain was not silence");
+  require(routeGainText(1.0F) == "0.0 dB", "Unity gain display incorrect");
+  require(routeGainText(0.001F) == "-60.0 dB", "Finite low gain displayed as silence");
+  require(routeGainText(0.0001F) == "-80.0 dB", "Sub-fader gain lost its actual value");
+  require(routeGainText(-1.0F) == "-- dB", "Invalid gain displayed as valid");
+  require(routeGainText(std::numeric_limits<float>::infinity()) == "-- dB", "Infinite gain displayed as valid");
+  require(routeGainText(std::numeric_limits<float>::quiet_NaN()) == "-- dB", "NaN gain displayed as valid");
   MatrixPage page(8);
   require(!page.next() && !page.previous(), "Empty page navigation accepted");
   page.reconcile(17);

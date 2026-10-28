@@ -7,6 +7,7 @@
 #include "app/gui_vstgui/runtime_device_window.h"
 #include "app/gui_vstgui/request_error_state.h"
 #include "app/gui_vstgui/matrix_page.h"
+#include "app/gui_vstgui/route_gain_text.h"
 #include "app/gui_vstgui/view_ownership.h"
 #include "app/gui_vstgui/window_geometry.h"
 
@@ -85,8 +86,31 @@ class MatrixCellButton final : public CTextButton {
 
   bool selectOnly() const noexcept { return selectOnly_; }
 
+  void present(bool available, bool connected, bool muted, bool selected) {
+    const std::string caption = !available ? "" : !connected ? "+" : muted ? "MUTE" : "ON";
+    const auto fill = connected ? (muted ? palette::kSurface : CColor(35, 61, 44)) : palette::kRaised;
+    const auto border = selected ? palette::kSteel : palette::kLine;
+    const auto ink = !connected ? palette::kMuted : muted ? palette::kWarning : palette::kHealthy;
+    if (caption_ == caption && fill_ == fill && border_ == border && ink_ == ink) return;
+    caption_ = caption; fill_ = fill; border_ = border; ink_ = ink;
+    setTitle(caption_.c_str());
+    invalid();
+  }
+
+  void draw(CDrawContext* context) override {
+    context->setFillColor(fill_);
+    context->setFrameColor(border_);
+    context->setLineWidth(1);
+    context->drawRect(getViewSize(), kDrawFilledAndStroked);
+    context->setFont(kNormalFontSmall);
+    context->setFontColor(ink_);
+    context->drawString(caption_.c_str(), getViewSize(), kCenterText, true);
+  }
+
  private:
   bool selectOnly_ = false;
+  std::string caption_;
+  CColor fill_ = palette::kRaised, border_ = palette::kLine, ink_ = palette::kMuted;
 };
 
 std::string format_uint(const char* format, std::uint64_t value) {
@@ -280,10 +304,7 @@ class HeaderController final : public IControlListener {
   }
 
   static std::string formatGain(float gain) {
-    if (gain <= 0.001F) return "-inf dB";
-    char buffer[32] = {};
-    std::snprintf(buffer, sizeof(buffer), "%.1f dB", 20.0 * std::log10(gain));
-    return buffer;
+    return routeGainText(gain);
   }
 
   void submit() {
@@ -326,7 +347,8 @@ class HeaderController final : public IControlListener {
   void apply(const EngineState& state) {
     last_ = state;
     if (dot_) {
-      dot_->setColor(state.transportOk ? palette::kHealthy : palette::kDanger);
+      dot_->setColor(!state.transportOk ? palette::kDanger :
+                    !state.lastError.empty() ? palette::kWarning : palette::kHealthy);
     }
     if (statusText_) {
       statusText_->setText(!state.lastError.empty() ? "Action failed"
@@ -371,10 +393,14 @@ class HeaderController final : public IControlListener {
       const auto index = rows_.first() + row;
       inputs_[row]->setText(available && index < matrix.inputs.size()
           ? matrix.inputs[index].label.c_str() : "");
+      inputs_[row]->setTooltipText(available && index < matrix.inputs.size()
+          ? matrix.inputs[index].label.c_str() : "");
     }
     for (std::size_t column = 0; column < kVisibleColumns; ++column) {
       const auto index = columns_.first() + column;
       outputs_[column]->setText(available && index < matrix.outputs.size()
+          ? matrix.outputs[index].label.c_str() : "");
+      outputs_[column]->setTooltipText(available && index < matrix.outputs.size()
           ? matrix.outputs[index].label.c_str() : "");
     }
     for (std::size_t i = 0; i < cells_.size(); ++i) {
@@ -388,9 +414,10 @@ class HeaderController final : public IControlListener {
           });
       const bool selected = valid && matrix.inputs[row].id == selectedInputId_ &&
                             matrix.outputs[column].id == selectedOutputId_;
-      cells_[i]->setTitle(valid ? (connected ? "ON" : "+") : "");
-      cells_[i]->setTextColor(connected ? palette::kHealthy : palette::kMuted);
-      cells_[i]->setFrameColor(selected ? palette::kHealthy : palette::kLine);
+      const bool muted = connected && std::any_of(matrix.routes.begin(), matrix.routes.end(),
+          [&](const auto& route) { return route.input_id == matrix.inputs[row].id &&
+              route.output_id == matrix.outputs[column].id && route.muted; });
+      cells_[i]->present(valid, connected, muted, selected);
       cells_[i]->setMouseEnabled(valid && !pending_.valid() && !routeCommand_);
     }
     summary_->setText(!available ? "Matrix unavailable" :
@@ -418,7 +445,7 @@ class HeaderController final : public IControlListener {
     const auto* route = selected ? selectedRoute() : nullptr;
     const bool active = route != nullptr;
     if (!gainSlider_->isEditing() && !routeCommand_) {
-      const float db = active && route->gain > 0.001F
+      const float db = active && route->gain > 0.0F
                            ? std::clamp(20.0F * std::log10(route->gain), -60.0F, 12.0F)
                            : -60.0F;
       gainSlider_->setValueNormalized((db + 60.0F) / 72.0F);
@@ -576,6 +603,8 @@ WindowPtr createMainWindow() {
   auto errorText = makeLabel(CRect(24, 44, kWindowWidth - 24, 70), "",
                             palette::kDanger, false);
   addRetainedView(*body, errorText);
+  addRetainedView(*body, makeLabel(CRect(24, 82, 190, 118), "SOURCE / DESTINATION",
+                                 palette::kMuted, false));
   constexpr CCoord kGridLeft = 206;
   constexpr CCoord kGridTop = 124;
   constexpr CCoord kCellWidth = 108;
