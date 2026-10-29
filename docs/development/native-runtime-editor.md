@@ -126,6 +126,51 @@ editing, localization, complete keyboard/accessibility navigation, and installer
 flow parity. Qt remains the default entry; no audio-path reliability result is
 changed by this GUI-only batch.
 
+## Workspace interactive acceptance (2026-10-29/30)
+
+The GUI was exercised in VM24 (`SAR-WIN11-LAB`) as its non-elevated interactive
+user. It used separate temporary GUI directories and private engine session/log
+files. Engine binaries remained at `9846a4c`; this batch changes no realtime
+implementation. No host tools, driver packages or boot settings were changed.
+
+| Flow | Observed result |
+| --- | --- |
+| Save a fresh preset, close and reopen Presets (`744004c`) | The engine document was saved and the named entry remained in the list |
+| Save an existing name, cancel overwrite | Confirmation defaulted to No; the existing entry remained |
+| Change gain, click the existing matrix cell | -25.9 dB remained unchanged while the route became muted |
+| Click the muted cell, double-click the gain slider | Route returned to ON and gain returned to 0.0 dB |
+| Shift-click the connected cell | Route count decreased from four to three; the inspector disabled disconnected-route gain |
+| Load the previously saved preset, confirm | The engine accepted it and four routes returned, including the removed route |
+| Delete preset, cancel | Confirmation defaulted to No and the entry remained; destructive confirmation was not exercised |
+| Diagnostics aggregate and bottom scroll | Actual counters were displayed, missing recovery telemetry was Unknown, and the final rows were reachable |
+| Stop the private engine while Diagnostics is open | Offline status and Unknown counters replaced the previous values |
+| Type a name without leaving the field (`e532938`) | Save current became enabled immediately; no extra Tab was required |
+| Save while the engine is offline | Explicit transport failure; no false success and no automatic retry |
+| Fresh unconfigured engine (`bfbc20d`) | No template WASAPI channels were shown; status said No audio runtime configured |
+| Configure one two-channel VB-CABLE playback endpoint through Audio devices | Apply completed; the matrix showed two ASIO source channels and four destinations, without phantom capture sources |
+| Connect two routes, start audio, select render-1 diagnostics | Header changed to Audio running; the actual endpoint was selectable and its silent-read counter advanced |
+| Stop audio, close GUI, query with independent CLI | Audio remained stopped; the engine still answered with runtime_running=false |
+| End acceptance | GUI and engine were closed normally; their scheduled tasks and process-ledger entries were cleared |
+
+The last four configuration/lifecycle cases used `bfbc20d`. Earlier preset and
+gain cases used `744004c`; the immediate-input and offline-save regression used
+`e532938`. A disposable `guiqa20261029` preset remains in the lab user's preset
+directory for inspection. No user preset was overwritten or removed.
+
+Final code revision `bfbc20d` passed CI run
+[`40896350797`](https://github.com/LovelyRua/sys-audio-router/actions/runs/40896350797):
+164 CTest cases, 15 automation script suites, eight advisory ASan cases, the two
+early native model/client checks, and five-window startup/graceful closure.
+Package run
+[`40896362306`](https://github.com/LovelyRua/sys-audio-router/actions/runs/40896362306)
+passed 168 CTest cases plus ZIP and EXE install/update/launch/uninstall acceptance,
+including the optional native payload using the existing background engine.
+The original vendor VB-CABLE setup was not executed by those package checks.
+
+This is GUI configuration, persistence and lifecycle evidence, not a REAPER
+signal-content or audio-continuity pass. It does not close the native UI gaps
+listed above and does not authorize switching the default installer entry.
+
 ## Topology changes in the routing matrix
 
 The native matrix now clamps both paging axes when it receives an authoritative
