@@ -48,7 +48,8 @@ errors; failed selection does not erase the typed path.
 `gui_runtime_device_model_smoke` exercises draft validation, wire round trips,
 device disappearance, channel ranges, clock selection, endpoint capacity,
 physical ASIO field preservation, and 4096 command IDs across concurrent clients.
-The bounded GUI startup check opens all three native windows and closes them.
+The bounded GUI startup check opens the main, runtime, driver-lab, preset and
+diagnostics windows and closes them.
 These checks do not replace interactive device selection, Apply, start/stop,
 dirty-refresh/reconnect, or the existing waveform/continuity acceptance tests.
 
@@ -83,9 +84,47 @@ closed or cleared after acceptance. No development-host tools were installed.
 
 This proves configuration and lifecycle behavior, not a new sound-content or
 waveform-continuity pass: the private test matrix contained no signal routes.
-The native preview still lacks physical-ASIO editing, experimental-driver
-installer integration, presets, full diagnostics and localization. It is not yet a
+That revision lacked physical-ASIO editing, experimental-driver installer
+integration, presets, full diagnostics and localization. It was not yet a
 replacement for the shipped Qt control panel.
+
+## Workspace, presets and diagnostics (2026-10-29)
+
+The native main window has a shared navigation rail for the routing matrix,
+Audio devices, Presets and Diagnostics. Experimental driver management is
+separated as Driver lab. Header status distinguishes service connectivity from
+audio running/stopped and an unconfigured runtime; it is not an audio continuity
+certificate. Fixed logical content remains scrollable on smaller screens.
+
+Presets use the existing `.sarpreset` codec and the same roaming preset directory
+as the Qt panel. Save queries an actual engine preset; load sends the decoded
+document through `LoadPreset`. Overwrite, load and delete require confirmation.
+Reads are bounded, names cannot escape the preset directory, and writes use a
+temporary file plus replacement. Disk and pipe operations run on value-owning
+workers. An uncertain command result is reported without automatic retry.
+
+Diagnostics polls the real aggregate and per-endpoint counters off the UI thread.
+Unavailable telemetry is Unknown rather than a fabricated zero. Cumulative
+underflows and other errors remain warnings even if the current engine health
+field reports Healthy. The window exposes recovery state/reason, queue depth,
+clock correction, callback timing and snapshot age.
+
+Ordinary matrix clicks connect an absent route or mute/unmute an existing one,
+preserving gain. Shift-click removes an existing route, or connects an absent
+one. Right-click selects without mutation. The gain slider supports double-click
+reset to 0 dB as well as the explicit reset button. These actions use the same
+bounded optimistic edit queue and engine-side validation as before.
+
+The preset name smoke rejects invalid UTF-8, reserved Windows names, path
+characters, NULs and excessive lengths before disk or IPC access. The route model
+smoke covers gain-preserving mute/unmute and Shift removal. Startup/closure
+coverage includes all five windows. Interactive acceptance is recorded separately;
+compilation alone does not establish user-flow parity.
+
+Remaining native UI gaps include virtual-ASIO topology editing, physical-ASIO
+editing, localization, complete keyboard/accessibility navigation, and installer
+flow parity. Qt remains the default entry; no audio-path reliability result is
+changed by this GUI-only batch.
 
 ## Topology changes in the routing matrix
 

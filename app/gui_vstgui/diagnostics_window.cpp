@@ -339,9 +339,11 @@ class DiagnosticsPanel final : public CViewContainer, public IControlListener {
     recovery_->setText(recoveryText.c_str());
     recovery_->setFontColor(r && hasWarning ? palette::kWarning : palette::kText);
     reason_->setText(r ? ("Reason: " + (r->runtime_reason_code.empty() ? std::string("Not supplied") : r->runtime_reason_code)).c_str() : "Reason: Unknown");
+    reason_->setTooltipText(r ? r->runtime_reason_code.c_str() : "Recovery telemetry unavailable");
     for (std::size_t i = 0; i < std::size(kRecovery); ++i)
       recoveryCounters_[i]->setText(r ? std::to_string(r->*kRecovery[i].member).c_str() : "Unknown");
     message_->setText(snapshot_.error.c_str());
+    message_->setTooltipText(snapshot_.error.c_str());
   }
 
   Snapshot snapshot_;

@@ -398,8 +398,8 @@ class HeaderController final : public IControlListener {
                     state.runtimeRunning ? palette::kHealthy : palette::kMuted);
     }
     if (statusText_) {
-      statusText_->setText(!state.lastError.empty() ? "Action failed"
-                          : !state.transportOk ? "Engine offline"
+      statusText_->setText(!state.transportOk ? "Engine offline"
+                          : !state.lastError.empty() ? "Action failed"
                           : !state.runtimeConfigured ? "Not configured"
                           : state.runtimeRunning ? "Audio running" : "Audio stopped");
     }
@@ -586,6 +586,7 @@ SharedPointer<CTextLabel> makeLabel(const CRect& rect, const char* text, CColor 
   label->setFrameColor(CColor(0, 0, 0, 0));
   label->setFontColor(color);
   label->setHoriAlign(kLeftText);
+  label->setTextTruncateMode(CTextLabel::kTruncateTail);
   label->setFont(makeOwned<CFontDesc>("Segoe UI", bold ? 14 : 12,
                                       bold ? kBoldFace : 0));
   return label;
@@ -608,6 +609,8 @@ WindowPtr createMainWindow() {
   }
 
   auto frame = makeOwned<CFrame>(CRect(0, 0, kWindowWidth, kWindowHeight), nullptr);
+  frame->setFocusDrawingEnabled(true);
+  frame->setFocusColor(palette::kSteel);
   frame->setBackgroundColor(palette::kCanvas);
   auto content = makeOwned<CViewContainer>(CRect(0, 0, kWindowWidth, kWindowHeight));
   content->setBackgroundColor(palette::kCanvas);
