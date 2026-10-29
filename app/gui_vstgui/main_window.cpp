@@ -434,7 +434,7 @@ class HeaderController final : public IControlListener {
   void renderMatrix() {
     if (cells_.empty()) return;
     const auto& matrix = displayMatrix_;
-    const bool available = last_.transportOk && last_.hasMatrix;
+    const bool available = last_.transportOk && last_.hasMatrix && last_.runtimeConfigured;
     if (available) {
       rows_.reconcile(matrix.inputs.size());
       columns_.reconcile(matrix.outputs.size());
@@ -474,7 +474,9 @@ class HeaderController final : public IControlListener {
       cells_[i]->setVisible(valid);
       cells_[i]->setMouseEnabled(valid && !engineCommandPending_ && !queuedCommand_);
     }
-    summary_->setText(!available ? "Matrix unavailable" :
+    summary_->setText(!last_.transportOk ? "Engine offline" :
+        !last_.runtimeConfigured ? "No audio runtime configured" :
+        !available ? "Matrix unavailable" :
         (std::to_string(matrix.inputs.size()) + " inputs  /  " +
          std::to_string(matrix.outputs.size()) + " outputs  /  " +
          std::to_string(matrix.routes.size()) + " routes" +
@@ -496,7 +498,7 @@ class HeaderController final : public IControlListener {
         [&](const auto& endpoint) { return endpoint.id == selectedInputId_; });
     const auto output = std::find_if(matrix.outputs.begin(), matrix.outputs.end(),
         [&](const auto& endpoint) { return endpoint.id == selectedOutputId_; });
-    const bool selected = last_.transportOk && last_.hasMatrix &&
+    const bool selected = last_.transportOk && last_.hasMatrix && last_.runtimeConfigured &&
                           input != matrix.inputs.end() && output != matrix.outputs.end();
     selectedSource_->setText(selected ? input->label.c_str() : "No source selected");
     selectedDestination_->setText(selected ? output->label.c_str() : "No destination selected");
