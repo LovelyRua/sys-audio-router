@@ -28,6 +28,9 @@ been reproduced or fixed by these changes.
    The default-pipe mismatch is now reproduced and repaired, with actual DAW
    playback verified; see `reaper-user-pipe-20261029.md`. The complete packaged
    install flow and the nonzero post-stop transient still need acceptance.
+   `native-controls-capture-evidence-20261029.md` localizes a later stop event
+   to one stereo frame and records excessive playback sample steps/producer
+   underflows. Audio continuity is not accepted despite successful signal flow.
 2. Review state ownership between the native panel, Qt panel and persisted
    session. Consolidate the supported entry without silently losing Qt features.
 3. Validate routing clicks during polling, gain edits and acknowledgements,
