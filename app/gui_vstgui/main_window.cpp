@@ -3,6 +3,7 @@
 #include "app/gui_vstgui/engine_client.h"
 #include "app/gui_vstgui/lcd_readout_view.h"
 #include "app/gui_vstgui/palette.h"
+#include "app/gui_vstgui/panel_button.h"
 #include "app/gui_vstgui/virtual_device_window.h"
 #include "app/gui_vstgui/runtime_device_window.h"
 #include "app/gui_vstgui/request_error_state.h"
@@ -278,7 +279,7 @@ class HeaderController final : public IControlListener {
     if (!last_.runtimeConfigured) { showRuntimeDeviceWindow(); return; }
     queuedCommand_ = last_.runtimeRunning ? 2 : 1;
     error_.clear();
-    button_->setMouseEnabled(false);
+    setPanelControlEnabled(*button_, false);
     renderMatrix();
     if (!pending_.valid()) submit();
   }
@@ -386,8 +387,8 @@ class HeaderController final : public IControlListener {
       button_->setTitle(!state.runtimeConfigured ? "Configure audio"
                         : state.runtimeRunning   ? "Stop audio"
                                                   : "Start audio");
-      button_->setMouseEnabled(state.transportOk &&
-                               queuedCommand_ == 0 && !engineCommandPending_);
+      setPanelControlEnabled(*button_, state.transportOk &&
+                             queuedCommand_ == 0 && !engineCommandPending_);
     }
     renderMatrix();
   }
@@ -402,6 +403,7 @@ class HeaderController final : public IControlListener {
     }
     for (std::size_t row = 0; row < kVisibleRows; ++row) {
       const auto index = rows_.first() + row;
+      inputs_[row]->setVisible(available && rows_.contains(row));
       inputs_[row]->setText(available && index < matrix.inputs.size()
           ? matrix.inputs[index].label.c_str() : "");
       inputs_[row]->setTooltipText(available && index < matrix.inputs.size()
@@ -409,6 +411,7 @@ class HeaderController final : public IControlListener {
     }
     for (std::size_t column = 0; column < kVisibleColumns; ++column) {
       const auto index = columns_.first() + column;
+      outputs_[column]->setVisible(available && columns_.contains(column));
       outputs_[column]->setText(available && index < matrix.outputs.size()
           ? matrix.outputs[index].label.c_str() : "");
       outputs_[column]->setTooltipText(available && index < matrix.outputs.size()
@@ -417,7 +420,8 @@ class HeaderController final : public IControlListener {
     for (std::size_t i = 0; i < cells_.size(); ++i) {
       const auto row = rows_.first() + i / kVisibleColumns;
       const auto column = columns_.first() + i % kVisibleColumns;
-      const bool valid = available && row < matrix.inputs.size() && column < matrix.outputs.size();
+      const bool valid = available && rows_.contains(i / kVisibleColumns) &&
+                         columns_.contains(i % kVisibleColumns);
       const bool connected = valid && std::any_of(matrix.routes.begin(), matrix.routes.end(),
           [&](const auto& route) {
             return route.input_id == matrix.inputs[row].id &&
@@ -429,6 +433,7 @@ class HeaderController final : public IControlListener {
           [&](const auto& route) { return route.input_id == matrix.inputs[row].id &&
               route.output_id == matrix.outputs[column].id && route.muted; });
       cells_[i]->present(valid, connected, muted, selected);
+      cells_[i]->setVisible(valid);
       cells_[i]->setMouseEnabled(valid && !engineCommandPending_ && !queuedCommand_);
     }
     summary_->setText(!available ? "Matrix unavailable" :
@@ -437,10 +442,12 @@ class HeaderController final : public IControlListener {
          std::to_string(matrix.routes.size()) + " routes" +
          (edits_.pending() ? "  /  applying" : "")).c_str());
     if (errorText_) errorText_->setText(error_.message().c_str());
-    navigation_[0]->setMouseEnabled(available && rows_.hasPrevious());
-    navigation_[1]->setMouseEnabled(available && rows_.hasNext());
-    navigation_[2]->setMouseEnabled(available && columns_.hasPrevious());
-    navigation_[3]->setMouseEnabled(available && columns_.hasNext());
+    for (std::size_t i = 0; i < navigation_.size(); ++i) {
+      const auto& page = i < 2 ? rows_ : columns_;
+      navigation_[i]->setVisible(available && (page.hasPrevious() || page.hasNext()));
+      setPanelControlEnabled(*navigation_[i], available &&
+          (i % 2 == 0 ? page.hasPrevious() : page.hasNext()));
+    }
     renderInspector();
   }
 
@@ -469,11 +476,11 @@ class HeaderController final : public IControlListener {
       gainText_->setText(active ? formatGain(route->gain).c_str() : "-- dB");
     }
     const bool editable = active && !engineCommandPending_ && !queuedCommand_;
-    gainSlider_->setMouseEnabled(editable);
-    muteButton_->setMouseEnabled(editable);
+    setPanelControlEnabled(*gainSlider_, editable);
+    setPanelControlEnabled(*muteButton_, editable);
     muteButton_->setTitle(active && route->muted ? "Unmute" : "Mute");
-    resetButton_->setMouseEnabled(editable);
-    removeButton_->setMouseEnabled(editable);
+    setPanelControlEnabled(*resetButton_, editable);
+    setPanelControlEnabled(*removeButton_, editable);
   }
 
   std::shared_ptr<EngineClient> client_ = std::make_shared<EngineClient>();
@@ -595,7 +602,7 @@ WindowPtr createMainWindow() {
       "Configure audio");
   startStopButton->setTextColor(palette::kText);
   startStopButton->setFrameColor(palette::kLine);
-  startStopButton->setGradient(nullptr);
+  stylePanelButton(*startStopButton);
   startStopButton->setRoundRadius(2);
   addRetainedView(*header, startStopButton);
 
@@ -661,7 +668,7 @@ WindowPtr createMainWindow() {
   }
   auto makeNav = [&](CCoord left, const char* text) {
     auto button = makeOwned<CTextButton>(CRect(left, 520, left + 82, 550), nullptr, -1, text);
-    button->setGradient(nullptr);
+    stylePanelButton(*button);
     button->setFrameColor(palette::kLine);
     button->setTextColor(palette::kText);
     button->setRoundRadius(2);
@@ -701,7 +708,7 @@ WindowPtr createMainWindow() {
   auto makeInspectorButton = [&](CCoord left, const char* label) {
     auto button = makeOwned<CTextButton>(CRect(left, 312, left + 96, 346),
                                         nullptr, -1, label);
-    button->setGradient(nullptr);
+    stylePanelButton(*button);
     button->setFrameColor(palette::kLine);
     button->setTextColor(palette::kText);
     button->setRoundRadius(2);
@@ -712,7 +719,7 @@ WindowPtr createMainWindow() {
   auto resetButton = makeInspectorButton(124, "0 dB");
   auto removeButton = makeOwned<CTextButton>(CRect(16, 374, 220, 408),
                                             nullptr, -1, "Remove route");
-  removeButton->setGradient(nullptr);
+  stylePanelButton(*removeButton);
   removeButton->setFrameColor(palette::kLine);
   removeButton->setTextColor(palette::kText);
   removeButton->setRoundRadius(2);
@@ -722,14 +729,14 @@ WindowPtr createMainWindow() {
   auto controller = std::make_shared<HeaderController>();
   auto virtualDevices = makeOwned<CTextButton>(CRect(596, 14, 742, 42), controller.get(),
                                                900, "Virtual WASAPI");
-  virtualDevices->setGradient(nullptr);
+  stylePanelButton(*virtualDevices);
   virtualDevices->setFrameColor(palette::kLine);
   virtualDevices->setTextColor(palette::kSteel);
   virtualDevices->setRoundRadius(2);
   addRetainedView(*body, virtualDevices);
   auto audioDevices = makeOwned<CTextButton>(CRect(462, 14, 584, 42), controller.get(),
                                             901, "Audio devices");
-  audioDevices->setGradient(nullptr);
+  stylePanelButton(*audioDevices);
   audioDevices->setFrameColor(palette::kLine);
   audioDevices->setTextColor(palette::kSteel);
   audioDevices->setRoundRadius(2);

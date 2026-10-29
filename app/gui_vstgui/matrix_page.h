@@ -29,6 +29,8 @@ class MatrixPage {
   bool hasNext() const { return count_ != 0 && page_ < (count_ - 1) / capacity_; }
   std::size_t first() const { return page_ * capacity_; }
   std::size_t page() const { return page_; }
+  std::size_t visibleCount() const { return (std::min)(capacity_, count_ - first()); }
+  bool contains(std::size_t slot) const { return slot < visibleCount(); }
 
  private:
   std::size_t capacity_;

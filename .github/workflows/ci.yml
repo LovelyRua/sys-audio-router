@@ -81,7 +81,8 @@ jobs:
               build/Release/sar_control_cli.exe,
               build/Release/SystemAudioRouteVirtualASIO.dll,
               build/Release/sar_virtual_asio_register.exe,
-              build/Release/sar_virtual_asio_host_probe.exe -Algorithm SHA256 |
+              build/Release/sar_virtual_asio_host_probe.exe,
+              build/Release/sar_measure_wasapi_capture_level.exe -Algorithm SHA256 |
               Select-Object Path, Hash)
           } | ConvertTo-Json -Depth 4 |
             Set-Content build/Release/matrix-lab-build.json -Encoding utf8
@@ -96,6 +97,7 @@ jobs:
             build/Release/SystemAudioRouteVirtualASIO.dll
             build/Release/sar_virtual_asio_register.exe
             build/Release/sar_virtual_asio_host_probe.exe
+            build/Release/sar_measure_wasapi_capture_level.exe
             build/Release/matrix-lab-build.json
             scripts/windows-virtual-wasapi-matrix-preflight.ps1
             scripts/windows-lab-process.psm1
@@ -138,8 +140,9 @@ jobs:
           sar_virtual_asio_broker_protocol_smoke
           sar_virtual_asio_broker_protocol_mutation_smoke
           sar_planar_audio_fifo_smoke
+          sar_capture_level_evidence_smoke
 
       - name: Run smoke tests
         run: >-
           ctest --test-dir build-asan --output-on-failure
-          -R "control_wire_protocol_smoke|control_codec_mutation_smoke|preset_file_codec_smoke|session_file_codec_smoke|virtual_asio_broker_protocol_smoke|virtual_asio_broker_protocol_mutation_smoke|planar_audio_fifo_smoke"
+          -R "control_wire_protocol_smoke|control_codec_mutation_smoke|preset_file_codec_smoke|session_file_codec_smoke|virtual_asio_broker_protocol_smoke|virtual_asio_broker_protocol_mutation_smoke|planar_audio_fifo_smoke|capture_level_evidence_smoke"

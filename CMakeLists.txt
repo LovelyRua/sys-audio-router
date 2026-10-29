@@ -550,6 +550,10 @@ add_executable(sar_wasapi_realtime_error_smoke
 
 target_link_libraries(sar_wasapi_realtime_error_smoke PRIVATE sar_core)
 
+add_executable(sar_capture_level_evidence_smoke
+  tests/realtime/capture_level_evidence_smoke.cpp)
+target_link_libraries(sar_capture_level_evidence_smoke PRIVATE sar_core)
+
 if(WIN32)
   add_library(sar_virtual_asio_registration STATIC
     driver/windows_virtual_asio_registration.cpp
@@ -1091,6 +1095,7 @@ add_executable(sar_spsc_ring_buffer_threaded_smoke
 target_link_libraries(sar_spsc_ring_buffer_threaded_smoke PRIVATE sar_core)
 
 enable_testing()
+add_test(NAME capture_level_evidence_smoke COMMAND sar_capture_level_evidence_smoke)
 if(TARGET sar_gui_virtual_device_client_smoke)
   add_test(NAME gui_virtual_device_client_smoke COMMAND sar_gui_virtual_device_client_smoke)
   set_tests_properties(gui_virtual_device_client_smoke PROPERTIES TIMEOUT 20)

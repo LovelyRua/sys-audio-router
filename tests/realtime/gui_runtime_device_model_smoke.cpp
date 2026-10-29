@@ -98,11 +98,16 @@ int main() {
   require(routeGainText(std::numeric_limits<float>::infinity()) == "-- dB", "Infinite gain displayed as valid");
   require(routeGainText(std::numeric_limits<float>::quiet_NaN()) == "-- dB", "NaN gain displayed as valid");
   MatrixPage page(8);
+  require(page.visibleCount() == 0 && !page.contains(0), "Empty page exposed a phantom slot");
   require(!page.next() && !page.previous(), "Empty page navigation accepted");
   page.reconcile(17);
   require(page.next() && page.next() && !page.next() && page.first() == 16,
           "Partial last page navigation failed");
+  require(page.visibleCount() == 1 && page.contains(0) && !page.contains(1),
+          "Partial page exposed nonexistent channels");
   page.reconcile(8);
+  require(page.visibleCount() == 8 && page.contains(7) && !page.contains(8),
+          "Full page exposed a slot beyond capacity");
   require(page.first() == 0 && !page.hasNext() && !page.hasPrevious(),
           "Shrinking topology stranded the matrix on an empty page");
   page.reconcile(16);
@@ -119,6 +124,10 @@ int main() {
     page.reconcile(count);
     while (page.previous()) {}
     while (page.next()) {}
+    require(page.visibleCount() <= 8, "Visible row count exceeded page capacity");
+    for (std::size_t slot = 0; slot <= 8; ++slot)
+      require(page.contains(slot) == (slot < 8 && page.first() + slot < count),
+              "Slot visibility diverged from the authoritative channel count");
     require(count == 0 ? page.first() == 0 : page.first() < count,
             "Page starts outside the authoritative topology");
     for (std::size_t reduced = count; reduced > 0; --reduced) {

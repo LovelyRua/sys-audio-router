@@ -2,6 +2,7 @@
 #include "app/gui_vstgui/runtime_device_model.h"
 #include "app/gui_vstgui/engine_client.h"
 #include "app/gui_vstgui/palette.h"
+#include "app/gui_vstgui/panel_button.h"
 #include "app/gui_vstgui/view_ownership.h"
 #include "app/gui_vstgui/window_geometry.h"
 #include "app/gui_vstgui/vb_cable_setup.h"
@@ -179,7 +180,7 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
   }
   SharedPointer<CTextButton> button(const CRect& bounds, const char* value, int tag) {
     auto view = makeOwned<CTextButton>(bounds, this, tag, value);
-    view->setGradient(nullptr);
+    stylePanelButton(*view);
     view->setTextColor(palette::kText);
     view->setFrameColor(palette::kLine);
     view->setRoundRadius(2);
@@ -304,7 +305,7 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
   }
   void updateEnabled() {
     const auto enable = [](CView* view, bool active) {
-      view->setMouseEnabled(active); view->setAlphaValue(active ? 1.0F : 0.4F);
+      setPanelControlEnabled(*view, active);
     };
     const bool idle = !pending_.valid() && !setup_.valid(), available = snapshot_.available && idle;
     const auto item = selectedItem();

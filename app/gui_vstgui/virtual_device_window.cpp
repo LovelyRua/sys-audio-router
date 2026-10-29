@@ -2,6 +2,7 @@
 #include "app/gui_vstgui/view_ownership.h"
 #include "app/gui_vstgui/virtual_device_client.h"
 #include "app/gui_vstgui/palette.h"
+#include "app/gui_vstgui/panel_button.h"
 #include "app/gui_vstgui/window_geometry.h"
 
 #ifndef NOMINMAX
@@ -138,7 +139,7 @@ class DevicePanel final : public CViewContainer, public IControlListener {
  private:
   SharedPointer<CTextButton> button(const CRect& bounds, const char* text, int tag) {
     auto view = makeOwned<CTextButton>(bounds, this, tag, text);
-    view->setGradient(nullptr);
+    stylePanelButton(*view);
     view->setFrameColor(palette::kLine);
     view->setTextColor(palette::kText);
     view->setRoundRadius(2);
@@ -244,8 +245,7 @@ class DevicePanel final : public CViewContainer, public IControlListener {
 
   void updateEnabled() {
     const auto enable = [](CView* view, bool active) {
-      view->setMouseEnabled(active);
-      view->setAlphaValue(active ? 1.0F : 0.4F);
+      setPanelControlEnabled(*view, active);
     };
     const bool idle = !pending_.valid();
     const bool selected = snapshot_.available && !selectedId_.empty();
