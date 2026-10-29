@@ -8,6 +8,7 @@
 #include "app/gui_vstgui/request_error_state.h"
 #include "app/gui_vstgui/matrix_page.h"
 #include "app/gui_vstgui/route_gain_text.h"
+#include "app/gui_vstgui/route_edit_queue.h"
 #include "app/gui_vstgui/view_ownership.h"
 #include "app/gui_vstgui/window_geometry.h"
 
@@ -183,15 +184,19 @@ class HeaderController final : public IControlListener {
         return;
       try {
         auto state = pending_.get();
-        error_.observe(state.lastError, state.transportOk);
-        state.lastError = error_.message();
+        if (routeRequest_) edits_.complete(state.transportOk && state.lastError.empty());
+        routeRequest_ = false;
+        engineCommandPending_ = false;
         apply(state);
       } catch (...) {
+        edits_.clear();
+        routeRequest_ = false;
+        engineCommandPending_ = false;
         EngineState state;
         state.lastError = "Engine request failed";
         apply(state);
       }
-      if (queuedCommand_ != 0 || routeCommand_) submit();
+      if (queuedCommand_ != 0 || edits_.queued()) submit();
       nextPoll_ = std::chrono::steady_clock::now() +
                   std::chrono::milliseconds(kPollIntervalMs);
       return;
@@ -214,33 +219,25 @@ class HeaderController final : public IControlListener {
       const float db = -60.0F + gainSlider_->getValueNormalized() * 72.0F;
       const float gain = db <= -60.0F ? 0.0F : std::pow(10.0F, db / 20.0F);
       gainText_->setText(formatGain(gain).c_str());
-      routeCommand_ = RouteCommand{RouteAction::Gain, selectedInputId_,
-                                   selectedOutputId_, gain, false};
-      if (!pending_.valid()) submit();
+      queueEdit({RouteAction::Gain, selectedInputId_, selectedOutputId_, gain, false});
       return;
     }
     if (control == muteButton_.get() && control->getValue() > 0.5F) {
       const auto route = selectedRoute();
       if (!route) return;
-      routeCommand_ = RouteCommand{RouteAction::Mute, selectedInputId_,
-                                   selectedOutputId_, 0.0F, !route->muted};
-      if (!pending_.valid()) submit();
+      queueEdit({RouteAction::Mute, selectedInputId_, selectedOutputId_, 0.0F, !route->muted});
       return;
     }
     if (control == resetButton_.get() && control->getValue() > 0.5F) {
       if (!selectedRoute()) return;
       gainSlider_->setValueNormalized(60.0F / 72.0F);
       gainText_->setText("0.0 dB");
-      routeCommand_ = RouteCommand{RouteAction::Gain, selectedInputId_,
-                                   selectedOutputId_, 1.0F, false};
-      if (!pending_.valid()) submit();
+      queueEdit({RouteAction::Gain, selectedInputId_, selectedOutputId_, 1.0F, false});
       return;
     }
     if (control == removeButton_.get() && control->getValue() > 0.5F) {
-      if (!selectedRoute() || pending_.valid()) return;
-      routeCommand_ = RouteCommand{RouteAction::Disconnect, selectedInputId_,
-                                   selectedOutputId_, 1.0F, false};
-      submit();
+      if (!selectedRoute()) return;
+      queueEdit({RouteAction::Disconnect, selectedInputId_, selectedOutputId_, 1.0F, false});
       return;
     }
     for (std::size_t i = 0; i < navigation_.size(); ++i) {
@@ -258,21 +255,20 @@ class HeaderController final : public IControlListener {
       if (control != cells_[i].get() || control->getValue() <= 0.5f) continue;
       const auto row = rows_.first() + i / kVisibleColumns;
       const auto column = columns_.first() + i % kVisibleColumns;
-      if (pending_.valid() || !last_.transportOk || !last_.hasMatrix ||
+      if (engineCommandPending_ || queuedCommand_ || !last_.transportOk || !last_.hasMatrix ||
           row >= last_.matrix.inputs.size() || column >= last_.matrix.outputs.size()) return;
       const auto& input = last_.matrix.inputs[row].id;
       const auto& output = last_.matrix.outputs[column].id;
-      const bool connected = std::any_of(last_.matrix.routes.begin(), last_.matrix.routes.end(),
+      const bool connected = std::any_of(displayMatrix_.routes.begin(), displayMatrix_.routes.end(),
           [&](const auto& route) { return route.input_id == input && route.output_id == output; });
       selectedInputId_ = input;
       selectedOutputId_ = output;
-      if (!cells_[i]->selectOnly()) {
-        routeCommand_ = RouteCommand{connected ? RouteAction::Disconnect : RouteAction::Connect,
-                                     input, output, 1.0F, false};
-      }
       error_.clear();
+      if (!cells_[i]->selectOnly()) {
+        queueEdit({connected ? RouteAction::Disconnect : RouteAction::Connect,
+                   input, output, 1.0F, false});
+      }
       renderMatrix();
-      if (routeCommand_) submit();
       return;
     }
     if (control != button_.get() || control->getValue() <= 0.5f) {
@@ -282,21 +278,25 @@ class HeaderController final : public IControlListener {
     queuedCommand_ = last_.runtimeRunning ? 2 : 1;
     error_.clear();
     button_->setMouseEnabled(false);
+    renderMatrix();
     if (!pending_.valid()) submit();
   }
 
  private:
-  enum class RouteAction { Connect, Disconnect, Gain, Mute };
-  struct RouteCommand {
-    RouteAction action;
-    std::string input;
-    std::string output;
-    float gain;
-    bool mute;
-  };
+  void queueEdit(RouteCommand command) {
+    if (!last_.transportOk || !last_.hasMatrix || queuedCommand_ || engineCommandPending_) return;
+    if (!edits_.enqueue(std::move(command))) {
+      error_.observe("Too many pending route edits; wait for the engine", true);
+    } else {
+      error_.clear();
+    }
+    displayMatrix_ = edits_.project(last_.matrix);
+    renderMatrix();
+    if (!pending_.valid()) submit();
+  }
 
   const control::PresetRoute* selectedRoute() const {
-    const auto& routes = last_.matrix.routes;
+    const auto& routes = displayMatrix_.routes;
     const auto found = std::find_if(routes.begin(), routes.end(), [&](const auto& route) {
       return route.input_id == selectedInputId_ && route.output_id == selectedOutputId_;
     });
@@ -308,13 +308,15 @@ class HeaderController final : public IControlListener {
   }
 
   void submit() {
+    if (pending_.valid()) return;
     int command = 0;
-    if (!routeCommand_ && queuedCommand_ != 0) {
+    if (!edits_.queued() && queuedCommand_ != 0) {
       command = queuedCommand_;
       queuedCommand_ = 0;
     }
-    auto route = std::move(routeCommand_);
-    routeCommand_.reset();
+    auto route = edits_.begin();
+    routeRequest_ = route.has_value();
+    engineCommandPending_ = command != 0;
     try {
       std::packaged_task<EngineState()> task([client = client_, command, route] {
         if (route) {
@@ -335,7 +337,11 @@ class HeaderController final : public IControlListener {
       auto future = task.get_future();
       std::thread(std::move(task)).detach();
       pending_ = std::move(future);
+      renderMatrix();
     } catch (...) {
+      edits_.clear();
+      routeRequest_ = false;
+      engineCommandPending_ = false;
       auto state = last_;
       state.lastError = "Could not start the engine request worker";
       apply(state);
@@ -344,8 +350,12 @@ class HeaderController final : public IControlListener {
     }
   }
 
-  void apply(const EngineState& state) {
+  void apply(EngineState state) {
+    error_.observe(state.lastError, state.transportOk);
+    state.lastError = error_.message();
     last_ = state;
+    if (!state.transportOk || !state.hasMatrix) edits_.clear();
+    displayMatrix_ = edits_.project(state.matrix);
     if (dot_) {
       dot_->setColor(!state.transportOk ? palette::kDanger :
                     !state.lastError.empty() ? palette::kWarning : palette::kHealthy);
@@ -376,14 +386,14 @@ class HeaderController final : public IControlListener {
                         : state.runtimeRunning   ? "Stop audio"
                                                   : "Start audio");
       button_->setMouseEnabled(state.transportOk &&
-                               queuedCommand_ == 0);
+                               queuedCommand_ == 0 && !engineCommandPending_);
     }
     renderMatrix();
   }
 
   void renderMatrix() {
     if (cells_.empty()) return;
-    const auto& matrix = last_.matrix;
+    const auto& matrix = displayMatrix_;
     const bool available = last_.transportOk && last_.hasMatrix;
     if (available) {
       rows_.reconcile(matrix.inputs.size());
@@ -418,12 +428,14 @@ class HeaderController final : public IControlListener {
           [&](const auto& route) { return route.input_id == matrix.inputs[row].id &&
               route.output_id == matrix.outputs[column].id && route.muted; });
       cells_[i]->present(valid, connected, muted, selected);
-      cells_[i]->setMouseEnabled(valid && !pending_.valid() && !routeCommand_);
+      cells_[i]->setMouseEnabled(valid && !engineCommandPending_ && !queuedCommand_);
     }
     summary_->setText(!available ? "Matrix unavailable" :
         (std::to_string(matrix.inputs.size()) + " inputs  /  " +
          std::to_string(matrix.outputs.size()) + " outputs  /  " +
-         std::to_string(matrix.routes.size()) + " routes").c_str());
+         std::to_string(matrix.routes.size()) + " routes" +
+         (edits_.pending() ? "  /  applying" : "")).c_str());
+    if (errorText_) errorText_->setText(error_.message().c_str());
     navigation_[0]->setMouseEnabled(available && rows_.hasPrevious());
     navigation_[1]->setMouseEnabled(available && rows_.hasNext());
     navigation_[2]->setMouseEnabled(available && columns_.hasPrevious());
@@ -433,7 +445,7 @@ class HeaderController final : public IControlListener {
 
   void renderInspector() {
     if (!gainSlider_) return;
-    const auto& matrix = last_.matrix;
+    const auto& matrix = displayMatrix_;
     const auto input = std::find_if(matrix.inputs.begin(), matrix.inputs.end(),
         [&](const auto& endpoint) { return endpoint.id == selectedInputId_; });
     const auto output = std::find_if(matrix.outputs.begin(), matrix.outputs.end(),
@@ -444,25 +456,29 @@ class HeaderController final : public IControlListener {
     selectedDestination_->setText(selected ? output->label.c_str() : "No destination selected");
     const auto* route = selected ? selectedRoute() : nullptr;
     const bool active = route != nullptr;
-    if (!gainSlider_->isEditing() && !routeCommand_) {
+    if (!gainSlider_->isEditing()) {
       const float db = active && route->gain > 0.0F
                            ? std::clamp(20.0F * std::log10(route->gain), -60.0F, 12.0F)
                            : -60.0F;
       gainSlider_->setValueNormalized((db + 60.0F) / 72.0F);
       gainText_->setText(active ? formatGain(route->gain).c_str() : "-- dB");
     }
-    gainSlider_->setMouseEnabled(active);
-    muteButton_->setMouseEnabled(active && !pending_.valid());
+    const bool editable = active && !engineCommandPending_ && !queuedCommand_;
+    gainSlider_->setMouseEnabled(editable);
+    muteButton_->setMouseEnabled(editable);
     muteButton_->setTitle(active && route->muted ? "Unmute" : "Mute");
-    resetButton_->setMouseEnabled(active && !pending_.valid());
-    removeButton_->setMouseEnabled(active && !pending_.valid());
+    resetButton_->setMouseEnabled(editable);
+    removeButton_->setMouseEnabled(editable);
   }
 
   std::shared_ptr<EngineClient> client_ = std::make_shared<EngineClient>();
   std::future<EngineState> pending_;
   std::chrono::steady_clock::time_point nextPoll_{};
   int queuedCommand_ = 0;
-  std::optional<RouteCommand> routeCommand_;
+  RouteEditQueue edits_;
+  control::PresetRouteMatrix displayMatrix_;
+  bool routeRequest_ = false;
+  bool engineCommandPending_ = false;
   MatrixPage rows_{kVisibleRows};
   MatrixPage columns_{kVisibleColumns};
   std::vector<SharedPointer<CTextLabel>> inputs_;

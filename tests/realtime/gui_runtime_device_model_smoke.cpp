@@ -3,6 +3,7 @@
 #include "app/gui_vstgui/request_error_state.h"
 #include "app/gui_vstgui/matrix_page.h"
 #include "app/gui_vstgui/route_gain_text.h"
+#include "app/gui_vstgui/route_edit_queue.h"
 #include <limits>
 #include "core/control/control_wire_protocol.h"
 
@@ -30,6 +31,65 @@ platform::AudioDeviceDescriptor device(const char* id, platform::AudioDeviceDire
 }
 
 int main() {
+  control::PresetRouteMatrix authoritative;
+  graph::RouteEndpointDescriptor source;
+  source.id = "source";
+  graph::RouteEndpointDescriptor destination;
+  destination.id = "destination";
+  authoritative.inputs.push_back(source);
+  authoritative.outputs.push_back(destination);
+  RouteEditQueue edits;
+  require(!edits.begin() && !edits.pending(), "Empty edit queue started a request");
+  require(edits.enqueue({RouteAction::Connect, "source", "destination"}), "Connect rejected");
+  auto shown = edits.project(authoritative);
+  require(shown.routes.size() == 1 && authoritative.routes.empty(),
+          "Pending route must be visible without mutating the received snapshot");
+  const auto connect = edits.begin();
+  require(connect && connect->action == RouteAction::Connect && !edits.begin(),
+          "More than one route writer was dispatched");
+  require(edits.enqueue({RouteAction::Gain, "source", "destination", 0.5F}), "Gain rejected");
+  require(edits.enqueue({RouteAction::Gain, "source", "destination", 0.25F}), "Gain replacement rejected");
+  shown = edits.project(authoritative);
+  require(shown.routes.size() == 1 && shown.routes[0].gain == 0.25F,
+          "A stale poll overwrote the latest fader intent");
+  // The acknowledged connect snapshot arrives before the queued gain request.
+  authoritative.routes.push_back({"source", "destination", 1.0F, false});
+  edits.complete(true);
+  require(edits.project(authoritative).routes[0].gain == 0.25F,
+          "Acknowledgement briefly snapped the fader back");
+  const auto gain = edits.begin();
+  require(gain && gain->gain == 0.25F && !edits.queued(), "Fader events did not coalesce");
+  require(edits.enqueue({RouteAction::Mute, "source", "destination", 0.0F, true}), "Mute rejected");
+  require(edits.enqueue({RouteAction::Gain, "source", "destination", 0.1F}), "Gain after mute rejected");
+  require(edits.project(authoritative).routes[0].muted, "Mute projection lost");
+  edits.complete(true);
+  require(edits.begin()->action == RouteAction::Mute, "Gain coalescing reordered mute");
+  edits.complete(true);
+  require(edits.begin()->action == RouteAction::Gain, "Ordered gain edit lost");
+  edits.complete(false);
+  require(!edits.pending() && edits.project(authoritative).routes[0].gain == 1.0F,
+          "Rejected edit remained in the displayed matrix");
+  require(edits.enqueue({RouteAction::Disconnect, "source", "destination"}), "Disconnect rejected");
+  require(edits.enqueue({RouteAction::Connect, "source", "destination"}), "Rapid reconnect rejected");
+  require(edits.project(authoritative).routes.size() == 1, "Rapid route toggles lost ordering");
+  require(edits.begin()->action == RouteAction::Disconnect, "Toggle dispatch order changed");
+  edits.complete(false);
+  require(!edits.pending(), "Dependent edits survived a rejected disconnect");
+  require(edits.enqueue({RouteAction::Gain, "source", "destination", 0.0F}), "Silence gain rejected");
+  require(edits.project({}).routes.empty(), "Pending edit resurrected a removed endpoint");
+  edits.clear();
+  for (std::size_t index = 0; index < RouteEditQueue::kCapacity; ++index)
+    require(edits.enqueue({RouteAction::Mute, "source", "destination", 0.0F, index % 2 == 0}),
+            "Edit queue capacity below its documented bound");
+  require(!edits.enqueue({RouteAction::Connect, "source", "destination"}), "Unbounded edit queue accepted");
+  require(edits.begin().has_value(), "Full queue could not dispatch");
+  require(!edits.enqueue({RouteAction::Connect, "source", "destination"}), "Active command escaped queue bound");
+  edits.clear();
+  require(!edits.pending(), "Disconnect did not discard pending edits");
+  require(!edits.enqueue({RouteAction::Connect, "", "destination"}), "Empty source accepted");
+  require(!edits.enqueue({RouteAction::Gain, "source", "destination", -1.0F}), "Negative gain queued");
+  require(!edits.enqueue({RouteAction::Gain, "source", "destination", std::numeric_limits<float>::quiet_NaN()}),
+          "NaN gain queued");
   require(routeGainText(0.0F) == "-inf dB", "Zero gain was not silence");
   require(routeGainText(1.0F) == "0.0 dB", "Unity gain display incorrect");
   require(routeGainText(0.001F) == "-60.0 dB", "Finite low gain displayed as silence");
