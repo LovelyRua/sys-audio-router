@@ -48,6 +48,7 @@ class PresetPanel final : public CViewContainer, public IControlListener {
     name_->setBackColor(palette::kSurface);
     name_->setFrameColor(palette::kLine);
     name_->setHoriAlign(kLeftText);
+    name_->setImmediateTextChange(true);
     addRetainedView(*this, name_);
     save_ = button(CRect(520, 220, 636, 254), 6, "Save current");
     message_ = makeOwned<CMultiLineTextLabel>(CRect(24, 274, 636, 330));
