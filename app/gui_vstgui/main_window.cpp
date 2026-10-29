@@ -231,6 +231,7 @@ class HeaderController final : public IControlListener {
     if (control == resetButton_.get() && control->getValue() > 0.5F) {
       if (!selectedRoute()) return;
       gainSlider_->setValueNormalized(60.0F / 72.0F);
+      gainSlider_->invalid();
       gainText_->setText("0.0 dB");
       queueEdit({RouteAction::Gain, selectedInputId_, selectedOutputId_, 1.0F, false});
       return;
@@ -460,7 +461,11 @@ class HeaderController final : public IControlListener {
       const float db = active && route->gain > 0.0F
                            ? std::clamp(20.0F * std::log10(route->gain), -60.0F, 12.0F)
                            : -60.0F;
-      gainSlider_->setValueNormalized((db + 60.0F) / 72.0F);
+      const auto normalized = (db + 60.0F) / 72.0F;
+      if (gainSlider_->getValueNormalized() != normalized) {
+        gainSlider_->setValueNormalized(normalized);
+        gainSlider_->invalid();
+      }
       gainText_->setText(active ? formatGain(route->gain).c_str() : "-- dB");
     }
     const bool editable = active && !engineCommandPending_ && !queuedCommand_;
