@@ -79,18 +79,21 @@ class MatrixCellButton final : public CTextButton {
   using CTextButton::CTextButton;
 
   CMouseEventResult onMouseDown(CPoint& where, const CButtonState& buttons) override {
-    if (buttons & kRButton) {
-      selectOnly_ = true;
+    if (buttons.isRightButton() || (buttons.isLeftButton() && buttons.isShiftSet())) {
+      selectOnly_ = buttons.isRightButton();
+      removeRequested_ = !selectOnly_;
       setValue(1.0F);
       valueChanged();
       setValue(0.0F);
       selectOnly_ = false;
+      removeRequested_ = false;
       return kMouseDownEventHandledButDontNeedMovedOrUpEvents;
     }
     return CTextButton::onMouseDown(where, buttons);
   }
 
   bool selectOnly() const noexcept { return selectOnly_; }
+  bool removeRequested() const noexcept { return removeRequested_; }
 
   void present(bool available, bool connected, bool muted, bool selected) {
     const std::string caption = !available ? "" : !connected ? "+" : muted ? "MUTE" : "ON";
@@ -115,8 +118,26 @@ class MatrixCellButton final : public CTextButton {
 
  private:
   bool selectOnly_ = false;
+  bool removeRequested_ = false;
   std::string caption_;
   CColor fill_ = palette::kRaised, border_ = palette::kLine, ink_ = palette::kMuted;
+};
+
+class RouteGainSlider final : public CHorizontalSlider {
+ public:
+  using CHorizontalSlider::CHorizontalSlider;
+
+  CMouseEventResult onMouseDown(CPoint& where, const CButtonState& buttons) override {
+    if (buttons.isLeftButton() && buttons.isDoubleClick()) {
+      beginEdit();
+      setValueNormalized(60.0F / 72.0F);
+      valueChanged();
+      invalid();
+      endEdit();
+      return kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+    }
+    return CHorizontalSlider::onMouseDown(where, buttons);
+  }
 };
 
 std::string format_uint(const char* format, std::uint64_t value) {
@@ -273,14 +294,15 @@ class HeaderController final : public IControlListener {
           row >= last_.matrix.inputs.size() || column >= last_.matrix.outputs.size()) return;
       const auto& input = last_.matrix.inputs[row].id;
       const auto& output = last_.matrix.outputs[column].id;
-      const bool connected = std::any_of(displayMatrix_.routes.begin(), displayMatrix_.routes.end(),
+      const auto route = std::find_if(displayMatrix_.routes.begin(), displayMatrix_.routes.end(),
           [&](const auto& route) { return route.input_id == input && route.output_id == output; });
       selectedInputId_ = input;
       selectedOutputId_ = output;
       error_.clear();
       if (!cells_[i]->selectOnly()) {
-        queueEdit({connected ? RouteAction::Disconnect : RouteAction::Connect,
-                   input, output, 1.0F, false});
+        queueEdit(routeClickCommand(input, output,
+            route == displayMatrix_.routes.end() ? nullptr : &*route,
+            cells_[i]->removeRequested()));
       }
       renderMatrix();
       return;
@@ -719,7 +741,7 @@ WindowPtr createMainWindow() {
       cell->setGradient(nullptr);
       cell->setFrameColor(palette::kLine);
       cell->setRoundRadius(2);
-      cell->setTooltipText("Left click: toggle route. Right click: inspect route.");
+      cell->setTooltipText("Click: enable/mute. Shift-click: connect/remove. Right-click: inspect.");
       addRetainedView(*body, cell);
       cells.push_back(cell);
     }
@@ -755,13 +777,14 @@ WindowPtr createMainWindow() {
                                palette::kMuted, false));
   auto gainText = makeLabel(CRect(16, 226, 222, 252), "-- dB", palette::kText, true);
   addRetainedView(*inspector, gainText);
-  auto gainSlider = makeOwned<CHorizontalSlider>(
+  auto gainSlider = makeOwned<RouteGainSlider>(
       CRect(16, 268, 222, 286), nullptr, -1, 16, 222, nullptr, nullptr);
   gainSlider->setDrawStyle(CSlider::kDrawFrame | CSlider::kDrawBack | CSlider::kDrawValue);
   gainSlider->setFrameColor(palette::kLine);
   gainSlider->setBackColor(palette::kCanvas);
   gainSlider->setValueColor(palette::kHealthy);
-  gainSlider->setTooltipText("Route gain: -60 to +12 dB");
+  gainSlider->setDefaultValue(60.0F / 72.0F);
+  gainSlider->setTooltipText("Route gain: -60 to +12 dB. Double-click: 0 dB.");
   addRetainedView(*inspector, gainSlider);
   auto makeInspectorButton = [&](CCoord left, const char* label) {
     auto button = makeOwned<CTextButton>(CRect(left, 312, left + 96, 346),

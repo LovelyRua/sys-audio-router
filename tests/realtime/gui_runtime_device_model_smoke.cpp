@@ -39,6 +39,24 @@ int main() {
   authoritative.inputs.push_back(source);
   authoritative.outputs.push_back(destination);
   RouteEditQueue edits;
+  for (const bool shift : {false, true}) {
+    const auto create = routeClickCommand("source", "destination", nullptr, shift);
+    require(create.action == RouteAction::Connect && create.gain == 1.0F,
+            "Click on an absent route did not connect at unity");
+  }
+  control::PresetRoute quiet{"source", "destination", 0.125F, false};
+  const auto mute = routeClickCommand("source", "destination", &quiet, false);
+  require(mute.action == RouteAction::Mute && mute.mute && mute.gain == quiet.gain,
+          "Ordinary click deleted the route or reset its gain");
+  quiet.muted = true;
+  const auto unmute = routeClickCommand("source", "destination", &quiet, false);
+  require(unmute.action == RouteAction::Mute && !unmute.mute && unmute.gain == quiet.gain,
+          "Unmute did not retain the configured gain");
+  for (const bool muted : {false, true}) {
+    quiet.muted = muted;
+    require(routeClickCommand("source", "destination", &quiet, true).action == RouteAction::Disconnect,
+            "Shift-click did not remove an existing route");
+  }
   require(!edits.begin() && !edits.pending(), "Empty edit queue started a request");
   require(edits.enqueue({RouteAction::Connect, "source", "destination"}), "Connect rejected");
   auto shown = edits.project(authoritative);

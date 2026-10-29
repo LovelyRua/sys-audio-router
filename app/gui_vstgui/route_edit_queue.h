@@ -20,6 +20,15 @@ struct RouteCommand {
   bool mute = false;
 };
 
+inline RouteCommand routeClickCommand(const std::string& input,
+                                      const std::string& output,
+                                      const control::PresetRoute* route,
+                                      bool remove) {
+  if (!route) return {RouteAction::Connect, input, output};
+  if (remove) return {RouteAction::Disconnect, input, output};
+  return {RouteAction::Mute, input, output, route->gain, !route->muted};
+}
+
 // UI-thread only. One serialized writer, with a bounded intent queue and a
 // projected view so a late poll cannot undo an edit awaiting acknowledgement.
 class RouteEditQueue {
