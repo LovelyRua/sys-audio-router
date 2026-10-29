@@ -39,3 +39,40 @@ been reproduced or fixed by these changes.
 Keep the existing multi-block-size negotiation contract until its complete
 adaptation path is audited. A suspicion about matching engine block sizes was
 withdrawn after inspecting registry clock-domain validation; it is not a finding.
+
+## October 29 internal pass
+
+- `36a9799` removes the poll-time interaction lockout. A UI-thread-only bounded
+  route queue serializes writes, collapses adjacent unsent fader changes, and
+  projects unacknowledged edits over readback snapshots. Rejected writes discard
+  dependent edits; lost transport clears pending intents rather than replaying
+  them after reconnect. Queue saturation reports an error instead of growing
+  without bound. No changes were made to realtime callbacks.
+- CI `40805704004` and package run `40805709823` passed for this code. The native
+  model test now covers stale polls, acknowledgement ordering, fader coalescing,
+  rejected dependent edits, rapid reconnect, removed endpoints and queue bounds.
+- VM24 was powered on with user authorization and reached at `10.88.0.4`.
+  Its codex desktop session was active. Matching GUI/engine binaries were run
+  from unique lab directories with a private session file. Connecting a route,
+  dragging to -21 dB and muting were observed in the actual native interface;
+  subsequent polling retained those values. These checks used an unconfigured
+  engine and do not establish audio transport or REAPER acceptance.
+- Inspection revealed that the fixed-size windows could strand the inspector
+  outside the viewport after a console resolution change. `f17561e` enables
+  normal window resizing for all three native panels; scrollable content is
+  retained for small displays. This is not a complete responsive-layout redesign.
+- The 0 dB button updated its numeric value but left the fader fill stale.
+  `549bf78` explicitly invalidates the slider after programmatic updates.
+  CI `40811372157` passed for `549bf78`, including both follow-up changes.
+  The matching GUI was then exercised on VM24: maximize exposed the inspector
+  and page controls; right-click selected without toggling; a drag to -15.1 dB
+  followed by the 0 dB command updated both text and fader fill. Unmute changed
+  the matrix from MUTE to ON; remove returned the route count from five to four
+  and disabled the route inspector controls. Routine polling retained readback.
+
+The lab has REAPER 7.41, but the initial read-only inventory found no matching
+SAR ASIO registration. Therefore its current state cannot reproduce the user's
+installed-driver failure. Establish a complete matched installation before
+claiming a DAW test. The native panel still needs visual/interaction work,
+including button affordances and small-window inspector access. No user-facing
+package was delivered by this pass.
