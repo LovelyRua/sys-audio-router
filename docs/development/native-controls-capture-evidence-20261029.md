@@ -107,3 +107,36 @@ ASIO producer queue against the outgoing WASAPI signal. Do not hide startup
 frames or soften the warning counters merely to make the result green.
 Fresh installer/upgrade, recording into a DAW, and complete GUI parity remain
 open. No user-facing installer was delivered by this pass.
+
+## Follow-up: continuous capture with the GUI absent
+
+A fresh isolated engine/REAPER session used the same engine, DLL and probe
+binaries. No SAR GUI was launched. After REAPER had finished opening its test
+project, one 30-second capture was started before a 20-second ReaScript
+play/stop cycle. The capture endpoint was not reopened at the stop boundary.
+Actual transport movement and -18 dBFS DAW meters were observed.
+
+- Received frames: 1298016; elapsed 30037 ms; packets 2717.
+- Peak: 0.125888824; RMS: 0.0747864014; significant frames: 916194.
+- First/last significant received-frame offsets: 129828 / 1079728.
+- Maximum adjacent-sample step: 0.239673615 at offset 753242, inside the
+  significant-signal interval rather than at its start or end.
+- Probe runtime errors, nonfinite samples and timeouts: zero.
+- The later engine snapshot reported 319 producer underflows, zero drops,
+  zero overflows/xruns and callback peak 252.7 us. These are cumulative values,
+  not time-correlated attribution of that particular sample step.
+- REAPER's final script report was stopped, at playback position
+  19.178666666665 seconds. Wall-clock versus audio-clock advancement and the
+  received-frame deficit need timestamped investigation; neither a frame
+  offset nor the aggregate duration proves a specific timeline gap.
+
+The oversized playback step therefore reproduces without the GUI and without
+reopening the capture endpoint during the measurement. This does not yet locate
+the fault in the ASIO producer, engine queue, Windows conversion or VB-CABLE.
+Do not close the audio-continuity blocker or attribute it solely to GUI load.
+
+An earlier attempt started while REAPER was still initializing and received
+only zero samples. It is excluded. The valid attempt above was repeated after
+the actual project window was ready. The isolated project was then saved and
+closed normally, the temporary ASIO registration withdrawn, and the engine
+stopped via `--stop`.
