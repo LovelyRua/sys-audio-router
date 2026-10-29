@@ -216,6 +216,12 @@ if(SAR_BUILD_GUI_VSTGUI)
     app/gui_vstgui/main_window.h
     app/gui_vstgui/engine_client.cpp
     app/gui_vstgui/engine_client.h
+    app/gui_vstgui/diagnostics_window.cpp
+    app/gui_vstgui/diagnostics_window.h
+    app/gui_vstgui/preset_client.cpp
+    app/gui_vstgui/preset_client.h
+    app/gui_vstgui/preset_window.cpp
+    app/gui_vstgui/preset_window.h
     app/gui_vstgui/lcd_readout_view.cpp
     app/gui_vstgui/lcd_readout_view.h
     app/gui_vstgui/palette.h
@@ -698,6 +704,11 @@ if(WIN32)
     app/gui_vstgui/engine_client.cpp
   )
   target_link_libraries(sar_vstgui_engine_client_smoke PRIVATE sar_core)
+
+  add_executable(sar_vstgui_preset_client_smoke
+    tests/realtime/vstgui_preset_client_smoke.cpp
+    app/gui_vstgui/preset_client.cpp)
+  target_link_libraries(sar_vstgui_preset_client_smoke PRIVATE sar_core shell32)
 
   add_executable(sar_windows_virtual_asio_object_names_smoke
     tests/realtime/windows_virtual_asio_object_names_smoke.cpp
@@ -1210,6 +1221,7 @@ if(WIN32)
   add_test(NAME windows_current_user_sid_smoke
            COMMAND sar_windows_current_user_sid_smoke)
   add_test(NAME vstgui_engine_client_smoke COMMAND sar_vstgui_engine_client_smoke)
+  add_test(NAME vstgui_preset_client_smoke COMMAND sar_vstgui_preset_client_smoke)
   add_test(NAME windows_virtual_asio_object_names_smoke
            COMMAND sar_windows_virtual_asio_object_names_smoke)
   add_test(NAME windows_virtual_asio_events_smoke

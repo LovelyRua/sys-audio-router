@@ -6,6 +6,8 @@
 #include "app/gui_vstgui/panel_button.h"
 #include "app/gui_vstgui/virtual_device_window.h"
 #include "app/gui_vstgui/runtime_device_window.h"
+#include "app/gui_vstgui/preset_window.h"
+#include "app/gui_vstgui/diagnostics_window.h"
 #include "app/gui_vstgui/request_error_state.h"
 #include "app/gui_vstgui/matrix_page.h"
 #include "app/gui_vstgui/route_gain_text.h"
@@ -40,7 +42,9 @@ using namespace VSTGUI::Standalone;
 namespace sar::gui_vstgui {
 namespace {
 
-constexpr CCoord kWindowWidth = 1000;
+constexpr CCoord kNavigationWidth = 160;
+constexpr CCoord kWorkspaceWidth = 1000;
+constexpr CCoord kWindowWidth = kNavigationWidth + kWorkspaceWidth;
 constexpr CCoord kWindowHeight = 640;
 constexpr CCoord kHeaderHeight = 54;
 constexpr std::uint32_t kPollIntervalMs = 750;
@@ -206,6 +210,14 @@ class HeaderController final : public IControlListener {
   }
 
   void valueChanged(CControl* control) override {
+    if (control->getTag() == 902 && control->getValue() > 0.5F) {
+      showPresetWindow();
+      return;
+    }
+    if (control->getTag() == 903 && control->getValue() > 0.5F) {
+      showDiagnosticsWindow();
+      return;
+    }
     if (control->getTag() == 901 && control->getValue() > 0.5F) {
       showRuntimeDeviceWindow();
       return;
@@ -360,14 +372,18 @@ class HeaderController final : public IControlListener {
     displayMatrix_ = edits_.project(state.matrix);
     if (dot_) {
       dot_->setColor(!state.transportOk ? palette::kDanger :
-                    !state.lastError.empty() ? palette::kWarning : palette::kHealthy);
+                    !state.lastError.empty() ? palette::kWarning :
+                    state.runtimeRunning ? palette::kHealthy : palette::kMuted);
     }
     if (statusText_) {
       statusText_->setText(!state.lastError.empty() ? "Action failed"
-                          : state.transportOk ? "Engine online" : "Engine offline");
+                          : !state.transportOk ? "Engine offline"
+                          : !state.runtimeConfigured ? "Not configured"
+                          : state.runtimeRunning ? "Audio running" : "Audio stopped");
     }
     if (errorText_) {
       errorText_->setText(state.lastError.c_str());
+      errorText_->setTooltipText(state.lastError.c_str());
     }
     if (hzReadout_) {
       hzReadout_->setText(state.sampleRate > 0
@@ -462,6 +478,8 @@ class HeaderController final : public IControlListener {
                           input != matrix.inputs.end() && output != matrix.outputs.end();
     selectedSource_->setText(selected ? input->label.c_str() : "No source selected");
     selectedDestination_->setText(selected ? output->label.c_str() : "No destination selected");
+    selectedSource_->setTooltipText(selected ? input->label.c_str() : "");
+    selectedDestination_->setTooltipText(selected ? output->label.c_str() : "");
     const auto* route = selected ? selectedRoute() : nullptr;
     const bool active = route != nullptr;
     if (!gainSlider_->isEditing()) {
@@ -621,15 +639,55 @@ WindowPtr createMainWindow() {
       CRect(right, readoutY, right + readoutWidth, readoutY + readoutHeight));
   addRetainedView(*header, hzReadout);
 
+  auto controller = std::make_shared<HeaderController>();
+  auto navigation = makeOwned<CViewContainer>(
+      CRect(0, kHeaderHeight, kNavigationWidth, kWindowHeight));
+  navigation->setBackgroundColor(palette::kSurface);
+  addRetainedView(*content, navigation);
+  addRetainedView(*navigation, makeLabel(CRect(16, 12, 148, 38), "WORKSPACE",
+                                        palette::kMuted, false));
+  auto selectedNavigation = makeOwned<CViewContainer>(CRect(8, 46, 152, 82));
+  selectedNavigation->setBackgroundColor(palette::kRaised);
+  auto accent = makeOwned<CViewContainer>(CRect(0, 0, 3, 36));
+  accent->setBackgroundColor(palette::kSteel);
+  addRetainedView(*selectedNavigation, accent);
+  addRetainedView(*selectedNavigation, makeLabel(CRect(12, 0, 140, 36),
+      "Routing matrix", palette::kText, true));
+  addRetainedView(*navigation, selectedNavigation);
+  auto makeNavigation = [&](CCoord top, int tag, const char* text, const char* tooltip) {
+    auto button = makeOwned<CTextButton>(CRect(8, top, 152, top + 36),
+                                        controller.get(), tag, text);
+    stylePanelButton(*button);
+    button->setTextColor(palette::kText);
+    button->setTooltipText(tooltip);
+    addRetainedView(*navigation, button);
+    return button;
+  };
+  auto audioDevices = makeNavigation(92, 901, "Audio devices", "Audio devices and VB-CABLE setup");
+  makeNavigation(138, 902, "Presets", "Save, load and manage routing presets");
+  makeNavigation(184, 903, "Diagnostics", "Engine counters and connection status");
+  addRetainedView(*navigation, makeLabel(CRect(16, 270, 148, 296), "EXPERIMENTAL",
+                                        palette::kMuted, false));
+  makeNavigation(304, 900, "Driver lab", "Experimental virtual driver management");
+  addRetainedView(*navigation, makeLabel(CRect(16, 530, 148, 554),
+      "Native Preview", palette::kWarning, false));
+  addRetainedView(*navigation, makeLabel(CRect(16, 554, 148, 578),
+      SAR_VERSION, palette::kMuted, false));
+
   auto body = makeOwned<CViewContainer>(
-      CRect(0, kHeaderHeight, kWindowWidth, kWindowHeight));
+      CRect(kNavigationWidth, kHeaderHeight, kWindowWidth, kWindowHeight));
   body->setBackgroundColor(palette::kCanvas);
-  auto title = makeLabel(CRect(24, 14, 300, 42), "ROUTING MATRIX", palette::kText, true);
+  auto title = makeLabel(CRect(24, 14, 228, 42), "ROUTING MATRIX", palette::kText, true);
   addRetainedView(*body, title);
-  auto summary = makeLabel(CRect(240, 14, 450, 42), "Matrix unavailable", palette::kMuted, false);
+  auto summary = makeLabel(CRect(240, 14, 742, 42), "Matrix unavailable", palette::kMuted, false);
   addRetainedView(*body, summary);
-  auto errorText = makeLabel(CRect(24, 44, kWindowWidth - 24, 70), "",
-                            palette::kDanger, false);
+  auto errorText = makeOwned<CMultiLineTextLabel>(CRect(24, 44, 742, 80));
+  errorText->setBackColor(CColor(0, 0, 0, 0));
+  errorText->setFrameColor(CColor(0, 0, 0, 0));
+  errorText->setFontColor(palette::kDanger);
+  errorText->setFont(kNormalFontSmall);
+  errorText->setHoriAlign(kLeftText);
+  errorText->setLineLayout(CMultiLineTextLabel::LineLayout::wrap);
   addRetainedView(*body, errorText);
   addRetainedView(*body, makeLabel(CRect(24, 82, 190, 118), "SOURCE / DESTINATION",
                                  palette::kMuted, false));
@@ -726,21 +784,6 @@ WindowPtr createMainWindow() {
   addRetainedView(*inspector, removeButton);
   addRetainedView(*content, body);
 
-  auto controller = std::make_shared<HeaderController>();
-  auto virtualDevices = makeOwned<CTextButton>(CRect(596, 14, 742, 42), controller.get(),
-                                               900, "Virtual WASAPI");
-  stylePanelButton(*virtualDevices);
-  virtualDevices->setFrameColor(palette::kLine);
-  virtualDevices->setTextColor(palette::kSteel);
-  virtualDevices->setRoundRadius(2);
-  addRetainedView(*body, virtualDevices);
-  auto audioDevices = makeOwned<CTextButton>(CRect(462, 14, 584, 42), controller.get(),
-                                            901, "Audio devices");
-  stylePanelButton(*audioDevices);
-  audioDevices->setFrameColor(palette::kLine);
-  audioDevices->setTextColor(palette::kSteel);
-  audioDevices->setRoundRadius(2);
-  addRetainedView(*body, audioDevices);
   controller->attachErrorView(errorText);
   controller->attachViews(dot, statusText, hzReadout, smpReadout, xrunReadout,
                           startStopButton);
