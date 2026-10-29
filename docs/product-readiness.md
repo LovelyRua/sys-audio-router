@@ -36,7 +36,7 @@ checks do not establish audio continuity or compatibility with every VB product.
 | OBS-1 | Logs and crash dumps | Done: rotating `engine.log`, minidumps under `logs\crashdumps`, "Logs" button and error-bar shortcut. The Export button bundles logs, session, dumps, and a system summary into a zip |
 | INST-1 | Graceful update/uninstall | Done: installers call `sar_engine_service --stop`, ask the GUI to close, and only then force-kill |
 | INST-2 | ASIO registration scope (per-user vs all users, cross-account UAC) | Open |
-| INST-3 | Per-user control pipe name | Done: the default pipe name is now `sys-audio-route-control-<SID>` (`core/platform/windows_current_user_sid.cpp`), computed independently by the engine, the control CLI, the bootstrap launcher, and the GUI so two Windows users never contend for one pipe. An explicit `--pipe NAME` still overrides it for tests and lab tooling |
+| INST-3 | Per-user control pipe name | Done: the default pipe name is `sys-audio-route-control-<SID>`. ASIO broker derivation is shared by the engine, registered DLL and runtime fallback, repairing a buffer-initialization timeout reproduced in REAPER. CI and VM24 playback evidence: `docs/development/reaper-user-pipe-20261029.md`. An explicit engine `--pipe NAME` still overrides the control name for tests and lab tooling |
 | DRV-1 | Sample-rate negotiation with the DAW | Open: engine-side rate change or conversion needed |
 | DRV-2 | Real latency reporting from `getLatencies` | Open: needs a measured round-trip latency model |
 | DRV-3 | ASIO Control Panel button opens the app | Done |
@@ -67,6 +67,6 @@ checks do not establish audio continuity or compatibility with every VB product.
 | CI-1 | Warnings-as-errors, static analysis | Open |
 | CI-2 | Mutation/fuzz coverage of decoders | Done for the control wire protocol, session, and preset codecs (`control_codec_mutation_smoke`) and the Virtual ASIO broker protocol (`virtual_asio_broker_protocol_mutation_smoke`) — the DLL-facing surface a DAW process talks to. The shared-memory/ring-buffer layouts (`virtual_wasapi_transport_layout`, `virtual_asio_shared_memory_layout`) already had dedicated adversarial smokes before this review |
 | CI-3 | Sanitizer job | See the advisory ASan job in `.github/workflows/ci.yml` |
-| SEC-1 | No credentials in docs or arguments | Done for docs and the WinRM wrappers that take a password (`SAR_TEST_PASSWORD`) |
+| SEC-1 | No credentials in docs or arguments | Partly done: normal lab runs use `SAR_TEST_PASSWORD`. The legacy `windows-winrm-reaper-acceptance.cmd` still forwards a password argument and must be migrated; it was not used for the October 29 REAPER validation |
 | SEC-2 | Control-client authorization | Open |
 | OSS-1 | CONTRIBUTING, SECURITY, issue template | Done |

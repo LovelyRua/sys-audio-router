@@ -24,9 +24,10 @@ been reproduced or fixed by these changes.
 
 ## Release blockers, in order
 
-1. Reproduce REAPER createBuffers failure with the installed DLL/engine versions,
-   requested format, returned ASIO error and broker failure captured. Fix the
-   proven failure, not a guessed block-size restriction.
+1. Validate fresh-install/upgrade driver identity and REAPER initialization.
+   The default-pipe mismatch is now reproduced and repaired, with actual DAW
+   playback verified; see `reaper-user-pipe-20261029.md`. The complete packaged
+   install flow and the nonzero post-stop transient still need acceptance.
 2. Review state ownership between the native panel, Qt panel and persisted
    session. Consolidate the supported entry without silently losing Qt features.
 3. Validate routing clicks during polling, gain edits and acknowledgements,
