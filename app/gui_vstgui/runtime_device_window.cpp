@@ -364,7 +364,7 @@ void showRuntimeDeviceWindow() {
   }
   WindowConfiguration config;
   config.type = WindowType::Document;
-  config.style.border().close();
+  config.style.border().close().size();
   config.size = CPoint(kWidth, kHeight);
   config.title = kTitle;
   auto window = IApplication::instance().createWindow(config, std::make_shared<WindowControllerAdapter>());

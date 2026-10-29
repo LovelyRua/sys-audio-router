@@ -544,7 +544,7 @@ SharedPointer<CTextLabel> makeLabel(const CRect& rect, const char* text, CColor 
 WindowPtr createMainWindow() {
   WindowConfiguration config;
   config.type = WindowType::Document;
-  config.style.border().close();
+  config.style.border().close().size();
   config.size = CPoint(kWindowWidth, kWindowHeight);
   config.title = "System Audio Route";
 
