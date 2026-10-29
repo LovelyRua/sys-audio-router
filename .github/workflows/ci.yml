@@ -78,7 +78,10 @@ jobs:
             commit = '${{ github.sha }}'
             run_id = '${{ github.run_id }}'
             binaries = @(Get-FileHash build/Release/sar_engine_service.exe,
-              build/Release/sar_control_cli.exe -Algorithm SHA256 |
+              build/Release/sar_control_cli.exe,
+              build/Release/SystemAudioRouteVirtualASIO.dll,
+              build/Release/sar_virtual_asio_register.exe,
+              build/Release/sar_virtual_asio_host_probe.exe -Algorithm SHA256 |
               Select-Object Path, Hash)
           } | ConvertTo-Json -Depth 4 |
             Set-Content build/Release/matrix-lab-build.json -Encoding utf8
@@ -90,6 +93,9 @@ jobs:
           path: |
             build/Release/sar_engine_service.exe
             build/Release/sar_control_cli.exe
+            build/Release/SystemAudioRouteVirtualASIO.dll
+            build/Release/sar_virtual_asio_register.exe
+            build/Release/sar_virtual_asio_host_probe.exe
             build/Release/matrix-lab-build.json
             scripts/windows-virtual-wasapi-matrix-preflight.ps1
             scripts/windows-lab-process.psm1

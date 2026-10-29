@@ -1,4 +1,5 @@
 #include "core/platform/windows_current_user_sid.h"
+#include "core/platform/windows_virtual_asio_pipe_name.h"
 
 #include <cassert>
 #include <string>
@@ -21,6 +22,12 @@ int main() {
   assert(!first.empty());
   assert(first == second);  // Every caller in one user session must agree.
   assert(first.starts_with(L"sys-audio-route-control"));
+  assert(sar::platform::virtual_asio_broker_pipe_name(L"virtual-asio") ==
+         first + L"-virtual-asio");
+  assert(sar::platform::virtual_asio_broker_pipe_name(L"device-2") ==
+         first + L"-device-2");
+  assert(sar::platform::virtual_asio_broker_pipe_name(L"device-2", L"private-test") ==
+         L"private-test-device-2");
   if (resolved) {
     assert(first == L"sys-audio-route-control-" + sid);
   } else {

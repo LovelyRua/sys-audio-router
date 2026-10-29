@@ -1,5 +1,6 @@
 #include "driver/windows_virtual_asio_com.h"
 #include "driver/windows_virtual_asio_runtime.h"
+#include "core/platform/windows_virtual_asio_pipe_name.h"
 
 #include <Unknwn.h>
 
@@ -121,7 +122,7 @@ bool resolve_instance(REFCLSID clsid, VirtualAsioInstanceDescriptor& instance) {
       instance.clsid = clsid;
       instance.display_name = std::move(display_name);
       instance.broker_pipe_name =
-          std::wstring(L"sys-audio-route-control-") + broker_token;
+          sar::platform::virtual_asio_broker_pipe_name(broker_token);
       return true;
     }
   }

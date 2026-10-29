@@ -10,6 +10,7 @@
 #include "core/service/virtual_asio_instance_layout.h"
 #include "core/platform/realtime_audio_channel_slice_sink.h"
 #include "core/platform/windows_current_user_sid.h"
+#include "core/platform/windows_virtual_asio_pipe_name.h"
 #include "core/platform/realtime_audio_fanout_sink.h"
 #include "core/platform/realtime_audio_input_assembler.h"
 #include "core/platform/virtual_asio_capture_bus.h"
@@ -1411,7 +1412,8 @@ int main(int argc, char** argv) {
         desired_session.virtual_asio_devices[instance.definition_index];
     const std::wstring broker_token(definition.broker_token.begin(),
                                     definition.broker_token.end());
-    const auto asio_pipe_name = pipe_config.pipe_name + L"-" + broker_token;
+    const auto asio_pipe_name = sar::platform::virtual_asio_broker_pipe_name(
+        broker_token, pipe_config.pipe_name);
     auto& host = *asio_hosts[index];
     auto broker =
         std::make_unique<sar::service::WindowsVirtualAsioBrokerServer>(
