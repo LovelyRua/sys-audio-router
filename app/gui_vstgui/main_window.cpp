@@ -240,7 +240,7 @@ class HeaderController final : public IControlListener {
       const auto preference = static_cast<UiLanguage>(menu->getCurrentIndex());
       if (preference == languagePreference()) return;
       const bool saved = setLanguagePreference(preference);
-      if (!saved) menu->setCurrent(static_cast<int>(languagePreference()));
+      if (!saved) menu->setValue(static_cast<float>(languagePreference()));
       const auto message = trWide(saved ? L"Restart System Audio Route to apply the new language."
                                         : L"Could not save the language preference.");
       MessageBoxW(GetActiveWindow(), message.c_str(), L"System Audio Route",
@@ -727,7 +727,7 @@ WindowPtr createMainWindow() {
   language->addEntry(tr("System language"));
   language->addEntry("English");
   language->addEntry(tr("Chinese (Simplified)"));
-  language->setCurrent(static_cast<int>(languagePreference()));
+  language->setValue(static_cast<float>(languagePreference()));
   language->setListener(controller.get());
   language->setTooltipText(tr("Restart required to apply language"));
   addRetainedView(*navigation, language);
