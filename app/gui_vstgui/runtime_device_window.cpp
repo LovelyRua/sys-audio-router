@@ -1,4 +1,5 @@
 #include "app/gui_vstgui/runtime_device_window.h"
+#include "app/gui_vstgui/localization.h"
 #include "app/gui_vstgui/runtime_device_model.h"
 #include "app/gui_vstgui/engine_client.h"
 #include "app/gui_vstgui/palette.h"
@@ -42,36 +43,36 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
  public:
   RuntimePanel() : CViewContainer(CRect(0, 0, kWidth, kHeight)) {
     setBackgroundColor(palette::kCanvas);
-    text(CRect(24, 16, 330, 46), "AUDIO DEVICES", palette::kSteel);
-    refresh_ = button(CRect(732, 16, 836, 46), "Refresh", 1);
-    status_ = text(CRect(24, 54, 836, 82), "Reading runtime...");
-    text(CRect(24, 96, 150, 126), "Matrix endpoint", palette::kMuted);
+    text(CRect(24, 16, 330, 46), tr("AUDIO DEVICES"), palette::kSteel);
+    refresh_ = button(CRect(732, 16, 836, 46), tr("Refresh"), 1);
+    status_ = text(CRect(24, 54, 836, 82), tr("Reading runtime..."));
+    text(CRect(24, 96, 150, 126), tr("Matrix endpoint"), palette::kMuted);
     endpoints_ = menu(CRect(160, 96, 836, 128), 2);
-    addCapture_ = button(CRect(160, 142, 308, 174), "+ Capture", 3);
-    addRender_ = button(CRect(320, 142, 468, 174), "+ Playback", 4);
-    addAsio_ = button(CRect(24, 142, 148, 174), "+ ASIO", 17);
-    remove_ = button(CRect(688, 142, 836, 174), "Remove endpoint", 5);
-    reload_ = button(CRect(480, 142, 672, 174), "Reload saved", 14);
-    text(CRect(24, 194, 150, 226), "Endpoint ID", palette::kMuted);
+    addCapture_ = button(CRect(160, 142, 308, 174), tr("+ Capture"), 3);
+    addRender_ = button(CRect(320, 142, 468, 174), tr("+ Playback"), 4);
+    addAsio_ = button(CRect(24, 142, 148, 174), tr("+ ASIO"), 17);
+    remove_ = button(CRect(688, 142, 836, 174), tr("Remove endpoint"), 5);
+    reload_ = button(CRect(480, 142, 672, 174), tr("Reload saved"), 14);
+    text(CRect(24, 194, 150, 226), tr("Endpoint ID"), palette::kMuted);
     id_ = edit(CRect(160, 194, 596, 226), 6);
-    master_ = button(CRect(608, 194, 836, 226), "Set clock master", 7);
-    text(CRect(24, 244, 150, 276), "Audio device", palette::kMuted);
+    master_ = button(CRect(608, 194, 836, 226), tr("Set clock master"), 7);
+    text(CRect(24, 244, 150, 276), tr("Audio device"), palette::kMuted);
     devices_ = menu(CRect(160, 244, 836, 276), 8);
-    text(CRect(24, 294, 150, 326), "First channel", palette::kMuted);
+    text(CRect(24, 294, 150, 326), tr("First channel"), palette::kMuted);
     first_ = edit(CRect(160, 294, 280, 326), 9);
-    text(CRect(320, 294, 462, 326), "Channel count", palette::kMuted);
+    text(CRect(320, 294, 462, 326), tr("Channel count"), palette::kMuted);
     channels_ = edit(CRect(470, 294, 590, 326), 10);
-    text(CRect(24, 338, 150, 370), "ASIO rate (Hz)", palette::kMuted);
+    text(CRect(24, 338, 150, 370), tr("ASIO rate (Hz)"), palette::kMuted);
     rate_ = edit(CRect(160, 338, 280, 370), 18);
-    text(CRect(320, 338, 462, 370), "Buffer (frames)", palette::kMuted);
+    text(CRect(320, 338, 462, 370), tr("Buffer (frames)"), palette::kMuted);
     frames_ = edit(CRect(470, 338, 590, 370), 19);
     details_ = text(CRect(160, 376, 836, 404), "", palette::kMuted);
-    reset_ = button(CRect(24, 424, 172, 460), "New matrix", 11);
-    run_ = button(CRect(464, 424, 636, 460), "Start audio", 12);
-    apply_ = button(CRect(648, 424, 836, 460), "Apply", 13);
-    cableSetup_ = button(CRect(24, 480, 232, 516), "Install VB-CABLE...", 15);
-    cableWebsite_ = button(CRect(248, 480, 460, 516), "VB-Audio / Donate", 16);
-    text(CRect(24, 522, 836, 550), "VB-CABLE by VB-Audio (vb-cable.com). Donationware; contributions are welcome.", palette::kMuted);
+    reset_ = button(CRect(24, 424, 172, 460), tr("New matrix"), 11);
+    run_ = button(CRect(464, 424, 636, 460), tr("Start audio"), 12);
+    apply_ = button(CRect(648, 424, 836, 460), tr("Apply"), 13);
+    cableSetup_ = button(CRect(24, 480, 232, 516), tr("Install VB-CABLE..."), 15);
+    cableWebsite_ = button(CRect(248, 480, 460, 516), tr("VB-Audio / Donate"), 16);
+    text(CRect(24, 522, 836, 550), tr("VB-CABLE by VB-Audio (vb-cable.com). Donationware; contributions are welcome."), palette::kMuted);
     message_ = makeOwned<CMultiLineTextLabel>(CRect(24, 562, 836, 666));
     message_->setFont(makeOwned<CFontDesc>("Segoe UI", 13));
     message_->setFontColor(palette::kMuted);
@@ -236,11 +237,11 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     if (!frame || !frame->getPlatformFrame()) return false;
     const auto native = static_cast<HWND>(frame->getPlatformFrame()->getPlatformRepresentation());
     const auto owner = native ? GetAncestor(native, GA_ROOT) : nullptr;
-    return owner && MessageBoxW(owner, value, L"Audio devices", MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING) == IDYES;
+    return owner && MessageBoxW(owner, trWide(value).c_str(), trWide(L"Audio devices").c_str(), MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING) == IDYES;
   }
   void message(const std::string& value, bool error = false) {
     message_->setFontColor(error ? palette::kDanger : palette::kMuted);
-    message_->setText(value.c_str());
+    message_->setText(trText(value).c_str());
   }
   RuntimeEndpointDraft* selectedItem() {
     return selected_ < 0 ? nullptr : draft_.at(static_cast<std::size_t>(selected_));
@@ -288,12 +289,12 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     endpoints_->removeAllEntry();
     for (const auto& item : draft_.endpoints()) {
       const auto name = item.endpoint.endpoint_id +
-          (item.endpoint.direction == control::AudioRuntimeEndpointDirection::Capture ? " / capture" : " / playback") +
-          (item.endpoint.clock_master ? " / MASTER" : "");
+          (item.endpoint.direction == control::AudioRuntimeEndpointDirection::Capture ? tr(" / capture") : tr(" / playback")) +
+          (item.endpoint.clock_master ? tr(" / MASTER") : "");
       endpoints_->addEntry(name.c_str());
     }
     if (draft_.endpoints().empty()) {
-      endpoints_->addEntry("No configured endpoints"); selected_ = -1;
+      endpoints_->addEntry(tr("No configured endpoints")); selected_ = -1;
     } else if (selected_ < 0 || static_cast<std::size_t>(selected_) >= draft_.endpoints().size()) selected_ = 0;
     endpoints_->setCurrent(selected_ < 0 ? 0 : selected_);
     rendering_ = false;
@@ -315,19 +316,19 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
       for (const auto& device : snapshot_.devices) {
         if (!RuntimeDeviceDraft::matchesEndpoint(device, item->endpoint)) continue;
         if (device.id == item->endpoint.device_id) selected = static_cast<int>(deviceIds_.size());
-        devices_->addEntry((device.label + (device.is_default ? " / default" : "")).c_str());
+        devices_->addEntry((device.label + (device.is_default ? tr(" / default") : "")).c_str());
         deviceIds_.push_back(device.id);
       }
     }
     if (selected < 0) {
-      devices_->addEntry(item && !item->endpoint.device_id.empty() ? "Configured binding unavailable / preserved" : "Select a device");
+      devices_->addEntry(item && !item->endpoint.device_id.empty() ? tr("Configured binding unavailable / preserved") : tr("Select a device"));
       deviceIds_.push_back(item ? item->endpoint.device_id : std::string{});
       selected = static_cast<int>(deviceIds_.size() - 1);
     }
     devices_->setCurrent(selected);
-    details_->setText(physical ? "ASIO group / master clock / native channel offset is zero-based" : "Native channel offset is zero-based");
-    remove_->setTitle(physical ? "Remove ASIO group" : "Remove endpoint");
-    master_->setTitle(item && item->endpoint.clock_master ? "Clock master" : "Set clock master");
+    details_->setText(physical ? tr("ASIO group / master clock / native channel offset is zero-based") : tr("Native channel offset is zero-based"));
+    remove_->setTitle(physical ? tr("Remove ASIO group") : tr("Remove endpoint"));
+    master_->setTitle(item && item->endpoint.clock_master ? tr("Clock master") : tr("Set clock master"));
     rendering_ = false;
     updateEnabled();
   }
@@ -358,14 +359,14 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     std::string validationError;
     const bool valid = draft_.editable() && draft_.build(snapshot_.devices, validationError).has_value();
     enable(apply_, available && draft_.dirty() && valid);
-    if (available && draft_.dirty()) details_->setText(valid ? "Ready to apply" : validationError.c_str());
+    if (available && draft_.dirty()) details_->setText(valid ? tr("Ready to apply") : trText(validationError).c_str());
     enable(run_, available && !draft_.dirty() && snapshot_.configuration.mode != control::AudioRuntimeMode::None);
-    run_->setTitle(snapshot_.running ? "Stop audio" : "Start audio");
-    const auto status = !snapshot_.available ? std::string("Engine unavailable")
-        : !draft_.editable() ? std::string("Existing runtime preserved / read-only")
-        : (snapshot_.running ? std::string("Audio running") : std::string("Audio stopped")) +
-          " / " + std::to_string(draft_.endpoints().size()) + " endpoints" +
-          (draft_.dirty() ? " / Unsaved changes" : "");
+    run_->setTitle(snapshot_.running ? tr("Stop audio") : tr("Start audio"));
+    const auto status = !snapshot_.available ? std::string(tr("Engine unavailable"))
+        : !draft_.editable() ? std::string(tr("Existing runtime preserved / read-only"))
+        : (snapshot_.running ? std::string(tr("Audio running")) : std::string(tr("Audio stopped"))) +
+          " / " + std::to_string(draft_.endpoints().size()) + tr(" endpoints") +
+          (draft_.dirty() ? tr(" / Unsaved changes") : "");
     status_->setText(status.c_str());
   }
 

@@ -212,6 +212,8 @@ if(SAR_BUILD_GUI_VSTGUI)
 
   add_executable(sar_gui_vstgui WIN32
     app/gui_vstgui/main.cpp
+    app/gui_vstgui/localization.cpp
+    app/gui_vstgui/localization.h
     app/gui_vstgui/main_window.cpp
     app/gui_vstgui/main_window.h
     app/gui_vstgui/engine_client.cpp
@@ -244,7 +246,7 @@ if(SAR_BUILD_GUI_VSTGUI)
   target_compile_features(sar_gui_vstgui PRIVATE cxx_std_20)
   target_compile_definitions(sar_gui_vstgui PRIVATE SAR_VERSION="${PROJECT_VERSION}")
   if(MSVC)
-    target_compile_options(sar_gui_vstgui PRIVATE /Zi)
+    target_compile_options(sar_gui_vstgui PRIVATE /Zi /utf-8)
     target_link_options(sar_gui_vstgui PRIVATE /DEBUG:FULL /OPT:REF /OPT:ICF /INCREMENTAL:NO
       "/MAP:${CMAKE_CURRENT_BINARY_DIR}/gui-vstgui.map")
   endif()
@@ -253,7 +255,7 @@ if(SAR_BUILD_GUI_VSTGUI)
     vstgui
     vstgui_uidescription
     vstgui_standalone
-    nlohmann_json::nlohmann_json shell32 comdlg32 wintrust crypt32 ole32
+    nlohmann_json::nlohmann_json shell32 comdlg32 wintrust crypt32 ole32 advapi32
   )
   sar_add_version_resource(sar_gui_vstgui
     "System Audio Route control panel (VSTGUI prototype)"
@@ -276,6 +278,15 @@ if(SAR_BUILD_GUI_VSTGUI)
   add_executable(sar_gui_runtime_device_model_smoke tests/realtime/gui_runtime_device_model_smoke.cpp)
   target_link_libraries(sar_gui_runtime_device_model_smoke PRIVATE sar_core)
   add_test(NAME gui_runtime_device_model_smoke COMMAND sar_gui_runtime_device_model_smoke)
+  add_executable(sar_native_localization_smoke
+    tests/realtime/native_localization_smoke.cpp app/gui_vstgui/localization.cpp)
+  target_include_directories(sar_native_localization_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_compile_features(sar_native_localization_smoke PRIVATE cxx_std_20)
+  target_link_libraries(sar_native_localization_smoke PRIVATE advapi32)
+  if(MSVC)
+    target_compile_options(sar_native_localization_smoke PRIVATE /utf-8)
+  endif()
+  add_test(NAME native_localization_smoke COMMAND sar_native_localization_smoke)
   add_custom_command(TARGET sar_gui_vstgui POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
       "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/nlohmann-json"

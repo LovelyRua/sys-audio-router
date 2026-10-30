@@ -22,11 +22,12 @@ jobs:
           sar_gui_virtual_device_client_smoke sar_gui_runtime_device_model_smoke
           sar_virtual_asio_driver sar_engine_service
           sar_vstgui_engine_client_smoke sar_windows_virtual_asio_topology_control_smoke
+          sar_native_localization_smoke
 
       - name: Test native virtual device client
         run: >-
           ctest --test-dir build -C Release --output-on-failure
-          -R "^(gui_(virtual_device_client|runtime_device_model)_smoke|vstgui_engine_client_smoke|windows_virtual_asio_topology_(control|reload)_smoke)$"
+          -R "^(gui_(virtual_device_client|runtime_device_model)_smoke|vstgui_engine_client_smoke|native_localization_smoke|windows_virtual_asio_topology_(control|reload)_smoke)$"
 
       - name: Build native control panel
         run: cmake --build build --config Release --target sar_gui_vstgui

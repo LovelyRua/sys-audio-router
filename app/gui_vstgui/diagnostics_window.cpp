@@ -1,4 +1,5 @@
 #include "app/gui_vstgui/diagnostics_window.h"
+#include "app/gui_vstgui/localization.h"
 #include "app/gui_vstgui/command_ids.h"
 #include "app/gui_vstgui/palette.h"
 #include "app/gui_vstgui/panel_button.h"
@@ -134,7 +135,7 @@ constexpr RecoveryField kRecovery[] = {
 };
 
 std::string number(double value, double scale = 1) {
-  if (!std::isfinite(value) || !std::isfinite(value * scale)) return "Unknown";
+  if (!std::isfinite(value) || !std::isfinite(value * scale)) return tr("Unknown");
   std::ostringstream out;
   out.imbue(std::locale::classic());
   out << std::fixed << std::setprecision(3) << value * scale;
@@ -143,14 +144,14 @@ std::string number(double value, double scale = 1) {
 
 const char* recoveryState(control::WasapiRecoveryState state) {
   switch (state) {
-    case control::WasapiRecoveryState::Stopped: return "Stopped";
-    case control::WasapiRecoveryState::Opening: return "Opening";
-    case control::WasapiRecoveryState::Running: return "Running";
-    case control::WasapiRecoveryState::Quiescing: return "Quiescing";
-    case control::WasapiRecoveryState::Backoff: return "Backoff";
-    case control::WasapiRecoveryState::Faulted: return "Faulted";
+    case control::WasapiRecoveryState::Stopped: return tr("Stopped");
+    case control::WasapiRecoveryState::Opening: return tr("Opening");
+    case control::WasapiRecoveryState::Running: return tr("Running");
+    case control::WasapiRecoveryState::Quiescing: return tr("Quiescing");
+    case control::WasapiRecoveryState::Backoff: return tr("Backoff");
+    case control::WasapiRecoveryState::Faulted: return tr("Faulted");
   }
-  return "Unknown";
+  return tr("Unknown");
 }
 
 bool underflow(const Counters& d, const Recovery* r) {
@@ -174,14 +175,14 @@ class DiagnosticsPanel final : public CViewContainer, public IControlListener {
  public:
   DiagnosticsPanel() : CViewContainer(CRect(0, 0, kWidth, kHeight)) {
     setBackgroundColor(palette::kCanvas);
-    text(CRect(24, 16, 400, 44), "DIAGNOSTICS", palette::kSteel);
-    refresh_ = makeOwned<CTextButton>(CRect(732, 16, 836, 46), this, 1, "Refresh");
+    text(CRect(24, 16, 400, 44), tr("DIAGNOSTICS"), palette::kSteel);
+    refresh_ = makeOwned<CTextButton>(CRect(732, 16, 836, 46), this, 1, tr("Refresh"));
     stylePanelButton(*refresh_);
     refresh_->setTextColor(palette::kText);
     addRetainedView(*this, refresh_);
-    status_ = text(CRect(24, 52, 836, 80), "Unknown / awaiting diagnostics");
+    status_ = text(CRect(24, 52, 836, 80), tr("Unknown / awaiting diagnostics"));
     freshness_ = text(CRect(24, 80, 836, 104), "", palette::kMuted);
-    text(CRect(24, 112, 132, 140), "Counter source", palette::kMuted);
+    text(CRect(24, 112, 132, 140), tr("Counter source"), palette::kMuted);
     sources_ = makeOwned<COptionMenu>(CRect(144, 112, 836, 140), this, 2);
     sources_->setFont(makeOwned<CFontDesc>("Segoe UI", 13));
     sources_->setFontColor(palette::kText);
@@ -196,14 +197,14 @@ class DiagnosticsPanel final : public CViewContainer, public IControlListener {
     queue_ = row(27, 152, "Endpoint queue fill (frames)");
     correction_ = row(28, 152, "Endpoint correction (ppm)");
     role_ = row(29, 152, "Endpoint role");
-    text(CRect(24, 580, 836, 608), "WASAPI RECOVERY", palette::kSteel);
-    recovery_ = text(CRect(24, 612, 836, 640), "Unknown");
-    reason_ = text(CRect(24, 640, 836, 668), "Unknown", palette::kMuted);
+    text(CRect(24, 580, 836, 608), tr("WASAPI RECOVERY"), palette::kSteel);
+    recovery_ = text(CRect(24, 612, 836, 640), tr("Unknown"));
+    reason_ = text(CRect(24, 640, 836, 668), tr("Unknown"), palette::kMuted);
     for (std::size_t i = 0; i < std::size(kRecovery); ++i)
       recoveryCounters_[i] = row(i, 676, kRecovery[i].label);
     message_ = text(CRect(24, 856, 836, 888), "", palette::kWarning);
     text(CRect(24, 892, 836, 920),
-         "Reported totals, not interval deltas. Missing telemetry is Unknown; zero is not proof of audio continuity.",
+         tr("Reported totals, not interval deltas. Missing telemetry is Unknown; zero is not proof of audio continuity."),
          palette::kMuted);
     renderSources();
     timer_ = makeOwned<CVSTGUITimer>([this](CVSTGUITimer*) { tick(); }, 100, true);
@@ -239,8 +240,8 @@ class DiagnosticsPanel final : public CViewContainer, public IControlListener {
   SharedPointer<CTextLabel> row(std::size_t index, CCoord top, const char* title) {
     const CCoord x = index % 2 ? 440 : 24;
     const CCoord y = top + (index / 2) * 28;
-    text(CRect(x, y, x + 232, y + 24), title, palette::kMuted);
-    return text(CRect(x + 236, y, x + 396, y + 24), "Unknown");
+    text(CRect(x, y, x + 232, y + 24), tr(title), palette::kMuted);
+    return text(CRect(x + 236, y, x + 396, y + 24), tr("Unknown"));
   }
   void inspect() {
     if (pending_.valid()) return;
@@ -270,13 +271,13 @@ class DiagnosticsPanel final : public CViewContainer, public IControlListener {
     }
     if (!pending_.valid() && Clock::now() >= nextPoll_) inspect();
     const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(Clock::now() - received_).count();
-    const auto age = snapshot_.valid ? "Snapshot age: " + std::to_string(seconds) + " s" : "No current counter snapshot";
-    freshness_->setText((age + (pending_.valid() ? " / Reading..." : " / Polling every 2 s")).c_str());
+    const auto age = snapshot_.valid ? tr("Snapshot age: ") + std::to_string(seconds) + tr(" s") : tr("No current counter snapshot");
+    freshness_->setText((age + (pending_.valid() ? tr(" / Reading...") : tr(" / Polling every 2 s"))).c_str());
   }
   void renderSources() {
     rendering_ = true;
     sources_->removeAllEntry();
-    sources_->addEntry("Engine aggregate");
+    sources_->addEntry(tr("Engine aggregate"));
     int selected = 0, index = 0;
     for (const auto& endpoint : snapshot_.response.endpoint_diagnostics) {
       sources_->addEntry(endpoint.endpoint_id.c_str());
@@ -285,7 +286,7 @@ class DiagnosticsPanel final : public CViewContainer, public IControlListener {
     }
     // Preserve the selected identity through outages; do not silently substitute aggregate counters.
     if (!selected_.empty() && selected == 0) {
-      sources_->addEntry("Selected endpoint unavailable");
+      sources_->addEntry(tr("Selected endpoint unavailable"));
       selected = index + 1;
     }
     sources_->setCurrent(selected);
@@ -308,42 +309,43 @@ class DiagnosticsPanel final : public CViewContainer, public IControlListener {
       hasUnderflow = hasUnderflow || underflow(item.diagnostics, recovery);
       hasWarning = hasWarning || warnings(item.diagnostics, recovery);
     }
-    const char* status = snapshot_.offline ? "Offline / engine unreachable; counters unknown"
-        : !d ? "Unknown / diagnostics unavailable"
-        : hasUnderflow ? "Warning / recorded underflows"
-        : hasWarning ? "Warning / recorded errors or recovery warning"
-        : !r ? "Counters received / recovery health unknown"
-        : "Counters received / no recorded counter warnings";
+    const char* status = snapshot_.offline ? tr("Offline / engine unreachable; counters unknown")
+        : !d ? tr("Unknown / diagnostics unavailable")
+        : hasUnderflow ? tr("Warning / recorded underflows")
+        : hasWarning ? tr("Warning / recorded errors or recovery warning")
+        : !r ? tr("Counters received / recovery health unknown")
+        : tr("Counters received / no recorded counter warnings");
     status_->setText(status);
     status_->setFontColor(snapshot_.offline ? palette::kDanger : (!d || hasWarning || !r) ? palette::kWarning : palette::kText);
     for (std::size_t i = 0; i < std::size(kCounters); ++i)
-      counters_[i]->setText(d ? std::to_string(d->*kCounters[i].member).c_str() : "Unknown");
-    callback_->setText(d ? number(d->last_callback_seconds, 1000).c_str() : "Unknown");
-    peakCallback_->setText(d ? number(d->peak_callback_seconds, 1000).c_str() : "Unknown");
-    peak_->setText(d ? number(d->virtual_asio_peak).c_str() : "Unknown");
-    queue_->setText(endpoint && endpoint->queue_fill_frames ? std::to_string(*endpoint->queue_fill_frames).c_str() : "Unknown");
-    correction_->setText(endpoint && endpoint->correction_ppm ? number(*endpoint->correction_ppm).c_str() : "Unknown");
-    role_->setText(endpoint ? (endpoint->role == control::AudioEndpointRuntimeRole::Master ? "Master" : "Follower") : "Not applicable");
-    std::string recoveryText = "Unknown / recovery telemetry unavailable";
+      counters_[i]->setText(d ? std::to_string(d->*kCounters[i].member).c_str() : tr("Unknown"));
+    callback_->setText(d ? number(d->last_callback_seconds, 1000).c_str() : tr("Unknown"));
+    peakCallback_->setText(d ? number(d->peak_callback_seconds, 1000).c_str() : tr("Unknown"));
+    peak_->setText(d ? number(d->virtual_asio_peak).c_str() : tr("Unknown"));
+    queue_->setText(endpoint && endpoint->queue_fill_frames ? std::to_string(*endpoint->queue_fill_frames).c_str() : tr("Unknown"));
+    correction_->setText(endpoint && endpoint->correction_ppm ? number(*endpoint->correction_ppm).c_str() : tr("Unknown"));
+    role_->setText(endpoint ? (endpoint->role == control::AudioEndpointRuntimeRole::Master ? tr("Master") : tr("Follower")) : tr("Not applicable"));
+    std::string recoveryText = tr("Unknown / recovery telemetry unavailable");
     if (r) {
       recoveryText = recoveryState(r->state);
       switch (r->runtime_health) {
-        case control::WasapiRuntimeHealth::Stopped: recoveryText += " / Engine reports stopped"; break;
-        case control::WasapiRuntimeHealth::Healthy: recoveryText += " / Engine reports healthy"; break;
-        case control::WasapiRuntimeHealth::Degraded: recoveryText += " / Engine reports degraded"; break;
-        case control::WasapiRuntimeHealth::Faulted: recoveryText += " / Engine reports faulted"; break;
-        default: recoveryText += " / Engine health unknown"; break;
+        case control::WasapiRuntimeHealth::Stopped: recoveryText += tr(" / Engine reports stopped"); break;
+        case control::WasapiRuntimeHealth::Healthy: recoveryText += tr(" / Engine reports healthy"); break;
+        case control::WasapiRuntimeHealth::Degraded: recoveryText += tr(" / Engine reports degraded"); break;
+        case control::WasapiRuntimeHealth::Faulted: recoveryText += tr(" / Engine reports faulted"); break;
+        default: recoveryText += tr(" / Engine health unknown"); break;
       }
-      if (r->endpoint_notification_reopen_pending) recoveryText += " / Reopen pending";
+      if (r->endpoint_notification_reopen_pending) recoveryText += tr(" / Reopen pending");
     }
     recovery_->setText(recoveryText.c_str());
     recovery_->setFontColor(r && hasWarning ? palette::kWarning : palette::kText);
-    reason_->setText(r ? ("Reason: " + (r->runtime_reason_code.empty() ? std::string("Not supplied") : r->runtime_reason_code)).c_str() : "Reason: Unknown");
-    reason_->setTooltipText(r ? r->runtime_reason_code.c_str() : "Recovery telemetry unavailable");
+    reason_->setText(r ? (tr("Reason: ") + (r->runtime_reason_code.empty() ? std::string(tr("Not supplied")) : r->runtime_reason_code)).c_str() : tr("Reason: Unknown"));
+    reason_->setTooltipText(r ? r->runtime_reason_code.c_str() : tr("Recovery telemetry unavailable"));
     for (std::size_t i = 0; i < std::size(kRecovery); ++i)
-      recoveryCounters_[i]->setText(r ? std::to_string(r->*kRecovery[i].member).c_str() : "Unknown");
-    message_->setText(snapshot_.error.c_str());
-    message_->setTooltipText(snapshot_.error.c_str());
+      recoveryCounters_[i]->setText(r ? std::to_string(r->*kRecovery[i].member).c_str() : tr("Unknown"));
+    const auto localizedError = trText(snapshot_.error);
+    message_->setText(localizedError.c_str());
+    message_->setTooltipText(localizedError.c_str());
   }
 
   Snapshot snapshot_;

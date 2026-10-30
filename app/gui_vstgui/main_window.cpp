@@ -15,6 +15,8 @@
 #include "app/gui_vstgui/route_edit_queue.h"
 #include "app/gui_vstgui/view_ownership.h"
 #include "app/gui_vstgui/window_geometry.h"
+#include "app/gui_vstgui/localization.h"
+#include "vstgui/lib/controls/coptionmenu.h"
 
 #include "vstgui/lib/cfont.h"
 #include "vstgui/lib/cdrawcontext.h"
@@ -103,7 +105,7 @@ class MatrixCellButton final : public CTextButton {
     const auto ink = !connected ? palette::kMuted : muted ? palette::kWarning : palette::kHealthy;
     if (caption_ == caption && fill_ == fill && border_ == border && ink_ == ink) return;
     caption_ = caption; fill_ = fill; border_ = border; ink_ = ink;
-    setTitle(caption_.c_str());
+    setTitle(tr(caption_.c_str()));
     invalid();
   }
 
@@ -114,7 +116,7 @@ class MatrixCellButton final : public CTextButton {
     context->drawRect(getViewSize(), kDrawFilledAndStroked);
     context->setFont(kNormalFontSmall);
     context->setFontColor(ink_);
-    context->drawString(caption_.c_str(), getViewSize(), kCenterText, true);
+    context->drawString(tr(caption_.c_str()), getViewSize(), kCenterText, true);
   }
 
  private:
@@ -232,6 +234,19 @@ class HeaderController final : public IControlListener {
   }
 
   void valueChanged(CControl* control) override {
+    if (control->getTag() == 905) {
+      const auto menu = dynamic_cast<COptionMenu*>(control);
+      if (!menu || menu->getCurrentIndex() < 0 || menu->getCurrentIndex() > 2) return;
+      const auto preference = static_cast<UiLanguage>(menu->getCurrentIndex());
+      if (preference == languagePreference()) return;
+      const bool saved = setLanguagePreference(preference);
+      if (!saved) menu->setCurrent(static_cast<int>(languagePreference()));
+      const auto message = trWide(saved ? L"Restart System Audio Route to apply the new language."
+                                        : L"Could not save the language preference.");
+      MessageBoxW(GetActiveWindow(), message.c_str(), L"System Audio Route",
+                  MB_OK | (saved ? MB_ICONINFORMATION : MB_ICONERROR));
+      return;
+    }
     if (control->getTag() == 904 && control->getValue() > 0.5F) {
       showAsioDeviceWindow();
       return;
@@ -403,10 +418,10 @@ class HeaderController final : public IControlListener {
                     state.runtimeRunning ? palette::kHealthy : palette::kMuted);
     }
     if (statusText_) {
-      statusText_->setText(!state.transportOk ? "Engine offline"
+      statusText_->setText(tr(!state.transportOk ? "Engine offline"
                           : !state.lastError.empty() ? "Action failed"
                           : !state.runtimeConfigured ? "Not configured"
-                          : state.runtimeRunning ? "Audio running" : "Audio stopped");
+                          : state.runtimeRunning ? "Audio running" : "Audio stopped"));
     }
     if (errorText_) {
       errorText_->setText(state.lastError.c_str());
@@ -427,9 +442,9 @@ class HeaderController final : public IControlListener {
       xrunReadout_->setTint(state.xrunCount > 0 ? palette::kWarning : palette::kLcdDim);
     }
     if (button_) {
-      button_->setTitle(!state.runtimeConfigured ? "Configure audio"
+      button_->setTitle(tr(!state.runtimeConfigured ? "Configure audio"
                         : state.runtimeRunning   ? "Stop audio"
-                                                  : "Start audio");
+                                                  : "Start audio"));
       setPanelControlEnabled(*button_, state.transportOk &&
                              queuedCommand_ == 0 && !engineCommandPending_);
     }
@@ -479,13 +494,13 @@ class HeaderController final : public IControlListener {
       cells_[i]->setVisible(valid);
       cells_[i]->setMouseEnabled(valid && !engineCommandPending_ && !queuedCommand_);
     }
-    summary_->setText(!last_.transportOk ? "Engine offline" :
-        !last_.runtimeConfigured ? "No audio runtime configured" :
-        !available ? "Matrix unavailable" :
-        (std::to_string(matrix.inputs.size()) + " inputs  /  " +
-         std::to_string(matrix.outputs.size()) + " outputs  /  " +
-         std::to_string(matrix.routes.size()) + " routes" +
-         (edits_.pending() ? "  /  applying" : "")).c_str());
+    summary_->setText(!last_.transportOk ? tr("Engine offline") :
+        !last_.runtimeConfigured ? tr("No audio runtime configured") :
+        !available ? tr("Matrix unavailable") :
+        (std::to_string(matrix.inputs.size()) + tr(" inputs  /  ") +
+         std::to_string(matrix.outputs.size()) + tr(" outputs  /  ") +
+         std::to_string(matrix.routes.size()) + tr(" routes") +
+         (edits_.pending() ? tr("  /  applying") : "")).c_str());
     if (errorText_) errorText_->setText(error_.message().c_str());
     for (std::size_t i = 0; i < navigation_.size(); ++i) {
       const auto& page = i < 2 ? rows_ : columns_;
@@ -505,8 +520,8 @@ class HeaderController final : public IControlListener {
         [&](const auto& endpoint) { return endpoint.id == selectedOutputId_; });
     const bool selected = last_.transportOk && last_.hasMatrix && last_.runtimeConfigured &&
                           input != matrix.inputs.end() && output != matrix.outputs.end();
-    selectedSource_->setText(selected ? input->label.c_str() : "No source selected");
-    selectedDestination_->setText(selected ? output->label.c_str() : "No destination selected");
+    selectedSource_->setText(selected ? input->label.c_str() : tr("No source selected"));
+    selectedDestination_->setText(selected ? output->label.c_str() : tr("No destination selected"));
     selectedSource_->setTooltipText(selected ? input->label.c_str() : "");
     selectedDestination_->setTooltipText(selected ? output->label.c_str() : "");
     const auto* route = selected ? selectedRoute() : nullptr;
@@ -525,7 +540,7 @@ class HeaderController final : public IControlListener {
     const bool editable = active && !engineCommandPending_ && !queuedCommand_;
     setPanelControlEnabled(*gainSlider_, editable);
     setPanelControlEnabled(*muteButton_, editable);
-    muteButton_->setTitle(active && route->muted ? "Unmute" : "Mute");
+    muteButton_->setTitle(tr(active && route->muted ? "Unmute" : "Mute"));
     setPanelControlEnabled(*resetButton_, editable);
     setPanelControlEnabled(*removeButton_, editable);
   }
@@ -588,7 +603,7 @@ class MainWindowController final : public WindowControllerAdapter {
 
 SharedPointer<CTextLabel> makeLabel(const CRect& rect, const char* text, CColor color,
                                     bool bold) {
-  auto label = makeOwned<CTextLabel>(rect, text);
+  auto label = makeOwned<CTextLabel>(rect, tr(text));
   label->setBackColor(CColor(0, 0, 0, 0));
   label->setFrameColor(CColor(0, 0, 0, 0));
   label->setFontColor(color);
@@ -649,7 +664,7 @@ WindowPtr createMainWindow() {
   right -= 120;
   auto startStopButton = makeOwned<CTextButton>(
       CRect(right, readoutY, right + 120, readoutY + readoutHeight), nullptr, -1,
-      "Configure audio");
+      tr("Configure audio"));
   startStopButton->setTextColor(palette::kText);
   startStopButton->setFrameColor(palette::kLine);
   stylePanelButton(*startStopButton);
@@ -688,10 +703,10 @@ WindowPtr createMainWindow() {
   addRetainedView(*navigation, selectedNavigation);
   auto makeNavigation = [&](CCoord top, int tag, const char* text, const char* tooltip) {
     auto button = makeOwned<CTextButton>(CRect(8, top, 152, top + 36),
-                                        controller.get(), tag, text);
+                                        controller.get(), tag, tr(text));
     stylePanelButton(*button);
     button->setTextColor(palette::kText);
-    button->setTooltipText(tooltip);
+    button->setTooltipText(tr(tooltip));
     addRetainedView(*navigation, button);
     return button;
   };
@@ -702,6 +717,20 @@ WindowPtr createMainWindow() {
   addRetainedView(*navigation, makeLabel(CRect(16, 316, 148, 342), "EXPERIMENTAL",
                                         palette::kMuted, false));
   makeNavigation(350, 900, "Driver lab", "Experimental virtual driver management");
+  addRetainedView(*navigation, makeLabel(CRect(16, 402, 148, 426), "Language",
+                                        palette::kMuted, false));
+  auto language = makeOwned<COptionMenu>(CRect(12, 432, 148, 466), nullptr, 905);
+  language->setFont(makeOwned<CFontDesc>("Segoe UI", 13));
+  language->setFontColor(palette::kText);
+  language->setBackColor(palette::kRaised);
+  language->setFrameColor(palette::kLine);
+  language->addEntry(tr("System language"));
+  language->addEntry("English");
+  language->addEntry(tr("Chinese (Simplified)"));
+  language->setCurrent(static_cast<int>(languagePreference()));
+  language->setListener(controller.get());
+  language->setTooltipText(tr("Restart required to apply language"));
+  addRetainedView(*navigation, language);
   addRetainedView(*navigation, makeLabel(CRect(16, 530, 148, 554),
       "Native Preview", palette::kWarning, false));
   addRetainedView(*navigation, makeLabel(CRect(16, 554, 148, 578),
@@ -752,13 +781,13 @@ WindowPtr createMainWindow() {
       cell->setGradient(nullptr);
       cell->setFrameColor(palette::kLine);
       cell->setRoundRadius(2);
-      cell->setTooltipText("Click: enable/mute. Shift-click: connect/remove. Right-click: inspect.");
+      cell->setTooltipText(tr("Click: enable/mute. Shift-click: connect/remove. Right-click: inspect."));
       addRetainedView(*body, cell);
       cells.push_back(cell);
     }
   }
   auto makeNav = [&](CCoord left, const char* text) {
-    auto button = makeOwned<CTextButton>(CRect(left, 520, left + 82, 550), nullptr, -1, text);
+    auto button = makeOwned<CTextButton>(CRect(left, 520, left + 82, 550), nullptr, -1, tr(text));
     stylePanelButton(*button);
     button->setFrameColor(palette::kLine);
     button->setTextColor(palette::kText);
@@ -795,11 +824,11 @@ WindowPtr createMainWindow() {
   gainSlider->setBackColor(palette::kCanvas);
   gainSlider->setValueColor(palette::kHealthy);
   gainSlider->setDefaultValue(60.0F / 72.0F);
-  gainSlider->setTooltipText("Route gain: -60 to +12 dB. Double-click: 0 dB.");
+  gainSlider->setTooltipText(tr("Route gain: -60 to +12 dB. Double-click: 0 dB."));
   addRetainedView(*inspector, gainSlider);
   auto makeInspectorButton = [&](CCoord left, const char* label) {
     auto button = makeOwned<CTextButton>(CRect(left, 312, left + 96, 346),
-                                        nullptr, -1, label);
+                                        nullptr, -1, tr(label));
     stylePanelButton(*button);
     button->setFrameColor(palette::kLine);
     button->setTextColor(palette::kText);
@@ -810,7 +839,7 @@ WindowPtr createMainWindow() {
   auto muteButton = makeInspectorButton(16, "Mute");
   auto resetButton = makeInspectorButton(124, "0 dB");
   auto removeButton = makeOwned<CTextButton>(CRect(16, 374, 220, 408),
-                                            nullptr, -1, "Remove route");
+                                            nullptr, -1, tr("Remove route"));
   stylePanelButton(*removeButton);
   removeButton->setFrameColor(palette::kLine);
   removeButton->setTextColor(palette::kText);

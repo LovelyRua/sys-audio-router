@@ -4,6 +4,7 @@
 #include "app/gui_vstgui/preset_window.h"
 #include "app/gui_vstgui/diagnostics_window.h"
 #include "app/gui_vstgui/asio_device_window.h"
+#include "app/gui_vstgui/localization.h"
 
 #include "vstgui/standalone/include/helpers/appdelegate.h"
 #include "vstgui/standalone/include/helpers/windowlistener.h"
@@ -29,6 +30,7 @@ struct AppDelegate final : Application::DelegateAdapter, WindowListenerAdapter {
                          "com.systemaudioroute.controlpanel"}) {}
 
   void finishLaunching() override {
+    initializeLanguage();
     auto window = createMainWindow();
     if (!window) {
       IApplication::instance().quit();

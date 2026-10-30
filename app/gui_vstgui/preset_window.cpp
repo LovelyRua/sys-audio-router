@@ -1,4 +1,5 @@
 #include "app/gui_vstgui/preset_window.h"
+#include "app/gui_vstgui/localization.h"
 #include "app/gui_vstgui/preset_client.h"
 #include "app/gui_vstgui/palette.h"
 #include "app/gui_vstgui/panel_button.h"
@@ -30,18 +31,18 @@ class PresetPanel final : public CViewContainer, public IControlListener {
  public:
   PresetPanel() : CViewContainer(CRect(0, 0, kWidth, kHeight)) {
     setBackgroundColor(palette::kCanvas);
-    label(CRect(24, 16, 510, 46), "PRESETS", palette::kSteel);
-    refresh_ = button(CRect(534, 16, 636, 48), 1, "Refresh");
-    label(CRect(24, 64, 636, 88), "Saved presets", palette::kMuted);
+    label(CRect(24, 16, 510, 46), tr("PRESETS"), palette::kSteel);
+    refresh_ = button(CRect(534, 16, 636, 48), 1, tr("Refresh"));
+    label(CRect(24, 64, 636, 88), tr("Saved presets"), palette::kMuted);
     presets_ = makeOwned<COptionMenu>(CRect(24, 92, 636, 124), this, 2);
     presets_->setFont(makeOwned<CFontDesc>("Segoe UI", 13));
     presets_->setFontColor(palette::kText);
     presets_->setBackColor(palette::kRaised);
     presets_->setFrameColor(palette::kLine);
     addRetainedView(*this, presets_);
-    load_ = button(CRect(24, 138, 140, 172), 3, "Load");
-    remove_ = button(CRect(152, 138, 268, 172), 4, "Delete");
-    label(CRect(24, 192, 636, 216), "Preset name", palette::kMuted);
+    load_ = button(CRect(24, 138, 140, 172), 3, tr("Load"));
+    remove_ = button(CRect(152, 138, 268, 172), 4, tr("Delete"));
+    label(CRect(24, 192, 636, 216), tr("Preset name"), palette::kMuted);
     name_ = makeOwned<CTextEdit>(CRect(24, 220, 508, 254), this, 5, "");
     name_->setFont(makeOwned<CFontDesc>("Segoe UI", 13));
     name_->setFontColor(palette::kText);
@@ -50,9 +51,9 @@ class PresetPanel final : public CViewContainer, public IControlListener {
     name_->setHoriAlign(kLeftText);
     name_->setImmediateTextChange(true);
     addRetainedView(*this, name_);
-    save_ = button(CRect(520, 220, 636, 254), 6, "Save current");
+    save_ = button(CRect(520, 220, 636, 254), 6, tr("Save current"));
     message_ = makeOwned<CMultiLineTextLabel>(CRect(24, 274, 636, 330));
-    message_->setText("Reading presets...");
+    message_->setText(tr("Reading presets..."));
     message_->setFont(makeOwned<CFontDesc>("Segoe UI", 13));
     message_->setFontColor(palette::kMuted);
     message_->setBackColor(palette::kCanvas);
@@ -110,7 +111,7 @@ class PresetPanel final : public CViewContainer, public IControlListener {
     if (!frame || !frame->getPlatformFrame()) return false;
     const auto native = static_cast<HWND>(frame->getPlatformFrame()->getPlatformRepresentation());
     const auto owner = native ? GetAncestor(native, GA_ROOT) : nullptr;
-    return owner && MessageBoxW(owner, text, L"Presets",
+    return owner && MessageBoxW(owner, trWide(text).c_str(), trWide(L"Presets").c_str(),
         MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING) == IDYES;
   }
   std::string selectedName() const {
@@ -119,8 +120,9 @@ class PresetPanel final : public CViewContainer, public IControlListener {
         ? names_[static_cast<std::size_t>(index)] : std::string{};
   }
   void message(const std::string& text, bool failed) {
-    message_->setText(text.c_str());
-    message_->setTooltipText(text.c_str());
+    const auto localized = trText(text);
+    message_->setText(localized.c_str());
+    message_->setTooltipText(localized.c_str());
     message_->setFontColor(failed ? palette::kDanger : palette::kText);
   }
   void updateEnabled() {
@@ -161,7 +163,7 @@ class PresetPanel final : public CViewContainer, public IControlListener {
       for (const auto& name : names_) presets_->addEntry(name.c_str());
       const auto found = std::find(names_.begin(), names_.end(), selected_);
       const auto index = found == names_.end() ? 0 : static_cast<int>(found - names_.begin());
-      if (names_.empty()) presets_->addEntry("No saved presets");
+      if (names_.empty()) presets_->addEntry(tr("No saved presets"));
       presets_->setCurrent(index);
       selected_ = selectedName();
       rendering_ = false;

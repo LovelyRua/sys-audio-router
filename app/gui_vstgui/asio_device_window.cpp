@@ -1,4 +1,5 @@
 #include "app/gui_vstgui/asio_device_window.h"
+#include "app/gui_vstgui/localization.h"
 #include "app/gui_vstgui/asio_device_model.h"
 #include "app/gui_vstgui/engine_client.h"
 #include "app/gui_vstgui/palette.h"
@@ -30,25 +31,25 @@ class AsioPanel final : public CViewContainer, public IControlListener {
  public:
   AsioPanel() : CViewContainer(CRect(0, 0, kWidth, kHeight)) {
     setBackgroundColor(palette::kCanvas);
-    label(CRect(24, 16, 610, 44), "VIRTUAL ASIO DEVICES", palette::kSteel);
-    refresh_ = button(CRect(666, 16, 776, 48), 1, "Refresh");
-    status_ = label(CRect(24, 54, 776, 84), "Reading engine...");
+    label(CRect(24, 16, 610, 44), tr("VIRTUAL ASIO DEVICES"), palette::kSteel);
+    refresh_ = button(CRect(666, 16, 776, 48), 1, tr("Refresh"));
+    status_ = label(CRect(24, 54, 776, 84), tr("Reading engine..."));
     devices_ = makeOwned<COptionMenu>(CRect(24, 96, 776, 130), this, 2);
     devices_->setFont(makeOwned<CFontDesc>("Segoe UI", 13));
     devices_->setFontColor(palette::kText);
     devices_->setBackColor(palette::kRaised);
     devices_->setFrameColor(palette::kLine);
     addRetainedView(*this, devices_);
-    add_ = button(CRect(24, 144, 142, 178), 3, "+ Device");
-    remove_ = button(CRect(154, 144, 272, 178), 4, "Remove");
-    reload_ = button(CRect(624, 144, 776, 178), 5, "Reload saved");
-    label(CRect(24, 194, 168, 222), "Device name", palette::kMuted);
+    add_ = button(CRect(24, 144, 142, 178), 3, tr("+ Device"));
+    remove_ = button(CRect(154, 144, 272, 178), 4, tr("Remove"));
+    reload_ = button(CRect(624, 144, 776, 178), 5, tr("Reload saved"));
+    label(CRect(24, 194, 168, 222), tr("Device name"), palette::kMuted);
     name_ = edit(CRect(180, 194, 776, 226), 6);
-    label(CRect(24, 242, 168, 270), "DAW inputs", palette::kMuted);
+    label(CRect(24, 242, 168, 270), tr("DAW inputs"), palette::kMuted);
     inputs_ = edit(CRect(180, 242, 292, 274), 7);
-    label(CRect(330, 242, 458, 270), "DAW outputs", palette::kMuted);
+    label(CRect(330, 242, 458, 270), tr("DAW outputs"), palette::kMuted);
     outputs_ = edit(CRect(474, 242, 586, 274), 8);
-    enabled_ = makeOwned<CCheckBox>(CRect(624, 242, 776, 274), this, 9, "Enabled");
+    enabled_ = makeOwned<CCheckBox>(CRect(624, 242, 776, 274), this, 9, tr("Enabled"));
     enabled_->setFont(makeOwned<CFontDesc>("Segoe UI", 13));
     enabled_->setFontColor(palette::kText);
     enabled_->setBoxFillColor(palette::kCanvas);
@@ -58,7 +59,7 @@ class AsioPanel final : public CViewContainer, public IControlListener {
     addRetainedView(*this, enabled_);
     identity_ = label(CRect(24, 294, 776, 322), "", palette::kMuted);
     totals_ = label(CRect(24, 330, 776, 358), "", palette::kMuted);
-    apply_ = button(CRect(580, 380, 776, 416), 10, "Apply and reload");
+    apply_ = button(CRect(580, 380, 776, 416), 10, tr("Apply and reload"));
     message_ = makeOwned<CMultiLineTextLabel>(CRect(24, 436, 776, 514));
     message_->setFont(makeOwned<CFontDesc>("Segoe UI", 13));
     message_->setFontColor(palette::kMuted);
@@ -145,19 +146,20 @@ class AsioPanel final : public CViewContainer, public IControlListener {
     if (!frame || !frame->getPlatformFrame()) return false;
     auto native = static_cast<HWND>(frame->getPlatformFrame()->getPlatformRepresentation());
     auto owner = native ? GetAncestor(native, GA_ROOT) : nullptr;
-    return owner && MessageBoxW(owner, text, L"Virtual ASIO devices",
+    return owner && MessageBoxW(owner, trWide(text).c_str(), trWide(L"Virtual ASIO devices").c_str(),
         MB_YESNO | MB_DEFBUTTON2 | MB_ICONWARNING) == IDYES;
   }
   void message(const std::string& text, bool error) {
-    message_->setText(text.c_str()); message_->setTooltipText(text.c_str());
+    const auto localized = trText(text);
+    message_->setText(localized.c_str()); message_->setTooltipText(localized.c_str());
     message_->setFontColor(error ? palette::kDanger : palette::kMuted);
   }
   void renderList() {
     rendering_ = true;
     devices_->removeAllEntry();
     for (const auto& item : draft_.items()) devices_->addEntry(
-        (item.device.registry_name + (item.device.enabled ? "" : " [disabled]")).c_str());
-    if (draft_.items().empty()) devices_->addEntry("No topology available");
+        (item.device.registry_name + (item.device.enabled ? "" : tr(" [disabled]"))).c_str());
+    if (draft_.items().empty()) devices_->addEntry(tr("No topology available"));
     devices_->setCurrent(selected_ >= 0 ? selected_ : 0);
     rendering_ = false;
     updateEnabled();
@@ -192,13 +194,13 @@ class AsioPanel final : public CViewContainer, public IControlListener {
     if (topology) for (const auto& device : *topology) if (device.enabled) {
       inputs += device.input_channels; outputs += device.output_channels;
     }
-    totals_->setText(topology ? ("Enabled totals: " + std::to_string(inputs) + " DAW inputs / " +
-        std::to_string(outputs) + " DAW outputs").c_str() : error.c_str());
+    totals_->setText(topology ? (tr("Enabled totals: ") + std::to_string(inputs) + tr(" DAW inputs / ") +
+        std::to_string(outputs) + tr(" DAW outputs")).c_str() : trText(error).c_str());
     totals_->setFontColor(topology ? palette::kMuted : palette::kWarning);
-    const auto state = !snapshot_.available ? "Engine unavailable" : snapshot_.running ? "Stop audio before applying" :
-        snapshot_.activeClients ? "Close DAW clients before applying" : "Audio stopped";
-    status_->setText((std::string(state) + " / " + std::to_string(draft_.items().size()) + " devices" +
-        (draft_.dirty() ? " / Unsaved changes" : "") + (awaitingReload_ ? " / Reloading" : "")).c_str());
+    const auto state = !snapshot_.available ? tr("Engine unavailable") : snapshot_.running ? tr("Stop audio before applying") :
+        snapshot_.activeClients ? tr("Close DAW clients before applying") : tr("Audio stopped");
+    status_->setText((std::string(state) + " / " + std::to_string(draft_.items().size()) + tr(" devices") +
+        (draft_.dirty() ? tr(" / Unsaved changes") : "") + (awaitingReload_ ? tr(" / Reloading") : "")).c_str());
   }
   template<class Work> void launch(Work work) {
     std::packaged_task<AsioDeviceSnapshot()> task(std::move(work)); auto future = task.get_future();
