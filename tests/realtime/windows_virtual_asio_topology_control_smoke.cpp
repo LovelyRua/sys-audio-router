@@ -221,7 +221,7 @@ int wmain(int argc, wchar_t** argv) {
         const auto state = sar::control::decode_control_response(as_u8(reply.payload()));
         reloaded = state.ok() && state.response.has_preset &&
             state.response.preset.matrix.inputs.size() == 6 &&
-            state.response.has_active_graph && state.response.active_graph.channels == 4;
+            state.response.has_active_graph && state.response.active_graph.channels == 6;
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(30));
     }
@@ -247,7 +247,7 @@ int wmain(int argc, wchar_t** argv) {
         const auto state = sar::control::decode_control_response(as_u8(reply.payload()));
         reloaded = state.ok() && state.response.has_preset &&
             state.response.preset.matrix.inputs.size() == 8 && state.response.has_active_graph &&
-            state.response.active_graph.channels == 6;
+            state.response.active_graph.channels == 8;
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(30));
     }
