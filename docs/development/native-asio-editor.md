@@ -65,3 +65,35 @@ CI runs these model/client/service checks before compiling the full native GUI,
 whose startup gate now opens and closes six windows. These checks do not prove
 audio-content continuity or full native UI parity with Qt. Physical ASIO editing,
 localization, accessibility and complete installer-flow parity remain separate.
+
+## Interactive acceptance (2026-10-30)
+
+VM24 (`SAR-WIN11-LAB`) ran matching GUI, service and ASIO DLL binaries from
+`d083672` in its non-elevated interactive user session. The fixture used a
+private session file and temporary directories. The default ASIO discovery key
+was absent before and after this test; no existing user configuration was changed.
+
+| Flow | Observed result |
+| --- | --- |
+| Add a generated device, name it `sarguiqa1030a`, set 4 input and 4 output channels, remove the original default from the private draft, Apply | GUI reported topology reloaded and verified; independent CLI returned the new identity and 4/4 channels; its current-user registration pointed to the matching fixture DLL |
+| Rename to `sarguiqa1030b`, add `sarguiqa1030c` with 2/2 channels, Apply | Both devices read back correctly; the old discovery name disappeared; the renamed device retained its CLSID and broker token |
+| Disable the second device, Apply | The saved topology retained the disabled device, enabled totals became 4/4, and only the first device remained registered |
+| Remove the disabled device, Apply | The saved topology contained exactly one 4/4 device; no deleted-device registration remained |
+| Set input channels to 0, Refresh | Local range error and disabled Apply; the invalid dirty input survived refresh and subsequent polling |
+| Reload saved, cancel | The dirty zero-channel input remained unchanged |
+| Reload saved, confirm | Saved 4/4 values returned, dirty state cleared and the last-device Remove action remained disabled |
+| Close both windows, stop the engine using its normal stop helper | Both processes exited; temporary tasks and process-ledger entries were cleared |
+| Remove fixture-owned registrations after stopping | Zero temporary discovery entries remained and the default discovery key was still absent |
+
+All four applied topology changes retained service PID 5972. Independent registry
+and control-CLI inspection followed the GUI operations; a success message alone
+was not the acceptance criterion. These are configuration, registration and
+lifecycle checks, not a new DAW audio-content or continuity result.
+
+Source revision `d083672` passed CI run
+[`40990777554`](https://github.com/LovelyRua/sys-audio-router/actions/runs/40990777554):
+165 CTest cases, five early model/client/service checks, 15 script suites, eight
+advisory ASan cases, and six-window startup/graceful closure. Package run
+[`40990782298`](https://github.com/LovelyRua/sys-audio-router/actions/runs/40990782298)
+also passed, including 169 CTest cases. Qt remains the default entry; this does
+not establish full native GUI replacement readiness.

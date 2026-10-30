@@ -121,10 +121,12 @@ smoke covers gain-preserving mute/unmute and Shift removal. Startup/closure
 coverage includes all five windows. Interactive acceptance is recorded separately;
 compilation alone does not establish user-flow parity.
 
-Remaining native UI gaps include virtual-ASIO topology editing, physical-ASIO
-editing, localization, complete keyboard/accessibility navigation, and installer
-flow parity. Qt remains the default entry; no audio-path reliability result is
-changed by this GUI-only batch.
+At that revision, native UI gaps included virtual-ASIO topology editing,
+physical-ASIO editing, localization, complete keyboard/accessibility navigation,
+and installer-flow parity. Virtual-ASIO editing and six-window startup coverage
+have since landed; see [Native Virtual ASIO editor](native-asio-editor.md) for the
+2026-10-30 interactive acceptance. The other gaps remain open. Qt remains the
+default entry; no audio-path reliability result is changed by this GUI work.
 
 ## Workspace interactive acceptance (2026-10-29/30)
 
