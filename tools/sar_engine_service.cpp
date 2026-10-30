@@ -699,24 +699,19 @@ std::vector<sar::control::PresetError> synchronize_virtual_asio_registration(
   constexpr auto view = WindowsVirtualAsioRegistryView::X64;
   constexpr auto scope = WindowsVirtualAsioRegistrationScope::CurrentUser;
 
-  const auto enabled_with_clsid = [](const auto& devices,
-                                     const std::string& clsid) {
-    return std::ranges::any_of(devices, [&](const auto& device) {
-      return device.enabled && _stricmp(device.clsid.c_str(), clsid.c_str()) == 0;
-    });
-  };
   const auto restore_previous = [&] {
+    // Remove candidate keys before restoring old names. Name swaps and renames
+    // must not leave stale discovery entries or delete a newly restored name.
+    for (const auto& device : desired) {
+      if (device.enabled) {
+        static_cast<void>(sar::driver::unregister_windows_virtual_asio_driver_if_owned(
+            driver_path, registration_descriptor(device), view, scope));
+      }
+    }
     for (const auto& device : previous) {
       if (device.enabled) {
         static_cast<void>(sar::driver::register_windows_virtual_asio_driver(
             driver_path, registration_descriptor(device), view, scope));
-      }
-    }
-    for (const auto& device : desired) {
-      if (device.enabled && !enabled_with_clsid(previous, device.clsid)) {
-        static_cast<void>(
-            sar::driver::unregister_windows_virtual_asio_driver_if_owned(
-                driver_path, registration_descriptor(device), view, scope));
       }
     }
   };
@@ -728,20 +723,18 @@ std::vector<sar::control::PresetError> synchronize_virtual_asio_registration(
     return errors;
   };
 
+  // Audio and clients have already stopped. Clear owned old discovery names
+  // first, including unchanged CLSIDs whose human-readable name was edited.
+  for (const auto& device : previous) {
+    if (!device.enabled) continue;
+    const auto result = sar::driver::unregister_windows_virtual_asio_driver_if_owned(
+        driver_path, registration_descriptor(device), view, scope);
+    if (!result.ok()) { restore_previous(); return convert_failure(result); }
+  }
   for (const auto& device : desired) {
     if (!device.enabled) continue;
     const auto result = sar::driver::register_windows_virtual_asio_driver(
         driver_path, registration_descriptor(device), view, scope);
-    if (!result.ok()) {
-      restore_previous();
-      return convert_failure(result);
-    }
-  }
-  for (const auto& device : previous) {
-    if (!device.enabled || enabled_with_clsid(desired, device.clsid)) continue;
-    const auto result =
-        sar::driver::unregister_windows_virtual_asio_driver_if_owned(
-            driver_path, registration_descriptor(device), view, scope);
     if (!result.ok()) {
       restore_previous();
       return convert_failure(result);
