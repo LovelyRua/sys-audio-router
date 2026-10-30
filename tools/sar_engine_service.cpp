@@ -1454,6 +1454,9 @@ int run_engine(int argc, char** argv, std::atomic_bool& reload_requested,
        &session_path,
        &asio_hosts,
        &virtual_asio_driver_path,
+       &reload_requested,
+       once,
+       asio_channels_explicit,
        session_writes_allowed](std::span<const std::byte> request) {
         std::lock_guard request_lock(request_mutex);
         const auto request_bytes = as_u8(request);
