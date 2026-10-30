@@ -16,9 +16,12 @@ launcher (`--native`), which starts the engine when needed.
 - Numeric fields are parsed strictly and checked against reported capabilities.
 - Exactly one playback endpoint must be the clock master; capture cannot be.
 - Duplicate device/direction bindings fail before applying the configuration.
-- Existing physical ASIO matrix endpoints are retained unchanged and read-only.
-  In particular their group, channel and timing fields survive WASAPI additions.
-  A physical ASIO render remains the master, as required by the current engine.
+- Physical ASIO matrix endpoints can be added and removed as a pair. Driver and
+  timing edits affect the whole group; channel slices are direction-specific.
+  Group identities and WASAPI bindings survive these edits. A physical ASIO
+  render remains master, as required by the current engine. See
+  [Physical ASIO editing](native-physical-asio-editor.md) for validation and
+  acceptance boundaries.
 - Legacy non-matrix and standalone ASIO modes are preserved read-only. New matrix
   explicitly creates a replacement draft; it is not applied automatically.
 
@@ -125,8 +128,11 @@ At that revision, native UI gaps included virtual-ASIO topology editing,
 physical-ASIO editing, localization, complete keyboard/accessibility navigation,
 and installer-flow parity. Virtual-ASIO editing and six-window startup coverage
 have since landed; see [Native Virtual ASIO editor](native-asio-editor.md) for the
-2026-10-30 interactive acceptance. The other gaps remain open. Qt remains the
-default entry; no audio-path reliability result is changed by this GUI work.
+2026-10-30 interactive acceptance. Physical-ASIO matrix editing has also since
+landed; [its acceptance record](native-physical-asio-editor.md) distinguishes
+tested GUI flows from pending real-driver validation. Localization, accessibility
+and installer-flow parity remain open. Qt remains the default entry; no audio-path
+reliability result is changed by this GUI work.
 
 ## Workspace interactive acceptance (2026-10-29/30)
 
