@@ -327,6 +327,18 @@ int main() {
   physical.direction = AudioRuntimeEndpointDirection::Render; physical.clock_master = true;
   mixed.endpoints.push_back(physical);
   draft.load(mixed);
+  require(!draft.bindDevice(99, "replacement"), "Invalid binding index accepted");
+  require(draft.bindDevice(0, "replacement"), "Physical driver group binding failed");
+  require(draft.at(0)->endpoint.device_id == "replacement" &&
+      draft.at(1)->endpoint.device_id == "replacement" &&
+      draft.at(1)->endpoint.clock_master && draft.at(0)->endpoint.sample_rate == 48000,
+      "Physical driver group binding split the group or changed timing");
+  auto asioDescriptor = device("replacement", platform::AudioDeviceDirection::Duplex);
+  asioDescriptor.backend = platform::AudioBackendKind::Asio;
+  require(RuntimeDeviceDraft::matchesEndpoint(asioDescriptor, draft.at(0)->endpoint),
+      "Physical driver missing from endpoint selector");
+  require(!RuntimeDeviceDraft::matchesEndpoint(devices.front(), draft.at(0)->endpoint),
+      "WASAPI device leaked into physical driver selector");
   require(!draft.remove(0), "Native WASAPI editor removed physical ASIO group member");
   require(draft.add(AudioRuntimeEndpointDirection::Render), "Mixed WASAPI addition rejected");
   draft.at(2)->endpoint.device_id = "speaker";

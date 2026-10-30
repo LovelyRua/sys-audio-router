@@ -33,6 +33,19 @@ class RuntimeDeviceDraft {
            source_.mode == control::AudioRuntimeMode::WasapiMatrix;
   }
   bool dirty() const { return dirty_; }
+  bool bindDevice(std::size_t index, const std::string& id) {
+    auto item = at(index);
+    if (!editable() || !item) return false;
+    const auto group = item->endpoint.device_group_id;
+    const auto backend = item->endpoint.backend;
+    for (auto& candidate : endpoints_)
+      if (&candidate == item ||
+          (backend == control::AudioRuntimeEndpointBackend::PhysicalAsio &&
+           candidate.endpoint.backend == backend && candidate.endpoint.device_group_id == group))
+        candidate.endpoint.device_id = id;
+    dirty_ = true;
+    return true;
+  }
   void changed() { dirty_ = true; }
   const auto& endpoints() const { return endpoints_; }
   RuntimeEndpointDraft* at(std::size_t index) {
@@ -99,6 +112,17 @@ class RuntimeDeviceDraft {
       (direction == control::AudioRuntimeEndpointDirection::Capture
         ? device.direction == platform::AudioDeviceDirection::Input
         : device.direction == platform::AudioDeviceDirection::Output);
+  }
+
+  static bool matchesEndpoint(const platform::AudioDeviceDescriptor& device,
+                             const control::AudioRuntimeEndpointConfiguration& endpoint) {
+    if (endpoint.backend == control::AudioRuntimeEndpointBackend::Wasapi)
+      return matches(device, endpoint.direction);
+    return device.backend == platform::AudioBackendKind::Asio &&
+        (device.direction == platform::AudioDeviceDirection::Duplex ||
+         (endpoint.direction == control::AudioRuntimeEndpointDirection::Capture
+            ? device.direction == platform::AudioDeviceDirection::Input
+            : device.direction == platform::AudioDeviceDirection::Output));
   }
 
   std::optional<control::AudioRuntimeConfiguration> build(

@@ -54,7 +54,7 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     text(CRect(24, 194, 150, 226), "Endpoint ID", palette::kMuted);
     id_ = edit(CRect(160, 194, 596, 226), 6);
     master_ = button(CRect(608, 194, 836, 226), "Set clock master", 7);
-    text(CRect(24, 244, 150, 276), "WASAPI device", palette::kMuted);
+    text(CRect(24, 244, 150, 276), "Audio device", palette::kMuted);
     devices_ = menu(CRect(160, 244, 836, 276), 8);
     text(CRect(24, 294, 150, 326), "First channel", palette::kMuted);
     first_ = edit(CRect(160, 294, 280, 326), 9);
@@ -119,9 +119,8 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     }
     if (source == devices_.get()) {
       const auto index = devices_->getCurrentIndex();
-      if (item && editableItem() && index >= 0 && static_cast<std::size_t>(index) < deviceIds_.size()) {
-        item->endpoint.device_id = deviceIds_[static_cast<std::size_t>(index)];
-        draft_.changed();
+      if (item && draft_.editable() && index >= 0 && static_cast<std::size_t>(index) < deviceIds_.size()) {
+        draft_.bindDevice(static_cast<std::size_t>(selected_), deviceIds_[static_cast<std::size_t>(index)]);
         updateEnabled();
       }
       return;
@@ -284,9 +283,9 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     devices_->removeAllEntry();
     deviceIds_.clear();
     int selected = -1;
-    if (item && editableItem()) {
+    if (item && draft_.editable()) {
       for (const auto& device : snapshot_.devices) {
-        if (!RuntimeDeviceDraft::matches(device, item->endpoint.direction)) continue;
+        if (!RuntimeDeviceDraft::matchesEndpoint(device, item->endpoint)) continue;
         if (device.id == item->endpoint.device_id) selected = static_cast<int>(deviceIds_.size());
         devices_->addEntry((device.label + (device.is_default ? " / default" : "")).c_str());
         deviceIds_.push_back(device.id);
@@ -298,7 +297,7 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
       selected = static_cast<int>(deviceIds_.size() - 1);
     }
     devices_->setCurrent(selected);
-    details_->setText(item && !editableItem() ? "Physical ASIO endpoint preserved (read-only)" : "");
+    details_->setText(item && !editableItem() ? "Physical ASIO: driver selection updates the whole group; timing and channels preserved" : "");
     master_->setTitle(item && item->endpoint.clock_master ? "Clock master" : "Set clock master");
     rendering_ = false;
     updateEnabled();
@@ -319,7 +318,8 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     enable(addRender_, available && draft_.editable() && draft_.endpoints().size() < control::kMaximumAudioRuntimeEndpoints);
     enable(reset_, available);
     enable(remove_, edit);
-    enable(id_, edit); enable(first_, edit); enable(channels_, edit); enable(devices_, edit);
+    enable(id_, edit); enable(first_, edit); enable(channels_, edit);
+    enable(devices_, available && draft_.editable() && item);
     enable(master_, edit && item && !item->endpoint.clock_master && selected_ >= 0 &&
         draft_.canMakeMaster(static_cast<std::size_t>(selected_)));
     enable(apply_, available && draft_.editable() && draft_.dirty());
