@@ -33,9 +33,9 @@ field layout changes. Old engines reject the unknown enum before mutation.
 and other existing clients.
 
 The new command validates and persists the same session, then tears down the
-stopped runtime, ASIO hosts, pipes, mappings and per-run locks before opening
+stopped runtime, ASIO hosts, pipes, mappings and session lock before opening
 the saved configuration again in the same process. Its PID, user identity, pipe
-name, log stream and session arguments are retained. An external stop still
+name, log stream, instance mutex, stop event and session arguments are retained. An external stop still
 takes precedence. One-shot engines and explicit `--asio-channels` startup profiles
 reject this operation instead of reapplying conflicting startup parameters.
 
@@ -52,7 +52,8 @@ stable identity, duplicate/invalid names, disabled devices, aggregate balance an
 wire round trips. The client smoke checks acknowledged and rejected operations.
 The real service integration runs two consecutive in-process reloads, checks
 the active graph shape and PID, verifies rename discovery keys, and finally
-confirms the legacy command still exits. Graph width includes non-ASIO channels;
+confirms the normal stop helper still works. A separate case retains legacy
+save-and-exit coverage. Graph width includes non-ASIO channels;
 it is not the same quantity as the sum of ASIO channels.
 
 CI runs these model/client/service checks before compiling the full native GUI,

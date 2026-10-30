@@ -252,11 +252,15 @@ int wmain(int argc, wchar_t** argv) {
       std::this_thread::sleep_for(std::chrono::milliseconds(30));
     }
     assert(reloaded);
-    // The old command retains its documented exit behaviour, even after two reloads.
-    configure.type = sar::control::ControlCommandType::ConfigureVirtualAsioDevices;
-    configure.command_id = "legacy-exit-after-reload";
-    const auto legacy = sar::control::encode_control_command(configure);
-    assert(sar::service::transact_named_pipe_control(pipe_config, as_bytes(legacy.bytes), 5000).ok());
+    std::wstring stop_command = L"\"" + std::wstring(argv[1]) + L"\" --pipe " + control_pipe + L" --stop";
+    PROCESS_INFORMATION stop_process{};
+    assert(CreateProcessW(nullptr, stop_command.data(), nullptr, nullptr, FALSE,
+        CREATE_NO_WINDOW, nullptr, nullptr, &startup, &stop_process));
+    CloseHandle(stop_process.hThread);
+    assert(WaitForSingleObject(stop_process.hProcess, 15000) == WAIT_OBJECT_0);
+    DWORD stop_exit = 1;
+    assert(GetExitCodeProcess(stop_process.hProcess, &stop_exit) && stop_exit == 0);
+    CloseHandle(stop_process.hProcess);
   }
   assert(WaitForSingleObject(process.hProcess, 10000) == WAIT_OBJECT_0);
   DWORD exit_code = 1;

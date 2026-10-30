@@ -873,7 +873,8 @@ sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator(
 }  // namespace
 
 int run_engine(int argc, char** argv, std::atomic_bool& reload_requested,
-               bool first_run) {
+               bool first_run, std::unique_ptr<EngineProcessLock>& process_lock,
+               std::unique_ptr<EngineStopEvent>& stop_event) {
   sar::service::NamedPipeControlConfig pipe_config;
   std::string pipe_display_name = "sys-audio-route-control";
   bool once = false;
@@ -1008,9 +1009,9 @@ int run_engine(int argc, char** argv, std::atomic_bool& reload_requested,
                  "per-user engine lock name.\n";
     return 1;
   }
-  EngineProcessLock engine_lock(engine_lock_name);
-  if (!engine_lock.acquired()) {
-    const auto error = engine_lock.error();
+  if (!process_lock) process_lock = std::make_unique<EngineProcessLock>(engine_lock_name);
+  if (!process_lock->acquired()) {
+    const auto error = process_lock->error();
     if (error == ERROR_ALREADY_EXISTS) {
       std::cerr << "engine_service_already_running: Another System Audio Route "
                    "engine already owns this control pipe.\n";
@@ -1023,8 +1024,7 @@ int run_engine(int argc, char** argv, std::atomic_bool& reload_requested,
   }
 
   std::wstring stop_event_name;
-  std::unique_ptr<EngineStopEvent> stop_event;
-  if (make_engine_stop_event_name(pipe_config.pipe_name, stop_event_name)) {
+  if (!stop_event && make_engine_stop_event_name(pipe_config.pipe_name, stop_event_name)) {
     stop_event = std::make_unique<EngineStopEvent>(stop_event_name);
     if (!stop_event->valid()) {
       std::cerr << "session_warning code=stop_event_unavailable\n";
@@ -1648,13 +1648,18 @@ int main(int argc, char** argv) {
   SetConsoleCtrlHandler(console_handler, TRUE);
   std::atomic_bool reload_requested{false};
   bool first_run = true;
+  std::unique_ptr<EngineProcessLock> process_lock;
+  std::unique_ptr<EngineStopEvent> stop_event;
   for (;;) {
     reload_requested.store(false);
     // All per-run resources (pipe, hosts, mappings and session lock) are destroyed
     // before re-reading the same arguments and persisted session. The process,
     // user identity, log stream and explicit external stop intent are retained.
-    const int result = run_engine(argc, argv, reload_requested, first_run);
-    if (result != 0 || stop_requested.load() || !reload_requested.load()) return result;
+    const int result = run_engine(argc, argv, reload_requested, first_run, process_lock, stop_event);
+    // Retain both handles across reload, so another launcher cannot steal the
+    // pipe and a stop request cannot disappear while the runtime is rebuilding.
+    if (result != 0 || stop_requested.load() || (stop_event && stop_event->signaled()) ||
+        !reload_requested.load()) return result;
     first_run = false;
     std::cout << "engine_service_state=reloading_virtual_asio\n";
   }
