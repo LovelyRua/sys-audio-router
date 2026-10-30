@@ -15,6 +15,7 @@ requires confirmation; channel removal can prune affected routes.
 
 - Refresh reads state without discarding dirty fields or closing the device menu.
 - Reload saved explicitly confirms discarding a dirty draft.
+  Editing is locked during that explicit discard/read so new input cannot be lost.
 - An externally changed topology blocks Apply until saved state is reloaded.
 - Apply is disabled while audio runs, clients are active or telemetry is unknown.
   The engine independently enforces its authoritative runtime/client guards.
@@ -55,6 +56,10 @@ the active graph shape and PID, verifies rename discovery keys, and finally
 confirms the normal stop helper still works. A separate case retains legacy
 save-and-exit coverage. Graph width includes non-ASIO channels;
 it is not the same quantity as the sum of ASIO channels.
+
+Once a topology is accepted, the retiring server generation rejects both reads
+and mutations under its request mutex. This prevents queued old-graph edits from
+overwriting the resized saved matrix and prevents premature successful readback.
 
 CI runs these model/client/service checks before compiling the full native GUI,
 whose startup gate now opens and closes six windows. These checks do not prove

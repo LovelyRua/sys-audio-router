@@ -207,6 +207,16 @@ int wmain(int argc, wchar_t** argv) {
   assert(response.response.virtual_asio_devices.size() == 2);
 
   if (reload_mode) {
+    sar::control::ControlCommand stale;
+    stale.command_id = "stale-preset-must-not-overwrite-reload";
+    stale.type = sar::control::ControlCommandType::LoadPreset;
+    stale.preset = initial_session().preset;
+    const auto stale_bytes = sar::control::encode_control_command(stale);
+    const auto stale_reply = sar::service::transact_named_pipe_control(pipe_config, as_bytes(stale_bytes.bytes), 300);
+    if (stale_reply.ok()) {
+      const auto state = sar::control::decode_control_response(as_u8(stale_reply.payload()));
+      assert(state.ok() && state.response.status == sar::control::ControlResponseStatus::Rejected);
+    }
     bool reloaded = false;
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     unsigned sequence = 0;
@@ -219,6 +229,8 @@ int wmain(int argc, wchar_t** argv) {
       const auto reply = sar::service::transact_named_pipe_control(pipe_config, as_bytes(bytes.bytes), 200);
       if (reply.ok()) {
         const auto state = sar::control::decode_control_response(as_u8(reply.payload()));
+        if (state.ok() && state.response.status == sar::control::ControlResponseStatus::Accepted)
+          assert(state.response.has_preset && state.response.preset.matrix.inputs.size() == 6);
         reloaded = state.ok() && state.response.has_preset &&
             state.response.preset.matrix.inputs.size() == 6 &&
             state.response.has_active_graph && state.response.active_graph.channels == 6;

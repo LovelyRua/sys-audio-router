@@ -73,7 +73,7 @@ class AsioPanel final : public CViewContainer, public IControlListener {
   }
   ~AsioPanel() noexcept override { if (timer_) timer_->stop(); }
   void valueChanged(CControl* source) override {
-    if (rendering_ || applying_ || awaitingReload_) return;
+    if (rendering_ || applying_ || awaitingReload_ || discardOnRead_) return;
     if (source == devices_.get()) { selected_ = devices_->getCurrentIndex(); renderSelected(); return; }
     auto item = draft_.at(selected_);
     if (source == name_.get() || source == inputs_.get() || source == outputs_.get() || source == enabled_.get()) {
@@ -175,11 +175,11 @@ class AsioPanel final : public CViewContainer, public IControlListener {
   }
   void updateEnabled() {
     const bool idle = !pending_.valid() && !awaitingReload_;
-    const bool editable = !applying_ && !awaitingReload_ && snapshot_.available && !conflict_ && !uncertain_;
+    const bool editable = !applying_ && !awaitingReload_ && !discardOnRead_ && snapshot_.available && !conflict_ && !uncertain_;
     const bool selected = editable && draft_.at(selected_);
     setPanelControlEnabled(*refresh_, idle);
     setPanelControlEnabled(*reload_, idle && snapshot_.available);
-    setPanelControlEnabled(*devices_, !applying_ && !awaitingReload_ && !draft_.items().empty());
+    setPanelControlEnabled(*devices_, !applying_ && !awaitingReload_ && !discardOnRead_ && !draft_.items().empty());
     setPanelControlEnabled(*add_, editable && draft_.items().size() < control::kMaximumVirtualAsioDevices);
     setPanelControlEnabled(*remove_, selected && draft_.items().size() > 1);
     for (CView* view : std::initializer_list<CView*>{name_.get(), inputs_.get(), outputs_.get(), enabled_.get()})
@@ -203,11 +203,12 @@ class AsioPanel final : public CViewContainer, public IControlListener {
   template<class Work> void launch(Work work) {
     std::packaged_task<AsioDeviceSnapshot()> task(std::move(work)); auto future = task.get_future();
     try { std::thread(std::move(task)).detach(); pending_ = std::move(future); }
-    catch (...) { applying_ = false; message("Could not start ASIO request worker.", true); }
+    catch (...) { applying_ = false; discardOnRead_ = false; message("Could not start ASIO request worker.", true); }
     updateEnabled();
   }
   void inspect(bool discard) {
     if (pending_.valid()) return;
+    if (discard && getFrame()) getFrame()->setFocusView(nullptr);
     discardOnRead_ = discard;
     launch([client = client_] { return client->inspectVirtualAsioDevices(); });
   }

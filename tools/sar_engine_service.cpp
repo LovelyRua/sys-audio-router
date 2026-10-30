@@ -1471,6 +1471,15 @@ int run_engine(int argc, char** argv, std::atomic_bool& reload_requested,
           return sar::service::NamedPipeControlResult::success(
               as_bytes(encoded.bytes));
         };
+        // The accepted topology already replaced desired_session, while service
+        // still owns the old graph. Freeze this generation until teardown: a
+        // queued preset mutation must not overwrite the resized saved matrix,
+        // and reads must not claim that the new runtime has already opened.
+        if (command.ok() && (reload_requested.load() || stop_requested.load())) {
+          return encode_response(sar::control::command_rejected(
+              command.command.command_id,
+              {{"engine_generation_closing", "Engine is reloading or stopping; refresh after it reconnects."}}));
+        }
         if (command.ok() &&
             command.command.type ==
                 sar::control::ControlCommandType::QueryVirtualAsioDevices) {
