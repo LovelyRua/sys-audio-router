@@ -289,7 +289,7 @@ class DiagnosticsPanel final : public CViewContainer, public IControlListener {
       sources_->addEntry(tr("Selected endpoint unavailable"));
       selected = index + 1;
     }
-    sources_->setCurrent(selected);
+    sources_->setValue(static_cast<float>(selected));
     rendering_ = false;
     render();
   }

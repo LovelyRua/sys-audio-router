@@ -296,7 +296,7 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     if (draft_.endpoints().empty()) {
       endpoints_->addEntry(tr("No configured endpoints")); selected_ = -1;
     } else if (selected_ < 0 || static_cast<std::size_t>(selected_) >= draft_.endpoints().size()) selected_ = 0;
-    endpoints_->setCurrent(selected_ < 0 ? 0 : selected_);
+    endpoints_->setValue(static_cast<float>(selected_ < 0 ? 0 : selected_));
     rendering_ = false;
     renderSelected();
   }
@@ -325,7 +325,7 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
       deviceIds_.push_back(item ? item->endpoint.device_id : std::string{});
       selected = static_cast<int>(deviceIds_.size() - 1);
     }
-    devices_->setCurrent(selected);
+    devices_->setValue(static_cast<float>(selected));
     details_->setText(physical ? tr("ASIO group / master clock / native channel offset is zero-based") : tr("Native channel offset is zero-based"));
     remove_->setTitle(physical ? tr("Remove ASIO group") : tr("Remove endpoint"));
     master_->setTitle(item && item->endpoint.clock_master ? tr("Clock master") : tr("Set clock master"));

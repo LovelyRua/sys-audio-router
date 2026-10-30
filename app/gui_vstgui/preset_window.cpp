@@ -164,7 +164,7 @@ class PresetPanel final : public CViewContainer, public IControlListener {
       const auto found = std::find(names_.begin(), names_.end(), selected_);
       const auto index = found == names_.end() ? 0 : static_cast<int>(found - names_.begin());
       if (names_.empty()) presets_->addEntry(tr("No saved presets"));
-      presets_->setCurrent(index);
+      presets_->setValue(static_cast<float>(index));
       selected_ = selectedName();
       rendering_ = false;
     }

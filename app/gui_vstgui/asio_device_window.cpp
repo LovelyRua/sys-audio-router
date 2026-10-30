@@ -160,7 +160,7 @@ class AsioPanel final : public CViewContainer, public IControlListener {
     for (const auto& item : draft_.items()) devices_->addEntry(
         (item.device.registry_name + (item.device.enabled ? "" : tr(" [disabled]"))).c_str());
     if (draft_.items().empty()) devices_->addEntry(tr("No topology available"));
-    devices_->setCurrent(selected_ >= 0 ? selected_ : 0);
+    devices_->setValue(static_cast<float>(selected_ >= 0 ? selected_ : 0));
     rendering_ = false;
     updateEnabled();
   }
