@@ -36,7 +36,7 @@ namespace {
 using namespace VSTGUI;
 using namespace VSTGUI::Standalone;
 constexpr const char* kTitle = "Audio devices";
-constexpr CCoord kWidth = 860, kHeight = 650;
+constexpr CCoord kWidth = 860, kHeight = 690;
 
 class RuntimePanel final : public CViewContainer, public IControlListener {
  public:
@@ -49,6 +49,7 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     endpoints_ = menu(CRect(160, 96, 836, 128), 2);
     addCapture_ = button(CRect(160, 142, 308, 174), "+ Capture", 3);
     addRender_ = button(CRect(320, 142, 468, 174), "+ Playback", 4);
+    addAsio_ = button(CRect(24, 142, 148, 174), "+ ASIO", 17);
     remove_ = button(CRect(688, 142, 836, 174), "Remove endpoint", 5);
     reload_ = button(CRect(480, 142, 672, 174), "Reload saved", 14);
     text(CRect(24, 194, 150, 226), "Endpoint ID", palette::kMuted);
@@ -60,14 +61,18 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     first_ = edit(CRect(160, 294, 280, 326), 9);
     text(CRect(320, 294, 462, 326), "Channel count", palette::kMuted);
     channels_ = edit(CRect(470, 294, 590, 326), 10);
-    details_ = text(CRect(160, 338, 836, 366), "", palette::kMuted);
-    reset_ = button(CRect(24, 384, 172, 420), "New matrix", 11);
-    run_ = button(CRect(464, 384, 636, 420), "Start audio", 12);
-    apply_ = button(CRect(648, 384, 836, 420), "Apply", 13);
-    cableSetup_ = button(CRect(24, 440, 232, 476), "Install VB-CABLE...", 15);
-    cableWebsite_ = button(CRect(248, 440, 460, 476), "VB-Audio / Donate", 16);
-    text(CRect(24, 482, 836, 510), "VB-CABLE by VB-Audio (vb-cable.com). Donationware; contributions are welcome.", palette::kMuted);
-    message_ = makeOwned<CMultiLineTextLabel>(CRect(24, 522, 836, 626));
+    text(CRect(24, 338, 150, 370), "ASIO rate (Hz)", palette::kMuted);
+    rate_ = edit(CRect(160, 338, 280, 370), 18);
+    text(CRect(320, 338, 462, 370), "Buffer (frames)", palette::kMuted);
+    frames_ = edit(CRect(470, 338, 590, 370), 19);
+    details_ = text(CRect(160, 376, 836, 404), "", palette::kMuted);
+    reset_ = button(CRect(24, 424, 172, 460), "New matrix", 11);
+    run_ = button(CRect(464, 424, 636, 460), "Start audio", 12);
+    apply_ = button(CRect(648, 424, 836, 460), "Apply", 13);
+    cableSetup_ = button(CRect(24, 480, 232, 516), "Install VB-CABLE...", 15);
+    cableWebsite_ = button(CRect(248, 480, 460, 516), "VB-Audio / Donate", 16);
+    text(CRect(24, 522, 836, 550), "VB-CABLE by VB-Audio (vb-cable.com). Donationware; contributions are welcome.", palette::kMuted);
+    message_ = makeOwned<CMultiLineTextLabel>(CRect(24, 562, 836, 666));
     message_->setFont(makeOwned<CFontDesc>("Segoe UI", 13));
     message_->setFontColor(palette::kMuted);
     message_->setBackColor(palette::kCanvas);
@@ -107,6 +112,12 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
       return;
     }
     auto item = selectedItem();
+    if (source == rate_.get() || source == frames_.get()) {
+      if (selected_ >= 0) draft_.setTiming(static_cast<std::size_t>(selected_),
+          rate_->getText().getString(), frames_->getText().getString());
+      updateEnabled();
+      return;
+    }
     if (source == id_.get() || source == first_.get() || source == channels_.get()) {
       if (item && editableItem()) {
         item->endpoint.endpoint_id = id_->getText().getString();
@@ -141,8 +152,17 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
         selected_ = static_cast<int>(draft_.endpoints().size() - 1);
         renderEndpoints();
       }
+    } else if (source == addAsio_.get()) {
+      if (draft_.addPhysicalAsio()) {
+        selected_ = static_cast<int>(draft_.endpoints().size() - 2);
+        renderEndpoints();
+      }
     } else if (source == remove_.get()) {
-      if (selected_ >= 0 && draft_.remove(static_cast<std::size_t>(selected_))) {
+      const bool physical = item && item->endpoint.backend == control::AudioRuntimeEndpointBackend::PhysicalAsio;
+      if (physical && !confirm(L"Remove both Physical ASIO endpoints from this draft? Routes using their channels may be removed after Apply. Remaining WASAPI endpoints are retained.")) return;
+      if (!getFrame()) return;
+      if (selected_ >= 0 && (physical ? draft_.removePhysicalAsio(static_cast<std::size_t>(selected_))
+                                    : draft_.remove(static_cast<std::size_t>(selected_)))) {
         selected_ = draft_.endpoints().empty() ? -1 : (std::min)(selected_, static_cast<int>(draft_.endpoints().size() - 1));
         renderEndpoints();
       }
@@ -152,6 +172,11 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
       std::string error;
       auto configuration = draft_.build(snapshot_.devices, error);
       if (!configuration) { message(error, true); return; }
+      if ((draft_.hasPhysicalAsio() || std::any_of(snapshot_.configuration.endpoints.begin(),
+            snapshot_.configuration.endpoints.end(), [](const auto& endpoint) {
+              return endpoint.backend == control::AudioRuntimeEndpointBackend::PhysicalAsio;
+            })) && !confirm(L"Apply this matrix configuration? The ASIO driver may reopen and audio may be interrupted. Removed channels can lose routes. Hardware must support the requested channel ranges, sample rate and buffer size.")) return;
+      if (!getFrame()) return;
       message("Applying runtime configuration...");
       reloadOnCompletion_ = true;
       launch([client = client_, configuration = std::move(*configuration)]() mutable {
@@ -222,7 +247,7 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
   }
   bool editableItem() {
     const auto item = selectedItem();
-    return draft_.editable() && item && item->endpoint.backend == control::AudioRuntimeEndpointBackend::Wasapi;
+    return draft_.editable() && item;
   }
   template <class Work> void launch(Work work) {
     std::packaged_task<RuntimeDeviceSnapshot()> task(std::move(work));
@@ -280,6 +305,9 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     id_->setText(item ? item->endpoint.endpoint_id.c_str() : "");
     first_->setText(item ? item->firstChannel.c_str() : "");
     channels_->setText(item ? item->channelCount.c_str() : "");
+    const bool physical = item && item->endpoint.backend == control::AudioRuntimeEndpointBackend::PhysicalAsio;
+    rate_->setText(physical ? item->sampleRate.c_str() : "");
+    frames_->setText(physical ? item->blockFrames.c_str() : "");
     devices_->removeAllEntry();
     deviceIds_.clear();
     int selected = -1;
@@ -297,7 +325,8 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
       selected = static_cast<int>(deviceIds_.size() - 1);
     }
     devices_->setCurrent(selected);
-    details_->setText(item && !editableItem() ? "Physical ASIO: driver selection updates the whole group; timing and channels preserved" : "");
+    details_->setText(physical ? "ASIO group / master clock / native channel offset is zero-based" : "Native channel offset is zero-based");
+    remove_->setTitle(physical ? "Remove ASIO group" : "Remove endpoint");
     master_->setTitle(item && item->endpoint.clock_master ? "Clock master" : "Set clock master");
     rendering_ = false;
     updateEnabled();
@@ -316,13 +345,20 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
     enable(endpoints_, available && !draft_.endpoints().empty());
     enable(addCapture_, available && draft_.editable() && draft_.endpoints().size() < control::kMaximumAudioRuntimeEndpoints);
     enable(addRender_, available && draft_.editable() && draft_.endpoints().size() < control::kMaximumAudioRuntimeEndpoints);
+    enable(addAsio_, available && draft_.editable() && !draft_.hasPhysicalAsio() &&
+        draft_.endpoints().size() + 2 <= control::kMaximumAudioRuntimeEndpoints);
     enable(reset_, available);
     enable(remove_, edit);
     enable(id_, edit); enable(first_, edit); enable(channels_, edit);
     enable(devices_, available && draft_.editable() && item);
+    const bool physical = item && item->endpoint.backend == control::AudioRuntimeEndpointBackend::PhysicalAsio;
+    enable(rate_, edit && physical); enable(frames_, edit && physical);
     enable(master_, edit && item && !item->endpoint.clock_master && selected_ >= 0 &&
         draft_.canMakeMaster(static_cast<std::size_t>(selected_)));
-    enable(apply_, available && draft_.editable() && draft_.dirty());
+    std::string validationError;
+    const bool valid = draft_.editable() && draft_.build(snapshot_.devices, validationError).has_value();
+    enable(apply_, available && draft_.dirty() && valid);
+    if (available && draft_.dirty()) details_->setText(valid ? "Ready to apply" : validationError.c_str());
     enable(run_, available && !draft_.dirty() && snapshot_.configuration.mode != control::AudioRuntimeMode::None);
     run_->setTitle(snapshot_.running ? "Stop audio" : "Start audio");
     const auto status = !snapshot_.available ? std::string("Engine unavailable")
@@ -344,11 +380,12 @@ class RuntimePanel final : public CViewContainer, public IControlListener {
   std::future<VbCableSetupResult> setup_;
   SharedPointer<CVSTGUITimer> timer_;
   SharedPointer<COptionMenu> endpoints_, devices_;
-  SharedPointer<CTextEdit> id_, first_, channels_;
+  SharedPointer<CTextEdit> id_, first_, channels_, rate_, frames_;
   SharedPointer<CTextLabel> status_, details_;
   SharedPointer<CMultiLineTextLabel> message_;
   SharedPointer<CTextButton> refresh_, reload_, addCapture_, addRender_, remove_, master_, reset_, run_, apply_;
   SharedPointer<CTextButton> cableSetup_, cableWebsite_;
+  SharedPointer<CTextButton> addAsio_;
 };
 
 struct LastRuntimeWindow final : WindowListenerAdapter {

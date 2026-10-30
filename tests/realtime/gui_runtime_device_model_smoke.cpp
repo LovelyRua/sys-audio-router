@@ -335,6 +335,9 @@ int main() {
       "Physical driver group binding split the group or changed timing");
   auto asioDescriptor = device("replacement", platform::AudioDeviceDirection::Duplex);
   asioDescriptor.backend = platform::AudioBackendKind::Asio;
+  asioDescriptor.input_channels = 8;
+  asioDescriptor.output_channels = 8;
+  devices.push_back(asioDescriptor);
   require(RuntimeDeviceDraft::matchesEndpoint(asioDescriptor, draft.at(0)->endpoint),
       "Physical driver missing from endpoint selector");
   require(!RuntimeDeviceDraft::matchesEndpoint(devices.front(), draft.at(0)->endpoint),
@@ -347,5 +350,54 @@ int main() {
   require(preserved && preserved->endpoints[0].device_group_id == "group" &&
       preserved->endpoints[1].clock_master && preserved->endpoints[0].sample_rate == 48000,
       "Physical ASIO fields lost while adding WASAPI follower");
+  require(draft.setTiming(0, "96000", "256"), "ASIO timing edit rejected");
+  require(draft.at(1)->sampleRate == "96000" && draft.at(1)->blockFrames == "256",
+      "Timing edit split ASIO group");
+  draft.at(0)->firstChannel = "2";
+  draft.at(0)->channelCount = "4";
+  const auto timed = draft.build(devices, error);
+  require(timed && timed->endpoints[0].first_channel == 2 &&
+      timed->endpoints[0].channel_count == 4 && timed->endpoints[1].sample_rate == 96000 &&
+      timed->endpoints[1].block_frames == 256 && timed->endpoints[2].device_id == "speaker",
+      "ASIO timing/channels or WASAPI binding lost");
+  for (const auto* invalid : {"", "0", "7999", "768001", "48k", " 48000"}) {
+    require(draft.setTiming(0, invalid, "128"), "Invalid draft text cannot be retained");
+    require(!draft.build(devices, error), "Invalid ASIO rate accepted");
+  }
+  for (const auto* invalid : {"", "0", "65537", "-1", "128x"}) {
+    draft.setTiming(0, "48000", invalid);
+    require(!draft.build(devices, error), "Invalid ASIO buffer accepted");
+  }
+  draft.setTiming(0, "48000", "128");
+  draft.at(0)->firstChannel = "7";
+  require(!draft.build(devices, error), "ASIO channel range exceeded native capability");
+  draft.at(0)->firstChannel = "0";
+  require(!draft.addPhysicalAsio(), "Second ASIO driver group accepted");
+  require(draft.removePhysicalAsio(1) && draft.endpoints().size() == 1 &&
+      draft.at(0)->endpoint.device_id == "speaker" && draft.at(0)->endpoint.clock_master,
+      "ASIO group removal lost WASAPI endpoint or failed clock handoff");
+  require(draft.build(devices, error).has_value(), "WASAPI follower could not become master");
+  require(!draft.removePhysicalAsio(0), "WASAPI endpoint removed as an ASIO group");
+  require(draft.addPhysicalAsio() && draft.endpoints().size() == 3,
+      "Could not add physical group beside WASAPI");
+  require(!draft.at(0)->endpoint.clock_master && draft.at(2)->endpoint.clock_master,
+      "New ASIO render did not become master");
+  require(!draft.build(devices, error), "Unbound ASIO group accepted");
+  require(draft.bindDevice(1, "replacement"), "New ASIO group could not bind");
+  require(draft.build(devices, error).has_value(), "New mixed matrix invalid");
+  draft.at(1)->firstChannel = "255";
+  draft.at(1)->channelCount = "2";
+  auto registryOnly = devices;
+  registryOnly.back().input_channels = 0;
+  registryOnly.back().output_channels = 0;
+  require(!draft.build(registryOnly, error), "ASIO range exceeded engine channel limit");
+  draft.at(1)->firstChannel = "0";
+  require(draft.build(registryOnly, error).has_value(), "Registry-only ASIO descriptor rejected");
+  registryOnly.pop_back();
+  require(!draft.build(registryOnly, error), "Unavailable ASIO driver accepted");
+  draft.newMatrix();
+  for (std::size_t i = 0; i < control::kMaximumAudioRuntimeEndpoints - 1; ++i)
+    require(draft.add(AudioRuntimeEndpointDirection::Capture), "Could not prepare capacity case");
+  require(!draft.addPhysicalAsio(), "Two-endpoint ASIO group exceeded capacity");
   std::cout << "Native runtime device draft checks passed\n";
 }
