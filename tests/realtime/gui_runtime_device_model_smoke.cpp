@@ -4,6 +4,7 @@
 #include "app/gui_vstgui/matrix_page.h"
 #include "app/gui_vstgui/route_gain_text.h"
 #include "app/gui_vstgui/route_edit_queue.h"
+#include "app/gui_vstgui/asio_device_model.h"
 #include <limits>
 #include "core/control/control_wire_protocol.h"
 
@@ -31,6 +32,61 @@ platform::AudioDeviceDescriptor device(const char* id, platform::AudioDeviceDire
 }
 
 int main() {
+  AsioTopologyDraft asio;
+  const auto defaultAsio = control::default_virtual_asio_device_definition();
+  asio.load({defaultAsio});
+  std::string asioError;
+  require(!asio.dirty() && asio.build(asioError).has_value(), "Valid ASIO topology rejected");
+  require(!asio.remove(0), "Last ASIO device removed");
+  require(asio.add("7350AB15-3850-452D-8E87-CFC14A95A101"), "ASIO device addition failed");
+  const auto addedIdentity = asio.at(1)->device;
+  require(!asio.add("7350AB15-3850-452D-8E87-CFC14A95A101"), "Duplicate ASIO identity accepted");
+  require(!asio.add("not-a-guid"), "Malformed ASIO identity accepted");
+  for (const auto* invalid : {"", "0", "65", "-1", "+2", " 2", "2x", "4294967296"}) {
+    asio.at(1)->inputs = invalid;
+    require(!asio.build(asioError), "Invalid ASIO channel text accepted");
+  }
+  asio.at(1)->inputs = "4";
+  require(!asio.build(asioError), "Unbalanced ASIO channel totals accepted");
+  asio.at(1)->outputs = "4";
+  auto validAsio = asio.build(asioError);
+  require(validAsio && validAsio->at(1).input_channels == 4, "ASIO channel edits lost");
+  require(validAsio->at(1).clsid == addedIdentity.clsid &&
+      validAsio->at(1).broker_token == addedIdentity.broker_token, "Editing channels changed stable ASIO identity");
+  asio.at(1)->device.registry_name = defaultAsio.registry_name;
+  require(!asio.build(asioError), "Duplicate ASIO display name accepted");
+  for (const auto* invalid : {"", " leading", "trailing ", "path/name", "path\\name", "line\nname"}) {
+    asio.at(1)->device.registry_name = invalid;
+    require(!asio.build(asioError), "Invalid ASIO device name accepted");
+  }
+  asio.at(1)->device.registry_name = "SAR Monitor";
+  asio.at(0)->device.enabled = false; asio.at(1)->device.enabled = false;
+  require(!asio.build(asioError), "Topology with no enabled ASIO channels accepted");
+  asio.at(1)->device.enabled = true;
+  require(asio.build(asioError).has_value(), "Disabled device was incorrectly counted in totals");
+  require(asio.remove(0) && asio.dirty(), "ASIO device removal failed");
+  asio.load({defaultAsio});
+  require(!asio.dirty(), "ASIO saved readback remained dirty");
+  for (unsigned index = 1; index < control::kMaximumVirtualAsioDevices; ++index) {
+    const auto suffix = std::to_string(index);
+    require(asio.add("7350AB15-3850-452D-8E87-" + std::string(12 - suffix.size(), '0') + suffix),
+            "ASIO device limit is below sixteen");
+  }
+  require(!asio.add("7350AB15-3850-452D-8E87-000000001000"), "ASIO device limit exceeded");
+  require(asio.build(asioError).has_value(), "Sixteen ASIO devices failed validation");
+  control::ControlCommand reloadAsio;
+  reloadAsio.command_id = "native-asio-reload-roundtrip";
+  reloadAsio.type = control::ControlCommandType::ReloadVirtualAsioDevices;
+  reloadAsio.virtual_asio_devices = *asio.build(asioError);
+  auto reloadBytes = control::encode_control_command(reloadAsio);
+  require(reloadBytes.ok(), "ASIO reload encoding failed");
+  const auto reloadRoundtrip = control::decode_control_command(reloadBytes.bytes);
+  require(reloadRoundtrip.ok() && reloadRoundtrip.command.type == reloadAsio.type &&
+      reloadRoundtrip.command.virtual_asio_devices == reloadAsio.virtual_asio_devices,
+      "ASIO reload wire round trip changed identities");
+  reloadBytes.bytes[4] = 13; reloadBytes.bytes[5] = 0;
+  require(!control::decode_control_command(reloadBytes.bytes).ok(),
+          "ASIO reload command accepted on an unsupported wire version");
   control::PresetRouteMatrix authoritative;
   graph::RouteEndpointDescriptor source;
   source.id = "source";

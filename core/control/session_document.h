@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <span>
 
 namespace sar::control {
 
@@ -38,5 +39,7 @@ class SessionDocumentValidationResult {
 
 [[nodiscard]] SessionDocumentValidationResult validate_session_document(
     const SessionDocument& session);
+[[nodiscard]] std::vector<PresetError> validate_virtual_asio_devices(
+    std::span<const VirtualAsioDeviceDefinition> devices);
 
 }  // namespace sar::control

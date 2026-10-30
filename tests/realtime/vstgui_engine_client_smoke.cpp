@@ -1,6 +1,7 @@
 #include "app/gui_vstgui/engine_client.h"
 #include "core/control/control_wire_protocol.h"
 #include "core/service/windows_named_pipe_control.h"
+#include "core/control/session_document.h"
 
 #include <Windows.h>
 #include <atomic>
@@ -17,6 +18,8 @@ int main() {
   bool connected = false;
   float gain = 1.0F;
   bool muted = false;
+  auto topology = std::vector{control::default_virtual_asio_device_definition()};
+  bool rejectTopology = false;
   service::WindowsNamedPipeControlServer server(config,
       [&](std::span<const std::byte> payload) {
         std::vector<std::uint8_t> bytes;
@@ -26,6 +29,19 @@ int main() {
         const auto& command = decoded.command;
         auto response = control::command_accepted(command.command_id);
         switch (command.type) {
+          case control::ControlCommandType::QueryVirtualAsioDevices:
+            response.has_virtual_asio_devices = true;
+            response.virtual_asio_devices = topology;
+            break;
+          case control::ControlCommandType::ReloadVirtualAsioDevices:
+            if (rejectTopology) response = control::command_rejected(command.command_id,
+                {{"test_topology_rejected", "Close DAW clients first"}});
+            else {
+              topology = command.virtual_asio_devices;
+              response.has_virtual_asio_devices = true;
+              response.virtual_asio_devices = topology;
+            }
+            break;
           case control::ControlCommandType::StartAudioRuntime:
           case control::ControlCommandType::StopAudioRuntime:
             response = control::command_rejected(command.command_id,
@@ -78,6 +94,18 @@ int main() {
       });
   assert(server.start().ok());
   gui_vstgui::EngineClient client(config.pipe_name);
+  const auto asio = client.inspectVirtualAsioDevices();
+  assert(asio.available && asio.devices.size() == 1 && !asio.running && !asio.activeClients);
+  auto changed = asio.devices;
+  changed[0].registry_name = "SAR Renamed";
+  changed[0].input_channels = changed[0].output_channels = 4;
+  const auto accepted = client.reloadVirtualAsioDevices(changed);
+  assert(accepted.reloadAccepted && accepted.devices == changed);
+  assert(client.inspectVirtualAsioDevices().devices == changed);
+  rejectTopology = true;
+  const auto rejected = client.reloadVirtualAsioDevices(changed);
+  assert(!rejected.reloadAccepted && rejected.error.find("Close DAW") != std::string::npos);
+  assert(!client.reloadVirtualAsioDevices({}).reloadAccepted);
   const auto initial = client.poll();
   assert(initial.transportOk && initial.runtimeConfigured);
   assert(initial.sampleRate == 48000 && initial.blockFrames == 128);

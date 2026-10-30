@@ -347,6 +347,7 @@ ControlCommandValidationResult validate_command(const ControlCommand& command) {
       break;
 
     case ControlCommandType::ConfigureVirtualAsioDevices:
+    case ControlCommandType::ReloadVirtualAsioDevices:
       if (command.virtual_asio_devices.empty() ||
           command.virtual_asio_devices.size() > kMaximumVirtualAsioDevices) {
         errors.push_back({
@@ -438,6 +439,7 @@ bool control_command_mutates_preset(ControlCommandType type) noexcept {
     case ControlCommandType::ConfigureAudioRuntime:
     case ControlCommandType::QueryVirtualAsioDevices:
     case ControlCommandType::ConfigureVirtualAsioDevices:
+    case ControlCommandType::ReloadVirtualAsioDevices:
       return false;
   }
 
@@ -552,6 +554,7 @@ ControlApplyResult apply_command(const PresetDocument& current,
     case ControlCommandType::ConfigureAudioRuntime:
     case ControlCommandType::QueryVirtualAsioDevices:
     case ControlCommandType::ConfigureVirtualAsioDevices:
+    case ControlCommandType::ReloadVirtualAsioDevices:
     case ControlCommandType::LoadPreset:
       break;
   }

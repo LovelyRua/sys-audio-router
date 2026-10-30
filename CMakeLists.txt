@@ -222,6 +222,9 @@ if(SAR_BUILD_GUI_VSTGUI)
     app/gui_vstgui/preset_client.h
     app/gui_vstgui/preset_window.cpp
     app/gui_vstgui/preset_window.h
+    app/gui_vstgui/asio_device_window.cpp
+    app/gui_vstgui/asio_device_window.h
+    app/gui_vstgui/asio_device_model.h
     app/gui_vstgui/lcd_readout_view.cpp
     app/gui_vstgui/lcd_readout_view.h
     app/gui_vstgui/palette.h
@@ -250,7 +253,7 @@ if(SAR_BUILD_GUI_VSTGUI)
     vstgui
     vstgui_uidescription
     vstgui_standalone
-    nlohmann_json::nlohmann_json shell32 comdlg32 wintrust crypt32
+    nlohmann_json::nlohmann_json shell32 comdlg32 wintrust crypt32 ole32
   )
   sar_add_version_resource(sar_gui_vstgui
     "System Audio Route control panel (VSTGUI prototype)"
@@ -1199,6 +1202,12 @@ if(WIN32)
   add_test(NAME windows_virtual_asio_topology_control_smoke
            COMMAND sar_windows_virtual_asio_topology_control_smoke
                    $<TARGET_FILE:sar_engine_service>)
+  add_test(NAME windows_virtual_asio_topology_reload_smoke
+           COMMAND sar_windows_virtual_asio_topology_control_smoke
+                   $<TARGET_FILE:sar_engine_service> --reload)
+  set_tests_properties(windows_virtual_asio_topology_control_smoke
+                       windows_virtual_asio_topology_reload_smoke
+                       PROPERTIES RUN_SERIAL TRUE TIMEOUT 45)
   add_test(NAME windows_engine_service_lifecycle_smoke
            COMMAND sar_windows_engine_service_lifecycle_smoke
                    $<TARGET_FILE:sar_engine_service>)

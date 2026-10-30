@@ -8,6 +8,7 @@
 #include "app/gui_vstgui/runtime_device_window.h"
 #include "app/gui_vstgui/preset_window.h"
 #include "app/gui_vstgui/diagnostics_window.h"
+#include "app/gui_vstgui/asio_device_window.h"
 #include "app/gui_vstgui/request_error_state.h"
 #include "app/gui_vstgui/matrix_page.h"
 #include "app/gui_vstgui/route_gain_text.h"
@@ -231,6 +232,10 @@ class HeaderController final : public IControlListener {
   }
 
   void valueChanged(CControl* control) override {
+    if (control->getTag() == 904 && control->getValue() > 0.5F) {
+      showAsioDeviceWindow();
+      return;
+    }
     if (control->getTag() == 902 && control->getValue() > 0.5F) {
       showPresetWindow();
       return;
@@ -691,11 +696,12 @@ WindowPtr createMainWindow() {
     return button;
   };
   auto audioDevices = makeNavigation(92, 901, "Audio devices", "Audio devices and VB-CABLE setup");
-  makeNavigation(138, 902, "Presets", "Save, load and manage routing presets");
-  makeNavigation(184, 903, "Diagnostics", "Engine counters and connection status");
-  addRetainedView(*navigation, makeLabel(CRect(16, 270, 148, 296), "EXPERIMENTAL",
+  makeNavigation(138, 904, "Virtual ASIO", "Virtual ASIO names, channels and enabled states");
+  makeNavigation(184, 902, "Presets", "Save, load and manage routing presets");
+  makeNavigation(230, 903, "Diagnostics", "Engine counters and connection status");
+  addRetainedView(*navigation, makeLabel(CRect(16, 316, 148, 342), "EXPERIMENTAL",
                                         palette::kMuted, false));
-  makeNavigation(304, 900, "Driver lab", "Experimental virtual driver management");
+  makeNavigation(350, 900, "Driver lab", "Experimental virtual driver management");
   addRetainedView(*navigation, makeLabel(CRect(16, 530, 148, 554),
       "Native Preview", palette::kWarning, false));
   addRetainedView(*navigation, makeLabel(CRect(16, 554, 148, 578),

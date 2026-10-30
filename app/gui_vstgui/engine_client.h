@@ -33,6 +33,15 @@ struct RuntimeDeviceSnapshot {
   std::string error;
 };
 
+struct AsioDeviceSnapshot {
+  bool available = false;
+  bool running = false;
+  std::uint64_t activeClients = 0;
+  bool reloadAccepted = false;
+  std::vector<control::VirtualAsioDeviceDefinition> devices;
+  std::string error;
+};
+
 // Talks to the engine over the same per-user named pipe the engine service,
 // sar_control_cli, and the Qt control panel use
 // (core/platform/windows_current_user_sid.h). Every method here blocks on
@@ -56,6 +65,9 @@ class EngineClient final {
   [[nodiscard]] RuntimeDeviceSnapshot inspectDevices();
   [[nodiscard]] RuntimeDeviceSnapshot configureDevices(control::AudioRuntimeConfiguration configuration);
   [[nodiscard]] RuntimeDeviceSnapshot setRuntimeRunning(bool running);
+  [[nodiscard]] AsioDeviceSnapshot inspectVirtualAsioDevices();
+  [[nodiscard]] AsioDeviceSnapshot reloadVirtualAsioDevices(
+      std::vector<control::VirtualAsioDeviceDefinition> devices);
   [[nodiscard]] EngineState setRoute(std::string input_id, std::string output_id,
                                      bool connect);
   [[nodiscard]] EngineState setRouteGain(std::string input_id, std::string output_id,

@@ -29,6 +29,7 @@ enum class ControlCommandType {
   ConfigureAudioRuntime,
   QueryVirtualAsioDevices,
   ConfigureVirtualAsioDevices,
+  ReloadVirtualAsioDevices,
 };
 
 enum class AudioRuntimeMode {

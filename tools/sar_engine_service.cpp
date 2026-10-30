@@ -879,7 +879,8 @@ sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator(
 
 }  // namespace
 
-int main(int argc, char** argv) {
+int run_engine(int argc, char** argv, std::atomic_bool& reload_requested,
+               bool first_run) {
   sar::service::NamedPipeControlConfig pipe_config;
   std::string pipe_display_name = "sys-audio-route-control";
   bool once = false;
@@ -1004,7 +1005,7 @@ int main(int argc, char** argv) {
     return request_engine_stop(pipe_config.pipe_name,
                                std::chrono::milliseconds(8000));
   }
-  if (!log_path.empty() && !enable_engine_logging(log_path)) {
+  if (first_run && !log_path.empty() && !enable_engine_logging(log_path)) {
     std::cerr << "session_warning code=log_file_unavailable\n";
   }
 
@@ -1484,8 +1485,16 @@ int main(int argc, char** argv) {
           return encode_response(std::move(response));
         }
         if (command.ok() &&
-            command.command.type == sar::control::ControlCommandType::
-                                        ConfigureVirtualAsioDevices) {
+            (command.command.type == sar::control::ControlCommandType::ConfigureVirtualAsioDevices ||
+             command.command.type == sar::control::ControlCommandType::ReloadVirtualAsioDevices)) {
+          const bool reload = command.command.type ==
+              sar::control::ControlCommandType::ReloadVirtualAsioDevices;
+          if (reload && (once || asio_channels_explicit)) {
+            return encode_response(sar::control::command_rejected(
+                command.command.command_id,
+                {{"virtual_asio_reload_startup_conflict",
+                  "Topology reload requires a persistent engine without --asio-channels."}}));
+          }
           const auto validation =
               sar::control::validate_command(command.command);
           if (!validation.ok()) {
@@ -1566,7 +1575,8 @@ int main(int argc, char** argv) {
               sar::control::command_accepted(command.command.command_id);
           response.virtual_asio_devices = desired_session.virtual_asio_devices;
           response.has_virtual_asio_devices = true;
-          stop_requested.store(true, std::memory_order_release);
+          if (reload) reload_requested.store(true, std::memory_order_release);
+          else stop_requested.store(true, std::memory_order_release);
           return encode_response(std::move(response));
         }
         const auto response = service->handle_wire_request(request_bytes);
@@ -1600,10 +1610,9 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  SetConsoleCtrlHandler(console_handler, TRUE);
   std::cout << "engine_service_state=running pipe=" << pipe_display_name
             << " asio_instances=" << asio_brokers.size() << '\n';
-  while (!stop_requested.load()) {
+  while (!stop_requested.load() && !reload_requested.load()) {
     if (once && pipe_server.stats().completed_requests >= 1) {
       break;
     }
@@ -1620,6 +1629,7 @@ int main(int argc, char** argv) {
   for (auto& broker : asio_brokers) broker->stop();
   for (auto& host : asio_hosts) host->stop_all();
   service->stop_audio_runtime();
+  if (stop_event && stop_event->signaled()) stop_requested.store(true);
   bool session_write_failed = false;
   if (session_writes_allowed && !save_session_file_atomic(session_path, desired_session)) {
     std::cerr << "session_write_failed: Could not persist the final engine session.\n";
@@ -1636,4 +1646,20 @@ int main(int argc, char** argv) {
             << stats.handler_errors << " asio_requests=" << asio_requests
             << '\n';
   return session_write_failed ? 1 : 0;
+}
+
+int main(int argc, char** argv) {
+  SetConsoleCtrlHandler(console_handler, TRUE);
+  std::atomic_bool reload_requested{false};
+  bool first_run = true;
+  for (;;) {
+    reload_requested.store(false);
+    // All per-run resources (pipe, hosts, mappings and session lock) are destroyed
+    // before re-reading the same arguments and persisted session. The process,
+    // user identity, log stream and explicit external stop intent are retained.
+    const int result = run_engine(argc, argv, reload_requested, first_run);
+    if (result != 0 || stop_requested.load() || !reload_requested.load()) return result;
+    first_run = false;
+    std::cout << "engine_service_state=reloading_virtual_asio\n";
+  }
 }

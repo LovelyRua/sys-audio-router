@@ -121,7 +121,8 @@ void delete_registration(const std::wstring& clsid,
 }  // namespace
 
 int wmain(int argc, wchar_t** argv) {
-  assert(argc == 2);
+  assert(argc == 2 || argc == 3);
+  const bool reload_mode = argc == 3 && std::wstring_view(argv[2]) == L"--reload";
   const std::wstring clsid_old = L"{705B4C39-BEB4-47E7-8FA9-B61F1C901A00}";
   const std::wstring clsid_a = L"{705B4C39-BEB4-47E7-8FA9-B61F1C901A01}";
   const std::wstring clsid_b = L"{705B4C39-BEB4-47E7-8FA9-B61F1C901A02}";
@@ -165,7 +166,8 @@ int wmain(int argc, wchar_t** argv) {
   sar::control::ControlCommand configure;
   configure.command_id = "configure-two-asio-devices";
   configure.type =
-      sar::control::ControlCommandType::ConfigureVirtualAsioDevices;
+      reload_mode ? sar::control::ControlCommandType::ReloadVirtualAsioDevices
+                  : sar::control::ControlCommandType::ConfigureVirtualAsioDevices;
   configure.virtual_asio_devices = {
       {.device_id = "topology-a",
        .clsid = "{705B4C39-BEB4-47E7-8FA9-B61F1C901A01}",
@@ -195,6 +197,32 @@ int wmain(int argc, wchar_t** argv) {
   assert(response.response.has_virtual_asio_devices);
   assert(response.response.virtual_asio_devices.size() == 2);
 
+  if (reload_mode) {
+    bool reloaded = false;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    unsigned sequence = 0;
+    while (std::chrono::steady_clock::now() < deadline && !reloaded) {
+      assert(WaitForSingleObject(process.hProcess, 0) == WAIT_TIMEOUT);
+      sar::control::ControlCommand query;
+      query.command_id = "reload-readback-" + std::to_string(++sequence);
+      query.type = sar::control::ControlCommandType::QuerySessionState;
+      const auto bytes = sar::control::encode_control_command(query);
+      const auto reply = sar::service::transact_named_pipe_control(pipe_config, as_bytes(bytes.bytes), 200);
+      if (reply.ok()) {
+        const auto state = sar::control::decode_control_response(as_u8(reply.payload()));
+        reloaded = state.ok() && state.response.has_preset &&
+            state.response.preset.matrix.inputs.size() == 6 &&
+            state.response.has_active_graph && state.response.active_graph.channels == 4;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    }
+    assert(reloaded);
+    // The old command retains its documented exit behaviour, even after a reload.
+    configure.type = sar::control::ControlCommandType::ConfigureVirtualAsioDevices;
+    configure.command_id = "legacy-exit-after-reload";
+    const auto legacy = sar::control::encode_control_command(configure);
+    assert(sar::service::transact_named_pipe_control(pipe_config, as_bytes(legacy.bytes), 5000).ok());
+  }
   assert(WaitForSingleObject(process.hProcess, 10000) == WAIT_OBJECT_0);
   DWORD exit_code = 1;
   assert(GetExitCodeProcess(process.hProcess, &exit_code));

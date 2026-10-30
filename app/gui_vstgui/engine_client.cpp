@@ -1,6 +1,7 @@
 #include "app/gui_vstgui/engine_client.h"
 
 #include "core/control/control_wire_protocol.h"
+#include "core/control/session_document.h"
 #include "core/platform/windows_current_user_sid.h"
 #include "core/service/windows_named_pipe_control.h"
 
@@ -37,7 +38,7 @@ std::vector<std::uint8_t> as_u8(std::span<const std::byte> input) {
 std::optional<control::ControlResponse> transact(
     const sar::service::NamedPipeControlConfig& config,
     control::ControlCommand command,
-    EngineState& state) {
+    EngineState& state, std::uint32_t timeout_ms = 2000) {
   const auto encoded = control::encode_control_command(command);
   if (!encoded.ok()) {
     state.transportOk = false;
@@ -45,7 +46,7 @@ std::optional<control::ControlResponse> transact(
     return std::nullopt;
   }
   const auto transaction = sar::service::transact_named_pipe_control(
-      config, as_bytes(encoded.bytes), 2000);
+      config, as_bytes(encoded.bytes), timeout_ms);
   if (!transaction.ok()) {
     state.transportOk = false;
     state.lastError = transaction.error().message;
@@ -203,6 +204,63 @@ RuntimeDeviceSnapshot EngineClient::setRuntimeRunning(bool running) {
   if (!response) result.error = transport.lastError;
   else if (result.available && result.running != running)
     result.error = "Runtime state did not match the requested transition";
+  return result;
+}
+
+AsioDeviceSnapshot EngineClient::inspectVirtualAsioDevices() {
+  AsioDeviceSnapshot result;
+  EngineState transport;
+  service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  const auto request = [&](control::ControlCommandType type) {
+    control::ControlCommand command;
+    command.command_id = next_command_id();
+    command.type = type;
+    return transact(config, std::move(command), transport);
+  };
+  const auto topology = request(control::ControlCommandType::QueryVirtualAsioDevices);
+  if (!topology || !topology->has_virtual_asio_devices) {
+    result.error = transport.lastError.empty() ? "Virtual ASIO topology is unavailable" : transport.lastError;
+    return result;
+  }
+  const auto runtime = request(control::ControlCommandType::QueryAudioRuntime);
+  const auto diagnostics = runtime ? request(control::ControlCommandType::QueryDiagnostics) : std::nullopt;
+  if (!runtime || !runtime->has_audio_runtime_state || !diagnostics || !diagnostics->has_diagnostics) {
+    result.error = transport.lastError.empty() ? "Runtime/client state is unavailable" : transport.lastError;
+    return result;
+  }
+  result.available = true;
+  result.running = runtime->audio_runtime.running;
+  result.activeClients = diagnostics->diagnostics.virtual_asio_active_producers;
+  result.devices = topology->virtual_asio_devices;
+  return result;
+}
+
+AsioDeviceSnapshot EngineClient::reloadVirtualAsioDevices(
+    std::vector<control::VirtualAsioDeviceDefinition> devices) {
+  AsioDeviceSnapshot result;
+  const auto validation = control::validate_virtual_asio_devices(devices);
+  if (!validation.empty()) { result.error = validation.front().message; return result; }
+  std::uint64_t inputs = 0, outputs = 0;
+  for (const auto& device : devices) if (device.enabled) {
+    inputs += device.input_channels; outputs += device.output_channels;
+  }
+  if (!inputs || inputs != outputs) { result.error = "Enabled ASIO channel totals must match and be nonzero"; return result; }
+  EngineState transport;
+  service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  control::ControlCommand command;
+  command.command_id = next_command_id();
+  command.type = control::ControlCommandType::ReloadVirtualAsioDevices;
+  command.virtual_asio_devices = std::move(devices);
+  const auto response = transact(config, std::move(command), transport, 5000);
+  if (!response || !response->has_virtual_asio_devices) {
+    result.error = transport.lastError.empty() ? "Topology reload was not acknowledged" : transport.lastError;
+    result.error += ". Refresh before trying again; no automatic resend was made.";
+    return result;
+  }
+  result.reloadAccepted = true;
+  result.devices = response->virtual_asio_devices;
   return result;
 }
 
