@@ -174,6 +174,14 @@ endif()
 # app/gui_vstgui and docs/product-readiness.md for what is not ported). Kept
 # as its own option so it never affects the Qt build above.
 option(SAR_BUILD_GUI_VSTGUI "Build the VSTGUI-based control panel prototype" OFF)
+option(SAR_PACKAGE_NATIVE_PREVIEW "Include the optional native preview in the Qt installer" OFF)
+option(SAR_BUNDLE_VBCABLE "Include unmodified base VB-CABLE with donationware attribution" OFF)
+if(SAR_BUNDLE_VBCABLE AND NOT SAR_PACKAGE_NATIVE_PREVIEW)
+  message(FATAL_ERROR "VB-CABLE bundle requires the native preview attribution and setup UI")
+endif()
+if(SAR_PACKAGE_NATIVE_PREVIEW AND NOT (SAR_BUILD_GUI AND SAR_BUILD_GUI_VSTGUI))
+  message(FATAL_ERROR "SAR_PACKAGE_NATIVE_PREVIEW requires both GUI build options")
+endif()
 
 if(SAR_BUILD_GUI_VSTGUI)
   if(NOT WIN32)
@@ -194,16 +202,42 @@ if(SAR_BUILD_GUI_VSTGUI)
     SOURCE_SUBDIR vstgui
   )
   FetchContent_MakeAvailable(vstgui)
+  set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
+  set(JSON_Install OFF CACHE BOOL "" FORCE)
+  FetchContent_Declare(nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+    GIT_SHALLOW TRUE)
+  FetchContent_MakeAvailable(nlohmann_json)
 
   add_executable(sar_gui_vstgui WIN32
     app/gui_vstgui/main.cpp
+    app/gui_vstgui/localization.cpp
+    app/gui_vstgui/localization.h
     app/gui_vstgui/main_window.cpp
     app/gui_vstgui/main_window.h
     app/gui_vstgui/engine_client.cpp
     app/gui_vstgui/engine_client.h
+    app/gui_vstgui/diagnostics_window.cpp
+    app/gui_vstgui/diagnostics_window.h
+    app/gui_vstgui/preset_client.cpp
+    app/gui_vstgui/preset_client.h
+    app/gui_vstgui/preset_window.cpp
+    app/gui_vstgui/preset_window.h
+    app/gui_vstgui/asio_device_window.cpp
+    app/gui_vstgui/asio_device_window.h
+    app/gui_vstgui/asio_device_model.h
     app/gui_vstgui/lcd_readout_view.cpp
     app/gui_vstgui/lcd_readout_view.h
     app/gui_vstgui/palette.h
+    app/gui_vstgui/virtual_device_client.cpp
+    app/gui_vstgui/virtual_device_client.h
+    app/gui_vstgui/virtual_device_window.cpp
+    app/gui_vstgui/virtual_device_window.h
+    app/gui_vstgui/runtime_device_model.h
+    app/gui_vstgui/runtime_device_window.cpp
+    app/gui_vstgui/runtime_device_window.h
+    app/gui_vstgui/vb_cable_setup.cpp
   )
   target_include_directories(sar_gui_vstgui PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -211,11 +245,17 @@ if(SAR_BUILD_GUI_VSTGUI)
   )
   target_compile_features(sar_gui_vstgui PRIVATE cxx_std_20)
   target_compile_definitions(sar_gui_vstgui PRIVATE SAR_VERSION="${PROJECT_VERSION}")
+  if(MSVC)
+    target_compile_options(sar_gui_vstgui PRIVATE /Zi /utf-8)
+    target_link_options(sar_gui_vstgui PRIVATE /DEBUG:FULL /OPT:REF /OPT:ICF /INCREMENTAL:NO
+      "/MAP:${CMAKE_CURRENT_BINARY_DIR}/gui-vstgui.map")
+  endif()
   target_link_libraries(sar_gui_vstgui PRIVATE
     sar_core
     vstgui
     vstgui_uidescription
     vstgui_standalone
+    nlohmann_json::nlohmann_json shell32 comdlg32 wintrust crypt32 ole32 advapi32
   )
   sar_add_version_resource(sar_gui_vstgui
     "System Audio Route control panel (VSTGUI prototype)"
@@ -229,6 +269,40 @@ if(SAR_BUILD_GUI_VSTGUI)
     # in as the entry point rather than relying on implicit resolution.
     LINK_FLAGS "/INCLUDE:wWinMain"
   )
+  add_executable(sar_gui_virtual_device_client_smoke
+    tests/realtime/gui_virtual_device_client_smoke.cpp
+    app/gui_vstgui/virtual_device_client.cpp)
+  target_include_directories(sar_gui_virtual_device_client_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_compile_features(sar_gui_virtual_device_client_smoke PRIVATE cxx_std_20)
+  target_link_libraries(sar_gui_virtual_device_client_smoke PRIVATE nlohmann_json::nlohmann_json shell32 ole32)
+  add_executable(sar_gui_runtime_device_model_smoke tests/realtime/gui_runtime_device_model_smoke.cpp)
+  target_link_libraries(sar_gui_runtime_device_model_smoke PRIVATE sar_core)
+  add_test(NAME gui_runtime_device_model_smoke COMMAND sar_gui_runtime_device_model_smoke)
+  add_executable(sar_native_localization_smoke
+    tests/realtime/native_localization_smoke.cpp app/gui_vstgui/localization.cpp)
+  target_include_directories(sar_native_localization_smoke PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_compile_features(sar_native_localization_smoke PRIVATE cxx_std_20)
+  target_link_libraries(sar_native_localization_smoke PRIVATE advapi32)
+  if(MSVC)
+    target_compile_options(sar_native_localization_smoke PRIVATE /utf-8)
+  endif()
+  add_test(NAME native_localization_smoke COMMAND sar_native_localization_smoke)
+  add_custom_command(TARGET sar_gui_vstgui POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/nlohmann-json"
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/vstgui"
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/libsamplerate"
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/asio-sdk"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${nlohmann_json_SOURCE_DIR}/LICENSE.MIT"
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/nlohmann-json/LICENSE.MIT"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${vstgui_SOURCE_DIR}/LICENSE"
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/vstgui/LICENSE"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PROJECT_SOURCE_DIR}/third_party/libsamplerate/COPYING"
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/libsamplerate/COPYING"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PROJECT_SOURCE_DIR}/third_party/asio_sdk_2.3.4/common/LICENSE.txt"
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>/licenses/asio-sdk/LICENSE.txt"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PROJECT_SOURCE_DIR}/LICENSE" "${PROJECT_SOURCE_DIR}/NOTICE.md"
+      "$<TARGET_FILE_DIR:sar_gui_vstgui>")
 endif()
 
 add_executable(sar_realtime_smoke
@@ -496,6 +570,10 @@ add_executable(sar_wasapi_realtime_error_smoke
 
 target_link_libraries(sar_wasapi_realtime_error_smoke PRIVATE sar_core)
 
+add_executable(sar_capture_level_evidence_smoke
+  tests/realtime/capture_level_evidence_smoke.cpp)
+target_link_libraries(sar_capture_level_evidence_smoke PRIVATE sar_core)
+
 if(WIN32)
   add_library(sar_virtual_asio_registration STATIC
     driver/windows_virtual_asio_registration.cpp
@@ -640,6 +718,11 @@ if(WIN32)
     app/gui_vstgui/engine_client.cpp
   )
   target_link_libraries(sar_vstgui_engine_client_smoke PRIVATE sar_core)
+
+  add_executable(sar_vstgui_preset_client_smoke
+    tests/realtime/vstgui_preset_client_smoke.cpp
+    app/gui_vstgui/preset_client.cpp)
+  target_link_libraries(sar_vstgui_preset_client_smoke PRIVATE sar_core shell32)
 
   add_executable(sar_windows_virtual_asio_object_names_smoke
     tests/realtime/windows_virtual_asio_object_names_smoke.cpp
@@ -1037,6 +1120,11 @@ add_executable(sar_spsc_ring_buffer_threaded_smoke
 target_link_libraries(sar_spsc_ring_buffer_threaded_smoke PRIVATE sar_core)
 
 enable_testing()
+add_test(NAME capture_level_evidence_smoke COMMAND sar_capture_level_evidence_smoke)
+if(TARGET sar_gui_virtual_device_client_smoke)
+  add_test(NAME gui_virtual_device_client_smoke COMMAND sar_gui_virtual_device_client_smoke)
+  set_tests_properties(gui_virtual_device_client_smoke PROPERTIES TIMEOUT 20)
+endif()
 add_test(NAME realtime_smoke COMMAND sar_realtime_smoke)
 add_test(NAME atomic_float_parameter_smoke COMMAND sar_atomic_float_parameter_smoke)
 add_test(NAME meter_node_smoke COMMAND sar_meter_node_smoke)
@@ -1125,6 +1213,12 @@ if(WIN32)
   add_test(NAME windows_virtual_asio_topology_control_smoke
            COMMAND sar_windows_virtual_asio_topology_control_smoke
                    $<TARGET_FILE:sar_engine_service>)
+  add_test(NAME windows_virtual_asio_topology_reload_smoke
+           COMMAND sar_windows_virtual_asio_topology_control_smoke
+                   $<TARGET_FILE:sar_engine_service> --reload)
+  set_tests_properties(windows_virtual_asio_topology_control_smoke
+                       windows_virtual_asio_topology_reload_smoke
+                       PROPERTIES RUN_SERIAL TRUE TIMEOUT 45)
   add_test(NAME windows_engine_service_lifecycle_smoke
            COMMAND sar_windows_engine_service_lifecycle_smoke
                    $<TARGET_FILE:sar_engine_service>)
@@ -1147,6 +1241,7 @@ if(WIN32)
   add_test(NAME windows_current_user_sid_smoke
            COMMAND sar_windows_current_user_sid_smoke)
   add_test(NAME vstgui_engine_client_smoke COMMAND sar_vstgui_engine_client_smoke)
+  add_test(NAME vstgui_preset_client_smoke COMMAND sar_vstgui_preset_client_smoke)
   add_test(NAME windows_virtual_asio_object_names_smoke
            COMMAND sar_windows_virtual_asio_object_names_smoke)
   add_test(NAME windows_virtual_asio_events_smoke
@@ -1450,6 +1545,25 @@ if(WIN32 AND SAR_BUILD_GUI)
   install(TARGETS sar_virtual_wasapi_lab_producer
                   sar_measure_wasapi_capture_level
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}/lab)
+  if(SAR_PACKAGE_NATIVE_PREVIEW)
+    install(TARGETS sar_gui_vstgui RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(FILES "${vstgui_SOURCE_DIR}/LICENSE" DESTINATION licenses/vstgui)
+    install(FILES "${nlohmann_json_SOURCE_DIR}/LICENSE.MIT" DESTINATION licenses/nlohmann-json)
+    install(PROGRAMS packaging/windows/start-native-preview.cmd DESTINATION .)
+  endif()
+  if(SAR_BUNDLE_VBCABLE)
+    set(sar_vbcable_archive "${CMAKE_CURRENT_BINARY_DIR}/vendor-downloads/VBCABLE_Driver_Pack45.zip")
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vendor-downloads")
+    file(DOWNLOAD
+      "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip"
+      "${sar_vbcable_archive}"
+      EXPECTED_HASH SHA256=b950e39f01af1d04ea623c8f6d8eb9b6ea5c477c637295fabf20631c85116bfb
+      TLS_VERIFY ON TIMEOUT 90)
+    set(sar_vbcable_directory "${CMAKE_CURRENT_BINARY_DIR}/vendor/VB-CABLE")
+    file(ARCHIVE_EXTRACT INPUT "${sar_vbcable_archive}" DESTINATION "${sar_vbcable_directory}")
+    install(DIRECTORY "${sar_vbcable_directory}" DESTINATION vendor)
+    install(FILES "${sar_vbcable_archive}" DESTINATION vendor)
+  endif()
   if(SAR_BUILD_GUI)
     install(TARGETS sar_gui
       RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -1517,30 +1631,52 @@ if(WIN32 AND SAR_BUILD_GUI)
   # existing Explorer process so the control panel starts in the signed-in
   # desktop session instead of inheriting the installer's elevated token.
   set(CPACK_NSIS_DEFINES [[
+    !include "x64.nsh"
     !define MUI_FINISHPAGE_RUN_FUNCTION SarLaunchControlPanel
     Function SarLaunchControlPanel
       Exec '"$WINDIR\explorer.exe" "$INSTDIR\bin\SystemAudioRouteLauncher.exe"'
     FunctionEnd
+
+    !macro SarGuardLoadedAsioDriver
+      ${If} ${RunningX64}
+        ${DisableX64FSRedirection}
+      ${EndIf}
+      nsExec::ExecToStack '"$SYSDIR\tasklist.exe" /M SystemAudioRouteVirtualASIO.dll /FO CSV /NH'
+      Pop $0
+      Pop $1
+      ${If} ${RunningX64}
+        ${EnableX64FSRedirection}
+      ${EndIf}
+      StrCmp $0 "0" sar_asio_check_output
+      MessageBox MB_OK|MB_ICONSTOP "System Audio Route could not check whether its ASIO driver is in use. No changes were made. Close your audio applications and try again." /SD IDOK
+      SetErrorLevel 1
+      Abort
+      sar_asio_check_output:
+      System::Call 'shlwapi::StrStrIW(w r1, w "SystemAudioRouteVirtualASIO.dll") p .r2'
+      StrCmp $2 "0" sar_asio_driver_unlocked
+      MessageBox MB_OK|MB_ICONSTOP "System Audio Route Virtual ASIO is still loaded by an audio application.$\r$\n$\r$\nSave your work and completely close the affected DAW or plug-in scanner, then try again.$\r$\n$\r$\nNo installed files or registrations were changed." /SD IDOK
+      SetErrorLevel 1
+      Abort
+      sar_asio_driver_unlocked:
+    !macroend
   ]])
-  set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+  # CPack otherwise runs the old uninstaller in .onInit, before our lock check.
+  set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL OFF)
   set(CPACK_NSIS_MANIFEST_DPI_AWARE ON)
   set(CPACK_NSIS_EXTRA_PREINSTALL_COMMANDS [[
-    nsExec::ExecToStack '"$SYSDIR\cmd.exe" /D /C ""$SYSDIR\tasklist.exe" /M SystemAudioRouteVirtualASIO.dll /FO CSV /NH 2^>nul | "$SYSDIR\findstr.exe" /I /C:"SystemAudioRouteVirtualASIO.dll" ^>nul"'
-    Pop $0
-    Pop $1
-    StrCmp $0 "0" 0 sar_asio_driver_unlocked
-    MessageBox MB_OK|MB_ICONSTOP "System Audio Route Virtual ASIO is still loaded by an audio application.$\r$\n$\r$\nClose REAPER, your DAW, and plug-in scanners, then run this installer again.$\r$\n$\r$\nThe update has not changed any installed files."
-    SetErrorLevel 1
-    Abort
-    sar_asio_driver_unlocked:
+    !insertmacro SarGuardLoadedAsioDriver
     IfFileExists "$INSTDIR\bin\sar_engine_service.exe" 0 sar_pre_no_engine
     nsExec::ExecToLog '"$INSTDIR\bin\sar_engine_service.exe" --stop'
     Pop $0
     sar_pre_no_engine:
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /IM SystemAudioRoute.exe'
     Pop $0
+    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /IM SystemAudioRouteVstgui.exe'
+    Pop $0
     Sleep 1500
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM SystemAudioRoute.exe'
+    Pop $0
+    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM SystemAudioRouteVstgui.exe'
     Pop $0
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM sar_engine_service.exe'
     Pop $0
@@ -1562,14 +1698,19 @@ if(WIN32 AND SAR_BUILD_GUI)
     sar_asio_registration_ok:
   ]])
   set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS [[
+    !insertmacro SarGuardLoadedAsioDriver
     IfFileExists "$INSTDIR\bin\sar_engine_service.exe" 0 sar_un_no_engine
     nsExec::ExecToLog '"$INSTDIR\bin\sar_engine_service.exe" --stop'
     Pop $0
     sar_un_no_engine:
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /IM SystemAudioRoute.exe'
     Pop $0
+    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /IM SystemAudioRouteVstgui.exe'
+    Pop $0
     Sleep 1500
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM SystemAudioRoute.exe'
+    Pop $0
+    nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM SystemAudioRouteVstgui.exe'
     Pop $0
     nsExec::ExecToLog '"$SYSDIR\taskkill.exe" /F /T /IM sar_engine_service.exe'
     Pop $0
@@ -1581,5 +1722,13 @@ if(WIN32 AND SAR_BUILD_GUI)
     Abort
     sar_skip_asio_unregistration:
   ]])
+  if(SAR_PACKAGE_NATIVE_PREVIEW)
+    string(APPEND CPACK_NSIS_EXTRA_INSTALL_COMMANDS [[
+      CreateShortCut "$SMPROGRAMS\$STARTMENU_FOLDER\System Audio Route Native Preview.lnk" "$INSTDIR\bin\SystemAudioRouteLauncher.exe" "--native" "$INSTDIR\bin\SystemAudioRouteVstgui.exe"
+    ]])
+    string(APPEND CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS [[
+      Delete "$SMPROGRAMS\$STARTMENU_FOLDER\System Audio Route Native Preview.lnk"
+    ]])
+  endif()
   include(CPack)
 endif()

@@ -10,6 +10,7 @@
 #include "core/service/virtual_asio_instance_layout.h"
 #include "core/platform/realtime_audio_channel_slice_sink.h"
 #include "core/platform/windows_current_user_sid.h"
+#include "core/platform/windows_virtual_asio_pipe_name.h"
 #include "core/platform/realtime_audio_fanout_sink.h"
 #include "core/platform/realtime_audio_input_assembler.h"
 #include "core/platform/virtual_asio_capture_bus.h"
@@ -698,24 +699,19 @@ std::vector<sar::control::PresetError> synchronize_virtual_asio_registration(
   constexpr auto view = WindowsVirtualAsioRegistryView::X64;
   constexpr auto scope = WindowsVirtualAsioRegistrationScope::CurrentUser;
 
-  const auto enabled_with_clsid = [](const auto& devices,
-                                     const std::string& clsid) {
-    return std::ranges::any_of(devices, [&](const auto& device) {
-      return device.enabled && _stricmp(device.clsid.c_str(), clsid.c_str()) == 0;
-    });
-  };
   const auto restore_previous = [&] {
+    // Remove candidate keys before restoring old names. Name swaps and renames
+    // must not leave stale discovery entries or delete a newly restored name.
+    for (const auto& device : desired) {
+      if (device.enabled) {
+        static_cast<void>(sar::driver::unregister_windows_virtual_asio_driver_if_owned(
+            driver_path, registration_descriptor(device), view, scope));
+      }
+    }
     for (const auto& device : previous) {
       if (device.enabled) {
         static_cast<void>(sar::driver::register_windows_virtual_asio_driver(
             driver_path, registration_descriptor(device), view, scope));
-      }
-    }
-    for (const auto& device : desired) {
-      if (device.enabled && !enabled_with_clsid(previous, device.clsid)) {
-        static_cast<void>(
-            sar::driver::unregister_windows_virtual_asio_driver_if_owned(
-                driver_path, registration_descriptor(device), view, scope));
       }
     }
   };
@@ -727,20 +723,18 @@ std::vector<sar::control::PresetError> synchronize_virtual_asio_registration(
     return errors;
   };
 
+  // Audio and clients have already stopped. Clear owned old discovery names
+  // first, including unchanged CLSIDs whose human-readable name was edited.
+  for (const auto& device : previous) {
+    if (!device.enabled) continue;
+    const auto result = sar::driver::unregister_windows_virtual_asio_driver_if_owned(
+        driver_path, registration_descriptor(device), view, scope);
+    if (!result.ok()) { restore_previous(); return convert_failure(result); }
+  }
   for (const auto& device : desired) {
     if (!device.enabled) continue;
     const auto result = sar::driver::register_windows_virtual_asio_driver(
         driver_path, registration_descriptor(device), view, scope);
-    if (!result.ok()) {
-      restore_previous();
-      return convert_failure(result);
-    }
-  }
-  for (const auto& device : previous) {
-    if (!device.enabled || enabled_with_clsid(desired, device.clsid)) continue;
-    const auto result =
-        sar::driver::unregister_windows_virtual_asio_driver_if_owned(
-            driver_path, registration_descriptor(device), view, scope);
     if (!result.ok()) {
       restore_previous();
       return convert_failure(result);
@@ -878,7 +872,9 @@ sar::service::EngineAudioRuntimeConfigurator make_wasapi_runtime_configurator(
 
 }  // namespace
 
-int main(int argc, char** argv) {
+int run_engine(int argc, char** argv, std::atomic_bool& reload_requested,
+               bool first_run, std::unique_ptr<EngineProcessLock>& process_lock,
+               std::unique_ptr<EngineStopEvent>& stop_event) {
   sar::service::NamedPipeControlConfig pipe_config;
   std::string pipe_display_name = "sys-audio-route-control";
   bool once = false;
@@ -1003,7 +999,7 @@ int main(int argc, char** argv) {
     return request_engine_stop(pipe_config.pipe_name,
                                std::chrono::milliseconds(8000));
   }
-  if (!log_path.empty() && !enable_engine_logging(log_path)) {
+  if (first_run && !log_path.empty() && !enable_engine_logging(log_path)) {
     std::cerr << "session_warning code=log_file_unavailable\n";
   }
 
@@ -1013,9 +1009,9 @@ int main(int argc, char** argv) {
                  "per-user engine lock name.\n";
     return 1;
   }
-  EngineProcessLock engine_lock(engine_lock_name);
-  if (!engine_lock.acquired()) {
-    const auto error = engine_lock.error();
+  if (!process_lock) process_lock = std::make_unique<EngineProcessLock>(engine_lock_name);
+  if (!process_lock->acquired()) {
+    const auto error = process_lock->error();
     if (error == ERROR_ALREADY_EXISTS) {
       std::cerr << "engine_service_already_running: Another System Audio Route "
                    "engine already owns this control pipe.\n";
@@ -1028,8 +1024,7 @@ int main(int argc, char** argv) {
   }
 
   std::wstring stop_event_name;
-  std::unique_ptr<EngineStopEvent> stop_event;
-  if (make_engine_stop_event_name(pipe_config.pipe_name, stop_event_name)) {
+  if (!stop_event && make_engine_stop_event_name(pipe_config.pipe_name, stop_event_name)) {
     stop_event = std::make_unique<EngineStopEvent>(stop_event_name);
     if (!stop_event->valid()) {
       std::cerr << "session_warning code=stop_event_unavailable\n";
@@ -1411,7 +1406,8 @@ int main(int argc, char** argv) {
         desired_session.virtual_asio_devices[instance.definition_index];
     const std::wstring broker_token(definition.broker_token.begin(),
                                     definition.broker_token.end());
-    const auto asio_pipe_name = pipe_config.pipe_name + L"-" + broker_token;
+    const auto asio_pipe_name = sar::platform::virtual_asio_broker_pipe_name(
+        broker_token, pipe_config.pipe_name);
     auto& host = *asio_hosts[index];
     auto broker =
         std::make_unique<sar::service::WindowsVirtualAsioBrokerServer>(
@@ -1458,6 +1454,9 @@ int main(int argc, char** argv) {
        &session_path,
        &asio_hosts,
        &virtual_asio_driver_path,
+       &reload_requested,
+       once,
+       asio_channels_explicit,
        session_writes_allowed](std::span<const std::byte> request) {
         std::lock_guard request_lock(request_mutex);
         const auto request_bytes = as_u8(request);
@@ -1472,6 +1471,15 @@ int main(int argc, char** argv) {
           return sar::service::NamedPipeControlResult::success(
               as_bytes(encoded.bytes));
         };
+        // The accepted topology already replaced desired_session, while service
+        // still owns the old graph. Freeze this generation until teardown: a
+        // queued preset mutation must not overwrite the resized saved matrix,
+        // and reads must not claim that the new runtime has already opened.
+        if (command.ok() && (reload_requested.load() || stop_requested.load())) {
+          return encode_response(sar::control::command_rejected(
+              command.command.command_id,
+              {{"engine_generation_closing", "Engine is reloading or stopping; refresh after it reconnects."}}));
+        }
         if (command.ok() &&
             command.command.type ==
                 sar::control::ControlCommandType::QueryVirtualAsioDevices) {
@@ -1482,8 +1490,16 @@ int main(int argc, char** argv) {
           return encode_response(std::move(response));
         }
         if (command.ok() &&
-            command.command.type == sar::control::ControlCommandType::
-                                        ConfigureVirtualAsioDevices) {
+            (command.command.type == sar::control::ControlCommandType::ConfigureVirtualAsioDevices ||
+             command.command.type == sar::control::ControlCommandType::ReloadVirtualAsioDevices)) {
+          const bool reload = command.command.type ==
+              sar::control::ControlCommandType::ReloadVirtualAsioDevices;
+          if (reload && (once || asio_channels_explicit)) {
+            return encode_response(sar::control::command_rejected(
+                command.command.command_id,
+                {{"virtual_asio_reload_startup_conflict",
+                  "Topology reload requires a persistent engine without --asio-channels."}}));
+          }
           const auto validation =
               sar::control::validate_command(command.command);
           if (!validation.ok()) {
@@ -1564,7 +1580,8 @@ int main(int argc, char** argv) {
               sar::control::command_accepted(command.command.command_id);
           response.virtual_asio_devices = desired_session.virtual_asio_devices;
           response.has_virtual_asio_devices = true;
-          stop_requested.store(true, std::memory_order_release);
+          if (reload) reload_requested.store(true, std::memory_order_release);
+          else stop_requested.store(true, std::memory_order_release);
           return encode_response(std::move(response));
         }
         const auto response = service->handle_wire_request(request_bytes);
@@ -1598,10 +1615,9 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  SetConsoleCtrlHandler(console_handler, TRUE);
   std::cout << "engine_service_state=running pipe=" << pipe_display_name
             << " asio_instances=" << asio_brokers.size() << '\n';
-  while (!stop_requested.load()) {
+  while (!stop_requested.load() && !reload_requested.load()) {
     if (once && pipe_server.stats().completed_requests >= 1) {
       break;
     }
@@ -1618,6 +1634,7 @@ int main(int argc, char** argv) {
   for (auto& broker : asio_brokers) broker->stop();
   for (auto& host : asio_hosts) host->stop_all();
   service->stop_audio_runtime();
+  if (stop_event && stop_event->signaled()) stop_requested.store(true);
   bool session_write_failed = false;
   if (session_writes_allowed && !save_session_file_atomic(session_path, desired_session)) {
     std::cerr << "session_write_failed: Could not persist the final engine session.\n";
@@ -1634,4 +1651,25 @@ int main(int argc, char** argv) {
             << stats.handler_errors << " asio_requests=" << asio_requests
             << '\n';
   return session_write_failed ? 1 : 0;
+}
+
+int main(int argc, char** argv) {
+  SetConsoleCtrlHandler(console_handler, TRUE);
+  std::atomic_bool reload_requested{false};
+  bool first_run = true;
+  std::unique_ptr<EngineProcessLock> process_lock;
+  std::unique_ptr<EngineStopEvent> stop_event;
+  for (;;) {
+    reload_requested.store(false);
+    // All per-run resources (pipe, hosts, mappings and session lock) are destroyed
+    // before re-reading the same arguments and persisted session. The process,
+    // user identity, log stream and explicit external stop intent are retained.
+    const int result = run_engine(argc, argv, reload_requested, first_run, process_lock, stop_event);
+    // Retain both handles across reload, so another launcher cannot steal the
+    // pipe and a stop request cannot disappear while the runtime is rebuilding.
+    if (result != 0 || stop_requested.load() || (stop_event && stop_event->signaled()) ||
+        !reload_requested.load()) return result;
+    first_run = false;
+    std::cout << "engine_service_state=reloading_virtual_asio\n";
+  }
 }

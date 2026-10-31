@@ -1,0 +1,233 @@
+# Native runtime editor
+
+The optional VSTGUI preview now has an Audio devices window using the same
+`QueryAudioRuntime`, `ListDevices`, `ConfigureAudioRuntime` and start/stop
+commands as the existing Qt control panel. It does not create a second session
+file or bypass engine-side validation. The engine must already be running;
+the default bootstrap entry still uses the Qt control panel. Packages built with
+`SAR_PACKAGE_NATIVE_PREVIEW=ON` add a separate native entry through the same
+launcher (`--native`), which starts the engine when needed.
+
+## Scope
+
+- A matrix draft can contain up to the engine limit of 32 endpoints.
+- Capture and playback bindings use actual enumerated WASAPI IDs, not names.
+- Endpoint IDs remain graph-route identities; channel offsets are zero-based.
+- Numeric fields are parsed strictly and checked against reported capabilities.
+- Exactly one playback endpoint must be the clock master; capture cannot be.
+- Duplicate device/direction bindings fail before applying the configuration.
+- Physical ASIO matrix endpoints can be added and removed as a pair. Driver and
+  timing edits affect the whole group; channel slices are direction-specific.
+  Group identities and WASAPI bindings survive these edits. A physical ASIO
+  render remains master, as required by the current engine. See
+  [Physical ASIO editing](native-physical-asio-editor.md) for validation and
+  acceptance boundaries.
+- Legacy non-matrix and standalone ASIO modes are preserved read-only. New matrix
+  explicitly creates a replacement draft; it is not applied automatically.
+
+Refresh reconnects and updates device inventory without discarding a dirty draft.
+Reload saved is a separate, confirmed discard operation. Failed Apply preserves
+the draft, refreshes actual runtime state when possible, and never retries an
+uncertain mutation automatically. Start/stop is disabled while edits are dirty.
+The regular engine runtime reconfiguration behavior, including stream restart,
+still applies when the user selects Apply.
+
+All pipe requests run in value-owning background workers. UI timers only collect
+completed results; closing a window does not wait for a pipe request. Command
+IDs are distinct across simultaneous windows and repeated window lifetimes,
+and responses must echo the requesting command ID.
+
+## Window fit
+
+The preview retains fixed logical control dimensions inside scroll viewports.
+On creation, the client viewport is limited to the current monitor's work area
+with DPI-aware window chrome. Small screens scroll rather than shrink text or
+hide the title bar. Live re-fitting after monitor/work-area changes is not yet
+implemented. The INF picker now distinguishes cancellation from Windows dialog
+errors; failed selection does not erase the typed path.
+
+## Verification
+
+`gui_runtime_device_model_smoke` exercises draft validation, wire round trips,
+device disappearance, channel ranges, clock selection, endpoint capacity,
+physical ASIO field preservation, and 4096 command IDs across concurrent clients.
+The bounded GUI startup check opens the main, runtime, driver-lab, preset and
+diagnostics windows and closes them.
+These checks do not replace interactive device selection, Apply, start/stop,
+dirty-refresh/reconnect, or the existing waveform/continuity acceptance tests.
+
+## Interactive acceptance (2026-10-20)
+
+VM24 used a private engine session and the non-elevated interactive codex user.
+The engine binaries came from product revision `03c2fec`; this batch changes no
+engine or audio-path implementation. The native client was first exercised at
+`27fa10a` and the final regression pass used `f8c1c5c`. Existing experimental
+adapters were selected, not installed, renamed or removed during this round.
+
+| Flow | Observed result |
+| --- | --- |
+| Invalid channel count 0, Apply | Local rejection; independent runtime query confirmed no runtime installed |
+| Configure two playback and two capture endpoints | Actual A/B adapter devices selected; four endpoints applied successfully |
+| Refresh a dirty draft | Endpoint IDs, bindings and numeric edits retained |
+| Disconnect and reconnect while dirty | Explicit transport error, followed by recovery without discarding edits |
+| Apply and reopen Audio devices | Four saved endpoints read back, with render-1 master and capture-2 bound to adapter B |
+| Start and stop audio | GUI state and independent control CLI agreed; the engine service stayed alive |
+| Reload saved, cancel | Five-endpoint dirty draft retained |
+| Reload saved, confirm | Saved four-endpoint configuration restored |
+| Close and reopen editor | No cross-window command-cache collision |
+| Main-window transport recovery | Offline pipe error cleared automatically after the private engine restarted |
+| Small 870 x 659 console | Title bars and close controls visible; fixed-size content scrollable with muted scrollbars |
+| Close native GUI | Independent CLI still responded; engine then stopped explicitly with --stop |
+
+CI run `39354135549` for `f8c1c5c` passed 162 CTest cases, 15 script suites,
+seven advisory ASan cases, the two native model/parser checks, and the bounded
+three-window startup/closure check. Windows package run `39354140497` also passed.
+Temporary GUI/engine processes, scheduled tasks and process-ledger entries were
+closed or cleared after acceptance. No development-host tools were installed.
+
+This proves configuration and lifecycle behavior, not a new sound-content or
+waveform-continuity pass: the private test matrix contained no signal routes.
+That revision lacked physical-ASIO editing, experimental-driver installer
+integration, presets, full diagnostics and localization. It was not yet a
+replacement for the shipped Qt control panel.
+
+## Workspace, presets and diagnostics (2026-10-29)
+
+The native main window has a shared navigation rail for the routing matrix,
+Audio devices, Presets and Diagnostics. Experimental driver management is
+separated as Driver lab. Header status distinguishes service connectivity from
+audio running/stopped and an unconfigured runtime; it is not an audio continuity
+certificate. Fixed logical content remains scrollable on smaller screens.
+
+Presets use the existing `.sarpreset` codec and the same roaming preset directory
+as the Qt panel. Save queries an actual engine preset; load sends the decoded
+document through `LoadPreset`. Overwrite, load and delete require confirmation.
+Reads are bounded, names cannot escape the preset directory, and writes use a
+temporary file plus replacement. Disk and pipe operations run on value-owning
+workers. An uncertain command result is reported without automatic retry.
+
+Diagnostics polls the real aggregate and per-endpoint counters off the UI thread.
+Unavailable telemetry is Unknown rather than a fabricated zero. Cumulative
+underflows and other errors remain warnings even if the current engine health
+field reports Healthy. The window exposes recovery state/reason, queue depth,
+clock correction, callback timing and snapshot age.
+
+Ordinary matrix clicks connect an absent route or mute/unmute an existing one,
+preserving gain. Shift-click removes an existing route, or connects an absent
+one. Right-click selects without mutation. The gain slider supports double-click
+reset to 0 dB as well as the explicit reset button. These actions use the same
+bounded optimistic edit queue and engine-side validation as before.
+
+The preset name smoke rejects invalid UTF-8, reserved Windows names, path
+characters, NULs and excessive lengths before disk or IPC access. The route model
+smoke covers gain-preserving mute/unmute and Shift removal. Startup/closure
+coverage includes all five windows. Interactive acceptance is recorded separately;
+compilation alone does not establish user-flow parity.
+
+At that revision, native UI gaps included virtual-ASIO topology editing,
+physical-ASIO editing, localization, complete keyboard/accessibility navigation,
+and installer-flow parity. Virtual-ASIO editing and six-window startup coverage
+have since landed; see [Native Virtual ASIO editor](native-asio-editor.md) for the
+2026-10-30 interactive acceptance. Physical-ASIO matrix editing has also since
+landed; [its acceptance record](native-physical-asio-editor.md) distinguishes
+tested GUI flows from pending real-driver validation. Primary English/Chinese
+localization and selected menu keyboard paths are tracked in
+[native localization](native-localization.md). Complete accessibility and
+installer-flow parity remain open. Qt remains the default entry; no audio-path
+reliability result is changed by this GUI work.
+
+## Workspace interactive acceptance (2026-10-29/30)
+
+The GUI was exercised in VM24 (`SAR-WIN11-LAB`) as its non-elevated interactive
+user. It used separate temporary GUI directories and private engine session/log
+files. Engine binaries remained at `9846a4c`; this batch changes no realtime
+implementation. No host tools, driver packages or boot settings were changed.
+
+| Flow | Observed result |
+| --- | --- |
+| Save a fresh preset, close and reopen Presets (`744004c`) | The engine document was saved and the named entry remained in the list |
+| Save an existing name, cancel overwrite | Confirmation defaulted to No; the existing entry remained |
+| Change gain, click the existing matrix cell | -25.9 dB remained unchanged while the route became muted |
+| Click the muted cell, double-click the gain slider | Route returned to ON and gain returned to 0.0 dB |
+| Shift-click the connected cell | Route count decreased from four to three; the inspector disabled disconnected-route gain |
+| Load the previously saved preset, confirm | The engine accepted it and four routes returned, including the removed route |
+| Delete preset, cancel | Confirmation defaulted to No and the entry remained; destructive confirmation was not exercised |
+| Diagnostics aggregate and bottom scroll | Actual counters were displayed, missing recovery telemetry was Unknown, and the final rows were reachable |
+| Stop the private engine while Diagnostics is open | Offline status and Unknown counters replaced the previous values |
+| Type a name without leaving the field (`e532938`) | Save current became enabled immediately; no extra Tab was required |
+| Save while the engine is offline | Explicit transport failure; no false success and no automatic retry |
+| Fresh unconfigured engine (`bfbc20d`) | No template WASAPI channels were shown; status said No audio runtime configured |
+| Configure one two-channel VB-CABLE playback endpoint through Audio devices | Apply completed; the matrix showed two ASIO source channels and four destinations, without phantom capture sources |
+| Connect two routes, start audio, select render-1 diagnostics | Header changed to Audio running; the actual endpoint was selectable and its silent-read counter advanced |
+| Stop audio, close GUI, query with independent CLI | Audio remained stopped; the engine still answered with runtime_running=false |
+| End acceptance | GUI and engine were closed normally; their scheduled tasks and process-ledger entries were cleared |
+
+The last four configuration/lifecycle cases used `bfbc20d`. Earlier preset and
+gain cases used `744004c`; the immediate-input and offline-save regression used
+`e532938`. A disposable `guiqa20261029` preset remains in the lab user's preset
+directory for inspection. No user preset was overwritten or removed.
+
+Final code revision `bfbc20d` passed CI run
+[`40896350797`](https://github.com/LovelyRua/sys-audio-router/actions/runs/40896350797):
+164 CTest cases, 15 automation script suites, eight advisory ASan cases, the two
+early native model/client checks, and five-window startup/graceful closure.
+Package run
+[`40896362306`](https://github.com/LovelyRua/sys-audio-router/actions/runs/40896362306)
+passed 168 CTest cases plus ZIP and EXE install/update/launch/uninstall acceptance,
+including the optional native payload using the existing background engine.
+The original vendor VB-CABLE setup was not executed by those package checks.
+
+This is GUI configuration, persistence and lifecycle evidence, not a REAPER
+signal-content or audio-continuity pass. It does not close the native UI gaps
+listed above and does not authorize switching the default installer entry.
+
+## Topology changes in the routing matrix
+
+The native matrix now clamps both paging axes when it receives an authoritative
+topology with fewer channels. A formerly valid last page cannot strand the user
+on an empty grid after applying a smaller runtime configuration. Temporary
+transport failures preserve the page position and disable navigation; a healthy
+snapshot reconciles it. The portable model smoke covers empty, partial and exact
+page boundaries and repeated topology shrink across 0-256 channels.
+
+The main-window runtime button says Start audio / Stop audio: these commands
+control audio streaming, not the lifetime of the background engine process.
+
+### Matrix keyboard controls
+
+Tab enters the existing matrix button focus order. Arrow keys move within the
+visible page, selecting the destination cell for inspection without sending a
+route mutation. They stop at page edges and do not wrap or enter hidden cells;
+page buttons remain the way to change pages. Enter or Space connects an absent
+route or mutes/unmutes an existing route. Shift+Enter or Shift+Space uses the
+same connect/remove command as Shift-click. Other modifiers are not consumed.
+Offline, hidden and command-disabled cells reject keyboard activation.
+
+The portable model smoke checks directional movement, boundaries, empty grids
+and invalid input. Compilation and those model checks do not establish complete
+keyboard accessibility or an interactive keyboard acceptance pass.
+
+Revision `b928502` passed CI run `39377647617`: 162 CTest cases, 15 script
+suites, seven advisory ASan cases, the native model/parser checks, and native
+three-window startup/closure. Windows package run `39377651538` passed too.
+This follow-up was verified in CI; no new VM24 audio-content test is claimed.
+
+## Optional installer payload
+
+`SAR_PACKAGE_NATIVE_PREVIEW=ON` requires both GUI build options. It installs the
+native EXE and its third-party licenses alongside the Qt panel. The default
+shortcut is unchanged; the additional Native Preview shortcut invokes
+`SystemAudioRouteLauncher.exe --native`. The ZIP installation retains the
+licenses directory and `start-native-preview.cmd` as well.
+
+Package run `39382435628` for branch revision `17c86ea` (PR merge build
+`515dc64df25a4e29f5208864b84bed781ac6246f`) passed 166 CTest cases, ZIP
+install/update/uninstall acceptance and EXE installer acceptance. Both package
+paths launched the installed native executable, retained the existing engine PID,
+and left the engine alive after disposing the native test process. The native
+probe uses a force-close of its exact owned process; it does not establish
+graceful native-window closure, covered separately by the startup gate.
+
+No experimental kernel driver or manager is included, and neither installer
+changes boot security settings. This is native-preview delivery, not complete
+virtual-WASAPI-driver delivery or a new VM24 sound-content acceptance pass.

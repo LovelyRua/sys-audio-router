@@ -3,15 +3,31 @@
 #include "app/gui_vstgui/engine_client.h"
 #include "app/gui_vstgui/lcd_readout_view.h"
 #include "app/gui_vstgui/palette.h"
+#include "app/gui_vstgui/panel_button.h"
+#include "app/gui_vstgui/virtual_device_window.h"
+#include "app/gui_vstgui/runtime_device_window.h"
+#include "app/gui_vstgui/preset_window.h"
+#include "app/gui_vstgui/diagnostics_window.h"
+#include "app/gui_vstgui/asio_device_window.h"
+#include "app/gui_vstgui/request_error_state.h"
+#include "app/gui_vstgui/matrix_page.h"
+#include "app/gui_vstgui/route_gain_text.h"
+#include "app/gui_vstgui/route_edit_queue.h"
+#include "app/gui_vstgui/view_ownership.h"
+#include "app/gui_vstgui/window_geometry.h"
+#include "app/gui_vstgui/localization.h"
+#include "vstgui/lib/controls/coptionmenu.h"
 
 #include "vstgui/lib/cfont.h"
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cframe.h"
+#include "vstgui/lib/cscrollview.h"
 #include "vstgui/lib/controls/cbuttons.h"
 #include "vstgui/lib/controls/cslider.h"
 #include "vstgui/lib/controls/ctextlabel.h"
 #include "vstgui/lib/cvstguitimer.h"
 #include "vstgui/standalone/include/iapplication.h"
+#include "vstgui/standalone/include/helpers/windowcontroller.h"
 
 #include <cstdio>
 #include <cmath>
@@ -21,6 +37,8 @@
 #include <vector>
 #include <algorithm>
 #include <optional>
+#include <thread>
+#include <functional>
 
 using namespace VSTGUI;
 using namespace VSTGUI::Standalone;
@@ -28,7 +46,9 @@ using namespace VSTGUI::Standalone;
 namespace sar::gui_vstgui {
 namespace {
 
-constexpr CCoord kWindowWidth = 1000;
+constexpr CCoord kNavigationWidth = 160;
+constexpr CCoord kWorkspaceWidth = 1000;
+constexpr CCoord kWindowWidth = kNavigationWidth + kWorkspaceWidth;
 constexpr CCoord kWindowHeight = 640;
 constexpr CCoord kHeaderHeight = 54;
 constexpr std::uint32_t kPollIntervalMs = 750;
@@ -61,23 +81,104 @@ class StatusDotView final : public CView {
 class MatrixCellButton final : public CTextButton {
  public:
   using CTextButton::CTextButton;
+  std::function<void(int, int)> navigate;
+
+  int32_t onKeyDown(VstKeyCode& key) override {
+    if (!getMouseEnabled() || !isVisible()) return -1;
+    if (key.modifier == 0) {
+      int row = 0, column = 0;
+      if (key.virt == VKEY_LEFT) column = -1;
+      if (key.virt == VKEY_RIGHT) column = 1;
+      if (key.virt == VKEY_UP) row = -1;
+      if (key.virt == VKEY_DOWN) row = 1;
+      if (row || column) {
+        if (navigate) navigate(row, column);
+        return 1;
+      }
+    }
+    if ((key.virt == VKEY_RETURN || key.virt == VKEY_ENTER || key.virt == VKEY_SPACE) &&
+        (key.modifier == 0 || key.modifier == MODIFIER_SHIFT)) {
+      beginEdit();
+      removeRequested_ = key.modifier == MODIFIER_SHIFT;
+      setValue(1.0F);
+      valueChanged();
+      setValue(0.0F);
+      removeRequested_ = false;
+      endEdit();
+      invalid();
+      return 1;
+    }
+    return -1;
+  }
+
+  void inspect() {
+    selectOnly_ = true;
+    setValue(1.0F);
+    valueChanged();
+    setValue(0.0F);
+    selectOnly_ = false;
+  }
 
   CMouseEventResult onMouseDown(CPoint& where, const CButtonState& buttons) override {
-    if (buttons & kRButton) {
-      selectOnly_ = true;
+    if (buttons.isRightButton() || (buttons.isLeftButton() && buttons.isShiftSet())) {
+      selectOnly_ = buttons.isRightButton();
+      removeRequested_ = !selectOnly_;
       setValue(1.0F);
       valueChanged();
       setValue(0.0F);
       selectOnly_ = false;
+      removeRequested_ = false;
       return kMouseDownEventHandledButDontNeedMovedOrUpEvents;
     }
     return CTextButton::onMouseDown(where, buttons);
   }
 
   bool selectOnly() const noexcept { return selectOnly_; }
+  bool removeRequested() const noexcept { return removeRequested_; }
+
+  void present(bool available, bool connected, bool muted, bool selected) {
+    const std::string caption = !available ? "" : !connected ? "+" : muted ? "MUTE" : "ON";
+    const auto fill = connected ? (muted ? palette::kSurface : CColor(35, 61, 44)) : palette::kRaised;
+    const auto border = selected ? palette::kSteel : palette::kLine;
+    const auto ink = !connected ? palette::kMuted : muted ? palette::kWarning : palette::kHealthy;
+    if (caption_ == caption && fill_ == fill && border_ == border && ink_ == ink) return;
+    caption_ = caption; fill_ = fill; border_ = border; ink_ = ink;
+    setTitle(tr(caption_.c_str()));
+    invalid();
+  }
+
+  void draw(CDrawContext* context) override {
+    context->setFillColor(fill_);
+    context->setFrameColor(border_);
+    context->setLineWidth(1);
+    context->drawRect(getViewSize(), kDrawFilledAndStroked);
+    context->setFont(kNormalFontSmall);
+    context->setFontColor(ink_);
+    context->drawString(tr(caption_.c_str()), getViewSize(), kCenterText, true);
+  }
 
  private:
   bool selectOnly_ = false;
+  bool removeRequested_ = false;
+  std::string caption_;
+  CColor fill_ = palette::kRaised, border_ = palette::kLine, ink_ = palette::kMuted;
+};
+
+class RouteGainSlider final : public CHorizontalSlider {
+ public:
+  using CHorizontalSlider::CHorizontalSlider;
+
+  CMouseEventResult onMouseDown(CPoint& where, const CButtonState& buttons) override {
+    if (buttons.isLeftButton() && buttons.isDoubleClick()) {
+      beginEdit();
+      setValueNormalized(60.0F / 72.0F);
+      valueChanged();
+      invalid();
+      endEdit();
+      return kMouseDownEventHandledButDontNeedMovedOrUpEvents;
+    }
+    return CHorizontalSlider::onMouseDown(where, buttons);
+  }
 };
 
 std::string format_uint(const char* format, std::uint64_t value) {
@@ -118,7 +219,19 @@ class HeaderController final : public IControlListener {
     cells_ = std::move(cells);
     summary_ = std::move(summary);
     navigation_ = {previousRows, nextRows, previousColumns, nextColumns};
-    for (auto& cell : cells_) cell->setListener(this);
+    for (std::size_t i = 0; i < cells_.size(); ++i) {
+      auto& cell = cells_[i];
+      cell->setListener(this);
+      cell->navigate = [this, i](int deltaRow, int deltaColumn) {
+        const auto index = adjacentMatrixCell(i, rows_.visibleCount(),
+                                             kVisibleColumns, deltaRow, deltaColumn);
+        if (!index) return;
+        const auto& target = cells_[*index];
+        if (!target->isVisible() || !target->getMouseEnabled() || !target->getFrame()) return;
+        target->getFrame()->setFocusView(target);
+        target->inspect();
+      };
+    }
     for (auto& button : navigation_) button->setListener(this);
     renderMatrix();
   }
@@ -150,15 +263,19 @@ class HeaderController final : public IControlListener {
         return;
       try {
         auto state = pending_.get();
-        if (!state.lastError.empty()) error_ = state.lastError;
-        state.lastError = error_;
+        if (routeRequest_) edits_.complete(state.transportOk && state.lastError.empty());
+        routeRequest_ = false;
+        engineCommandPending_ = false;
         apply(state);
       } catch (...) {
+        edits_.clear();
+        routeRequest_ = false;
+        engineCommandPending_ = false;
         EngineState state;
         state.lastError = "Engine request failed";
         apply(state);
       }
-      if (queuedCommand_ != 0 || routeCommand_) submit();
+      if (queuedCommand_ != 0 || edits_.queued()) submit();
       nextPoll_ = std::chrono::steady_clock::now() +
                   std::chrono::milliseconds(kPollIntervalMs);
       return;
@@ -167,93 +284,125 @@ class HeaderController final : public IControlListener {
   }
 
   void valueChanged(CControl* control) override {
+    if (control->getTag() == 905) {
+      const auto menu = dynamic_cast<COptionMenu*>(control);
+      if (!menu || menu->getCurrentIndex() < 0 || menu->getCurrentIndex() > 2) return;
+      const auto preference = static_cast<UiLanguage>(menu->getCurrentIndex());
+      if (preference == languagePreference()) return;
+      const bool saved = setLanguagePreference(preference);
+      if (!saved) menu->setValue(static_cast<float>(languagePreference()));
+      const auto message = trWide(saved ? L"Restart System Audio Route to apply the new language."
+                                        : L"Could not save the language preference.");
+      MessageBoxW(GetActiveWindow(), message.c_str(), L"System Audio Route",
+                  MB_OK | (saved ? MB_ICONINFORMATION : MB_ICONERROR));
+      return;
+    }
+    if (control->getTag() == 904 && control->getValue() > 0.5F) {
+      showAsioDeviceWindow();
+      return;
+    }
+    if (control->getTag() == 902 && control->getValue() > 0.5F) {
+      showPresetWindow();
+      return;
+    }
+    if (control->getTag() == 903 && control->getValue() > 0.5F) {
+      showDiagnosticsWindow();
+      return;
+    }
+    if (control->getTag() == 901 && control->getValue() > 0.5F) {
+      showRuntimeDeviceWindow();
+      return;
+    }
+    if (control->getTag() == 900 && control->getValue() > 0.5F) {
+      showVirtualDeviceWindow();
+      return;
+    }
     if (control == gainSlider_.get()) {
       const auto route = selectedRoute();
       if (!route || !gainSlider_->isEditing()) return;
       const float db = -60.0F + gainSlider_->getValueNormalized() * 72.0F;
       const float gain = db <= -60.0F ? 0.0F : std::pow(10.0F, db / 20.0F);
       gainText_->setText(formatGain(gain).c_str());
-      routeCommand_ = RouteCommand{RouteAction::Gain, selectedInputId_,
-                                   selectedOutputId_, gain, false};
-      if (!pending_.valid()) submit();
+      queueEdit({RouteAction::Gain, selectedInputId_, selectedOutputId_, gain, false});
       return;
     }
     if (control == muteButton_.get() && control->getValue() > 0.5F) {
       const auto route = selectedRoute();
       if (!route) return;
-      routeCommand_ = RouteCommand{RouteAction::Mute, selectedInputId_,
-                                   selectedOutputId_, 0.0F, !route->muted};
-      if (!pending_.valid()) submit();
+      queueEdit({RouteAction::Mute, selectedInputId_, selectedOutputId_, 0.0F, !route->muted});
       return;
     }
     if (control == resetButton_.get() && control->getValue() > 0.5F) {
       if (!selectedRoute()) return;
       gainSlider_->setValueNormalized(60.0F / 72.0F);
+      gainSlider_->invalid();
       gainText_->setText("0.0 dB");
-      routeCommand_ = RouteCommand{RouteAction::Gain, selectedInputId_,
-                                   selectedOutputId_, 1.0F, false};
-      if (!pending_.valid()) submit();
+      queueEdit({RouteAction::Gain, selectedInputId_, selectedOutputId_, 1.0F, false});
       return;
     }
     if (control == removeButton_.get() && control->getValue() > 0.5F) {
-      if (!selectedRoute() || pending_.valid()) return;
-      routeCommand_ = RouteCommand{RouteAction::Disconnect, selectedInputId_,
-                                   selectedOutputId_, 1.0F, false};
-      submit();
+      if (!selectedRoute()) return;
+      queueEdit({RouteAction::Disconnect, selectedInputId_, selectedOutputId_, 1.0F, false});
       return;
     }
     for (std::size_t i = 0; i < navigation_.size(); ++i) {
       if (control == navigation_[i].get() && control->getValue() > 0.5f) {
-        if (i == 0 && rowOffset_ > 0) --rowOffset_;
-        if (i == 1 && (rowOffset_ + 1) * kVisibleRows < last_.matrix.inputs.size()) ++rowOffset_;
-        if (i == 2 && columnOffset_ > 0) --columnOffset_;
-        if (i == 3 && (columnOffset_ + 1) * kVisibleColumns < last_.matrix.outputs.size()) ++columnOffset_;
+        if (!last_.transportOk || !last_.hasMatrix) return;
+        if (i == 0) rows_.previous();
+        if (i == 1) rows_.next();
+        if (i == 2) columns_.previous();
+        if (i == 3) columns_.next();
         renderMatrix();
         return;
       }
     }
     for (std::size_t i = 0; i < cells_.size(); ++i) {
       if (control != cells_[i].get() || control->getValue() <= 0.5f) continue;
-      const auto row = rowOffset_ * kVisibleRows + i / kVisibleColumns;
-      const auto column = columnOffset_ * kVisibleColumns + i % kVisibleColumns;
-      if (pending_.valid() || !last_.transportOk || !last_.hasMatrix ||
+      const auto row = rows_.first() + i / kVisibleColumns;
+      const auto column = columns_.first() + i % kVisibleColumns;
+      if (engineCommandPending_ || queuedCommand_ || !last_.transportOk || !last_.hasMatrix ||
           row >= last_.matrix.inputs.size() || column >= last_.matrix.outputs.size()) return;
       const auto& input = last_.matrix.inputs[row].id;
       const auto& output = last_.matrix.outputs[column].id;
-      const bool connected = std::any_of(last_.matrix.routes.begin(), last_.matrix.routes.end(),
+      const auto route = std::find_if(displayMatrix_.routes.begin(), displayMatrix_.routes.end(),
           [&](const auto& route) { return route.input_id == input && route.output_id == output; });
       selectedInputId_ = input;
       selectedOutputId_ = output;
-      if (!cells_[i]->selectOnly()) {
-        routeCommand_ = RouteCommand{connected ? RouteAction::Disconnect : RouteAction::Connect,
-                                     input, output, 1.0F, false};
-      }
       error_.clear();
+      if (!cells_[i]->selectOnly()) {
+        queueEdit(routeClickCommand(input, output,
+            route == displayMatrix_.routes.end() ? nullptr : &*route,
+            cells_[i]->removeRequested()));
+      }
       renderMatrix();
-      if (routeCommand_) submit();
       return;
     }
     if (control != button_.get() || control->getValue() <= 0.5f) {
       return;
     }
+    if (!last_.runtimeConfigured) { showRuntimeDeviceWindow(); return; }
     queuedCommand_ = last_.runtimeRunning ? 2 : 1;
     error_.clear();
-    button_->setMouseEnabled(false);
+    setPanelControlEnabled(*button_, false);
+    renderMatrix();
     if (!pending_.valid()) submit();
   }
 
  private:
-  enum class RouteAction { Connect, Disconnect, Gain, Mute };
-  struct RouteCommand {
-    RouteAction action;
-    std::string input;
-    std::string output;
-    float gain;
-    bool mute;
-  };
+  void queueEdit(RouteCommand command) {
+    if (!last_.transportOk || !last_.hasMatrix || queuedCommand_ || engineCommandPending_) return;
+    if (!edits_.enqueue(std::move(command))) {
+      error_.observe("Too many pending route edits; wait for the engine", true);
+    } else {
+      error_.clear();
+    }
+    displayMatrix_ = edits_.project(last_.matrix);
+    renderMatrix();
+    if (!pending_.valid()) submit();
+  }
 
   const control::PresetRoute* selectedRoute() const {
-    const auto& routes = last_.matrix.routes;
+    const auto& routes = displayMatrix_.routes;
     const auto found = std::find_if(routes.begin(), routes.end(), [&](const auto& route) {
       return route.input_id == selectedInputId_ && route.output_id == selectedOutputId_;
     });
@@ -261,22 +410,21 @@ class HeaderController final : public IControlListener {
   }
 
   static std::string formatGain(float gain) {
-    if (gain <= 0.001F) return "-inf dB";
-    char buffer[32] = {};
-    std::snprintf(buffer, sizeof(buffer), "%.1f dB", 20.0 * std::log10(gain));
-    return buffer;
+    return routeGainText(gain);
   }
 
   void submit() {
+    if (pending_.valid()) return;
     int command = 0;
-    if (!routeCommand_ && queuedCommand_ != 0) {
+    if (!edits_.queued() && queuedCommand_ != 0) {
       command = queuedCommand_;
       queuedCommand_ = 0;
     }
-    auto route = std::move(routeCommand_);
-    routeCommand_.reset();
+    auto route = edits_.begin();
+    routeRequest_ = route.has_value();
+    engineCommandPending_ = command != 0;
     try {
-      pending_ = std::async(std::launch::async, [client = client_, command, route] {
+      std::packaged_task<EngineState()> task([client = client_, command, route] {
         if (route) {
           switch (route->action) {
             case RouteAction::Connect:
@@ -292,7 +440,14 @@ class HeaderController final : public IControlListener {
         return command == 1 ? client->start()
              : command == 2 ? client->stop() : client->poll();
       });
+      auto future = task.get_future();
+      std::thread(std::move(task)).detach();
+      pending_ = std::move(future);
+      renderMatrix();
     } catch (...) {
+      edits_.clear();
+      routeRequest_ = false;
+      engineCommandPending_ = false;
       auto state = last_;
       state.lastError = "Could not start the engine request worker";
       apply(state);
@@ -301,17 +456,26 @@ class HeaderController final : public IControlListener {
     }
   }
 
-  void apply(const EngineState& state) {
+  void apply(EngineState state) {
+    error_.observe(state.lastError, state.transportOk);
+    state.lastError = error_.message();
     last_ = state;
+    if (!state.transportOk || !state.hasMatrix) edits_.clear();
+    displayMatrix_ = edits_.project(state.matrix);
     if (dot_) {
-      dot_->setColor(state.transportOk ? palette::kHealthy : palette::kDanger);
+      dot_->setColor(!state.transportOk ? palette::kDanger :
+                    !state.lastError.empty() ? palette::kWarning :
+                    state.runtimeRunning ? palette::kHealthy : palette::kMuted);
     }
     if (statusText_) {
-      statusText_->setText(!state.lastError.empty() ? "Action failed"
-                          : state.transportOk ? "Engine online" : "Engine offline");
+      statusText_->setText(tr(!state.transportOk ? "Engine offline"
+                          : !state.lastError.empty() ? "Action failed"
+                          : !state.runtimeConfigured ? "Not configured"
+                          : state.runtimeRunning ? "Audio running" : "Audio stopped"));
     }
     if (errorText_) {
       errorText_->setText(state.lastError.c_str());
+      errorText_->setTooltipText(state.lastError.c_str());
     }
     if (hzReadout_) {
       hzReadout_->setText(state.sampleRate > 0
@@ -328,33 +492,44 @@ class HeaderController final : public IControlListener {
       xrunReadout_->setTint(state.xrunCount > 0 ? palette::kWarning : palette::kLcdDim);
     }
     if (button_) {
-      button_->setTitle(!state.runtimeConfigured ? "Configure audio"
-                        : state.runtimeRunning   ? "Stop engine"
-                                                  : "Start engine");
-      button_->setMouseEnabled(state.transportOk && state.runtimeConfigured &&
-                               queuedCommand_ == 0);
+      button_->setTitle(tr(!state.runtimeConfigured ? "Configure audio"
+                        : state.runtimeRunning   ? "Stop audio"
+                                                  : "Start audio"));
+      setPanelControlEnabled(*button_, state.transportOk &&
+                             queuedCommand_ == 0 && !engineCommandPending_);
     }
     renderMatrix();
   }
 
   void renderMatrix() {
     if (cells_.empty()) return;
-    const auto& matrix = last_.matrix;
-    const bool available = last_.transportOk && last_.hasMatrix;
+    const auto& matrix = displayMatrix_;
+    const bool available = last_.transportOk && last_.hasMatrix && last_.runtimeConfigured;
+    if (available) {
+      rows_.reconcile(matrix.inputs.size());
+      columns_.reconcile(matrix.outputs.size());
+    }
     for (std::size_t row = 0; row < kVisibleRows; ++row) {
-      const auto index = rowOffset_ * kVisibleRows + row;
+      const auto index = rows_.first() + row;
+      inputs_[row]->setVisible(available && rows_.contains(row));
       inputs_[row]->setText(available && index < matrix.inputs.size()
+          ? matrix.inputs[index].label.c_str() : "");
+      inputs_[row]->setTooltipText(available && index < matrix.inputs.size()
           ? matrix.inputs[index].label.c_str() : "");
     }
     for (std::size_t column = 0; column < kVisibleColumns; ++column) {
-      const auto index = columnOffset_ * kVisibleColumns + column;
+      const auto index = columns_.first() + column;
+      outputs_[column]->setVisible(available && columns_.contains(column));
       outputs_[column]->setText(available && index < matrix.outputs.size()
+          ? matrix.outputs[index].label.c_str() : "");
+      outputs_[column]->setTooltipText(available && index < matrix.outputs.size()
           ? matrix.outputs[index].label.c_str() : "");
     }
     for (std::size_t i = 0; i < cells_.size(); ++i) {
-      const auto row = rowOffset_ * kVisibleRows + i / kVisibleColumns;
-      const auto column = columnOffset_ * kVisibleColumns + i % kVisibleColumns;
-      const bool valid = available && row < matrix.inputs.size() && column < matrix.outputs.size();
+      const auto row = rows_.first() + i / kVisibleColumns;
+      const auto column = columns_.first() + i % kVisibleColumns;
+      const bool valid = available && rows_.contains(i / kVisibleColumns) &&
+                         columns_.contains(i % kVisibleColumns);
       const bool connected = valid && std::any_of(matrix.routes.begin(), matrix.routes.end(),
           [&](const auto& route) {
             return route.input_id == matrix.inputs[row].id &&
@@ -362,56 +537,74 @@ class HeaderController final : public IControlListener {
           });
       const bool selected = valid && matrix.inputs[row].id == selectedInputId_ &&
                             matrix.outputs[column].id == selectedOutputId_;
-      cells_[i]->setTitle(valid ? (connected ? "ON" : "+") : "");
-      cells_[i]->setTextColor(connected ? palette::kHealthy : palette::kMuted);
-      cells_[i]->setFrameColor(selected ? palette::kHealthy : palette::kLine);
-      cells_[i]->setMouseEnabled(valid && !pending_.valid() && !routeCommand_);
+      const bool muted = connected && std::any_of(matrix.routes.begin(), matrix.routes.end(),
+          [&](const auto& route) { return route.input_id == matrix.inputs[row].id &&
+              route.output_id == matrix.outputs[column].id && route.muted; });
+      cells_[i]->present(valid, connected, muted, selected);
+      cells_[i]->setVisible(valid);
+      cells_[i]->setMouseEnabled(valid && !engineCommandPending_ && !queuedCommand_);
     }
-    summary_->setText(!available ? "Matrix unavailable" :
-        (std::to_string(matrix.inputs.size()) + " inputs  /  " +
-         std::to_string(matrix.outputs.size()) + " outputs  /  " +
-         std::to_string(matrix.routes.size()) + " routes").c_str());
-    navigation_[0]->setMouseEnabled(rowOffset_ > 0);
-    navigation_[1]->setMouseEnabled(available && (rowOffset_ + 1) * kVisibleRows < matrix.inputs.size());
-    navigation_[2]->setMouseEnabled(columnOffset_ > 0);
-    navigation_[3]->setMouseEnabled(available && (columnOffset_ + 1) * kVisibleColumns < matrix.outputs.size());
+    summary_->setText(!last_.transportOk ? tr("Engine offline") :
+        !last_.runtimeConfigured ? tr("No audio runtime configured") :
+        !available ? tr("Matrix unavailable") :
+        (std::to_string(matrix.inputs.size()) + tr(" inputs  /  ") +
+         std::to_string(matrix.outputs.size()) + tr(" outputs  /  ") +
+         std::to_string(matrix.routes.size()) + tr(" routes") +
+         (edits_.pending() ? tr("  /  applying") : "")).c_str());
+    if (errorText_) errorText_->setText(error_.message().c_str());
+    for (std::size_t i = 0; i < navigation_.size(); ++i) {
+      const auto& page = i < 2 ? rows_ : columns_;
+      navigation_[i]->setVisible(available && (page.hasPrevious() || page.hasNext()));
+      setPanelControlEnabled(*navigation_[i], available &&
+          (i % 2 == 0 ? page.hasPrevious() : page.hasNext()));
+    }
     renderInspector();
   }
 
   void renderInspector() {
     if (!gainSlider_) return;
-    const auto& matrix = last_.matrix;
+    const auto& matrix = displayMatrix_;
     const auto input = std::find_if(matrix.inputs.begin(), matrix.inputs.end(),
         [&](const auto& endpoint) { return endpoint.id == selectedInputId_; });
     const auto output = std::find_if(matrix.outputs.begin(), matrix.outputs.end(),
         [&](const auto& endpoint) { return endpoint.id == selectedOutputId_; });
-    const bool selected = last_.transportOk && last_.hasMatrix &&
+    const bool selected = last_.transportOk && last_.hasMatrix && last_.runtimeConfigured &&
                           input != matrix.inputs.end() && output != matrix.outputs.end();
-    selectedSource_->setText(selected ? input->label.c_str() : "No source selected");
-    selectedDestination_->setText(selected ? output->label.c_str() : "No destination selected");
+    selectedSource_->setText(selected ? input->label.c_str() : tr("No source selected"));
+    selectedDestination_->setText(selected ? output->label.c_str() : tr("No destination selected"));
+    selectedSource_->setTooltipText(selected ? input->label.c_str() : "");
+    selectedDestination_->setTooltipText(selected ? output->label.c_str() : "");
     const auto* route = selected ? selectedRoute() : nullptr;
     const bool active = route != nullptr;
-    if (!gainSlider_->isEditing() && !routeCommand_) {
-      const float db = active && route->gain > 0.001F
+    if (!gainSlider_->isEditing()) {
+      const float db = active && route->gain > 0.0F
                            ? std::clamp(20.0F * std::log10(route->gain), -60.0F, 12.0F)
                            : -60.0F;
-      gainSlider_->setValueNormalized((db + 60.0F) / 72.0F);
+      const auto normalized = (db + 60.0F) / 72.0F;
+      if (gainSlider_->getValueNormalized() != normalized) {
+        gainSlider_->setValueNormalized(normalized);
+        gainSlider_->invalid();
+      }
       gainText_->setText(active ? formatGain(route->gain).c_str() : "-- dB");
     }
-    gainSlider_->setMouseEnabled(active);
-    muteButton_->setMouseEnabled(active && !pending_.valid());
-    muteButton_->setTitle(active && route->muted ? "Unmute" : "Mute");
-    resetButton_->setMouseEnabled(active && !pending_.valid());
-    removeButton_->setMouseEnabled(active && !pending_.valid());
+    const bool editable = active && !engineCommandPending_ && !queuedCommand_;
+    setPanelControlEnabled(*gainSlider_, editable);
+    setPanelControlEnabled(*muteButton_, editable);
+    muteButton_->setTitle(tr(active && route->muted ? "Unmute" : "Mute"));
+    setPanelControlEnabled(*resetButton_, editable);
+    setPanelControlEnabled(*removeButton_, editable);
   }
 
   std::shared_ptr<EngineClient> client_ = std::make_shared<EngineClient>();
   std::future<EngineState> pending_;
   std::chrono::steady_clock::time_point nextPoll_{};
   int queuedCommand_ = 0;
-  std::optional<RouteCommand> routeCommand_;
-  std::size_t rowOffset_ = 0;
-  std::size_t columnOffset_ = 0;
+  RouteEditQueue edits_;
+  control::PresetRouteMatrix displayMatrix_;
+  bool routeRequest_ = false;
+  bool engineCommandPending_ = false;
+  MatrixPage rows_{kVisibleRows};
+  MatrixPage columns_{kVisibleColumns};
   std::vector<SharedPointer<CTextLabel>> inputs_;
   std::vector<SharedPointer<CTextLabel>> outputs_;
   std::vector<SharedPointer<MatrixCellButton>> cells_;
@@ -426,7 +619,7 @@ class HeaderController final : public IControlListener {
   SharedPointer<CTextButton> muteButton_;
   SharedPointer<CTextButton> resetButton_;
   SharedPointer<CTextButton> removeButton_;
-  std::string error_;
+  GuiRequestErrorState error_;
   SharedPointer<CTextLabel> errorText_;
   EngineState last_;
   SharedPointer<StatusDotView> dot_;
@@ -437,13 +630,35 @@ class HeaderController final : public IControlListener {
   SharedPointer<CTextButton> button_;
 };
 
+class MainWindowController final : public WindowControllerAdapter {
+ public:
+  void startPolling(std::shared_ptr<HeaderController> controller) {
+    controller_ = std::move(controller);
+    timer_ = makeOwned<CVSTGUITimer>([controller = controller_](CVSTGUITimer*) {
+      controller->refresh();
+    }, 30, true);
+    controller_->refresh();
+  }
+
+  void onClosed(const IWindow&) override {
+    if (timer_) timer_->stop();
+    timer_ = nullptr;
+    controller_.reset();
+  }
+
+ private:
+  std::shared_ptr<HeaderController> controller_;
+  SharedPointer<CVSTGUITimer> timer_;
+};
+
 SharedPointer<CTextLabel> makeLabel(const CRect& rect, const char* text, CColor color,
                                     bool bold) {
-  auto label = makeOwned<CTextLabel>(rect, text);
+  auto label = makeOwned<CTextLabel>(rect, tr(text));
   label->setBackColor(CColor(0, 0, 0, 0));
   label->setFrameColor(CColor(0, 0, 0, 0));
   label->setFontColor(color);
   label->setHoriAlign(kLeftText);
+  label->setTextTruncateMode(CTextLabel::kTruncateTail);
   label->setFont(makeOwned<CFontDesc>("Segoe UI", bold ? 14 : 12,
                                       bold ? kBoldFace : 0));
   return label;
@@ -454,37 +669,42 @@ SharedPointer<CTextLabel> makeLabel(const CRect& rect, const char* text, CColor 
 WindowPtr createMainWindow() {
   WindowConfiguration config;
   config.type = WindowType::Document;
-  config.style.border().close().centered();
+  config.style.border().close().size();
   config.size = CPoint(kWindowWidth, kWindowHeight);
   config.title = "System Audio Route";
-  config.autoSaveFrameName = "SystemAudioRouteMainWindow";
 
-  auto window = IApplication::instance().createWindow(config, nullptr);
+  // Window command/menu dispatch requires a controller, which also owns polling.
+  auto windowController = std::make_shared<MainWindowController>();
+  auto window = IApplication::instance().createWindow(config, windowController);
   if (!window) {
     return nullptr;
   }
 
   auto frame = makeOwned<CFrame>(CRect(0, 0, kWindowWidth, kWindowHeight), nullptr);
+  frame->setFocusDrawingEnabled(true);
+  frame->setFocusColor(palette::kSteel);
   frame->setBackgroundColor(palette::kCanvas);
+  auto content = makeOwned<CViewContainer>(CRect(0, 0, kWindowWidth, kWindowHeight));
+  content->setBackgroundColor(palette::kCanvas);
 
   auto header = makeOwned<CViewContainer>(CRect(0, 0, kWindowWidth, kHeaderHeight));
   header->setBackgroundColor(palette::kSurface);
-  frame->addView(header);
+  addRetainedView(*content, header);
 
   CCoord x = 18;
   auto brand = makeLabel(CRect(x, 0, x + 220, kHeaderHeight), "SYSTEM AUDIO ROUTE",
                          palette::kText, true);
-  header->addView(brand);
+  addRetainedView(*header, brand);
   x += 236;
 
   auto dot = makeOwned<StatusDotView>(CRect(x, kHeaderHeight / 2 - 4, x + 8,
                                             kHeaderHeight / 2 + 4));
-  header->addView(dot);
+  addRetainedView(*header, dot);
   x += 16;
 
   auto statusText = makeLabel(CRect(x, 0, x + 130, kHeaderHeight), "Engine offline",
                               palette::kText, false);
-  header->addView(statusText);
+  addRetainedView(*header, statusText);
 
   const CCoord readoutWidth = 96;
   const CCoord readoutHeight = 26;
@@ -494,38 +714,95 @@ WindowPtr createMainWindow() {
   right -= 120;
   auto startStopButton = makeOwned<CTextButton>(
       CRect(right, readoutY, right + 120, readoutY + readoutHeight), nullptr, -1,
-      "Configure audio");
+      tr("Configure audio"));
   startStopButton->setTextColor(palette::kText);
   startStopButton->setFrameColor(palette::kLine);
-  startStopButton->setGradient(nullptr);
+  stylePanelButton(*startStopButton);
   startStopButton->setRoundRadius(2);
-  header->addView(startStopButton);
+  addRetainedView(*header, startStopButton);
 
   right -= 10 + readoutWidth;
   auto xrunReadout = makeOwned<LcdReadoutView>(
       CRect(right, readoutY, right + readoutWidth, readoutY + readoutHeight));
-  header->addView(xrunReadout);
+  addRetainedView(*header, xrunReadout);
 
   right -= 8 + readoutWidth;
   auto smpReadout = makeOwned<LcdReadoutView>(
       CRect(right, readoutY, right + readoutWidth, readoutY + readoutHeight));
-  header->addView(smpReadout);
+  addRetainedView(*header, smpReadout);
 
   right -= 8 + readoutWidth;
   auto hzReadout = makeOwned<LcdReadoutView>(
       CRect(right, readoutY, right + readoutWidth, readoutY + readoutHeight));
-  header->addView(hzReadout);
+  addRetainedView(*header, hzReadout);
+
+  auto controller = std::make_shared<HeaderController>();
+  auto navigation = makeOwned<CViewContainer>(
+      CRect(0, kHeaderHeight, kNavigationWidth, kWindowHeight));
+  navigation->setBackgroundColor(palette::kSurface);
+  addRetainedView(*content, navigation);
+  addRetainedView(*navigation, makeLabel(CRect(16, 12, 148, 38), "WORKSPACE",
+                                        palette::kMuted, false));
+  auto selectedNavigation = makeOwned<CViewContainer>(CRect(8, 46, 152, 82));
+  selectedNavigation->setBackgroundColor(palette::kRaised);
+  auto accent = makeOwned<CViewContainer>(CRect(0, 0, 3, 36));
+  accent->setBackgroundColor(palette::kSteel);
+  addRetainedView(*selectedNavigation, accent);
+  addRetainedView(*selectedNavigation, makeLabel(CRect(12, 0, 140, 36),
+      "Routing matrix", palette::kText, true));
+  addRetainedView(*navigation, selectedNavigation);
+  auto makeNavigation = [&](CCoord top, int tag, const char* text, const char* tooltip) {
+    auto button = makeOwned<CTextButton>(CRect(8, top, 152, top + 36),
+                                        controller.get(), tag, tr(text));
+    stylePanelButton(*button);
+    button->setTextColor(palette::kText);
+    button->setTooltipText(tr(tooltip));
+    addRetainedView(*navigation, button);
+    return button;
+  };
+  auto audioDevices = makeNavigation(92, 901, "Audio devices", "Audio devices and VB-CABLE setup");
+  makeNavigation(138, 904, "Virtual ASIO", "Virtual ASIO names, channels and enabled states");
+  makeNavigation(184, 902, "Presets", "Save, load and manage routing presets");
+  makeNavigation(230, 903, "Diagnostics", "Engine counters and connection status");
+  addRetainedView(*navigation, makeLabel(CRect(16, 316, 148, 342), "EXPERIMENTAL",
+                                        palette::kMuted, false));
+  makeNavigation(350, 900, "Driver lab", "Experimental virtual driver management");
+  addRetainedView(*navigation, makeLabel(CRect(16, 402, 148, 426), "Language",
+                                        palette::kMuted, false));
+  auto language = makeOwned<COptionMenu>(CRect(12, 432, 148, 466), nullptr, 905);
+  language->setFont(makeOwned<CFontDesc>("Segoe UI", 13));
+  language->setFontColor(palette::kText);
+  language->setBackColor(palette::kRaised);
+  language->setFrameColor(palette::kLine);
+  language->addEntry(tr("System language"));
+  language->addEntry("English");
+  language->addEntry(tr("Chinese (Simplified)"));
+  language->setValue(static_cast<float>(languagePreference()));
+  language->setListener(controller.get());
+  language->setTooltipText(tr("Restart required to apply language"));
+  addRetainedView(*navigation, language);
+  addRetainedView(*navigation, makeLabel(CRect(16, 530, 148, 554),
+      "Native Preview", palette::kWarning, false));
+  addRetainedView(*navigation, makeLabel(CRect(16, 554, 148, 578),
+      SAR_VERSION, palette::kMuted, false));
 
   auto body = makeOwned<CViewContainer>(
-      CRect(0, kHeaderHeight, kWindowWidth, kWindowHeight));
+      CRect(kNavigationWidth, kHeaderHeight, kWindowWidth, kWindowHeight));
   body->setBackgroundColor(palette::kCanvas);
-  auto title = makeLabel(CRect(24, 14, 300, 42), "ROUTING MATRIX", palette::kText, true);
-  body->addView(title);
-  auto summary = makeLabel(CRect(300, 14, 740, 42), "Matrix unavailable", palette::kMuted, false);
-  body->addView(summary);
-  auto errorText = makeLabel(CRect(24, 44, kWindowWidth - 24, 70), "",
-                            palette::kDanger, false);
-  body->addView(errorText);
+  auto title = makeLabel(CRect(24, 14, 228, 42), "ROUTING MATRIX", palette::kText, true);
+  addRetainedView(*body, title);
+  auto summary = makeLabel(CRect(240, 14, 742, 42), "Matrix unavailable", palette::kMuted, false);
+  addRetainedView(*body, summary);
+  auto errorText = makeOwned<CMultiLineTextLabel>(CRect(24, 44, 742, 80));
+  errorText->setBackColor(CColor(0, 0, 0, 0));
+  errorText->setFrameColor(CColor(0, 0, 0, 0));
+  errorText->setFontColor(palette::kDanger);
+  errorText->setFont(kNormalFontSmall);
+  errorText->setHoriAlign(kLeftText);
+  errorText->setLineLayout(CMultiLineTextLabel::LineLayout::wrap);
+  addRetainedView(*body, errorText);
+  addRetainedView(*body, makeLabel(CRect(24, 82, 190, 118), "SOURCE / DESTINATION",
+                                 palette::kMuted, false));
   constexpr CCoord kGridLeft = 206;
   constexpr CCoord kGridTop = 124;
   constexpr CCoord kCellWidth = 108;
@@ -537,14 +814,14 @@ WindowPtr createMainWindow() {
     const auto left = kGridLeft + column * kCellWidth;
     auto label = makeLabel(CRect(left + 5, 82, left + kCellWidth - 5, 118), "",
                            palette::kMuted, false);
-    body->addView(label);
+    addRetainedView(*body, label);
     outputs.push_back(label);
   }
   for (std::size_t row = 0; row < kVisibleRows; ++row) {
     const auto top = kGridTop + row * kCellHeight;
     auto label = makeLabel(CRect(24, top, kGridLeft - 10, top + kCellHeight), "",
                            palette::kText, false);
-    body->addView(label);
+    addRetainedView(*body, label);
     inputs.push_back(label);
     for (std::size_t column = 0; column < kVisibleColumns; ++column) {
       const auto left = kGridLeft + column * kCellWidth;
@@ -554,18 +831,18 @@ WindowPtr createMainWindow() {
       cell->setGradient(nullptr);
       cell->setFrameColor(palette::kLine);
       cell->setRoundRadius(2);
-      cell->setTooltipText("Left click: toggle route. Right click: inspect route.");
-      body->addView(cell);
+      cell->setTooltipText(tr("Click: enable/mute. Shift-click: connect/remove. Right-click: inspect."));
+      addRetainedView(*body, cell);
       cells.push_back(cell);
     }
   }
   auto makeNav = [&](CCoord left, const char* text) {
-    auto button = makeOwned<CTextButton>(CRect(left, 520, left + 82, 550), nullptr, -1, text);
-    button->setGradient(nullptr);
+    auto button = makeOwned<CTextButton>(CRect(left, 520, left + 82, 550), nullptr, -1, tr(text));
+    stylePanelButton(*button);
     button->setFrameColor(palette::kLine);
     button->setTextColor(palette::kText);
     button->setRoundRadius(2);
-    body->addView(button);
+    addRetainedView(*body, button);
     return button;
   };
   auto previousRows = makeNav(24, "Rows <");
@@ -575,51 +852,51 @@ WindowPtr createMainWindow() {
 
   auto inspector = makeOwned<CViewContainer>(CRect(760, 0, 1000, kWindowHeight - kHeaderHeight));
   inspector->setBackgroundColor(palette::kSurface);
-  body->addView(inspector);
-  inspector->addView(makeLabel(CRect(16, 14, 220, 42), "ROUTE INSPECTOR",
+  addRetainedView(*body, inspector);
+  addRetainedView(*inspector, makeLabel(CRect(16, 14, 220, 42), "ROUTE INSPECTOR",
                                palette::kMuted, true));
   auto selectedSource = makeLabel(CRect(16, 70, 222, 96), "No source selected",
                                   palette::kText, false);
-  inspector->addView(selectedSource);
-  inspector->addView(makeLabel(CRect(16, 100, 222, 120), "TO",
+  addRetainedView(*inspector, selectedSource);
+  addRetainedView(*inspector, makeLabel(CRect(16, 100, 222, 120), "TO",
                                palette::kMuted, false));
   auto selectedDestination = makeLabel(CRect(16, 124, 222, 150),
                                        "No destination selected", palette::kText, false);
-  inspector->addView(selectedDestination);
-  inspector->addView(makeLabel(CRect(16, 196, 222, 218), "GAIN",
+  addRetainedView(*inspector, selectedDestination);
+  addRetainedView(*inspector, makeLabel(CRect(16, 196, 222, 218), "GAIN",
                                palette::kMuted, false));
   auto gainText = makeLabel(CRect(16, 226, 222, 252), "-- dB", palette::kText, true);
-  inspector->addView(gainText);
-  auto gainSlider = makeOwned<CHorizontalSlider>(
+  addRetainedView(*inspector, gainText);
+  auto gainSlider = makeOwned<RouteGainSlider>(
       CRect(16, 268, 222, 286), nullptr, -1, 16, 222, nullptr, nullptr);
   gainSlider->setDrawStyle(CSlider::kDrawFrame | CSlider::kDrawBack | CSlider::kDrawValue);
   gainSlider->setFrameColor(palette::kLine);
   gainSlider->setBackColor(palette::kCanvas);
   gainSlider->setValueColor(palette::kHealthy);
-  gainSlider->setTooltipText("Route gain: -60 to +12 dB");
-  inspector->addView(gainSlider);
+  gainSlider->setDefaultValue(60.0F / 72.0F);
+  gainSlider->setTooltipText(tr("Route gain: -60 to +12 dB. Double-click: 0 dB."));
+  addRetainedView(*inspector, gainSlider);
   auto makeInspectorButton = [&](CCoord left, const char* label) {
     auto button = makeOwned<CTextButton>(CRect(left, 312, left + 96, 346),
-                                        nullptr, -1, label);
-    button->setGradient(nullptr);
+                                        nullptr, -1, tr(label));
+    stylePanelButton(*button);
     button->setFrameColor(palette::kLine);
     button->setTextColor(palette::kText);
     button->setRoundRadius(2);
-    inspector->addView(button);
+    addRetainedView(*inspector, button);
     return button;
   };
   auto muteButton = makeInspectorButton(16, "Mute");
   auto resetButton = makeInspectorButton(124, "0 dB");
   auto removeButton = makeOwned<CTextButton>(CRect(16, 374, 220, 408),
-                                            nullptr, -1, "Remove route");
-  removeButton->setGradient(nullptr);
+                                            nullptr, -1, tr("Remove route"));
+  stylePanelButton(*removeButton);
   removeButton->setFrameColor(palette::kLine);
   removeButton->setTextColor(palette::kText);
   removeButton->setRoundRadius(2);
-  inspector->addView(removeButton);
-  frame->addView(body);
+  addRetainedView(*inspector, removeButton);
+  addRetainedView(*content, body);
 
-  auto controller = std::make_shared<HeaderController>();
   controller->attachErrorView(errorText);
   controller->attachViews(dot, statusText, hzReadout, smpReadout, xrunReadout,
                           startStopButton);
@@ -628,15 +905,21 @@ WindowPtr createMainWindow() {
   controller->attachInspector(selectedSource, selectedDestination, gainText,
                               gainSlider, muteButton, resetButton, removeButton);
   startStopButton->setListener(controller.get());
-  // The controller and its views must outlive the timer, which is the case
-  // here: the frame (owned by the window) holds the views, and this lambda
-  // holds the last strong reference to the controller for the process's
-  // lifetime, matching CVSTGUITimer's own fire-and-forget ownership model.
-  new CVSTGUITimer([controller](CVSTGUITimer*) { controller->refresh(); },
-                   30, true);
-  controller->refresh();
-
+  auto viewport = makeOwned<ThemedScrollView>(CRect(0, 0, kWindowWidth, kWindowHeight),
+      CRect(0, 0, kWindowWidth, kWindowHeight), CScrollView::kHorizontalScrollbar |
+      CScrollView::kVerticalScrollbar | CScrollView::kAutoHideScrollbars |
+      CScrollView::kDontDrawFrame | CScrollView::kFollowFocusView);
+  viewport->setBackgroundColor(palette::kCanvas);
+  styleScrollbars(*viewport);
+  viewport->setAutosizeFlags(kAutosizeLeft | kAutosizeTop | kAutosizeRight | kAutosizeBottom);
+  addRetainedView(*viewport, content);
+  addRetainedView(*frame, viewport);
   window->setContentView(frame);
+  prepareScrollableWindow(*window, *frame, CPoint(kWindowWidth, kWindowHeight),
+      MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTONEAREST));
+  frame->setFocusView(audioDevices);
+  viewport->resetScrollOffset();
+  windowController->startPolling(std::move(controller));
   return window;
 }
 

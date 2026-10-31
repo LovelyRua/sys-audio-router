@@ -1,6 +1,7 @@
 #include "app/gui_vstgui/engine_client.h"
 
 #include "core/control/control_wire_protocol.h"
+#include "core/control/session_document.h"
 #include "core/platform/windows_current_user_sid.h"
 #include "core/service/windows_named_pipe_control.h"
 
@@ -37,7 +38,7 @@ std::vector<std::uint8_t> as_u8(std::span<const std::byte> input) {
 std::optional<control::ControlResponse> transact(
     const sar::service::NamedPipeControlConfig& config,
     control::ControlCommand command,
-    EngineState& state) {
+    EngineState& state, std::uint32_t timeout_ms = 2000) {
   const auto encoded = control::encode_control_command(command);
   if (!encoded.ok()) {
     state.transportOk = false;
@@ -45,7 +46,7 @@ std::optional<control::ControlResponse> transact(
     return std::nullopt;
   }
   const auto transaction = sar::service::transact_named_pipe_control(
-      config, as_bytes(encoded.bytes), 2000);
+      config, as_bytes(encoded.bytes), timeout_ms);
   if (!transaction.ok()) {
     state.transportOk = false;
     state.lastError = transaction.error().message;
@@ -55,6 +56,11 @@ std::optional<control::ControlResponse> transact(
   if (!decoded.ok()) {
     state.transportOk = false;
     state.lastError = "The engine response could not be decoded";
+    return std::nullopt;
+  }
+  if (decoded.response.command_id != command.command_id) {
+    state.transportOk = false;
+    state.lastError = "The engine response belongs to a different request";
     return std::nullopt;
   }
   state.transportOk = true;
@@ -71,12 +77,10 @@ std::optional<control::ControlResponse> transact(
 
 EngineClient::EngineClient(std::wstring pipe_name)
     : pipe_name_(pipe_name.empty() ? sar::platform::default_control_pipe_name()
-                                   : std::move(pipe_name)),
-      command_prefix_("gui-vstgui-" + std::to_string(GetCurrentProcessId()) + "-") {}
+                                   : std::move(pipe_name)) {}
 
 std::string EngineClient::next_command_id() {
-  return command_prefix_ +
-        std::to_string(command_sequence_.fetch_add(1, std::memory_order_relaxed));
+  return command_ids_.next();
 }
 
 EngineState EngineClient::poll() {
@@ -133,6 +137,131 @@ EngineState EngineClient::start() {
   auto current = poll();
   if (!response) current.lastError = state.lastError;
   return current;
+}
+
+RuntimeDeviceSnapshot EngineClient::inspectDevices() {
+  RuntimeDeviceSnapshot result;
+  EngineState transport;
+  service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  control::ControlCommand query;
+  query.command_id = next_command_id();
+  query.type = control::ControlCommandType::QueryAudioRuntime;
+  const auto runtime = transact(config, std::move(query), transport);
+  if (!runtime || !runtime->has_audio_runtime_state) {
+    result.error = transport.lastError.empty() ? "Runtime configuration is unavailable" : transport.lastError;
+    return result;
+  }
+  query = {};
+  query.command_id = next_command_id();
+  query.type = control::ControlCommandType::ListDevices;
+  const auto devices = transact(config, std::move(query), transport);
+  if (!devices || !devices->has_devices) {
+    result.error = transport.lastError.empty() ? "Device inventory is unavailable" : transport.lastError;
+    return result;
+  }
+  result.available = true;
+  result.operationSucceeded = true;
+  result.running = runtime->audio_runtime.running;
+  result.configuration = runtime->audio_runtime.configuration;
+  result.devices = devices->devices;
+  return result;
+}
+
+RuntimeDeviceSnapshot EngineClient::configureDevices(control::AudioRuntimeConfiguration configuration) {
+  const auto errors = control::validate_audio_runtime_configuration(configuration, false);
+  if (!errors.empty()) {
+    RuntimeDeviceSnapshot result;
+    result.error = errors.front().message;
+    return result;
+  }
+  EngineState transport;
+  service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  control::ControlCommand command;
+  command.command_id = next_command_id();
+  command.type = control::ControlCommandType::ConfigureAudioRuntime;
+  command.audio_runtime = std::move(configuration);
+  const auto response = transact(config, std::move(command), transport);
+  auto result = inspectDevices();
+  result.operationSucceeded = response.has_value() && result.available;
+  if (!response) result.error = transport.lastError +
+      "; refreshed state may differ. No automatic retry was made.";
+  return result;
+}
+
+RuntimeDeviceSnapshot EngineClient::setRuntimeRunning(bool running) {
+  EngineState transport;
+  service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  control::ControlCommand command;
+  command.command_id = next_command_id();
+  command.type = running ? control::ControlCommandType::StartAudioRuntime
+                         : control::ControlCommandType::StopAudioRuntime;
+  const auto response = transact(config, std::move(command), transport);
+  auto result = inspectDevices();
+  result.operationSucceeded = response.has_value() && result.available && result.running == running;
+  if (!response) result.error = transport.lastError;
+  else if (result.available && result.running != running)
+    result.error = "Runtime state did not match the requested transition";
+  return result;
+}
+
+AsioDeviceSnapshot EngineClient::inspectVirtualAsioDevices() {
+  AsioDeviceSnapshot result;
+  EngineState transport;
+  service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  const auto request = [&](control::ControlCommandType type) {
+    control::ControlCommand command;
+    command.command_id = next_command_id();
+    command.type = type;
+    return transact(config, std::move(command), transport);
+  };
+  const auto topology = request(control::ControlCommandType::QueryVirtualAsioDevices);
+  if (!topology || !topology->has_virtual_asio_devices) {
+    result.error = transport.lastError.empty() ? "Virtual ASIO topology is unavailable" : transport.lastError;
+    return result;
+  }
+  const auto runtime = request(control::ControlCommandType::QueryAudioRuntime);
+  const auto diagnostics = runtime ? request(control::ControlCommandType::QueryDiagnostics) : std::nullopt;
+  if (!runtime || !runtime->has_audio_runtime_state || !diagnostics || !diagnostics->has_diagnostics) {
+    result.error = transport.lastError.empty() ? "Runtime/client state is unavailable" : transport.lastError;
+    return result;
+  }
+  result.available = true;
+  result.running = runtime->audio_runtime.running;
+  result.activeClients = diagnostics->diagnostics.virtual_asio_active_producers;
+  result.devices = topology->virtual_asio_devices;
+  return result;
+}
+
+AsioDeviceSnapshot EngineClient::reloadVirtualAsioDevices(
+    std::vector<control::VirtualAsioDeviceDefinition> devices) {
+  AsioDeviceSnapshot result;
+  const auto validation = control::validate_virtual_asio_devices(devices);
+  if (!validation.empty()) { result.error = validation.front().message; return result; }
+  std::uint64_t inputs = 0, outputs = 0;
+  for (const auto& device : devices) if (device.enabled) {
+    inputs += device.input_channels; outputs += device.output_channels;
+  }
+  if (!inputs || inputs != outputs) { result.error = "Enabled ASIO channel totals must match and be nonzero"; return result; }
+  EngineState transport;
+  service::NamedPipeControlConfig config;
+  config.pipe_name = pipe_name_;
+  control::ControlCommand command;
+  command.command_id = next_command_id();
+  command.type = control::ControlCommandType::ReloadVirtualAsioDevices;
+  command.virtual_asio_devices = std::move(devices);
+  const auto response = transact(config, std::move(command), transport, 5000);
+  if (!response || !response->has_virtual_asio_devices) {
+    result.error = transport.lastError.empty() ? "Topology reload was not acknowledged" : transport.lastError;
+    result.error += ". Refresh before trying again; no automatic resend was made.";
+    return result;
+  }
+  result.reloadAccepted = true;
+  result.devices = response->virtual_asio_devices;
+  return result;
 }
 
 EngineState EngineClient::stop() {
