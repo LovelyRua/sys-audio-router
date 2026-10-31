@@ -130,8 +130,10 @@ and installer-flow parity. Virtual-ASIO editing and six-window startup coverage
 have since landed; see [Native Virtual ASIO editor](native-asio-editor.md) for the
 2026-10-30 interactive acceptance. Physical-ASIO matrix editing has also since
 landed; [its acceptance record](native-physical-asio-editor.md) distinguishes
-tested GUI flows from pending real-driver validation. Localization, accessibility
-and installer-flow parity remain open. Qt remains the default entry; no audio-path
+tested GUI flows from pending real-driver validation. Primary English/Chinese
+localization and selected menu keyboard paths are tracked in
+[native localization](native-localization.md). Complete accessibility and
+installer-flow parity remain open. Qt remains the default entry; no audio-path
 reliability result is changed by this GUI work.
 
 ## Workspace interactive acceptance (2026-10-29/30)
