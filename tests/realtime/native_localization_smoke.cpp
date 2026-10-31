@@ -32,6 +32,18 @@ int main() {
   check(std::string("1") + tr(" saved presets") == "1 个已保存的预设", "Preset count fragment");
   check(std::string(tr("Saved preset: ")) + "Refresh" == "已保存预设：Refresh", "Preset name retained");
   check(trText("Processed blocks") == "已处理块数", "Diagnostics catalog");
+  check(trText("Could not locate the installed package") ==
+      "无法定位已安装的软件包。", "Installer package location failure");
+  check(trText("VB-CABLE setup is not included in this build. Use the official website or install your own package.") ==
+      "此版本未包含 VB-CABLE 安装程序。请从官方网站获取，或使用自己的安装包。", "Optional installer absent");
+  check(trText("VB-CABLE setup signature could not be verified. Setup was not opened.") ==
+      "无法验证 VB-CABLE 安装程序的签名，未打开安装程序。", "Installer trust failure");
+  check(trText("VB-CABLE setup elevation cancelled. No automatic retry.") ==
+      "已取消 VB-CABLE 安装程序的管理员授权，未自动重试。", "Installer cancellation");
+  check(trText("Could not open the vendor installer. No automatic retry.") ==
+      "无法打开厂商安装程序，未自动重试。", "Installer launch failure");
+  check(trText("Vendor setup opened, not yet installed. Complete its prompts, reboot if requested, then Refresh. SAR will not uninstall VB-CABLE.") ==
+      "厂商安装程序已打开，但不代表安装完成。请完成其中的步骤，按要求重启后刷新。SAR 不会卸载 VB-CABLE。", "Launch is not installation success");
   check(trWide(L"Refresh") == L"刷新", "Wide translation");
   check(trWide(L"Permanently delete the selected preset file?") ==
       L"永久删除所选预设文件？", "Wide confirmation");

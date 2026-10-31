@@ -79,3 +79,9 @@ passed all 170 tests. The corresponding
 [full CI run](https://github.com/LovelyRua/sys-audio-router/actions/runs/41158638112)
 also records the native startup traces and sanitizer results. These automated
 checks supplement, rather than replace, the interactive acceptance above.
+
+The installer-result catalog also covers missing payload/location, signature
+verification failure, cancelled elevation, launch failure and successful launch.
+Successful launch explicitly does not mean successful driver installation.
+These exact messages are covered by the localization smoke; this follow-up does
+not execute vendor setup or claim a new driver-installation acceptance pass.
