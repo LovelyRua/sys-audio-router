@@ -1631,22 +1631,40 @@ if(WIN32 AND SAR_BUILD_GUI)
   # existing Explorer process so the control panel starts in the signed-in
   # desktop session instead of inheriting the installer's elevated token.
   set(CPACK_NSIS_DEFINES [[
+    !include "x64.nsh"
     !define MUI_FINISHPAGE_RUN_FUNCTION SarLaunchControlPanel
     Function SarLaunchControlPanel
       Exec '"$WINDIR\explorer.exe" "$INSTDIR\bin\SystemAudioRouteLauncher.exe"'
     FunctionEnd
+
+    !macro SarGuardLoadedAsioDriver
+      ${If} ${RunningX64}
+        ${DisableX64FSRedirection}
+      ${EndIf}
+      nsExec::ExecToStack '"$SYSDIR\tasklist.exe" /M SystemAudioRouteVirtualASIO.dll /FO CSV /NH'
+      Pop $0
+      Pop $1
+      ${If} ${RunningX64}
+        ${EnableX64FSRedirection}
+      ${EndIf}
+      StrCmp $0 "0" sar_asio_check_output
+      MessageBox MB_OK|MB_ICONSTOP "System Audio Route could not check whether its ASIO driver is in use. No changes were made. Close your audio applications and try again." /SD IDOK
+      SetErrorLevel 1
+      Abort
+      sar_asio_check_output:
+      System::Call 'shlwapi::StrStrIW(w r1, w "SystemAudioRouteVirtualASIO.dll") p .r2'
+      StrCmp $2 "0" sar_asio_driver_unlocked
+      MessageBox MB_OK|MB_ICONSTOP "System Audio Route Virtual ASIO is still loaded by an audio application.$\r$\n$\r$\nSave your work and completely close the affected DAW or plug-in scanner, then try again.$\r$\n$\r$\nNo installed files or registrations were changed." /SD IDOK
+      SetErrorLevel 1
+      Abort
+      sar_asio_driver_unlocked:
+    !macroend
   ]])
-  set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+  # CPack otherwise runs the old uninstaller in .onInit, before our lock check.
+  set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL OFF)
   set(CPACK_NSIS_MANIFEST_DPI_AWARE ON)
   set(CPACK_NSIS_EXTRA_PREINSTALL_COMMANDS [[
-    nsExec::ExecToStack '"$SYSDIR\cmd.exe" /D /C ""$SYSDIR\tasklist.exe" /M SystemAudioRouteVirtualASIO.dll /FO CSV /NH 2^>nul | "$SYSDIR\findstr.exe" /I /C:"SystemAudioRouteVirtualASIO.dll" ^>nul"'
-    Pop $0
-    Pop $1
-    StrCmp $0 "0" 0 sar_asio_driver_unlocked
-    MessageBox MB_OK|MB_ICONSTOP "System Audio Route Virtual ASIO is still loaded by an audio application.$\r$\n$\r$\nClose REAPER, your DAW, and plug-in scanners, then run this installer again.$\r$\n$\r$\nThe update has not changed any installed files."
-    SetErrorLevel 1
-    Abort
-    sar_asio_driver_unlocked:
+    !insertmacro SarGuardLoadedAsioDriver
     IfFileExists "$INSTDIR\bin\sar_engine_service.exe" 0 sar_pre_no_engine
     nsExec::ExecToLog '"$INSTDIR\bin\sar_engine_service.exe" --stop'
     Pop $0
@@ -1680,6 +1698,7 @@ if(WIN32 AND SAR_BUILD_GUI)
     sar_asio_registration_ok:
   ]])
   set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS [[
+    !insertmacro SarGuardLoadedAsioDriver
     IfFileExists "$INSTDIR\bin\sar_engine_service.exe" 0 sar_un_no_engine
     nsExec::ExecToLog '"$INSTDIR\bin\sar_engine_service.exe" --stop'
     Pop $0

@@ -29,6 +29,24 @@ function Invoke-NsisExecutable {
   }
 }
 
+function Get-NsisExitCode {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path,
+
+    [Parameter(Mandatory = $true)]
+    [string[]]$Argument
+  )
+
+  $process = Start-Process -FilePath $Path -ArgumentList $Argument `
+      -WindowStyle Hidden -PassThru
+  if (!$process.WaitForExit(30000)) {
+    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+    throw "'$Path' did not exit within 30 seconds."
+  }
+  return $process.ExitCode
+}
+
 function Get-InstalledProcess {
   param(
     [Parameter(Mandatory = $true)]
@@ -80,6 +98,9 @@ if (Test-Path -LiteralPath $asioRegistrationKey) {
 }
 
 $installed = $false
+$lockHolder = $null
+$lockReadyFile = Join-Path ([IO.Path]::GetTempPath()) "sar-dll-ready-$suffix"
+$lockReleaseFile = Join-Path ([IO.Path]::GetTempPath()) "sar-dll-release-$suffix"
 $savedEnvironment = @{}
 foreach ($name in @(
     "PATH",
@@ -133,6 +154,60 @@ try {
           [StringComparison]::OrdinalIgnoreCase)) {
     throw "Virtual ASIO registration does not belong to the installed payload."
   }
+
+  $lockScript = Join-Path $PSScriptRoot 'windows-installer-lock-holder.ps1'
+  $lockHolder = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden `
+      -ArgumentList @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+        '-File', ('"{0}"' -f $lockScript),
+        '-DllPath', ('"{0}"' -f $driverPath),
+        '-ReadyFile', ('"{0}"' -f $lockReadyFile),
+        '-ReleaseFile', ('"{0}"' -f $lockReleaseFile)) -PassThru
+  $lockDeadline = [DateTime]::UtcNow.AddSeconds(20)
+  while (!(Test-Path -LiteralPath $lockReadyFile) -and
+         !$lockHolder.HasExited -and [DateTime]::UtcNow -lt $lockDeadline) {
+    Start-Sleep -Milliseconds 100
+  }
+  if (!(Test-Path -LiteralPath $lockReadyFile)) {
+    throw 'The test process could not load the installed Virtual ASIO DLL.'
+  }
+
+  $installedDriverHash = (Get-FileHash -LiteralPath $driverPath -Algorithm SHA256).Hash
+  $blockedUpdate = Get-NsisExitCode -Path $resolvedPackagePath `
+      -Argument @('/S', "/D=$installPath")
+  if ($blockedUpdate -eq 0) {
+    throw 'A silent update succeeded while the Virtual ASIO DLL was loaded.'
+  }
+  $uninstaller = Join-Path $installPath 'Uninstall.exe'
+  $blockedUninstallBootstrap = Get-NsisExitCode -Path $uninstaller `
+      -Argument @('/S')
+  Start-Sleep -Seconds 2
+  if (!(Test-Path -LiteralPath $uninstaller) -or
+      !(Test-Path -LiteralPath $driverPath)) {
+    throw 'The regular uninstaller changed the installation while the driver was loaded.'
+  }
+  # NSIS normally copies the uninstaller and its bootstrap may return zero.
+  # Running in place lets the test inspect the actual uninstall section's exit.
+  $blockedUninstall = Get-NsisExitCode -Path $uninstaller `
+      -Argument @('/S', "_?=$installPath")
+  if ($blockedUninstall -eq 0) {
+    throw 'A silent uninstall succeeded while the Virtual ASIO DLL was loaded.'
+  }
+  foreach ($relativePath in $installedFiles) {
+    if (!(Test-Path -LiteralPath (Join-Path $installPath $relativePath) -PathType Leaf)) {
+      throw "Blocked update or uninstall removed '$relativePath'."
+    }
+  }
+  if ((Get-FileHash -LiteralPath $driverPath -Algorithm SHA256).Hash -ne $installedDriverHash -or
+      !(Test-Path -LiteralPath $asioRegistrationKey) -or
+      (Get-Item -LiteralPath $asioRegistrationKey).GetValue('') -ne $registeredDriver) {
+    throw 'Blocked update or uninstall changed the installed driver or registration.'
+  }
+
+  [IO.File]::WriteAllText($lockReleaseFile, 'release')
+  if (!$lockHolder.WaitForExit(10000) -or $lockHolder.ExitCode -ne 0) {
+    throw 'The test process did not release the Virtual ASIO DLL cleanly.'
+  }
+  $lockHolder = $null
 
   Invoke-NsisExecutable -Path $resolvedPackagePath `
       -Argument @("/S", "/D=$installPath")
@@ -272,10 +347,21 @@ try {
       "windows_installer_acceptance passed=1" +
       " package=`"$resolvedPackagePath`"" +
       " sha256=$packageHash" +
-      " install=passed update=passed launcher=passed control=passed" +
+      " install=passed locked_update=passed locked_uninstall=passed" +
+      " uninstall_bootstrap_exit=$blockedUninstallBootstrap" +
+      " update=passed launcher=passed control=passed" +
       " concurrent_launch=passed single_instance=passed" +
       " gui=passed engine=passed asio=passed uninstall=passed")
 } finally {
+  if ($null -ne $lockHolder) {
+    [IO.File]::WriteAllText($lockReleaseFile, 'release')
+    if (!$lockHolder.WaitForExit(10000)) {
+      Stop-Process -Id $lockHolder.Id -Force -ErrorAction SilentlyContinue
+    }
+  }
+  foreach ($lockFile in @($lockReadyFile, $lockReleaseFile)) {
+    Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
+  }
   foreach ($processName in @("SystemAudioRoute", "SystemAudioRouteVstgui", "sar_engine_service")) {
     foreach ($process in @(Get-InstalledProcess -Name $processName `
         -Directory $installPath)) {
