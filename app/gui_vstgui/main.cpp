@@ -17,6 +17,7 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <string_view>
+#include <cstdio>
 
 using namespace VSTGUI;
 using namespace VSTGUI::Standalone;
@@ -30,14 +31,6 @@ struct AppDelegate final : Application::DelegateAdapter, WindowListenerAdapter {
                          "com.systemaudioroute.controlpanel"}) {}
 
   void finishLaunching() override {
-    initializeLanguage();
-    auto window = createMainWindow();
-    if (!window) {
-      IApplication::instance().quit();
-      return;
-    }
-    window->show();
-    window->registerWindowListener(this);
     int count = 0;
     auto arguments = CommandLineToArgvW(GetCommandLineW(), &count);
     bool startupSmoke = false;
@@ -46,15 +39,38 @@ struct AppDelegate final : Application::DelegateAdapter, WindowListenerAdapter {
         startupSmoke = startupSmoke || std::wstring_view(arguments[i]) == L"--startup-smoke";
       LocalFree(arguments);
     }
+    if (startupSmoke) std::fprintf(stderr, "native_smoke phase=initialize tick=%llu\n", GetTickCount64());
+    initializeLanguage();
+    auto window = createMainWindow();
+    if (!window) {
+      IApplication::instance().quit();
+      return;
+    }
+    window->show();
+    window->registerWindowListener(this);
     if (startupSmoke) {
-      Call::later([] { showVirtualDeviceWindow(); }, 500);
-      Call::later([] { showRuntimeDeviceWindow(); }, 1000);
-      Call::later([] { showPresetWindow(); }, 1500);
-      Call::later([] { showDiagnosticsWindow(); }, 2000);
-      Call::later([] { showAsioDeviceWindow(); }, 2500);
+      std::fprintf(stderr, "native_smoke phase=main_shown tick=%llu\n", GetTickCount64());
+      const auto open = [](const char* name, void (*show)()) {
+        std::fprintf(stderr, "native_smoke phase=open_begin window=%s tick=%llu\n", name, GetTickCount64());
+        show();
+        std::fprintf(stderr, "native_smoke phase=open_end window=%s tick=%llu\n", name, GetTickCount64());
+        std::fflush(stderr);
+      };
+      Call::later([open] { open("driver_lab", showVirtualDeviceWindow); }, 500);
+      Call::later([open] { open("audio_devices", showRuntimeDeviceWindow); }, 1000);
+      Call::later([open] { open("presets", showPresetWindow); }, 1500);
+      Call::later([open] { open("diagnostics", showDiagnosticsWindow); }, 2000);
+      Call::later([open] { open("virtual_asio", showAsioDeviceWindow); }, 2500);
       Call::later([] {
         const auto windows = IApplication::instance().getWindows();
-        for (const auto& current : windows) current->close();
+        std::fprintf(stderr, "native_smoke phase=close_begin count=%zu tick=%llu\n", windows.size(), GetTickCount64());
+        for (const auto& current : windows) {
+          std::fprintf(stderr, "native_smoke phase=close_window title=%s\n", current->getTitle().getString().c_str());
+          current->close();
+        }
+        std::fprintf(stderr, "native_smoke phase=close_end remaining=%zu tick=%llu\n",
+            IApplication::instance().getWindows().size(), GetTickCount64());
+        std::fflush(stderr);
       }, 6500);
     }
   }
