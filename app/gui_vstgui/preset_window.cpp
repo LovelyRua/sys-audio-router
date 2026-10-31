@@ -169,7 +169,8 @@ class PresetPanel final : public CViewContainer, public IControlListener {
       rendering_ = false;
     }
     auto resultText = result.message;
-    const auto count = std::to_string(result.names.size());
+    // The result vector has already moved into the displayed list above.
+    const auto count = std::to_string(names_.size());
     if (result.hasList && resultText == count + " saved presets")
       resultText = count + tr(" saved presets");
     for (const char* prefix : {"Saved preset: ", "Engine accepted preset: ", "Deleted preset: "})
