@@ -761,8 +761,9 @@ void merge_successful_command(
   }
   if (command.type ==
       sar::control::ControlCommandType::ConfigureAudioRuntime) {
+    desired_session.preset = service.session_document().preset;
     desired_session.audio_runtime = command.audio_runtime;
-    desired_session.auto_start = service.audio_runtime_running();
+    // A failed restore can leave auto-start intended while the runtime is stopped.
   } else if (command.type ==
              sar::control::ControlCommandType::StartAudioRuntime) {
     desired_session.auto_start = true;
@@ -1282,6 +1283,7 @@ int run_engine(int argc, char** argv, std::atomic_bool& reload_requested,
       return 1;
     }
   }
+  bool session_runtime_restored = false;
   if (has_session_path &&
       desired_session.audio_runtime.mode !=
           sar::control::AudioRuntimeMode::None) {
@@ -1292,12 +1294,16 @@ int run_engine(int argc, char** argv, std::atomic_bool& reload_requested,
         std::cerr << "session_warning code=runtime_restore_failed detail="
                   << error.code << " action=keep_service_online\n";
       }
-    } else if (desired_session.auto_start) {
-      const auto start_result = service->start_audio_runtime();
-      if (!start_result.ok()) {
-        for (const auto& error : start_result.errors()) {
-          std::cerr << "session_warning code=runtime_start_restore_failed detail="
-                    << error.code << " action=keep_service_online\n";
+    } else {
+      desired_session.preset = service->session_document().preset;
+      session_runtime_restored = true;
+      if (desired_session.auto_start) {
+        const auto start_result = service->start_audio_runtime();
+        if (!start_result.ok()) {
+          for (const auto& error : start_result.errors()) {
+            std::cerr << "session_warning code=runtime_start_restore_failed detail="
+                      << error.code << " action=keep_service_online\n";
+          }
         }
       }
     }
@@ -1331,6 +1337,8 @@ int run_engine(int argc, char** argv, std::atomic_bool& reload_requested,
       service->stop_audio_runtime();
       return 1;
     }
+  } else if (session_runtime_restored && session_writes_allowed) {
+    static_cast<void>(save_session_file_atomic(session_path, desired_session));
   }
 
   std::vector<std::unique_ptr<sar::service::WindowsVirtualAsioTransportHost>>
