@@ -168,7 +168,14 @@ class PresetPanel final : public CViewContainer, public IControlListener {
       selected_ = selectedName();
       rendering_ = false;
     }
-    message(result.message, !result.succeeded && !result.needsOverwrite);
+    auto resultText = result.message;
+    const auto count = std::to_string(result.names.size());
+    if (result.hasList && resultText == count + " saved presets")
+      resultText = count + tr(" saved presets");
+    for (const char* prefix : {"Saved preset: ", "Engine accepted preset: ", "Deleted preset: "})
+      if (resultText == std::string(prefix) + requestedName_)
+        resultText = std::string(tr(prefix)) + requestedName_;
+    message(resultText, !result.succeeded && !result.needsOverwrite);
     updateEnabled();
     if (result.needsOverwrite && confirm(L"A preset with this name already exists. Replace its file?"))
       request(PresetAction::Save, requestedName_, true);

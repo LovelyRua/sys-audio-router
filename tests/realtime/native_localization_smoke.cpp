@@ -29,6 +29,8 @@ int main() {
   check(trText("ROUTING MATRIX") == "路由矩阵", "Main catalog");
   check(trText("Virtual ASIO devices") == "虚拟 ASIO 设备", "ASIO catalog");
   check(trText("Save current") == "保存当前配置", "Preset catalog");
+  check(std::string("1") + tr(" saved presets") == "1 个已保存的预设", "Preset count fragment");
+  check(std::string(tr("Saved preset: ")) + "Refresh" == "已保存预设：Refresh", "Preset name retained");
   check(trText("Processed blocks") == "已处理块数", "Diagnostics catalog");
   check(trWide(L"Refresh") == L"刷新", "Wide translation");
   check(trWide(L"Permanently delete the selected preset file?") ==

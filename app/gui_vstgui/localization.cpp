@@ -184,6 +184,10 @@ constexpr Translation catalog[] = {
     {"Channel range must fit within 256 native channels", "原生通道范围不能超过 256 个通道"},
     {"ASIO sample rate must be 8000-768000 Hz; buffer must be 1-65536 frames", "ASIO 采样率须为 8000-768000 Hz；缓冲须为 1-65536 帧"},
     {"Channel counts must be whole numbers between 1 and 64.", "通道数须为 1 至 64 的整数。"},
+    {" saved presets", " 个已保存的预设"},
+    {"Saved preset: ", "已保存预设："},
+    {"Engine accepted preset: ", "引擎已应用预设："},
+    {"Deleted preset: ", "已删除预设："},
 };
 }  // namespace
 
