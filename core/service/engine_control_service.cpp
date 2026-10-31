@@ -80,6 +80,15 @@ bool updates_realtime_route_parameters(
          type == control::ControlCommandType::SetMute;
 }
 
+bool same_matrix_endpoints(const control::PresetRouteMatrix& left,
+                           const control::PresetRouteMatrix& right) noexcept {
+  const auto same_port = [](const auto& first, const auto& second) {
+    return first.id == second.id && first.label == second.label;
+  };
+  return std::ranges::equal(left.inputs, right.inputs, same_port) &&
+         std::ranges::equal(left.outputs, right.outputs, same_port);
+}
+
 }  // namespace
 
 EngineControlServiceCreateResult EngineControlService::create(
@@ -161,16 +170,15 @@ EngineAudioRuntimeResult EngineControlService::configure_audio_runtime_locked(
   }
 
   std::optional<control::PreparedPresetUpdate> matrix_update;
+  std::optional<control::AudioRuntimeConfiguration> next_matrix_configuration;
   const bool leaves_matrix_for_legacy_wasapi =
-      audio_runtime_configuration_ &&
-      audio_runtime_configuration_->mode ==
-          control::AudioRuntimeMode::WasapiMatrix &&
+      matrix_needs_legacy_reconcile_ &&
       configuration.mode != control::AudioRuntimeMode::PhysicalAsio;
   const bool changes_matrix_topology =
       configuration.mode == control::AudioRuntimeMode::WasapiMatrix ||
       leaves_matrix_for_legacy_wasapi;
   if (changes_matrix_topology) {
-    const auto previous = audio_runtime_configuration_.value_or(
+    const auto previous = matrix_preset_configuration_.value_or(
         control::AudioRuntimeConfiguration{});
     auto reconciled = reconcile_audio_runtime_matrix_preset(
         session_->current_preset(), previous, configuration);
@@ -196,6 +204,9 @@ EngineAudioRuntimeResult EngineControlService::configure_audio_runtime_locked(
       return EngineAudioRuntimeResult::failure(std::move(errors));
     }
     matrix_update.emplace(prepared.take_update());
+    if (configuration.mode == control::AudioRuntimeMode::WasapiMatrix) {
+      next_matrix_configuration.emplace(configuration);
+    }
   }
 
   const bool restart_after_configure =
@@ -299,6 +310,10 @@ EngineAudioRuntimeResult EngineControlService::configure_audio_runtime_locked(
     audio_runtime_configuration_ = std::move(configuration);
     if (matrix_update) {
       session_->commit_preset_update(std::move(*matrix_update));
+      matrix_preset_configuration_ = std::move(next_matrix_configuration);
+      matrix_needs_legacy_reconcile_ =
+          audio_runtime_configuration_->mode ==
+          control::AudioRuntimeMode::WasapiMatrix;
     }
   } catch (const std::exception& error) {
     return restore_previous_runtime({
@@ -682,7 +697,15 @@ control::ControlWireEncodeResult EngineControlService::handle_wire_request(
             "The running audio runtime cannot apply route parameters "
             "without restarting."}}));
     }
+    const bool forget_matrix_configuration =
+        decoded.command.type == control::ControlCommandType::LoadPreset &&
+        !same_matrix_endpoints(session_->current_preset().matrix,
+                               update.preset.matrix);
     session_->commit_preset_update(std::move(update));
+    if (forget_matrix_configuration) {
+      // A changed preset topology does not identify its endpoint owners.
+      matrix_preset_configuration_.reset();
+    }
 
     auto response = control::preset_response(
         decoded.command.command_id, session_->current_preset());

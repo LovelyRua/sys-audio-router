@@ -114,6 +114,14 @@ class EngineControlService {
   bool preset_commit_in_progress_ = false;
   std::optional<control::AudioRuntimeConfiguration>
       audio_runtime_configuration_;
+  // A legacy runtime still needs its ports after an intervening preset load,
+  // even when that load makes the old matrix endpoint owners unknown.
+  bool matrix_needs_legacy_reconcile_ = false;
+  // Runtime configuration that generated the current matrix topology, which
+  // can outlive the active runtime during Physical ASIO preview. Empty when
+  // a loaded preset makes that ownership uncertain.
+  std::optional<control::AudioRuntimeConfiguration>
+      matrix_preset_configuration_;
   platform::AudioDeviceRegistry audio_device_registry_;
   std::deque<ReplayedResponse> replayed_responses_;
   std::size_t replayed_response_bytes_ = 0;
