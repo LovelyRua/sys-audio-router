@@ -193,6 +193,20 @@ page boundaries and repeated topology shrink across 0-256 channels.
 The main-window runtime button says Start audio / Stop audio: these commands
 control audio streaming, not the lifetime of the background engine process.
 
+### Matrix keyboard controls
+
+Tab enters the existing matrix button focus order. Arrow keys move within the
+visible page, selecting the destination cell for inspection without sending a
+route mutation. They stop at page edges and do not wrap or enter hidden cells;
+page buttons remain the way to change pages. Enter or Space connects an absent
+route or mutes/unmutes an existing route. Shift+Enter or Shift+Space uses the
+same connect/remove command as Shift-click. Other modifiers are not consumed.
+Offline, hidden and command-disabled cells reject keyboard activation.
+
+The portable model smoke checks directional movement, boundaries, empty grids
+and invalid input. Compilation and those model checks do not establish complete
+keyboard accessibility or an interactive keyboard acceptance pass.
+
 Revision `b928502` passed CI run `39377647617`: 162 CTest cases, 15 script
 suites, seven advisory ASan cases, the native model/parser checks, and native
 three-window startup/closure. Windows package run `39377651538` passed too.

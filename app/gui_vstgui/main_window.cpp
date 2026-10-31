@@ -38,6 +38,7 @@
 #include <algorithm>
 #include <optional>
 #include <thread>
+#include <functional>
 
 using namespace VSTGUI;
 using namespace VSTGUI::Standalone;
@@ -80,6 +81,43 @@ class StatusDotView final : public CView {
 class MatrixCellButton final : public CTextButton {
  public:
   using CTextButton::CTextButton;
+  std::function<void(int, int)> navigate;
+
+  int32_t onKeyDown(VstKeyCode& key) override {
+    if (!getMouseEnabled() || !isVisible()) return -1;
+    if (key.modifier == 0) {
+      int row = 0, column = 0;
+      if (key.virt == VKEY_LEFT) column = -1;
+      if (key.virt == VKEY_RIGHT) column = 1;
+      if (key.virt == VKEY_UP) row = -1;
+      if (key.virt == VKEY_DOWN) row = 1;
+      if (row || column) {
+        if (navigate) navigate(row, column);
+        return 1;
+      }
+    }
+    if ((key.virt == VKEY_RETURN || key.virt == VKEY_ENTER || key.virt == VKEY_SPACE) &&
+        (key.modifier == 0 || key.modifier == MODIFIER_SHIFT)) {
+      beginEdit();
+      removeRequested_ = key.modifier == MODIFIER_SHIFT;
+      setValue(1.0F);
+      valueChanged();
+      setValue(0.0F);
+      removeRequested_ = false;
+      endEdit();
+      invalid();
+      return 1;
+    }
+    return -1;
+  }
+
+  void inspect() {
+    selectOnly_ = true;
+    setValue(1.0F);
+    valueChanged();
+    setValue(0.0F);
+    selectOnly_ = false;
+  }
 
   CMouseEventResult onMouseDown(CPoint& where, const CButtonState& buttons) override {
     if (buttons.isRightButton() || (buttons.isLeftButton() && buttons.isShiftSet())) {
@@ -181,7 +219,19 @@ class HeaderController final : public IControlListener {
     cells_ = std::move(cells);
     summary_ = std::move(summary);
     navigation_ = {previousRows, nextRows, previousColumns, nextColumns};
-    for (auto& cell : cells_) cell->setListener(this);
+    for (std::size_t i = 0; i < cells_.size(); ++i) {
+      auto& cell = cells_[i];
+      cell->setListener(this);
+      cell->navigate = [this, i](int deltaRow, int deltaColumn) {
+        const auto index = adjacentMatrixCell(i, rows_.visibleCount(),
+                                             kVisibleColumns, deltaRow, deltaColumn);
+        if (!index) return;
+        const auto& target = cells_[*index];
+        if (!target->isVisible() || !target->getMouseEnabled() || !target->getFrame()) return;
+        target->getFrame()->setFocusView(target);
+        target->inspect();
+      };
+    }
     for (auto& button : navigation_) button->setListener(this);
     renderMatrix();
   }

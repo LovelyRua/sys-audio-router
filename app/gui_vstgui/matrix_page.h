@@ -2,8 +2,23 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <optional>
 
 namespace sar::gui_vstgui {
+
+inline std::optional<std::size_t> adjacentMatrixCell(
+    std::size_t index, std::size_t rows, std::size_t columns,
+    int deltaRow, int deltaColumn) {
+  if (!rows || !columns || index / columns >= rows) return std::nullopt;
+  auto row = index / columns;
+  auto column = index % columns;
+  if (deltaRow == -1 && deltaColumn == 0 && row > 0) --row;
+  else if (deltaRow == 1 && deltaColumn == 0 && row < rows - 1) ++row;
+  else if (deltaColumn == -1 && deltaRow == 0 && column > 0) --column;
+  else if (deltaColumn == 1 && deltaRow == 0 && column < columns - 1) ++column;
+  else return std::nullopt;
+  return row * columns + column;
+}
 
 // Page indexes are retained across temporary disconnects, but must be clamped
 // when a new authoritative topology is received.
