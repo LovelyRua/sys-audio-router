@@ -15,6 +15,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Import-Module (Join-Path $PSScriptRoot "windows-lab-process.psm1") -Force
+$script:controlCliCount = 0
 
 function Resolve-SarExecutable {
   param([string]$Root, [string]$Name, [string]$BuildConfiguration)
@@ -36,19 +38,21 @@ function Resolve-SarExecutable {
 }
 
 function Invoke-ControlCli {
-  param([string]$CliPath, [string]$PipeName, [string[]]$OperationArguments)
+  param([string]$CliPath, [string]$PipeName, [string[]]$OperationArguments,
+        [int]$TimeoutMilliseconds = 10000)
 
-  $previousPreference = $ErrorActionPreference
-  $ErrorActionPreference = "Continue"
-  try {
-    $lines = @(& $CliPath --pipe $PipeName @OperationArguments 2>&1 |
-        ForEach-Object { [string]$_ })
-    $exitCode = $LASTEXITCODE
-  } finally {
-    $ErrorActionPreference = $previousPreference
+  $script:controlCliCount += 1
+  $result = Invoke-SarLabProcess -FilePath $CliPath `
+      -ArgumentList (@("--pipe", $PipeName) + $OperationArguments) `
+      -OutputDirectory $OutputDirectory `
+      -Name "control-$PID-$runId-$script:controlCliCount" `
+      -TimeoutMilliseconds $TimeoutMilliseconds -MaximumOutputBytes 16777216
+  if ($result.failure_reason -ne "") {
+    throw "CLI $($OperationArguments[0]) failed: $($result.failure_reason); logs=$($result.stderr_path)"
   }
+  $lines = @($result.stdout_lines) + @($result.stderr_lines)
   return [pscustomobject]@{
-    ExitCode = $exitCode
+    ExitCode = $result.exit_code
     Lines = $lines
     Text = [string]::Join([Environment]::NewLine, $lines)
   }
@@ -238,6 +242,7 @@ function Start-SessionService {
   $process = Start-Process -FilePath $ServicePath -ArgumentList $arguments `
       -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutPath `
       -RedirectStandardError $stderrPath
+  $null = $process.Handle
   return [pscustomobject]@{
     Process = $process
     StdoutPath = $stdoutPath
@@ -261,8 +266,11 @@ function Wait-ServiceReady {
       } else { "missing service stderr log" }
       throw "service exited before becoming ready: $stderr"
     }
+    $remainingMilliseconds = [Math]::Max(100, [Math]::Min(10000,
+        [int](($deadline - [DateTime]::UtcNow).TotalMilliseconds)))
     $result = Invoke-ControlCli -CliPath $CliPath -PipeName $PipeName `
-        -OperationArguments @("runtime-state")
+        -OperationArguments @("runtime-state") `
+        -TimeoutMilliseconds $remainingMilliseconds
     if ($result.ExitCode -eq 0) {
       Assert-Accepted -Result $result -Step "service-ready"
       return $result
@@ -327,7 +335,7 @@ try {
       -OperationArguments @("runtime-configure-render")
   Assert-Accepted -Result $configured -Step $failedStep
   $gain = Invoke-ControlCli -CliPath $cliPath -PipeName $firstPipe `
-      -OperationArguments @("set-gain", "input-l", "output-l", "0.25")
+      -OperationArguments @("set-gain", "asio-output-l", "wasapi-render-l", "0.25")
   Assert-Accepted -Result $gain -Step "set-gain"
   $started = Invoke-ControlCli -CliPath $cliPath -PipeName $firstPipe `
       -OperationArguments @("runtime-start")
