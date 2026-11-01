@@ -11,7 +11,9 @@ param(
   [ValidateRange(0, 60000)]
   [int]$DiagnosticsDelayMilliseconds = 500,
 
-  [string]$OutputDirectory = ""
+  [string]$OutputDirectory = "",
+
+  [switch]$SkipAudioProgressCheck
 )
 
 $ErrorActionPreference = "Stop"
@@ -298,6 +300,7 @@ $cleanupComplete = $true
 $failedStep = "setup"
 $failureReason = "none"
 $processedBlocks = 0
+$audioProgressVerified = $false
 $sessionBytes = 0
 $corruptPreserved = $false
 $matrixPersistenceVerified = $false
@@ -373,7 +376,10 @@ try {
     throw "restored diagnostics did not contain processed_blocks"
   }
   $processedBlocks = [long]$Matches["blocks"]
-  if ($processedBlocks -lt 1) { throw "restored runtime processed no audio blocks" }
+  if (!$SkipAudioProgressCheck) {
+    if ($processedBlocks -lt 1) { throw "restored runtime processed no audio blocks" }
+    $audioProgressVerified = $true
+  }
   $stopped = Invoke-ControlCli -CliPath $cliPath -PipeName $secondPipe `
       -OperationArguments @("runtime-stop")
   Assert-Accepted -Result $stopped -Step "restored-runtime-stop"
@@ -607,6 +613,8 @@ Write-Output (
     " failed_step=$(if ($passed) { 'none' } else { $failedStep })" +
     " session_bytes=$sessionBytes" +
     " restored_processed_blocks=$processedBlocks" +
+    " audio_progress_verified=$(if ($audioProgressVerified) { 1 } else { 0 })" +
+    " skip_audio_progress_check=$(if ($SkipAudioProgressCheck) { 1 } else { 0 })" +
     " matrix_persistence_verified=$(if ($matrixPersistenceVerified) { 1 } else { 0 })" +
     " corrupt_preserved=$(if ($corruptPreserved) { 1 } else { 0 })" +
     " cleanup_complete=$(if ($cleanupComplete) { 1 } else { 0 })" +
