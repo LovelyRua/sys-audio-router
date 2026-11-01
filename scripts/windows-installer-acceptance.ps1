@@ -40,6 +40,7 @@ function Get-NsisExitCode {
 
   $process = Start-Process -FilePath $Path -ArgumentList $Argument `
       -WindowStyle Hidden -PassThru
+  $null = $process.Handle
   if (!$process.WaitForExit(30000)) {
     Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
     throw "'$Path' did not exit within 30 seconds."
@@ -162,6 +163,7 @@ try {
         '-DllPath', ('"{0}"' -f $driverPath),
         '-ReadyFile', ('"{0}"' -f $lockReadyFile),
         '-ReleaseFile', ('"{0}"' -f $lockReleaseFile)) -PassThru
+  $null = $lockHolder.Handle
   $lockDeadline = [DateTime]::UtcNow.AddSeconds(20)
   while (!(Test-Path -LiteralPath $lockReadyFile) -and
          !$lockHolder.HasExited -and [DateTime]::UtcNow -lt $lockDeadline) {
