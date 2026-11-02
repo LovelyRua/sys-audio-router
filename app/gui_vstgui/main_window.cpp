@@ -836,7 +836,7 @@ WindowPtr createMainWindow() {
   body->setBackgroundColor(palette::kCanvas);
   auto title = makeLabel(CRect(24, 14, 228, 42), "ROUTING MATRIX", palette::kText, true);
   addRetainedView(*body, title);
-  auto summary = makeLabel(CRect(240, 14, 742, 42), "Matrix unavailable", palette::kMuted, false);
+  auto summary = makeLabel(CRect(240, 14, 530, 42), "Matrix unavailable", palette::kMuted, false);
   addRetainedView(*body, summary);
   auto errorText = makeOwned<CMultiLineTextLabel>(CRect(24, 44, 742, 80));
   errorText->setBackColor(CColor(0, 0, 0, 0));
@@ -894,7 +894,7 @@ WindowPtr createMainWindow() {
   auto nextRows = makeNav(112, "Rows >");
   auto previousColumns = makeNav(206, "Cols <");
   auto nextColumns = makeNav(294, "Cols >");
-  auto showInactive = makeOwned<CCheckBox>(CRect(430, 520, 736, 550), nullptr, -1,
+  auto showInactive = makeOwned<CCheckBox>(CRect(548, 14, 742, 42), nullptr, -1,
                                            tr("Show inactive I/O"));
   showInactive->setFont(makeOwned<CFontDesc>("Segoe UI", 12));
   showInactive->setFontColor(palette::kText);
