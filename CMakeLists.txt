@@ -347,6 +347,12 @@ add_executable(sar_route_matrix_smoke
 
 target_link_libraries(sar_route_matrix_smoke PRIVATE sar_core)
 
+add_executable(sar_vstgui_matrix_projection_smoke
+  tests/realtime/vstgui_matrix_projection_smoke.cpp
+)
+
+target_link_libraries(sar_vstgui_matrix_projection_smoke PRIVATE sar_core)
+
 add_executable(sar_preset_document_smoke
   tests/realtime/preset_document_smoke.cpp
 )
@@ -1120,6 +1126,7 @@ add_executable(sar_spsc_ring_buffer_threaded_smoke
 target_link_libraries(sar_spsc_ring_buffer_threaded_smoke PRIVATE sar_core)
 
 enable_testing()
+add_test(NAME vstgui_matrix_projection_smoke COMMAND sar_vstgui_matrix_projection_smoke)
 add_test(NAME capture_level_evidence_smoke COMMAND sar_capture_level_evidence_smoke)
 if(TARGET sar_gui_virtual_device_client_smoke)
   add_test(NAME gui_virtual_device_client_smoke COMMAND sar_gui_virtual_device_client_smoke)
