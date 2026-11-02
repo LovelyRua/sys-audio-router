@@ -16,6 +16,7 @@ struct VirtualAsioDeviceDefinition {
   std::uint32_t input_channels = 2;
   std::uint32_t output_channels = 2;
   bool enabled = true;
+  bool operator==(const VirtualAsioDeviceDefinition&) const = default;
 };
 
 }  // namespace sar::control

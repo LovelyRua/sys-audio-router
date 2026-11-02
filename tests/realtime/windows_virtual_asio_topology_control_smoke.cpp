@@ -110,6 +110,14 @@ bool registry_key_exists(const std::wstring& clsid) {
   return status == ERROR_SUCCESS;
 }
 
+bool asio_name_exists(const wchar_t* name) {
+  HKEY key = nullptr;
+  const auto path = std::wstring(L"Software\\ASIO\\") + name;
+  const auto status = RegOpenKeyExW(HKEY_CURRENT_USER, path.c_str(), 0, KEY_QUERY_VALUE, &key);
+  if (key) RegCloseKey(key);
+  return status == ERROR_SUCCESS;
+}
+
 void delete_registration(const std::wstring& clsid,
                          const std::wstring& registry_name) {
   const auto clsid_path = L"Software\\Classes\\CLSID\\" + clsid;
@@ -121,7 +129,8 @@ void delete_registration(const std::wstring& clsid,
 }  // namespace
 
 int wmain(int argc, wchar_t** argv) {
-  assert(argc == 2);
+  assert(argc == 2 || argc == 3);
+  const bool reload_mode = argc == 3 && std::wstring_view(argv[2]) == L"--reload";
   const std::wstring clsid_old = L"{705B4C39-BEB4-47E7-8FA9-B61F1C901A00}";
   const std::wstring clsid_a = L"{705B4C39-BEB4-47E7-8FA9-B61F1C901A01}";
   const std::wstring clsid_b = L"{705B4C39-BEB4-47E7-8FA9-B61F1C901A02}";
@@ -130,6 +139,7 @@ int wmain(int argc, wchar_t** argv) {
   delete_registration(clsid_old, L"SAR Topology Test Old");
   delete_registration(clsid_a, name_a);
   delete_registration(clsid_b, name_b);
+  delete_registration(clsid_a, L"SAR Topology Test Renamed");
 
   const auto token = std::to_wstring(GetCurrentProcessId()) + L"-" +
                      std::to_wstring(GetTickCount64());
@@ -165,7 +175,8 @@ int wmain(int argc, wchar_t** argv) {
   sar::control::ControlCommand configure;
   configure.command_id = "configure-two-asio-devices";
   configure.type =
-      sar::control::ControlCommandType::ConfigureVirtualAsioDevices;
+      reload_mode ? sar::control::ControlCommandType::ReloadVirtualAsioDevices
+                  : sar::control::ControlCommandType::ConfigureVirtualAsioDevices;
   configure.virtual_asio_devices = {
       {.device_id = "topology-a",
        .clsid = "{705B4C39-BEB4-47E7-8FA9-B61F1C901A01}",
@@ -195,6 +206,74 @@ int wmain(int argc, wchar_t** argv) {
   assert(response.response.has_virtual_asio_devices);
   assert(response.response.virtual_asio_devices.size() == 2);
 
+  if (reload_mode) {
+    sar::control::ControlCommand stale;
+    stale.command_id = "stale-preset-must-not-overwrite-reload";
+    stale.type = sar::control::ControlCommandType::LoadPreset;
+    stale.preset = initial_session().preset;
+    const auto stale_bytes = sar::control::encode_control_command(stale);
+    const auto stale_reply = sar::service::transact_named_pipe_control(pipe_config, as_bytes(stale_bytes.bytes), 300);
+    if (stale_reply.ok()) {
+      const auto state = sar::control::decode_control_response(as_u8(stale_reply.payload()));
+      assert(state.ok() && state.response.status == sar::control::ControlResponseStatus::Rejected);
+    }
+    bool reloaded = false;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    unsigned sequence = 0;
+    while (std::chrono::steady_clock::now() < deadline && !reloaded) {
+      assert(WaitForSingleObject(process.hProcess, 0) == WAIT_TIMEOUT);
+      sar::control::ControlCommand query;
+      query.command_id = "reload-readback-" + std::to_string(++sequence);
+      query.type = sar::control::ControlCommandType::QuerySessionState;
+      const auto bytes = sar::control::encode_control_command(query);
+      const auto reply = sar::service::transact_named_pipe_control(pipe_config, as_bytes(bytes.bytes), 200);
+      if (reply.ok()) {
+        const auto state = sar::control::decode_control_response(as_u8(reply.payload()));
+        if (state.ok() && state.response.status == sar::control::ControlResponseStatus::Accepted)
+          assert(state.response.has_preset && state.response.preset.matrix.inputs.size() == 6);
+        reloaded = state.ok() && state.response.has_preset &&
+            state.response.preset.matrix.inputs.size() == 6 &&
+            state.response.has_active_graph && state.response.active_graph.channels == 6;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    }
+    assert(reloaded);
+    configure.command_id = "reload-with-renamed-device";
+    configure.virtual_asio_devices[0].registry_name = "SAR Topology Test Renamed";
+    configure.virtual_asio_devices[0].input_channels = 4;
+    configure.virtual_asio_devices[0].output_channels = 4;
+    const auto renamed = sar::control::encode_control_command(configure);
+    assert(sar::service::transact_named_pipe_control(pipe_config, as_bytes(renamed.bytes), 5000).ok());
+    assert(!asio_name_exists(L"SAR Topology Test A"));
+    assert(asio_name_exists(L"SAR Topology Test Renamed"));
+    reloaded = false;
+    const auto second_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (std::chrono::steady_clock::now() < second_deadline && !reloaded) {
+      assert(WaitForSingleObject(process.hProcess, 0) == WAIT_TIMEOUT);
+      sar::control::ControlCommand query;
+      query.command_id = "second-reload-readback-" + std::to_string(++sequence);
+      query.type = sar::control::ControlCommandType::QuerySessionState;
+      const auto bytes = sar::control::encode_control_command(query);
+      const auto reply = sar::service::transact_named_pipe_control(pipe_config, as_bytes(bytes.bytes), 200);
+      if (reply.ok()) {
+        const auto state = sar::control::decode_control_response(as_u8(reply.payload()));
+        reloaded = state.ok() && state.response.has_preset &&
+            state.response.preset.matrix.inputs.size() == 8 && state.response.has_active_graph &&
+            state.response.active_graph.channels == 8;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    }
+    assert(reloaded);
+    std::wstring stop_command = L"\"" + std::wstring(argv[1]) + L"\" --pipe " + control_pipe + L" --stop";
+    PROCESS_INFORMATION stop_process{};
+    assert(CreateProcessW(nullptr, stop_command.data(), nullptr, nullptr, FALSE,
+        CREATE_NO_WINDOW, nullptr, nullptr, &startup, &stop_process));
+    CloseHandle(stop_process.hThread);
+    assert(WaitForSingleObject(stop_process.hProcess, 15000) == WAIT_OBJECT_0);
+    DWORD stop_exit = 1;
+    assert(GetExitCodeProcess(stop_process.hProcess, &stop_exit) && stop_exit == 0);
+    CloseHandle(stop_process.hProcess);
+  }
   assert(WaitForSingleObject(process.hProcess, 10000) == WAIT_OBJECT_0);
   DWORD exit_code = 1;
   assert(GetExitCodeProcess(process.hProcess, &exit_code));
@@ -206,12 +285,13 @@ int wmain(int argc, wchar_t** argv) {
       sar::control::decode_session_file(read_file(session_path));
   assert(decoded_session.ok());
   assert(decoded_session.session().virtual_asio_devices.size() == 2);
-  assert(decoded_session.session().preset.matrix.inputs.size() == 6);
-  assert(decoded_session.session().preset.matrix.outputs.size() == 6);
+  assert(decoded_session.session().preset.matrix.inputs.size() == (reload_mode ? 8 : 6));
+  assert(decoded_session.session().preset.matrix.outputs.size() == (reload_mode ? 8 : 6));
   assert(registry_key_exists(clsid_a));
   assert(registry_key_exists(clsid_b));
 
   delete_registration(clsid_a, name_a);
   delete_registration(clsid_b, name_b);
+  delete_registration(clsid_a, L"SAR Topology Test Renamed");
   std::filesystem::remove_all(directory);
 }

@@ -593,7 +593,9 @@ ControlCommandDecodeResult decode_control_command(
   command.command_id = reader.string();
   command.type = reader.enumeration<ControlCommandType>(
       static_cast<std::uint32_t>(
-          reader.version() >= 11
+          reader.version() >= 14
+              ? ControlCommandType::ReloadVirtualAsioDevices
+              : reader.version() >= 11
               ? ControlCommandType::ConfigureVirtualAsioDevices
               : ControlCommandType::ConfigureAudioRuntime));
   command.endpoint_id = reader.string();

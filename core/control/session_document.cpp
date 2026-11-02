@@ -116,8 +116,22 @@ SessionDocumentValidationResult validate_session_document(
                 std::make_move_iterator(runtime_errors.begin()),
                 std::make_move_iterator(runtime_errors.end()));
 
-  if (session.virtual_asio_devices.empty() ||
-      session.virtual_asio_devices.size() > kMaximumVirtualAsioDevices) {
+  auto asio_errors = validate_virtual_asio_devices(session.virtual_asio_devices);
+  errors.insert(errors.end(), std::make_move_iterator(asio_errors.begin()),
+                std::make_move_iterator(asio_errors.end()));
+
+  if (session.auto_start && runtime.mode == AudioRuntimeMode::None) {
+    errors.push_back({"auto_start_without_audio_runtime",
+                      "Session auto-start requires a configured audio runtime."});
+  }
+  if (!errors.empty()) return SessionDocumentValidationResult::failure(std::move(errors));
+  return SessionDocumentValidationResult::success();
+}
+
+std::vector<PresetError> validate_virtual_asio_devices(
+    std::span<const VirtualAsioDeviceDefinition> devices) {
+  std::vector<PresetError> errors;
+  if (devices.empty() || devices.size() > kMaximumVirtualAsioDevices) {
     errors.push_back({
         "invalid_virtual_asio_device_count",
         "Session requires between one and sixteen Virtual ASIO devices.",
@@ -127,7 +141,7 @@ SessionDocumentValidationResult validate_session_document(
   std::unordered_set<std::string> clsids;
   std::unordered_set<std::string> registry_names;
   std::unordered_set<std::string> broker_tokens;
-  for (const auto& device : session.virtual_asio_devices) {
+  for (const auto& device : devices) {
     const bool empty_field = device.device_id.empty() || device.clsid.empty() ||
                              device.registry_name.empty() ||
                              device.broker_token.empty();
@@ -171,17 +185,7 @@ SessionDocumentValidationResult validate_session_document(
     }
   }
 
-  if (session.auto_start && runtime.mode == AudioRuntimeMode::None) {
-    errors.push_back({
-        "auto_start_without_audio_runtime",
-        "Session auto-start requires a configured audio runtime.",
-    });
-  }
-
-  if (!errors.empty()) {
-    return SessionDocumentValidationResult::failure(std::move(errors));
-  }
-  return SessionDocumentValidationResult::success();
+  return errors;
 }
 
 }  // namespace sar::control

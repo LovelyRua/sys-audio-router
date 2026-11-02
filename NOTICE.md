@@ -4,6 +4,22 @@ System Audio Route is licensed under GNU GPL version 3. See `LICENSE`.
 
 ## Third-party components
 
+- **VB-CABLE Driver Pack 45** (proprietary donationware by VB-Audio / Vincent
+  Burel), optionally bundled unmodified under the published VB-CABLE distribution
+  conditions at https://vb-audio.com/Services/licensing.htm. Origin:
+  https://www.vb-cable.com/ . VB-CABLE is donationware; all contributions are
+  welcome. Original files, license/readme and ZIP are retained under `vendor/`.
+  It is a separate third-party driver, not GPL SAR code. It is installed only
+  through its own vendor setup after user approval and is not removed by SAR.
+  This permission does not cover bundling VB-CABLE A/B or C/D. Hi-Fi Cable and
+  additional cables are not included. Professional deployments must check the
+  vendor's applicable licensing requirements.
+
+- **nlohmann/json 3.11.3** (MIT), used only by the optional VSTGUI preview to
+  decode the independent virtual-device manager's JSON inventory. Its license
+  ships with that preview in `licenses/nlohmann-json/LICENSE.MIT`.
+- **VSTGUI 4.9** (BSD-3-Clause), used only by the optional native control-panel
+  preview. Its license ships with that preview in `licenses/vstgui/LICENSE`.
 - **Steinberg ASIO SDK 2.3.4** (unmodified interface headers). Copyright
   Steinberg Media Technologies GmbH, used under the GPLv3 option described by
   the SDK's included license. Source and archive verification details are in

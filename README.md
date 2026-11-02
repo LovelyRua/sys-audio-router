@@ -46,9 +46,9 @@ multiple WASAPI capture/render endpoints -> one clocked matrix
 - Physical ASIO is a **preview**. Its integration into the unified routing
   matrix is being staged and has only been exercised on limited hardware.
 - Physical ASIO currently requires the complete native channel set in order.
-- Virtual WDM/WASAPI endpoint creation is still under development, so ordinary
-  applications (browsers, OBS, Discord) cannot yet send audio to SAR without a
-  third-party virtual cable.
+- Self-developed virtual WDM/WASAPI driver work is on hold. The near-term path
+  uses third-party virtual cables for desktop application audio. Base VB-CABLE
+  can be bundled with attribution; A/B, C/D and Hi-Fi Cable remain separate.
 - The Virtual ASIO driver only accepts the engine's sample rate; a DAW project
   at a different rate cannot open the device until the engine is reconfigured.
 - The driver is registered for the current Windows user only and is x64 only:
@@ -155,7 +155,8 @@ Important directories:
 1. Move Physical ASIO from an exclusive runtime into the unified matrix.
 2. Finish mixed ASIO/WASAPI clock-master and follower recovery behavior.
 3. Complete multi-Virtual-ASIO GUI workflows and DAW compatibility coverage.
-4. Land the first Virtual WDM/WASAPI endpoint spike and make the driver decision.
+4. Qualify VB-CABLE render/capture integration and make its installation and
+   routing understandable; keep the self-developed virtual WASAPI driver on hold.
 5. Run longer hardware, hot-plug, install/update, and multi-DAW acceptance gates.
 
 See [Current System Architecture](docs/architecture/current-system.md),

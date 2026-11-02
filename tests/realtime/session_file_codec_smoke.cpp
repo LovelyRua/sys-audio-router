@@ -1,6 +1,8 @@
 #include "core/control/control_wire_protocol.h"
 #include "core/control/session_file_codec.h"
+#include "core/service/audio_runtime_matrix_preset.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -225,6 +227,10 @@ int main() {
   assert(sar::control::encode_session_file(default_duplex).ok());
 
   auto matrix = session;
+  matrix.preset.matrix.inputs.push_back({"foreign.ch1", "External Input"});
+  matrix.preset.matrix.outputs.push_back({"foreign.ch2", "External Output"});
+  matrix.preset.matrix.routes.push_back(
+      {"foreign.ch1", "foreign.ch2", 0.25F, true});
   matrix.audio_runtime = {};
   matrix.audio_runtime.mode = sar::control::AudioRuntimeMode::WasapiMatrix;
   matrix.audio_runtime.endpoints = {
@@ -285,6 +291,25 @@ int main() {
              .device_group_id.empty());
   assert(decoded_v4.session().audio_runtime.endpoints[0].sample_rate == 0);
   assert(decoded_v4.session().audio_runtime.endpoints[0].block_frames == 0);
+  const auto upgraded_matrix =
+      sar::service::reconcile_audio_runtime_matrix_preset(
+          decoded_v4.session().preset, {}, decoded_v4.session().audio_runtime);
+  assert(upgraded_matrix.ok());
+  const auto& upgraded_preset = upgraded_matrix.preset();
+  assert(std::ranges::any_of(upgraded_preset.matrix.inputs,
+                             [](const auto& port) {
+    return port.id == "foreign.ch1" && port.label == "External Input";
+  }));
+  assert(std::ranges::any_of(upgraded_preset.matrix.outputs,
+                             [](const auto& port) {
+    return port.id == "foreign.ch2" && port.label == "External Output";
+  }));
+  assert(std::ranges::any_of(upgraded_preset.matrix.routes,
+                             [](const auto& route) {
+    return route.input_id == "foreign.ch1" &&
+           route.output_id == "foreign.ch2" && route.gain == 0.25F &&
+           route.muted;
+  }));
 
   auto stopped = session;
   stopped.audio_runtime.mode = sar::control::AudioRuntimeMode::None;

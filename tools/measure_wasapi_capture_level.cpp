@@ -1,6 +1,7 @@
 #include "core/platform/windows_wasapi_stream.h"
 #include "core/platform/windows_wasapi_stream_probe.h"
 #include "core/realtime/audio_buffer.h"
+#include "tools/capture_level_evidence.h"
 
 #include <algorithm>
 #include <chrono>
@@ -16,7 +17,7 @@ namespace {
 
 constexpr std::uint32_t kDefaultDurationMs = 3000;
 constexpr std::uint32_t kDefaultTimeoutMs = 1000;
-constexpr float kNonSilentPeakThreshold = 1.0e-5F;
+constexpr float kNonSilentPeakThreshold = sar::tools::CaptureLevelEvidence::kSignalThreshold;
 
 enum class ExitCode : int {
   Success = 0,
@@ -33,14 +34,14 @@ struct Options {
 };
 
 struct LevelEvidence {
-  std::uint64_t frames = 0;
-  std::uint64_t finite_samples = 0;
-  std::uint64_t nonfinite = 0;
+  sar::tools::CaptureLevelEvidence level;
   std::uint64_t silent = 0;
   std::uint64_t timeout = 0;
   std::uint64_t error = 0;
-  double square_sum = 0.0;
-  float peak = 0.0F;
+  std::uint64_t silent_signal_frames = 0;
+  std::uint64_t elapsed_ms = 0;
+  std::uint32_t sample_rate = 0;
+  std::uint32_t channels = 0;
 };
 
 bool parse_u32(std::string_view text, std::uint32_t& value) noexcept {
@@ -114,47 +115,35 @@ void count_errors(const sar::platform::WasapiStreamIoResult& result,
   evidence.error += result.errors().size();
 }
 
-void measure_packet(const sar::realtime::AudioBuffer& buffer,
-                    std::uint32_t frames,
-                    LevelEvidence& evidence) noexcept {
-  for (std::size_t channel_index = 0; channel_index < buffer.channels();
-       ++channel_index) {
-    const auto channel = buffer.channel(channel_index);
-    for (std::uint32_t frame = 0; frame < frames; ++frame) {
-      const float sample = channel[frame];
-      if (!std::isfinite(sample)) {
-        ++evidence.nonfinite;
-        continue;
-      }
-
-      const float magnitude = std::fabs(sample);
-      evidence.peak = std::max(evidence.peak, magnitude);
-      evidence.square_sum += static_cast<double>(sample) *
-                             static_cast<double>(sample);
-      ++evidence.finite_samples;
-    }
-  }
-}
-
-double calculate_rms(const LevelEvidence& evidence) noexcept {
-  if (evidence.finite_samples == 0 || !std::isfinite(evidence.square_sum)) {
-    return 0.0;
-  }
-  return std::sqrt(evidence.square_sum /
-                   static_cast<double>(evidence.finite_samples));
+std::string frame_index(std::uint64_t value) {
+  return value == sar::tools::CaptureLevelEvidence::kNoFrame ? "-1" : std::to_string(value);
 }
 
 void print_evidence(const LevelEvidence& evidence) {
-  const double rms = calculate_rms(evidence);
+  const auto& level = evidence.level;
   std::cout << std::setprecision(9)
             << "wasapi_capture_level"
-            << " frames=" << evidence.frames
-            << " peak=" << evidence.peak
-            << " rms=" << rms
-            << " nonfinite=" << evidence.nonfinite
+            << " frames=" << level.frames
+            << " peak=" << level.peak
+            << " rms=" << level.rms()
+            << " nonfinite=" << level.nonfinite
             << " silent=" << evidence.silent
             << " timeout=" << evidence.timeout
-            << " error=" << evidence.error << '\n';
+            << " error=" << evidence.error
+            << " sample_rate=" << evidence.sample_rate << " channels=" << evidence.channels
+            << " elapsed_ms=" << evidence.elapsed_ms << " packets=" << level.packets
+            << " nonzero_samples=" << level.nonzero_samples
+            << " nonzero_frames=" << level.nonzero_frames
+            << " signal_frames=" << level.signal_frames
+            << " signal_packets=" << level.signal_packets
+            << " first_signal_frame=" << frame_index(level.first_signal_frame)
+            << " last_signal_frame=" << frame_index(level.last_signal_frame)
+            << " first_signal_packet=" << frame_index(level.first_signal_packet)
+            << " peak_frame=" << frame_index(level.peak_frame)
+            << " maximum_step=" << level.maximum_step
+            << " maximum_step_frame=" << frame_index(level.maximum_step_frame)
+            << " maximum_step_channel=" << level.maximum_step_channel
+            << " silent_signal_frames=" << evidence.silent_signal_frames << '\n';
 }
 
 }  // namespace
@@ -192,6 +181,9 @@ int main(int argc, char** argv) {
 
   auto stream = open_result.take_stream();
   const auto& probe = stream.probe();
+  evidence.sample_rate = probe.mix_format.sample_rate;
+  evidence.channels = probe.mix_format.channels;
+  evidence.level = sar::tools::CaptureLevelEvidence(evidence.channels);
   sar::realtime::AudioBuffer capture_buffer(probe.mix_format.channels,
                                             probe.buffer_frames);
 
@@ -202,7 +194,8 @@ int main(int argc, char** argv) {
     return static_cast<int>(ExitCode::RuntimeError);
   }
 
-  const auto deadline = std::chrono::steady_clock::now() +
+  const auto started = std::chrono::steady_clock::now();
+  const auto deadline = started +
                         std::chrono::milliseconds(options.duration_ms);
   while (std::chrono::steady_clock::now() < deadline) {
     const auto capture_result =
@@ -221,23 +214,29 @@ int main(int argc, char** argv) {
     }
 
     const auto frames = capture_result.frames();
-    evidence.frames += frames;
+    const auto previous_signal_frames = evidence.level.signal_frames;
+    if (!evidence.level.observe(capture_buffer, frames)) {
+      ++evidence.error;
+      break;
+    }
     if (capture_result.silent()) {
       evidence.silent += frames;
+      evidence.silent_signal_frames += evidence.level.signal_frames - previous_signal_frames;
     }
-    measure_packet(capture_buffer, frames, evidence);
   }
 
   const auto stop_result = stream.stop();
   if (!stop_result.ok()) {
     count_errors(stop_result, evidence);
   }
+  evidence.elapsed_ms = static_cast<std::uint64_t>(std::chrono::duration_cast<
+      std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count());
   print_evidence(evidence);
 
-  if (evidence.error != 0 || evidence.nonfinite != 0) {
+  if (evidence.error != 0 || evidence.level.nonfinite != 0) {
     return static_cast<int>(ExitCode::RuntimeError);
   }
-  if (evidence.frames == 0 || evidence.peak < kNonSilentPeakThreshold) {
+  if (evidence.level.frames == 0 || evidence.level.peak < kNonSilentPeakThreshold) {
     return static_cast<int>(ExitCode::Silent);
   }
   return static_cast<int>(ExitCode::Success);

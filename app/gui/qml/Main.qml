@@ -1,4 +1,5 @@
 import QtQuick
+import "MatrixProjection.js" as MatrixProjection
 import QtQuick.Controls
 import QtQuick.Layouts
 
@@ -77,10 +78,14 @@ ApplicationWindow {
     property bool showInactiveIo: false
     readonly property var matrixInputs: projectEndpoints(engine.inputs, true,
                                                           engine.runtimeMode,
-                                                          showInactiveIo)
+                                                          showInactiveIo,
+                                                          engine.runtimeConfigured,
+                                                          engine.runtimeEndpoints)
     readonly property var matrixOutputs: projectEndpoints(engine.outputs, false,
                                                            engine.runtimeMode,
-                                                           showInactiveIo)
+                                                           showInactiveIo,
+                                                           engine.runtimeConfigured,
+                                                           engine.runtimeEndpoints)
     property real meterTarget: 0
     property real meterLevel: 0
     property real meterHold: 0
@@ -239,22 +244,11 @@ ApplicationWindow {
         return inputId.length + ":" + inputId + outputId
     }
 
-    function projectEndpoints(endpoints, source, runtimeMode, includeInactive) {
-        var projected = []
-        for (var index = 0; index < endpoints.length; ++index) {
-            var endpoint = endpoints[index]
-            var family = endpointFamily(endpoint, index, endpoints.length)
-            var active = runtimeMode === "duplex" || runtimeMode === "matrix" ||
-                    (source ? family !== "wasapi" : family !== "asio")
-            if (active || includeInactive) {
-                projected.push({
-                    id: endpoint.id,
-                    label: endpoint.label,
-                    active: active
-                })
-            }
-        }
-        return projected
+    function projectEndpoints(endpoints, source, runtimeMode, includeInactive,
+                              runtimeConfigured, runtimeEndpoints) {
+        return MatrixProjection.projectEndpoints(endpoints, source, runtimeMode,
+                                                  includeInactive, runtimeConfigured,
+                                                  runtimeEndpoints)
     }
 
     function endpointActive(endpointId) {
@@ -269,18 +263,7 @@ ApplicationWindow {
     }
 
     function endpointFamily(endpoint, index, count) {
-        var identity = (String(endpoint.id) + " " + String(endpoint.label)).toLowerCase()
-        if (identity.indexOf("asio") >= 0 || identity.indexOf("daw") >= 0 ||
-                identity.indexOf("virtual") >= 0)
-            return "asio"
-        if (identity.indexOf("wasapi") >= 0 || identity.indexOf("capture") >= 0 ||
-                identity.indexOf("render") >= 0 || identity.indexOf("monitor") >= 0 ||
-                identity.indexOf("hardware") >= 0)
-            return "wasapi"
-        // The unified duplex layout is conventionally WASAPI L/R followed by ASIO L/R.
-        if (count === 4)
-            return index < 2 ? "wasapi" : "asio"
-        return "other"
+        return MatrixProjection.endpointFamily(endpoint, index, count)
     }
 
     function endpointGroupTitle(endpoint, index, count, source) {

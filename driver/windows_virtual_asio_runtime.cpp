@@ -1,4 +1,5 @@
 #include "driver/windows_virtual_asio_runtime.h"
+#include "core/platform/windows_virtual_asio_pipe_name.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -77,7 +78,7 @@ std::wstring default_broker_pipe_name() {
   if (length > 0 && length < value.size()) {
     return {value.data(), length};
   }
-  return L"sys-audio-route-control-virtual-asio";
+  return sar::platform::virtual_asio_broker_pipe_name(L"virtual-asio");
 }
 
 std::string client_id(std::uint64_t random_value) {

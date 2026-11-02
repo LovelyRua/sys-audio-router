@@ -4,6 +4,59 @@ System Audio Route (SAR) is alpha software. Read the
 [current limits](../README.md#current-limits) before using it on a production
 rig.
 
+## Installing and choosing a control panel
+
+Use the Windows GUI Package artifact from the revision you want to test. Extract
+the downloaded artifact and run its `SystemAudioRoute-*-windows-x64.exe`
+installer. The regular **System Audio Route** shortcut opens the Qt control
+panel. Packages built with `SAR_PACKAGE_NATIVE_PREVIEW=ON` also install
+**System Audio Route Native Preview** in the Start menu.
+
+Both shortcuts use the same launcher, engine, per-user control pipe, session and
+log paths. You do not need to start the engine manually for the native preview.
+For a ZIP installation, run `install-alpha.cmd`, then use
+`start-native-preview.cmd` in the installed directory. Do not move individual
+EXEs or Qt runtime folders out of the installed layout.
+
+The native preview is optional, not yet feature-equivalent to the Qt panel.
+It supports routing, route gain/mute and multi-WASAPI runtime configuration;
+presets, full diagnostics and other Qt workflows are not ported yet. Closing
+the native window leaves the engine running without the Qt close-choice dialog.
+Its Start audio / Stop audio buttons control streaming, not the engine process.
+Changes in either panel affect the same live session; avoid editing both at once.
+
+This installer registers Virtual ASIO but does **not** install an experimental
+virtual WASAPI kernel driver or its management helper. It does not change Secure
+Boot or test-signing settings. Ordinary WASAPI device routing needs no SAR kernel
+driver. The native Virtual WASAPI management window requires a separately
+provisioned driver-lab environment; a missing helper there is expected for a
+normal installation.
+
+### VB-CABLE integration
+
+Builds with `SAR_BUNDLE_VBCABLE=ON` include the original base VB-CABLE Pack 45
+under `vendor/`, with its unchanged archive and readme. In the native Audio
+devices window choose **Install VB-CABLE...** to open VB-Audio's own setup after
+signature validation and administrator approval. Review the vendor terms there;
+SAR does not install silently, accept agreements, or reboot automatically.
+Finish installation, reboot when requested, reopen SAR and Refresh devices.
+
+VB-CABLE is donationware by VB-Audio (https://www.vb-cable.com/); contributions
+are welcome through the **VB-Audio / Donate** button. Professional distribution
+has additional licensing conditions. A/B, C/D and Hi-Fi Cable are not bundled.
+Install those separately from your own licensed vendor packages.
+
+Windows **CABLE Input** is a playback destination: send SAR audio to it using a
+playback endpoint. Windows **CABLE Output** is a recording source: choose it as
+a capture endpoint to receive audio into SAR. These vendor names describe the
+cable's perspective, not SAR's direction. Use the actual reported channels;
+do not assume every cable or driver version is stereo. Hi-Fi Cable requires
+matching playback and recording sample rates. Resampling or mixing in SAR means
+the route must not be described as bit-perfect.
+
+SAR uninstall removes its bundled setup files, not the installed VB-CABLE device.
+Use VB-Audio's own setup for driver removal, after closing applications using it.
+
 ## Start and stop
 
 Start **System Audio Route** from the Start menu or desktop shortcut. The

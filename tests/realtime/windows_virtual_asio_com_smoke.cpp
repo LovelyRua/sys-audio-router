@@ -2,6 +2,7 @@
 #include "driver/windows_virtual_asio_runtime.h"
 #include "core/graph/graph.h"
 #include "core/service/windows_virtual_asio_broker_server.h"
+#include "core/platform/windows_virtual_asio_pipe_name.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -167,7 +168,7 @@ int wmain(int argc, wchar_t** argv) {
   const std::wstring instance_token =
       L"asio-com-smoke-" + std::to_wstring(GetCurrentProcessId());
   const std::wstring pipe_name =
-      L"sys-audio-route-control-" + instance_token;
+      sar::platform::default_control_pipe_name() + L"-" + instance_token;
   sar::service::WindowsVirtualAsioTransportHost transport_host({
       .endpoint_token = "asio-com-smoke",
       .maximum_clients = 2,
@@ -178,8 +179,9 @@ int wmain(int argc, wchar_t** argv) {
       pipe_name, transport_host, make_graph,
       [] { return sar::platform::VirtualAsioFormat{48000, 256, 8, 8}; });
   assert(broker_server.start().ok());
-  assert(SetEnvironmentVariableW(L"SAR_VIRTUAL_ASIO_PIPE",
-                                 pipe_name.c_str()));
+  // The registered-instance test must use the product's user-scoped naming
+  // contract, not a test-only environment override that masks a mismatch.
+  assert(SetEnvironmentVariableW(L"SAR_VIRTUAL_ASIO_PIPE", nullptr));
 
   HMODULE module = LoadLibraryW(argv[1]);
   assert(module != nullptr);
@@ -220,6 +222,7 @@ int wmain(int argc, wchar_t** argv) {
   assert(custom_factory->Release() == 0);
   assert(RegDeleteTreeW(HKEY_CURRENT_USER, custom_key.c_str()) ==
          ERROR_SUCCESS);
+  assert(SetEnvironmentVariableW(L"SAR_VIRTUAL_ASIO_PIPE", pipe_name.c_str()));
 
   CLSID unknown = sar::driver::kWindowsVirtualAsioClsid;
   ++unknown.Data1;
@@ -290,6 +293,18 @@ int wmain(int argc, wchar_t** argv) {
   channel_info.isInput = ASIOTrue;
   assert(asio->getChannelInfo(&channel_info) == ASE_OK);
   assert(std::strcmp(channel_info.name, "Input 8") == 0);
+
+  // Invalid host enumeration must return, not recursively lock control_mutex_.
+  for (const auto input : {ASIOFalse, ASIOTrue}) {
+    channel_info = {};
+    channel_info.isInput = input;
+    channel_info.channel = -1;
+    assert(asio->getChannelInfo(&channel_info) == ASE_InvalidParameter);
+    channel_info.channel = input == ASIOTrue ? input_channels : output_channels;
+    assert(asio->getChannelInfo(&channel_info) == ASE_InvalidParameter);
+    channel_info.channel = 0;
+    assert(asio->getChannelInfo(&channel_info) == ASE_OK);
+  }
 
   std::array<ASIOBufferInfo, 4> buffer_infos{};
   for (long index = 0; index < 2; ++index) {
@@ -363,6 +378,33 @@ int wmain(int argc, wchar_t** argv) {
   assert(factory->LockServer(FALSE) == S_OK);
   assert(factory->Release() == 0);
   assert(can_unload() == S_OK);
+
+  // Exercise the unregistered legacy DLL fallback with no override, too.
+  // init() deliberately returns true on discovery failure, so checking its
+  // return value alone would miss this regression: verify format and buffers.
+  assert(SetEnvironmentVariableW(L"SAR_VIRTUAL_ASIO_PIPE", nullptr));
+  sar::service::WindowsVirtualAsioBrokerServer default_broker(
+      sar::platform::default_control_pipe_name() + L"-virtual-asio",
+      transport_host, make_graph,
+      [] { return sar::platform::VirtualAsioFormat{48000, 256, 8, 8}; });
+  assert(default_broker.start().ok());
+  factory = nullptr;
+  assert(get_class(sar::driver::kWindowsVirtualAsioClsid, IID_IClassFactory,
+                   reinterpret_cast<void**>(&factory)) == S_OK);
+  driver = nullptr;
+  assert(factory->CreateInstance(nullptr, sar::driver::kWindowsVirtualAsioClsid,
+                                 reinterpret_cast<void**>(&driver)) == S_OK);
+  asio = static_cast<IASIO*>(driver);
+  assert(asio->init(nullptr) == ASIOTrue);
+  assert(asio->getChannels(&input_channels, &output_channels) == ASE_OK);
+  assert(input_channels == 8 && output_channels == 8);
+  assert(asio->createBuffers(buffer_infos.data(), static_cast<long>(buffer_infos.size()),
+                             256, &callbacks) == ASE_OK);
+  assert(asio->disposeBuffers() == ASE_OK);
+  assert(driver->Release() == 0);
+  assert(factory->Release() == 0);
+  assert(can_unload() == S_OK);
+  default_broker.stop();
 
   assert(FreeLibrary(module));
   active_buffers = nullptr;

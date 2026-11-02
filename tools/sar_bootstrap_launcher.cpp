@@ -171,14 +171,20 @@ int fail(const wchar_t* message) noexcept {
 
 }  // namespace
 
-int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
+int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR command_line, int) {
+  const std::wstring_view arguments = command_line ? command_line : L"";
+  const bool native = arguments == L"--native";
+  if (!arguments.empty() && !native) {
+    return fail(L"Unsupported launcher option. Use no option or --native.");
+  }
   const auto directory = executable_directory();
   if (directory.empty()) {
     return fail(L"Could not locate the System Audio Route installation.");
   }
 
   const auto engine = directory / L"sar_engine_service.exe";
-  const auto gui = directory / L"SystemAudioRoute.exe";
+  const auto gui = directory / (native ? L"SystemAudioRouteVstgui.exe"
+                                       : L"SystemAudioRoute.exe");
   if (!std::filesystem::is_regular_file(engine) ||
       !std::filesystem::is_regular_file(gui)) {
     return fail(L"The installation is incomplete. Reinstall System Audio Route.");

@@ -1,6 +1,7 @@
 #include "app/gui_vstgui/engine_client.h"
 #include "core/control/control_wire_protocol.h"
 #include "core/service/windows_named_pipe_control.h"
+#include "core/control/session_document.h"
 
 #include <Windows.h>
 #include <atomic>
@@ -9,6 +10,21 @@
 
 int main() {
   using namespace sar;
+  using Backend = control::AudioRuntimeEndpointBackend;
+  using Direction = control::AudioRuntimeEndpointDirection;
+  control::AudioRuntimeConfiguration runtimeConfiguration;
+  runtimeConfiguration.mode = control::AudioRuntimeMode::WasapiMatrix;
+  runtimeConfiguration.endpoints = {
+      {"wasapi-capture", "microphone", Direction::Capture, false, 0, 2,
+       Backend::Wasapi},
+      {"wasapi-render", "speakers", Direction::Render, false, 0, 4,
+       Backend::Wasapi},
+      {"asio-capture", "asio-driver", Direction::Capture, false, 0, 6,
+       Backend::PhysicalAsio, "asio-group", 48000, 128},
+      {"asio-render", "asio-driver", Direction::Render, true, 0, 8,
+       Backend::PhysicalAsio, "asio-group", 48000, 128},
+  };
+  assert(control::validate_audio_runtime_configuration(runtimeConfiguration, false).empty());
   service::NamedPipeControlConfig config;
   config.pipe_name = L"sar-vstgui-client-test-" + std::to_wstring(GetCurrentProcessId());
   std::atomic_bool reject_session{false};
@@ -17,6 +33,8 @@ int main() {
   bool connected = false;
   float gain = 1.0F;
   bool muted = false;
+  auto topology = std::vector{control::default_virtual_asio_device_definition()};
+  bool rejectTopology = false;
   service::WindowsNamedPipeControlServer server(config,
       [&](std::span<const std::byte> payload) {
         std::vector<std::uint8_t> bytes;
@@ -26,6 +44,19 @@ int main() {
         const auto& command = decoded.command;
         auto response = control::command_accepted(command.command_id);
         switch (command.type) {
+          case control::ControlCommandType::QueryVirtualAsioDevices:
+            response.has_virtual_asio_devices = true;
+            response.virtual_asio_devices = topology;
+            break;
+          case control::ControlCommandType::ReloadVirtualAsioDevices:
+            if (rejectTopology) response = control::command_rejected(command.command_id,
+                {{"test_topology_rejected", "Close DAW clients first"}});
+            else {
+              topology = command.virtual_asio_devices;
+              response.has_virtual_asio_devices = true;
+              response.virtual_asio_devices = topology;
+            }
+            break;
           case control::ControlCommandType::StartAudioRuntime:
           case control::ControlCommandType::StopAudioRuntime:
             response = control::command_rejected(command.command_id,
@@ -34,6 +65,7 @@ int main() {
           case control::ControlCommandType::QueryAudioRuntime:
             response.has_audio_runtime_state = true;
             response.audio_runtime.configured = true;
+            response.audio_runtime.configuration = runtimeConfiguration;
             break;
           case control::ControlCommandType::QuerySessionState:
             if (reject_session.load()) {
@@ -78,8 +110,37 @@ int main() {
       });
   assert(server.start().ok());
   gui_vstgui::EngineClient client(config.pipe_name);
+  const auto asio = client.inspectVirtualAsioDevices();
+  assert(asio.available && asio.devices.size() == 1 && !asio.running && !asio.activeClients);
+  auto changed = asio.devices;
+  changed[0].registry_name = "SAR Renamed";
+  changed[0].input_channels = changed[0].output_channels = 4;
+  const auto accepted = client.reloadVirtualAsioDevices(changed);
+  assert(accepted.reloadAccepted && accepted.devices == changed);
+  assert(client.inspectVirtualAsioDevices().devices == changed);
+  rejectTopology = true;
+  const auto rejected = client.reloadVirtualAsioDevices(changed);
+  assert(!rejected.reloadAccepted && rejected.error.find("Close DAW") != std::string::npos);
+  assert(!client.reloadVirtualAsioDevices({}).reloadAccepted);
   const auto initial = client.poll();
   assert(initial.transportOk && initial.runtimeConfigured);
+  assert(initial.runtimeConfiguration.mode == control::AudioRuntimeMode::WasapiMatrix);
+  const auto& endpoints = initial.runtimeConfiguration.endpoints;
+  assert(endpoints.size() == runtimeConfiguration.endpoints.size());
+  for (std::size_t index = 0; index < endpoints.size(); ++index) {
+    const auto& actual = endpoints[index];
+    const auto& expected = runtimeConfiguration.endpoints[index];
+    assert(actual.endpoint_id == expected.endpoint_id);
+    assert(actual.device_id == expected.device_id);
+    assert(actual.direction == expected.direction);
+    assert(actual.clock_master == expected.clock_master);
+    assert(actual.first_channel == expected.first_channel);
+    assert(actual.channel_count == expected.channel_count);
+    assert(actual.backend == expected.backend);
+    assert(actual.device_group_id == expected.device_group_id);
+    assert(actual.sample_rate == expected.sample_rate);
+    assert(actual.block_frames == expected.block_frames);
+  }
   assert(initial.sampleRate == 48000 && initial.blockFrames == 128);
   assert(initial.hasMatrix && initial.matrix.inputs.size() == 1);
   assert(initial.matrix.outputs.front().label == "Main out");

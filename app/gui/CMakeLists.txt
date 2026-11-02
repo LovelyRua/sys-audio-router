@@ -11,6 +11,7 @@ qt_add_qml_module(sar_gui
   VERSION 1.0
   QML_FILES
     qml/Main.qml
+    qml/MatrixProjection.js
 )
 
 target_link_libraries(sar_gui PRIVATE
@@ -111,3 +112,15 @@ add_test(NAME gui_qml_page_structure_smoke
   COMMAND ${CMAKE_COMMAND}
     -DMAIN_QML=${CMAKE_CURRENT_SOURCE_DIR}/qml/Main.qml
     -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/qml_page_structure_smoke.cmake)
+
+add_executable(sar_gui_matrix_projection_smoke tests/matrix_projection_smoke.cpp)
+target_link_libraries(sar_gui_matrix_projection_smoke PRIVATE Qt6::Qml)
+add_test(NAME gui_matrix_projection_smoke
+  COMMAND sar_gui_matrix_projection_smoke
+    "${CMAKE_CURRENT_SOURCE_DIR}/qml/MatrixProjection.js"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/matrix_projection_cases.js")
+set_tests_properties(gui_matrix_projection_smoke PROPERTIES
+  ENVIRONMENT_MODIFICATION
+    "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
+  TIMEOUT 10
+)

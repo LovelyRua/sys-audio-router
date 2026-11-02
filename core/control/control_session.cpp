@@ -110,7 +110,8 @@ ControlResponse ControlSession::handle(const ControlCommand& command,
       command.type == ControlCommandType::StopAudioRuntime ||
       command.type == ControlCommandType::ConfigureAudioRuntime ||
       command.type == ControlCommandType::QueryVirtualAsioDevices ||
-      command.type == ControlCommandType::ConfigureVirtualAsioDevices) {
+      command.type == ControlCommandType::ConfigureVirtualAsioDevices ||
+      command.type == ControlCommandType::ReloadVirtualAsioDevices) {
     return command_rejected(command.command_id, {
         {"audio_runtime_command_requires_service",
          "Audio runtime commands must be handled by the engine service."},

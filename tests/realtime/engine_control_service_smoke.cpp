@@ -1,9 +1,12 @@
-#include "core/service/engine_control_service.h"
+#include "core/control/session_file_codec.h"
 #include "core/platform/mock_audio_device_provider.h"
+#include "core/service/engine_control_service.h"
 
+#include <algorithm>
 #include <cassert>
 #include <memory>
 #include <stdexcept>
+#include <string_view>
 
 namespace {
 
@@ -99,9 +102,385 @@ sar::control::ControlResponse send(
   return response.response;
 }
 
+bool has_port(const std::vector<sar::graph::RouteEndpointDescriptor>& ports,
+              std::string_view id) {
+  return std::ranges::any_of(ports, [&](const auto& port) {
+    return port.id == id;
+  });
+}
+
+bool same_matrix(const sar::control::PresetRouteMatrix& left,
+                 const sar::control::PresetRouteMatrix& right) {
+  const auto same_port = [](const auto& first, const auto& second) {
+    return first.id == second.id && first.label == second.label;
+  };
+  const auto same_route = [](const auto& first, const auto& second) {
+    return first.input_id == second.input_id &&
+           first.output_id == second.output_id && first.gain == second.gain &&
+           first.muted == second.muted;
+  };
+  return std::ranges::equal(left.inputs, right.inputs, same_port) &&
+         std::ranges::equal(left.outputs, right.outputs, same_port) &&
+         std::ranges::equal(left.routes, right.routes, same_route);
+}
+
+void test_matrix_session_snapshot_restore() {
+  using Direction = sar::control::AudioRuntimeEndpointDirection;
+  using Mode = sar::control::AudioRuntimeMode;
+
+  auto preset = make_preset();
+  preset.matrix.inputs.push_back({"foreign.ch1", "External Input"});
+  preset.matrix.outputs.push_back({"foreign.ch2", "External Output"});
+  preset.matrix.routes.push_back(
+      {"foreign.ch1", "foreign.ch2", 0.25F, true});
+  auto created = sar::service::EngineControlService::create(preset);
+  assert(created.ok());
+  auto service = created.take_service();
+  bool reject_configuration = false;
+  bool reject_start = false;
+  const auto install_fake_configurator = [&](auto& engine) {
+    engine.set_audio_runtime_configurator(
+        [&](const sar::control::AudioRuntimeConfiguration&,
+            std::shared_ptr<sar::graph::Graph> graph,
+            const sar::control::PresetRouteMatrix&) {
+          if (reject_configuration) {
+            return sar::service::EngineAudioRuntimeBuildResult::failure({
+                {"injected_configuration_failure", "Injected failure."},
+            });
+          }
+          return sar::service::EngineAudioRuntimeBuildResult::success(
+              std::make_unique<FakeAudioRuntime>(graph->version(),
+                                                 reject_start));
+        });
+  };
+  install_fake_configurator(*service);
+
+  sar::control::AudioRuntimeConfiguration old_configuration;
+  old_configuration.mode = Mode::WasapiMatrix;
+  old_configuration.endpoints = {
+      {"BGM", "capture-bgm", Direction::Capture, false, 0, 2},
+      {"MIC", "capture-mic", Direction::Capture, false, 0, 2},
+      {"RAW MIC IN", "capture-raw", Direction::Capture, false, 0, 2},
+      {"MAIN OUT", "render-old-main", Direction::Render, false, 0, 2},
+      {"AUX OUT", "render-old-aux", Direction::Render, false, 0, 2},
+      {"MOTU", "render-old-motu", Direction::Render, false, 0, 2},
+      {"MAIN RENDER", "render-main", Direction::Render, true, 0, 2},
+  };
+  const auto configured_old = service->configure_audio_runtime(old_configuration);
+  assert(configured_old.ok());
+
+  sar::control::ControlCommand route;
+  route.command_id = "snapshot-retained-route";
+  route.type = sar::control::ControlCommandType::ConnectRoute;
+  route.input_id = "RAW MIC IN.ch1";
+  route.output_id = "MAIN RENDER.ch1";
+  route.gain = 0.5F;
+  const auto connected = send(*service, route);
+  assert(connected.status == sar::control::ControlResponseStatus::Accepted);
+  route.command_id = "snapshot-retained-mute";
+  route.type = sar::control::ControlCommandType::SetMute;
+  route.mute = true;
+  const auto muted = send(*service, route);
+  assert(muted.status == sar::control::ControlResponseStatus::Accepted);
+
+  sar::control::AudioRuntimeConfiguration preview;
+  preview.mode = Mode::PhysicalAsio;
+  preview.physical_asio_driver_clsid = "{preview-driver}";
+  preview.physical_asio_sample_rate = 48000;
+  preview.physical_asio_block_frames = 128;
+  preview.physical_asio_input_channels = {0, 1};
+  preview.physical_asio_output_channels = {0, 1};
+  const auto before_preview = service->session_document();
+  assert(service->start_audio_runtime().ok());
+  reject_configuration = true;
+  const auto rejected_preview = service->configure_audio_runtime(preview);
+  assert(!rejected_preview.ok());
+  assert(rejected_preview.errors()[0].code == "injected_configuration_failure");
+  assert(service->audio_runtime_running());
+  assert(service->session_document().audio_runtime.mode == Mode::WasapiMatrix);
+  assert(same_matrix(service->session_document().preset.matrix,
+                     before_preview.preset.matrix));
+  reject_configuration = false;
+  reject_start = true;
+  const auto rejected_preview_start = service->configure_audio_runtime(preview);
+  assert(!rejected_preview_start.ok());
+  assert(rejected_preview_start.errors()[0].code == "injected_start_failure");
+  assert(service->audio_runtime_running());
+  assert(service->session_document().audio_runtime.mode == Mode::WasapiMatrix);
+  assert(same_matrix(service->session_document().preset.matrix,
+                     before_preview.preset.matrix));
+  reject_start = false;
+  service->stop_audio_runtime();
+  const auto configured_preview = service->configure_audio_runtime(preview);
+  assert(configured_preview.ok());
+  assert(has_port(service->session_document().preset.matrix.inputs, "BGM.ch1"));
+  sar::control::ControlCommand load_same_topology;
+  load_same_topology.command_id = "snapshot-same-topology";
+  load_same_topology.type = sar::control::ControlCommandType::LoadPreset;
+  load_same_topology.preset = service->session_document().preset;
+  load_same_topology.preset.matrix.routes[0].gain = 0.75F;
+  const auto loaded_same_topology = send(*service, load_same_topology);
+  assert(loaded_same_topology.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  const auto started_preview = service->start_audio_runtime();
+  assert(started_preview.ok());
+  const auto preview_snapshot = service->session_document();
+  const auto preview_graph_version =
+      service->session().current_graph()->version();
+  const auto assert_preview_restored = [&] {
+    const auto current = service->session_document();
+    assert(current.audio_runtime.mode == Mode::PhysicalAsio);
+    assert(current.audio_runtime.physical_asio_driver_clsid ==
+           preview.physical_asio_driver_clsid);
+    assert(current.audio_runtime.physical_asio_input_channels ==
+           preview.physical_asio_input_channels);
+    assert(current.audio_runtime.physical_asio_output_channels ==
+           preview.physical_asio_output_channels);
+    assert(current.auto_start);
+    assert(service->session().current_graph()->version() ==
+           preview_graph_version);
+    assert(same_matrix(current.preset.matrix, preview_snapshot.preset.matrix));
+  };
+  bool reject_observer = false;
+  service->set_preset_commit_observer(
+      [&](const sar::control::PresetDocument&, std::uint64_t) {
+        if (reject_observer) {
+          return std::vector<sar::control::PresetError>{
+              {"injected_observer_failure", "Injected observer failure."},
+          };
+        }
+        return std::vector<sar::control::PresetError>{};
+      });
+  sar::control::ControlCommand rejected_load;
+  rejected_load.command_id = "snapshot-rejected-load";
+  rejected_load.type = sar::control::ControlCommandType::LoadPreset;
+  rejected_load.preset = preset;
+  reject_observer = true;
+  const auto load_failed = send(*service, rejected_load);
+  assert(load_failed.status == sar::control::ControlResponseStatus::Rejected);
+  assert(load_failed.errors[0].code == "injected_observer_failure");
+  assert_preview_restored();
+  reject_observer = false;
+
+  sar::control::AudioRuntimeConfiguration next_configuration;
+  next_configuration.mode = Mode::WasapiMatrix;
+  next_configuration.endpoints = {
+      {"RAW MIC IN", "capture-raw", Direction::Capture, false, 0, 2},
+      {"COMPOSITE IN", "capture-composite", Direction::Capture, false, 0, 2},
+      {"MAIN RENDER", "render-main", Direction::Render, true, 0, 2},
+      {"BGM RENDER", "render-bgm", Direction::Render, false, 0, 2},
+  };
+  reject_configuration = true;
+  const auto rejected_next =
+      service->configure_audio_runtime(next_configuration);
+  assert(!rejected_next.ok());
+  assert(rejected_next.errors()[0].code == "injected_configuration_failure");
+  assert_preview_restored();
+  reject_configuration = false;
+  reject_start = true;
+  const auto rejected_next_start =
+      service->configure_audio_runtime(next_configuration);
+  assert(!rejected_next_start.ok());
+  assert(rejected_next_start.errors()[0].code == "injected_start_failure");
+  assert_preview_restored();
+  reject_start = false;
+  reject_observer = true;
+  const auto rejected_next_commit =
+      service->configure_audio_runtime(next_configuration);
+  assert(!rejected_next_commit.ok());
+  assert(rejected_next_commit.errors()[0].code == "injected_observer_failure");
+  assert_preview_restored();
+  reject_observer = false;
+  const auto configured_next =
+      service->configure_audio_runtime(next_configuration);
+  assert(configured_next.ok());
+  auto snapshot = service->session_document();
+  snapshot.virtual_asio_devices.push_back(
+      sar::control::default_virtual_asio_device_definition());
+  const auto encoded = sar::control::encode_session_file(snapshot);
+  assert(encoded.ok());
+  const auto decoded = sar::control::decode_session_file(encoded.bytes());
+  assert(decoded.ok());
+
+  auto reopened = sar::service::EngineControlService::create(
+      decoded.session().preset);
+  assert(reopened.ok());
+  auto restored = reopened.take_service();
+  install_fake_configurator(*restored);
+  const auto configured_restored =
+      restored->configure_audio_runtime(decoded.session().audio_runtime);
+  assert(configured_restored.ok());
+  assert(decoded.session().auto_start);
+  const auto started_restored = restored->start_audio_runtime();
+  assert(started_restored.ok());
+  const auto actual = restored->session_document();
+  for (const auto* id : {"BGM.ch1", "BGM.ch2", "MIC.ch1", "MIC.ch2"}) {
+    assert(!has_port(actual.preset.matrix.inputs, id));
+  }
+  for (const auto* id : {"MAIN OUT.ch1", "MAIN OUT.ch2", "AUX OUT.ch1",
+                         "AUX OUT.ch2", "MOTU.ch1", "MOTU.ch2"}) {
+    assert(!has_port(actual.preset.matrix.outputs, id));
+  }
+  assert(has_port(actual.preset.matrix.inputs, "COMPOSITE IN.ch1"));
+  assert(has_port(actual.preset.matrix.outputs, "BGM RENDER.ch1"));
+  assert(has_port(actual.preset.matrix.inputs, "foreign.ch1"));
+  assert(has_port(actual.preset.matrix.outputs, "foreign.ch2"));
+  assert(std::ranges::any_of(actual.preset.matrix.routes, [](const auto& route) {
+    return route.input_id == "foreign.ch1" && route.output_id == "foreign.ch2" &&
+           route.gain == 0.25F && route.muted;
+  }));
+  assert(std::ranges::any_of(actual.preset.matrix.routes, [](const auto& route) {
+    return route.input_id == "RAW MIC IN.ch1" &&
+           route.output_id == "MAIN RENDER.ch1" && route.gain == 0.5F &&
+           route.muted;
+  }));
+  assert(std::ranges::any_of(actual.preset.matrix.routes, [](const auto& route) {
+    return route.input_id == "input" && route.output_id == "output" &&
+           route.gain == 0.75F;
+  }));
+
+  auto preview_reopened = sar::service::EngineControlService::create(
+      preview_snapshot.preset);
+  assert(preview_reopened.ok());
+  auto preview_without_history = preview_reopened.take_service();
+  install_fake_configurator(*preview_without_history);
+  assert(preview_without_history
+             ->configure_audio_runtime(preview_snapshot.audio_runtime)
+             .ok());
+  assert(preview_without_history->configure_audio_runtime(next_configuration)
+             .ok());
+  const auto unknown_history = preview_without_history->session_document();
+  assert(has_port(unknown_history.preset.matrix.inputs, "BGM.ch1"));
+  assert(has_port(unknown_history.preset.matrix.outputs, "MAIN OUT.ch1"));
+  assert(has_port(unknown_history.preset.matrix.inputs, "foreign.ch1"));
+  assert(has_port(unknown_history.preset.matrix.outputs, "foreign.ch2"));
+
+  auto ambiguous_created = sar::service::EngineControlService::create(preset);
+  assert(ambiguous_created.ok());
+  auto ambiguous = ambiguous_created.take_service();
+  install_fake_configurator(*ambiguous);
+  const auto ambiguous_old = ambiguous->configure_audio_runtime(old_configuration);
+  assert(ambiguous_old.ok());
+  const auto ambiguous_preview = ambiguous->configure_audio_runtime(preview);
+  assert(ambiguous_preview.ok());
+  sar::control::ControlCommand load;
+  load.command_id = "load-ambiguous-topology";
+  load.type = sar::control::ControlCommandType::LoadPreset;
+  load.preset = preset;
+  load.preset.matrix.inputs.push_back({"BGM.ch1", "External Sampler"});
+  load.preset.matrix.routes.push_back(
+      {"BGM.ch1", "foreign.ch2", 0.625F, true});
+  const auto loaded = send(*ambiguous, load);
+  assert(loaded.status == sar::control::ControlResponseStatus::Accepted);
+  const auto ambiguous_next =
+      ambiguous->configure_audio_runtime(next_configuration);
+  assert(ambiguous_next.ok());
+  const auto ambiguous_preset = ambiguous->session_document().preset;
+  assert(std::ranges::any_of(ambiguous_preset.matrix.inputs, [](const auto& port) {
+    return port.id == "BGM.ch1" && port.label == "External Sampler";
+  }));
+  assert(std::ranges::any_of(ambiguous_preset.matrix.routes, [](const auto& item) {
+    return item.input_id == "BGM.ch1" && item.output_id == "foreign.ch2" &&
+           item.gain == 0.625F && item.muted;
+  }));
+
+  auto legacy_created = sar::service::EngineControlService::create(preset);
+  assert(legacy_created.ok());
+  auto legacy = legacy_created.take_service();
+  install_fake_configurator(*legacy);
+  const auto legacy_old = legacy->configure_audio_runtime(old_configuration);
+  assert(legacy_old.ok());
+  const auto legacy_preview = legacy->configure_audio_runtime(preview);
+  assert(legacy_preview.ok());
+  sar::control::AudioRuntimeConfiguration duplex;
+  duplex.mode = Mode::WasapiDuplex;
+  duplex.capture_device_id = "capture-raw";
+  duplex.render_device_id = "render-main";
+  const auto configured_duplex = legacy->configure_audio_runtime(duplex);
+  assert(configured_duplex.ok());
+  const auto legacy_preset = legacy->session_document().preset;
+  assert(!has_port(legacy_preset.matrix.inputs, "BGM.ch1"));
+  assert(!has_port(legacy_preset.matrix.outputs, "MAIN OUT.ch1"));
+  assert(has_port(legacy_preset.matrix.inputs, "wasapi-capture-l"));
+  assert(has_port(legacy_preset.matrix.outputs, "wasapi-render-l"));
+  assert(has_port(legacy_preset.matrix.inputs, "foreign.ch1"));
+  assert(has_port(legacy_preset.matrix.outputs, "foreign.ch2"));
+
+  auto ambiguous_legacy_created =
+      sar::service::EngineControlService::create(preset);
+  assert(ambiguous_legacy_created.ok());
+  auto ambiguous_legacy = ambiguous_legacy_created.take_service();
+  install_fake_configurator(*ambiguous_legacy);
+  assert(ambiguous_legacy->configure_audio_runtime(old_configuration).ok());
+  assert(ambiguous_legacy->configure_audio_runtime(preview).ok());
+  const auto ambiguous_legacy_load = send(*ambiguous_legacy, load);
+  assert(ambiguous_legacy_load.status ==
+         sar::control::ControlResponseStatus::Accepted);
+  assert(ambiguous_legacy->configure_audio_runtime(duplex).ok());
+  const auto ambiguous_legacy_preset =
+      ambiguous_legacy->session_document().preset;
+  assert(has_port(ambiguous_legacy_preset.matrix.inputs, "wasapi-capture-l"));
+  assert(has_port(ambiguous_legacy_preset.matrix.outputs, "wasapi-render-l"));
+  assert(std::ranges::any_of(ambiguous_legacy_preset.matrix.inputs,
+                             [](const auto& port) {
+    return port.id == "BGM.ch1" && port.label == "External Sampler";
+  }));
+  assert(std::ranges::any_of(ambiguous_legacy_preset.matrix.routes,
+                             [](const auto& item) {
+    return item.input_id == "BGM.ch1" && item.output_id == "foreign.ch2" &&
+           item.gain == 0.625F && item.muted;
+  }));
+
+  auto restore_failure_created =
+      sar::service::EngineControlService::create(preset);
+  assert(restore_failure_created.ok());
+  auto restore_failure_service = restore_failure_created.take_service();
+  FakeAudioRuntime* restore_failure_runtime = nullptr;
+  restore_failure_service->set_audio_runtime_configurator(
+      [&](const sar::control::AudioRuntimeConfiguration&,
+          std::shared_ptr<sar::graph::Graph> graph,
+          const sar::control::PresetRouteMatrix&) {
+        if (reject_configuration) {
+          return sar::service::EngineAudioRuntimeBuildResult::failure({
+              {"injected_configuration_failure", "Injected failure."},
+          });
+        }
+        auto runtime = std::make_unique<FakeAudioRuntime>(graph->version());
+        restore_failure_runtime = runtime.get();
+        return sar::service::EngineAudioRuntimeBuildResult::success(
+            std::move(runtime));
+      });
+  assert(restore_failure_service->configure_audio_runtime(old_configuration)
+             .ok());
+  assert(restore_failure_service->start_audio_runtime().ok());
+  const auto before_failed_restore = restore_failure_service->session_document();
+  restore_failure_runtime->fail_start_ = true;
+  reject_configuration = true;
+  const auto failed_restore =
+      restore_failure_service->configure_audio_runtime(next_configuration);
+  assert(!failed_restore.ok());
+  assert(failed_restore.errors().size() == 2);
+  assert(failed_restore.errors()[1].code ==
+         "audio_runtime_restore_failed_injected_start_failure");
+  assert(!restore_failure_service->audio_runtime_running());
+  assert(restore_failure_service->session_document().audio_runtime.mode ==
+         Mode::WasapiMatrix);
+  assert(same_matrix(restore_failure_service->session_document().preset.matrix,
+                     before_failed_restore.preset.matrix));
+  restore_failure_runtime->fail_start_ = false;
+  reject_configuration = false;
+  assert(restore_failure_service->start_audio_runtime().ok());
+  assert(restore_failure_service->configure_audio_runtime(next_configuration)
+             .ok());
+  assert(!has_port(
+      restore_failure_service->session_document().preset.matrix.inputs,
+      "BGM.ch1"));
+}
+
 }  // namespace
 
 int main() {
+  test_matrix_session_snapshot_restore();
   auto replay_create =
       sar::service::EngineControlService::create(make_preset(), 100);
   assert(replay_create.ok());

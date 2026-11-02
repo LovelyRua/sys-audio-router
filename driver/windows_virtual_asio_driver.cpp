@@ -1,5 +1,6 @@
 #include "driver/windows_virtual_asio_com.h"
 #include "driver/windows_virtual_asio_runtime.h"
+#include "core/platform/windows_virtual_asio_pipe_name.h"
 
 #include <Unknwn.h>
 
@@ -121,7 +122,7 @@ bool resolve_instance(REFCLSID clsid, VirtualAsioInstanceDescriptor& instance) {
       instance.clsid = clsid;
       instance.display_name = std::move(display_name);
       instance.broker_pipe_name =
-          std::wstring(L"sys-audio-route-control-") + broker_token;
+          sar::platform::virtual_asio_broker_pipe_name(broker_token);
       return true;
     }
   }
@@ -346,6 +347,7 @@ class VirtualAsioDriver final : public IASIO {
       return fail_thread_safe(ASE_InvalidParameter,
                               "Buffer size output pointers must not be null.");
     }
+    std::scoped_lock lock(control_mutex_);
     if (format_discovered_) {
       *minimum = kMinimumBufferFrames;
       *maximum = kMaximumBufferFrames;
@@ -443,7 +445,7 @@ class VirtualAsioDriver final : public IASIO {
     const auto channel_count = info->isInput == ASIOTrue ? input_channels_
                                                          : output_channels_;
     if (info->channel < 0 || info->channel >= channel_count) {
-      return fail_thread_safe(ASE_InvalidParameter,
+      return fail(ASE_InvalidParameter,
                               "The requested channel does not exist.");
     }
     info->isActive = channel_active(info->isInput, info->channel) ? ASIOTrue

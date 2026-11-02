@@ -8,6 +8,13 @@ Status legend: **Done** (implemented and covered by CI), **Open** (work we can
 do in the repository), **External** (needs something outside the repository:
 a certificate, hardware, a driver test machine).
 
+Current delivery priority (2026-10-20): integrate existing VB-CABLE WASAPI
+endpoints and the native user workflow. Self-developed virtual WASAPI driver
+work is on hold; historical FEAT-1 evidence below is retained, not a promise to
+ship that driver. Only base VB-CABLE is eligible for the attributed bundle;
+A/B, C/D and Hi-Fi Cable are separate prerequisites. Installer launch and payload
+checks do not establish audio continuity or compatibility with every VB product.
+
 ## Release and delivery
 
 | ID | Item | Status |
@@ -17,7 +24,7 @@ a certificate, hardware, a driver test machine).
 | REL-3 | Icon, version resource, About/version display | Done: every shipped executable and the driver carry VERSIONINFO; executables carry the icon; the version shows in the control panel |
 | REL-4 | Update check | Open |
 | LIC-1 | Third-party license texts in the package | Done: libsamplerate and ASIO SDK licenses ship under `licenses/`; `NOTICE.md` lists Qt, libsamplerate, ASIO SDK, and the VC++ runtime |
-| FEAT-1 | Virtual WDM/WASAPI endpoints | Open: the Win11 driver lab exists and Microsoft sample endpoints were enumerated there. The driver is now scoped as a separate MS-PL project with a public-WASAPI-only integration boundary; SAR still does not install or expose its own virtual endpoint. See `docs/architecture/virtual-wasapi-driver-boundary.md` |
+| FEAT-1 | Virtual WDM/WASAPI endpoints | Open: a separate MS-PL experimental driver passes short public-WASAPI sound-content, live matrix route-transition, and steady receiving-endpoint timeline checks through the product engine, both within one adapter and across two adapters. Native GUI adapter management is implemented as an experimental preview, with interactive acceptance tracked separately; this is not shipping installer delivery. Full waveform continuity/soak is not passed. See `docs/development/virtual-wasapi-gui-lab.md`, `docs/development/virtual-wasapi-matrix-acceptance.md` and `docs/architecture/virtual-wasapi-driver-boundary.md` |
 | QUAL-1 | Release soaks (second 8 h pairing, 24 h, multi-DAW) and more DAWs/interfaces | External: needs hardware time |
 
 ## Lifecycle and reliability
@@ -27,9 +34,9 @@ a certificate, hardware, a driver test machine).
 | LIFE-1 | One engine lifecycle | Done: the engine always runs detached and outlives the control panel; closing the window asks to keep or stop it |
 | LIFE-2 | Start at login | Done: per-user Run entry launches the engine headless and restores the session. A tray icon is still Open |
 | OBS-1 | Logs and crash dumps | Done: rotating `engine.log`, minidumps under `logs\crashdumps`, "Logs" button and error-bar shortcut. The Export button bundles logs, session, dumps, and a system summary into a zip |
-| INST-1 | Graceful update/uninstall | Done: installers call `sar_engine_service --stop`, ask the GUI to close, and only then force-kill |
-| INST-2 | ASIO registration scope (per-user vs all users, cross-account UAC) | Open |
-| INST-3 | Per-user control pipe name | Done: the default pipe name is now `sys-audio-route-control-<SID>` (`core/platform/windows_current_user_sid.cpp`), computed independently by the engine, the control CLI, the bootstrap launcher, and the GUI so two Windows users never contend for one pipe. An explicit `--pipe NAME` still overrides it for tests and lab tooling |
+| INST-1 | Graceful update/uninstall | Open: on VM24, interactive reinstall's default pre-uninstall stopped the engine and removed user ASIO registration while REAPER held the DLL, before the new installer reached its Welcome page. Silent WinRM reinstall also disrupted the engine, and silent uninstall left files and registration. Interactive uninstall after closing apps succeeded. Repair and retest locked-DLL, running-app, Session 0 and cross-version flows; see `docs/development/installed-user-acceptance-20261031.md` |
+| INST-2 | ASIO registration scope (per-user vs all users, cross-account UAC) | Open: the installer-created user registration was not discovered by REAPER 7.41 on VM24; temporary machine registration allowed discovery. See `docs/development/installed-user-acceptance-20261031.md` |
+| INST-3 | Per-user control pipe name | Done: the default pipe name is `sys-audio-route-control-<SID>`. ASIO broker derivation is shared by the engine, registered DLL and runtime fallback, repairing a buffer-initialization timeout reproduced in REAPER. CI and VM24 playback evidence: `docs/development/reaper-user-pipe-20261029.md`. An explicit engine `--pipe NAME` still overrides the control name for tests and lab tooling |
 | DRV-1 | Sample-rate negotiation with the DAW | Open: engine-side rate change or conversion needed |
 | DRV-2 | Real latency reporting from `getLatencies` | Open: needs a measured round-trip latency model |
 | DRV-3 | ASIO Control Panel button opens the app | Done |
@@ -51,7 +58,7 @@ a certificate, hardware, a driver test machine).
 | UX-9 | Per-channel meters and mixer view | Open |
 | UX-10 | Engine-provided endpoint families (replace name matching in `Main.qml`) | Open |
 | GUI-1 | Split `Main.qml`; add Qt Quick Test | Open |
-| GUI-2 | VSTGUI-based control panel as a replacement for the Qt Quick GUI | Open: `app/gui_vstgui` is a parallel prototype behind `SAR_BUILD_GUI_VSTGUI` (default off), wired to the real engine over the control pipe. It has engine status and start/stop, a paged interactive routing matrix, and a route inspector with gain and mute. Windows CI builds, tests, and publishes a preview executable. Still missing: device configuration, diagnostics detail, presets, dialogs, localization, keyboard/accessible navigation, and interactive user-flow verification. The Qt Quick GUI remains the shipped control panel until this catches up |
+| GUI-2 | VSTGUI-based control panel as a replacement for the Qt Quick GUI | Open: `app/gui_vstgui` remains an optional preview, not a Qt replacement. It has workspace navigation, distinct offline/stopped/running states, a paged matrix with gain-preserving mute and double-click gain reset, WASAPI runtime editing, preset save/load/delete, aggregate/per-endpoint diagnostics, virtual-ASIO topology editing with verified in-process reload, physical-ASIO matrix group/driver/channel/timing editing, and English/Simplified Chinese primary UI with shared saved language preference. Selected menu keyboard paths passed VM24 acceptance after index/value synchronization. Evidence: `docs/development/native-runtime-editor.md`, `docs/development/native-asio-editor.md`, `docs/development/native-physical-asio-editor.md`, `docs/development/native-localization.md`; startup coverage opens six windows in each language. Experimental Driver lab and some technical text retain English. Still open: complete keyboard/accessibility navigation, real physical-ASIO acceptance, full installer/user-flow parity and investigation if the recorded intermediate Chinese startup timeout recurs. The lab has no physical ASIO driver. The custom kernel WASAPI project remains paused; no new audio reliability pass is implied. Qt remains the default entry |
 
 ## Engineering and process
 
@@ -60,6 +67,6 @@ a certificate, hardware, a driver test machine).
 | CI-1 | Warnings-as-errors, static analysis | Open |
 | CI-2 | Mutation/fuzz coverage of decoders | Done for the control wire protocol, session, and preset codecs (`control_codec_mutation_smoke`) and the Virtual ASIO broker protocol (`virtual_asio_broker_protocol_mutation_smoke`) — the DLL-facing surface a DAW process talks to. The shared-memory/ring-buffer layouts (`virtual_wasapi_transport_layout`, `virtual_asio_shared_memory_layout`) already had dedicated adversarial smokes before this review |
 | CI-3 | Sanitizer job | See the advisory ASan job in `.github/workflows/ci.yml` |
-| SEC-1 | No credentials in docs or arguments | Done for docs and the WinRM wrappers that take a password (`SAR_TEST_PASSWORD`) |
+| SEC-1 | No credentials in docs or arguments | Partly done: normal lab runs use `SAR_TEST_PASSWORD`. The legacy `windows-winrm-reaper-acceptance.cmd` still forwards a password argument and must be migrated; it was not used for the October 29 REAPER validation |
 | SEC-2 | Control-client authorization | Open |
 | OSS-1 | CONTRIBUTING, SECURITY, issue template | Done |
