@@ -10,6 +10,21 @@
 
 int main() {
   using namespace sar;
+  using Backend = control::AudioRuntimeEndpointBackend;
+  using Direction = control::AudioRuntimeEndpointDirection;
+  control::AudioRuntimeConfiguration runtimeConfiguration;
+  runtimeConfiguration.mode = control::AudioRuntimeMode::WasapiMatrix;
+  runtimeConfiguration.endpoints = {
+      {"wasapi-capture", "microphone", Direction::Capture, false, 0, 2,
+       Backend::Wasapi},
+      {"wasapi-render", "speakers", Direction::Render, false, 0, 4,
+       Backend::Wasapi},
+      {"asio-capture", "asio-driver", Direction::Capture, false, 0, 6,
+       Backend::PhysicalAsio, "asio-group", 48000, 128},
+      {"asio-render", "asio-driver", Direction::Render, true, 0, 8,
+       Backend::PhysicalAsio, "asio-group", 48000, 128},
+  };
+  assert(control::validate_audio_runtime_configuration(runtimeConfiguration, false).empty());
   service::NamedPipeControlConfig config;
   config.pipe_name = L"sar-vstgui-client-test-" + std::to_wstring(GetCurrentProcessId());
   std::atomic_bool reject_session{false};
@@ -50,6 +65,7 @@ int main() {
           case control::ControlCommandType::QueryAudioRuntime:
             response.has_audio_runtime_state = true;
             response.audio_runtime.configured = true;
+            response.audio_runtime.configuration = runtimeConfiguration;
             break;
           case control::ControlCommandType::QuerySessionState:
             if (reject_session.load()) {
@@ -108,6 +124,23 @@ int main() {
   assert(!client.reloadVirtualAsioDevices({}).reloadAccepted);
   const auto initial = client.poll();
   assert(initial.transportOk && initial.runtimeConfigured);
+  assert(initial.runtimeConfiguration.mode == control::AudioRuntimeMode::WasapiMatrix);
+  const auto& endpoints = initial.runtimeConfiguration.endpoints;
+  assert(endpoints.size() == runtimeConfiguration.endpoints.size());
+  for (std::size_t index = 0; index < endpoints.size(); ++index) {
+    const auto& actual = endpoints[index];
+    const auto& expected = runtimeConfiguration.endpoints[index];
+    assert(actual.endpoint_id == expected.endpoint_id);
+    assert(actual.device_id == expected.device_id);
+    assert(actual.direction == expected.direction);
+    assert(actual.clock_master == expected.clock_master);
+    assert(actual.first_channel == expected.first_channel);
+    assert(actual.channel_count == expected.channel_count);
+    assert(actual.backend == expected.backend);
+    assert(actual.device_group_id == expected.device_group_id);
+    assert(actual.sample_rate == expected.sample_rate);
+    assert(actual.block_frames == expected.block_frames);
+  }
   assert(initial.sampleRate == 48000 && initial.blockFrames == 128);
   assert(initial.hasMatrix && initial.matrix.inputs.size() == 1);
   assert(initial.matrix.outputs.front().label == "Main out");

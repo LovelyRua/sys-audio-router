@@ -16,6 +16,7 @@ struct EngineState {
   bool transportOk = false;
   bool runtimeConfigured = false;
   bool runtimeRunning = false;
+  control::AudioRuntimeConfiguration runtimeConfiguration;
   std::uint32_t sampleRate = 0;
   std::uint32_t blockFrames = 0;
   std::uint64_t xrunCount = 0;

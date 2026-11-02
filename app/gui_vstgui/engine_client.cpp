@@ -98,6 +98,7 @@ EngineState EngineClient::poll() {
   if (runtime_response->has_audio_runtime_state) {
     state.runtimeConfigured = runtime_response->audio_runtime.configured;
     state.runtimeRunning = runtime_response->audio_runtime.running;
+    state.runtimeConfiguration = runtime_response->audio_runtime.configuration;
   }
 
   control::ControlCommand session_query;
