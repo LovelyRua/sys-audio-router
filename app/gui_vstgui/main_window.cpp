@@ -11,6 +11,7 @@
 #include "app/gui_vstgui/asio_device_window.h"
 #include "app/gui_vstgui/request_error_state.h"
 #include "app/gui_vstgui/matrix_page.h"
+#include "app/gui_vstgui/matrix_projection.h"
 #include "app/gui_vstgui/route_gain_text.h"
 #include "app/gui_vstgui/route_edit_queue.h"
 #include "app/gui_vstgui/view_ownership.h"
@@ -136,11 +137,13 @@ class MatrixCellButton final : public CTextButton {
   bool selectOnly() const noexcept { return selectOnly_; }
   bool removeRequested() const noexcept { return removeRequested_; }
 
-  void present(bool available, bool connected, bool muted, bool selected) {
+  void present(bool available, bool active, bool connected, bool muted, bool selected) {
     const std::string caption = !available ? "" : !connected ? "+" : muted ? "MUTE" : "ON";
-    const auto fill = connected ? (muted ? palette::kSurface : CColor(35, 61, 44)) : palette::kRaised;
+    const auto fill = !active ? palette::kCanvas :
+        connected ? (muted ? palette::kSurface : CColor(35, 61, 44)) : palette::kRaised;
     const auto border = selected ? palette::kSteel : palette::kLine;
-    const auto ink = !connected ? palette::kMuted : muted ? palette::kWarning : palette::kHealthy;
+    const auto ink = !active ? CColor(78, 78, 82) :
+        !connected ? palette::kMuted : muted ? palette::kWarning : palette::kHealthy;
     if (caption_ == caption && fill_ == fill && border_ == border && ink_ == ink) return;
     caption_ = caption; fill_ = fill; border_ = border; ink_ = ink;
     setTitle(tr(caption_.c_str()));
@@ -213,12 +216,15 @@ class HeaderController final : public IControlListener {
                     SharedPointer<CTextButton> previousRows,
                     SharedPointer<CTextButton> nextRows,
                     SharedPointer<CTextButton> previousColumns,
-                    SharedPointer<CTextButton> nextColumns) {
+                    SharedPointer<CTextButton> nextColumns,
+                    SharedPointer<CCheckBox> showInactive) {
     inputs_ = std::move(inputs);
     outputs_ = std::move(outputs);
     cells_ = std::move(cells);
     summary_ = std::move(summary);
     navigation_ = {previousRows, nextRows, previousColumns, nextColumns};
+    showInactive_ = std::move(showInactive);
+    showInactive_->setListener(this);
     for (std::size_t i = 0; i < cells_.size(); ++i) {
       auto& cell = cells_[i];
       cell->setListener(this);
@@ -284,6 +290,11 @@ class HeaderController final : public IControlListener {
   }
 
   void valueChanged(CControl* control) override {
+    if (control == showInactive_.get()) {
+      updateProjection();
+      renderMatrix();
+      return;
+    }
     if (control->getTag() == 905) {
       const auto menu = dynamic_cast<COptionMenu*>(control);
       if (!menu || menu->getCurrentIndex() < 0 || menu->getCurrentIndex() > 2) return;
@@ -319,7 +330,7 @@ class HeaderController final : public IControlListener {
     }
     if (control == gainSlider_.get()) {
       const auto route = selectedRoute();
-      if (!route || !gainSlider_->isEditing()) return;
+      if (!route || !selectedEndpointsActive() || !gainSlider_->isEditing()) return;
       const float db = -60.0F + gainSlider_->getValueNormalized() * 72.0F;
       const float gain = db <= -60.0F ? 0.0F : std::pow(10.0F, db / 20.0F);
       gainText_->setText(formatGain(gain).c_str());
@@ -328,12 +339,12 @@ class HeaderController final : public IControlListener {
     }
     if (control == muteButton_.get() && control->getValue() > 0.5F) {
       const auto route = selectedRoute();
-      if (!route) return;
+      if (!route || !selectedEndpointsActive()) return;
       queueEdit({RouteAction::Mute, selectedInputId_, selectedOutputId_, 0.0F, !route->muted});
       return;
     }
     if (control == resetButton_.get() && control->getValue() > 0.5F) {
-      if (!selectedRoute()) return;
+      if (!selectedRoute() || !selectedEndpointsActive()) return;
       gainSlider_->setValueNormalized(60.0F / 72.0F);
       gainSlider_->invalid();
       gainText_->setText("0.0 dB");
@@ -361,15 +372,17 @@ class HeaderController final : public IControlListener {
       const auto row = rows_.first() + i / kVisibleColumns;
       const auto column = columns_.first() + i % kVisibleColumns;
       if (engineCommandPending_ || queuedCommand_ || !last_.transportOk || !last_.hasMatrix ||
-          row >= last_.matrix.inputs.size() || column >= last_.matrix.outputs.size()) return;
-      const auto& input = last_.matrix.inputs[row].id;
-      const auto& output = last_.matrix.outputs[column].id;
+          !last_.runtimeConfigured ||
+          row >= displayMatrix_.inputs.size() || column >= displayMatrix_.outputs.size() ||
+          row >= inputActive_.size() || column >= outputActive_.size()) return;
+      const auto& input = displayMatrix_.inputs[row].id;
+      const auto& output = displayMatrix_.outputs[column].id;
       const auto route = std::find_if(displayMatrix_.routes.begin(), displayMatrix_.routes.end(),
           [&](const auto& route) { return route.input_id == input && route.output_id == output; });
       selectedInputId_ = input;
       selectedOutputId_ = output;
       error_.clear();
-      if (!cells_[i]->selectOnly()) {
+      if (!cells_[i]->selectOnly() && inputActive_[row] && outputActive_[column]) {
         queueEdit(routeClickCommand(input, output,
             route == displayMatrix_.routes.end() ? nullptr : &*route,
             cells_[i]->removeRequested()));
@@ -390,13 +403,14 @@ class HeaderController final : public IControlListener {
 
  private:
   void queueEdit(RouteCommand command) {
-    if (!last_.transportOk || !last_.hasMatrix || queuedCommand_ || engineCommandPending_) return;
+    if (!last_.transportOk || !last_.hasMatrix || !last_.runtimeConfigured ||
+        queuedCommand_ || engineCommandPending_) return;
     if (!edits_.enqueue(std::move(command))) {
       error_.observe("Too many pending route edits; wait for the engine", true);
     } else {
       error_.clear();
     }
-    displayMatrix_ = edits_.project(last_.matrix);
+    updateProjection();
     renderMatrix();
     if (!pending_.valid()) submit();
   }
@@ -407,6 +421,27 @@ class HeaderController final : public IControlListener {
       return route.input_id == selectedInputId_ && route.output_id == selectedOutputId_;
     });
     return found == routes.end() ? nullptr : &*found;
+  }
+
+  bool selectedEndpointsActive() const {
+    const auto input = std::find_if(displayMatrix_.inputs.begin(), displayMatrix_.inputs.end(),
+        [&](const auto& endpoint) { return endpoint.id == selectedInputId_; });
+    const auto output = std::find_if(displayMatrix_.outputs.begin(), displayMatrix_.outputs.end(),
+        [&](const auto& endpoint) { return endpoint.id == selectedOutputId_; });
+    if (input == displayMatrix_.inputs.end() || output == displayMatrix_.outputs.end()) return false;
+    const auto row = static_cast<std::size_t>(input - displayMatrix_.inputs.begin());
+    const auto column = static_cast<std::size_t>(output - displayMatrix_.outputs.begin());
+    return row < inputActive_.size() && column < outputActive_.size() &&
+           inputActive_[row] && outputActive_[column];
+  }
+
+  void updateProjection() {
+    auto projection = projectMatrix(edits_.project(last_.matrix), last_.runtimeConfiguration,
+                                    last_.runtimeConfigured,
+                                    showInactive_ && showInactive_->getValue() > 0.5F);
+    displayMatrix_ = std::move(projection.matrix);
+    inputActive_ = std::move(projection.inputActive);
+    outputActive_ = std::move(projection.outputActive);
   }
 
   static std::string formatGain(float gain) {
@@ -461,7 +496,7 @@ class HeaderController final : public IControlListener {
     state.lastError = error_.message();
     last_ = state;
     if (!state.transportOk || !state.hasMatrix) edits_.clear();
-    displayMatrix_ = edits_.project(state.matrix);
+    updateProjection();
     if (dot_) {
       dot_->setColor(!state.transportOk ? palette::kDanger :
                     !state.lastError.empty() ? palette::kWarning :
@@ -516,6 +551,8 @@ class HeaderController final : public IControlListener {
           ? matrix.inputs[index].label.c_str() : "");
       inputs_[row]->setTooltipText(available && index < matrix.inputs.size()
           ? matrix.inputs[index].label.c_str() : "");
+      inputs_[row]->setFontColor(available && index < inputActive_.size() && inputActive_[index]
+          ? palette::kText : CColor(78, 78, 82));
     }
     for (std::size_t column = 0; column < kVisibleColumns; ++column) {
       const auto index = columns_.first() + column;
@@ -524,12 +561,16 @@ class HeaderController final : public IControlListener {
           ? matrix.outputs[index].label.c_str() : "");
       outputs_[column]->setTooltipText(available && index < matrix.outputs.size()
           ? matrix.outputs[index].label.c_str() : "");
+      outputs_[column]->setFontColor(available && index < outputActive_.size() && outputActive_[index]
+          ? palette::kMuted : CColor(78, 78, 82));
     }
     for (std::size_t i = 0; i < cells_.size(); ++i) {
       const auto row = rows_.first() + i / kVisibleColumns;
       const auto column = columns_.first() + i % kVisibleColumns;
       const bool valid = available && rows_.contains(i / kVisibleColumns) &&
                          columns_.contains(i % kVisibleColumns);
+      const bool active = valid && row < inputActive_.size() && column < outputActive_.size() &&
+                          inputActive_[row] && outputActive_[column];
       const bool connected = valid && std::any_of(matrix.routes.begin(), matrix.routes.end(),
           [&](const auto& route) {
             return route.input_id == matrix.inputs[row].id &&
@@ -540,7 +581,7 @@ class HeaderController final : public IControlListener {
       const bool muted = connected && std::any_of(matrix.routes.begin(), matrix.routes.end(),
           [&](const auto& route) { return route.input_id == matrix.inputs[row].id &&
               route.output_id == matrix.outputs[column].id && route.muted; });
-      cells_[i]->present(valid, connected, muted, selected);
+      cells_[i]->present(valid, active, connected, muted, selected);
       cells_[i]->setVisible(valid);
       cells_[i]->setMouseEnabled(valid && !engineCommandPending_ && !queuedCommand_);
     }
@@ -587,12 +628,13 @@ class HeaderController final : public IControlListener {
       }
       gainText_->setText(active ? formatGain(route->gain).c_str() : "-- dB");
     }
-    const bool editable = active && !engineCommandPending_ && !queuedCommand_;
+    const bool editable = active && selectedEndpointsActive() &&
+                          !engineCommandPending_ && !queuedCommand_;
     setPanelControlEnabled(*gainSlider_, editable);
     setPanelControlEnabled(*muteButton_, editable);
     muteButton_->setTitle(tr(active && route->muted ? "Unmute" : "Mute"));
     setPanelControlEnabled(*resetButton_, editable);
-    setPanelControlEnabled(*removeButton_, editable);
+    setPanelControlEnabled(*removeButton_, active && !engineCommandPending_ && !queuedCommand_);
   }
 
   std::shared_ptr<EngineClient> client_ = std::make_shared<EngineClient>();
@@ -601,6 +643,8 @@ class HeaderController final : public IControlListener {
   int queuedCommand_ = 0;
   RouteEditQueue edits_;
   control::PresetRouteMatrix displayMatrix_;
+  std::vector<bool> inputActive_;
+  std::vector<bool> outputActive_;
   bool routeRequest_ = false;
   bool engineCommandPending_ = false;
   MatrixPage rows_{kVisibleRows};
@@ -609,6 +653,7 @@ class HeaderController final : public IControlListener {
   std::vector<SharedPointer<CTextLabel>> outputs_;
   std::vector<SharedPointer<MatrixCellButton>> cells_;
   SharedPointer<CTextLabel> summary_;
+  SharedPointer<CCheckBox> showInactive_;
   std::vector<SharedPointer<CTextButton>> navigation_;
   std::string selectedInputId_;
   std::string selectedOutputId_;
@@ -849,6 +894,15 @@ WindowPtr createMainWindow() {
   auto nextRows = makeNav(112, "Rows >");
   auto previousColumns = makeNav(206, "Cols <");
   auto nextColumns = makeNav(294, "Cols >");
+  auto showInactive = makeOwned<CCheckBox>(CRect(430, 520, 736, 550), nullptr, -1,
+                                           tr("Show inactive I/O"));
+  showInactive->setFont(makeOwned<CFontDesc>("Segoe UI", 12));
+  showInactive->setFontColor(palette::kText);
+  showInactive->setBoxFillColor(palette::kCanvas);
+  showInactive->setBoxFrameColor(palette::kLine);
+  showInactive->setCheckMarkColor(palette::kHealthy);
+  showInactive->setRoundRectRadius(2);
+  addRetainedView(*body, showInactive);
 
   auto inspector = makeOwned<CViewContainer>(CRect(760, 0, 1000, kWindowHeight - kHeaderHeight));
   inspector->setBackgroundColor(palette::kSurface);
@@ -901,7 +955,8 @@ WindowPtr createMainWindow() {
   controller->attachViews(dot, statusText, hzReadout, smpReadout, xrunReadout,
                           startStopButton);
   controller->attachMatrix(std::move(inputs), std::move(outputs), std::move(cells),
-                           summary, previousRows, nextRows, previousColumns, nextColumns);
+                           summary, previousRows, nextRows, previousColumns, nextColumns,
+                           showInactive);
   controller->attachInspector(selectedSource, selectedDestination, gainText,
                               gainSlider, muteButton, resetButton, removeButton);
   startStopButton->setListener(controller.get());

@@ -54,6 +54,7 @@ constexpr Translation catalog[] = {
     {"Experimental virtual driver management", "实验性虚拟驱动管理"},
     {"Native Preview", "原生预览版"}, {"ROUTING MATRIX", "路由矩阵"},
     {"SOURCE / DESTINATION", "源 / 目标"}, {"ROUTE INSPECTOR", "路由检查器"},
+    {"Show inactive I/O", "显示未激活的 I/O"},
     {"TO", "至"}, {"GAIN", "增益"}, {"Remove route", "移除路由"},
     {"Rows <", "行 <"}, {"Rows >", "行 >"}, {"Cols <", "列 <"}, {"Cols >", "列 >"},
     {"Click: enable/mute. Shift-click: connect/remove. Right-click: inspect.", "单击：启用/静音。Shift 单击：连接/移除。右键：检查。"},
